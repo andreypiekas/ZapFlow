@@ -61,7 +61,7 @@ Para rodar o sistema em produção, você precisará de:
 ### 1. Clonar e Instalar Dependências
 
 ```bash
-git clone https://github.com/seu-usuario/zapflow-manager.git
+git clone https://github.com/andreypiekas/ZapFlow.git
 cd zapflow-manager
 npm install
 ```
