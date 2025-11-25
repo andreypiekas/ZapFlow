@@ -1,3 +1,4 @@
+
 import { ApiConfig } from "../types";
 
 // Serviço compatível com Evolution API v1.x/v2.x ou similares
@@ -39,14 +40,49 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
   if (!config.baseUrl || !config.apiKey) return null;
 
   try {
-    // Tenta conectar/buscar QR code
-    const response = await fetch(`${config.baseUrl}/instance/connect/${config.instanceName}`, {
+    // 1. Tenta conectar para pegar o QR Code
+    let response = await fetch(`${config.baseUrl}/instance/connect/${config.instanceName}`, {
       method: 'GET',
       headers: {
         'apikey': config.apiKey,
         'Content-Type': 'application/json'
       }
     });
+
+    // 2. AUTO-FIX: Se a instância não existir (404), tenta criar automaticamente
+    if (response.status === 404) {
+        console.warn(`Instância '${config.instanceName}' não encontrada. Tentando criar...`);
+        
+        const createRes = await fetch(`${config.baseUrl}/instance/create`, {
+            method: 'POST',
+            headers: {
+                'apikey': config.apiKey,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                instanceName: config.instanceName,
+                qrcode: true,
+                integration: "WHATSAPP-BAILEYS"
+            })
+        });
+
+        if (createRes.ok) {
+             // Aguarda 2 segundos para o processo de criação iniciar
+             await new Promise(resolve => setTimeout(resolve, 2000));
+             
+             // Tenta buscar o QR novamente
+             response = await fetch(`${config.baseUrl}/instance/connect/${config.instanceName}`, {
+                method: 'GET',
+                headers: {
+                    'apikey': config.apiKey,
+                    'Content-Type': 'application/json'
+                }
+            });
+        } else {
+            console.error("Falha ao criar instância automaticamente:", await createRes.text());
+            return null;
+        }
+    }
 
     if (!response.ok) {
         console.error("Erro API:", response.statusText);
@@ -55,7 +91,7 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
 
     const data = await response.json();
     
-    // Evolution API geralmente retorna { base64: "..." } ou { code: "..." }
+    // Evolution API geralmente retorna { base64: "..." } ou { code: "..." } ou { qrcode: "..." }
     let base64 = data.base64 || data.code || data.qrcode;
     
     if (!base64) return null;

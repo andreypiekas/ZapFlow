@@ -15,6 +15,19 @@ sudo apt install -y curl git unzip wget nano
 
 
 ------------------------------------------------------------------------------
+PASSO EXTRA (CRUCIAL): CRIAR MEMÓRIA SWAP (Evitar travamentos)
+------------------------------------------------------------------------------
+Servidores com menos de 2GB de RAM podem travar o WhatsApp (Loop no Chrome). 
+Execute estes comandos um por um para criar 2GB de memória virtual:
+
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+
+------------------------------------------------------------------------------
 PASSO 2: INSTALAR NODE.JS (VERSÃO 20 LTS)
 ------------------------------------------------------------------------------
 O sistema requer o Node.js versão 20 ou superior.
@@ -143,18 +156,16 @@ pm2 startup
 SOLUÇÃO DE PROBLEMAS (TROUBLESHOOTING)
 ------------------------------------------------------------------------------
 
-PROBLEMA: QR CODE NÃO APARECE NO MANAGER
-1. Verifique se o SERVER_URL no docker-compose.yml está com o IP correto (não use localhost se estiver acessando de outro PC).
-2. Rode 'docker logs evolution_api' e veja se há erros de "Puppeteer" ou "Chrome".
-3. Tente excluir a instância no manager e criar novamente.
+PROBLEMA: QR CODE NÃO APARECE NO MANAGER OU A INSTÂNCIA REINICIA (LOOP)
+1. Certifique-se de que criou a Memória SWAP (Passo Extra). VPS com 1GB de RAM não roda o navegador da API sem Swap.
+2. Verifique se o SERVER_URL no docker-compose.yml está com o IP correto.
 
-PROBLEMA: "INVALID CREDENTIALS" NO LOGIN DA API
-1. Verifique se a variável AUTHENTICATION_API_KEY está correta.
+PROBLEMA: "INVALID CREDENTIALS"
+1. Verifique se AUTHENTICATION_API_KEY está correto no docker-compose e no painel do ZapFlow.
 
-PROBLEMA: TELA BRANCA AO ACESSAR O SITE
+PROBLEMA: TELA BRANCA
 1. Rode 'npm run build' novamente.
-2. Limpe o cache do navegador.
-3. Verifique se o firewall está liberando a porta 5173 e 8080.
+2. Limpe cache do navegador.
 
 ------------------------------------------------------------------------------
 FINALIZAÇÃO
@@ -169,6 +180,7 @@ Dados de Acesso Padrão:
 Email: admin@hostgator.com
 Senha: 123
 
-Configuração da API (No painel do ZapFlow e no Manager da Evolution):
+Configuração da API (No painel do ZapFlow):
 URL: http://SEU_IP_DO_SERVIDOR:8080
 API Key Global: B8349283-F143-429D-B6C2-9386E8016558
+Instância: zapflow_main
