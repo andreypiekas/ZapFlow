@@ -41,8 +41,7 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
   }
 
   console.log(`[ZapFlow] Iniciando busca de QR Code para instância: ${config.instanceName}`);
-  console.log(`[ZapFlow] URL: ${config.baseUrl}`);
-
+  
   try {
     // 1. Tenta conectar para pegar o QR Code
     let response = await fetch(`${config.baseUrl}/instance/connect/${config.instanceName}`, {
@@ -52,8 +51,6 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
         'Content-Type': 'application/json'
       }
     });
-
-    console.log(`[ZapFlow] Status resposta inicial: ${response.status}`);
 
     // 2. AUTO-FIX: Se a instância não existir (404), tenta criar automaticamente
     if (response.status === 404) {
@@ -74,7 +71,6 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
 
         if (createRes.ok) {
              console.log("[ZapFlow] Instância criada com sucesso. Aguardando inicialização...");
-             // Aguarda 3 segundos para o processo de criação iniciar
              await new Promise(resolve => setTimeout(resolve, 3000));
              
              // Tenta buscar o QR novamente
@@ -97,13 +93,20 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
     }
 
     const data = await response.json();
-    console.log("[ZapFlow] Dados recebidos da API (QR)");
     
+    // TRATAMENTO ESPECÍFICO PARA RESPOSTA "count: 0"
+    // Isso acontece quando a Evolution recebeu o comando mas o navegador ainda não gerou a imagem.
+    if (data && typeof data.count === 'number') {
+        console.log("[ZapFlow] Instância conectando... QR Code sendo gerado (Count: " + data.count + ")");
+        // Retornamos null mas sem erro, para que o Connection.tsx continue tentando (polling)
+        return null; 
+    }
+
     // Evolution API geralmente retorna { base64: "..." } ou { code: "..." } ou { qrcode: "..." }
     let base64 = data.base64 || data.code || data.qrcode;
     
     if (!base64) {
-        console.warn("[ZapFlow] Resposta da API não contém QR Code válido.", data);
+        // Se veio vazio e não é count, algo está estranho, mas não é erro fatal.
         return null;
     }
 
@@ -112,9 +115,10 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
         base64 = `data:image/png;base64,${base64}`;
     }
 
+    console.log("[ZapFlow] QR Code recebido com sucesso!");
     return base64;
   } catch (error) {
-    console.error("[ZapFlow] ERRO CRÍTICO AO BUSCAR QR CODE:", error);
+    console.error("[ZapFlow] ERRO DE CONEXÃO AO BUSCAR QR:", error);
     return null;
   }
 };
@@ -149,8 +153,6 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
   }
 };
 
-// --- NOVAS FUNÇÕES DE MÍDIA ---
-
 // Helper para converter Blob/File para Base64
 export const blobToBase64 = (blob: Blob): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -182,26 +184,23 @@ export const sendRealMediaMessage = async (
     const cleanPhone = phone.replace(/\D/g, '');
     const base64 = await blobToBase64(mediaBlob);
     
-    // Mime types comuns
     let mimeType = mediaBlob.type;
-    if (mediaType === 'audio') mimeType = 'audio/mp4'; // Whatsapp geralmente prefere mp4/aac ou ogg
+    if (mediaType === 'audio') mimeType = 'audio/mp4'; 
 
-    // Estrutura genérica para Evolution API (sendMedia ou sendWhatsAppMedia)
     const body = {
       number: cleanPhone,
       options: { delay: 1200, presence: "recording" },
       mediaMessage: {
         mediatype: mediaType,
         caption: caption,
-        media: base64, // Base64 completo com data:mime;base64,...
+        media: base64, 
         fileName: fileName
       }
     };
 
-    // Ajuste de rota dependendo do tipo (Evolution as vezes separa Audio)
     let endpoint = 'sendMedia';
     if (mediaType === 'audio') {
-        endpoint = 'sendWhatsAppAudio'; // Algumas versões usam rota específica para áudio ptt
+        endpoint = 'sendWhatsAppAudio'; 
     }
 
     const response = await fetch(`${config.baseUrl}/message/${endpoint}/${config.instanceName}`, {
