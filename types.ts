@@ -10,7 +10,7 @@ export enum MessageStatus {
   READ = 'READ'
 }
 
-export type MessageType = 'text' | 'image' | 'audio' | 'document' | 'video';
+export type MessageType = 'text' | 'image' | 'audio' | 'document' | 'video' | 'sticker';
 
 export interface User {
   id: string;
@@ -55,6 +55,40 @@ export interface ActiveWorkflow {
 }
 // ----------------------
 
+// --- NEW FEATURES TYPES ---
+
+export interface Contact {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  avatar?: string;
+  source: 'manual' | 'google';
+  lastSync?: Date;
+}
+
+export interface Tag {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface BusinessHours {
+  dayOfWeek: number; // 0 = Domingo, 1 = Segunda...
+  isOpen: boolean;
+  openTime: string; // "09:00"
+  closeTime: string; // "18:00"
+}
+
+export interface ChatbotConfig {
+  isEnabled: boolean;
+  businessHours: BusinessHours[];
+  awayMessage: string;
+  greetingMessage: string;
+}
+
+// -------------------------
+
 export interface Message {
   id: string;
   content: string;
@@ -73,6 +107,7 @@ export interface Chat {
   contactNumber: string;
   contactAvatar: string;
   clientCode?: string;
+  tags?: string[]; // Array of Tag IDs or Names
   departmentId: string | null;
   unreadCount: number;
   lastMessage: string;
@@ -92,4 +127,4 @@ export interface ApiConfig {
   isDemo: boolean;
 }
 
-export type ViewState = 'dashboard' | 'chat' | 'connections' | 'departments' | 'settings' | 'users' | 'reports' | 'workflows';
+export type ViewState = 'dashboard' | 'chat' | 'connections' | 'departments' | 'settings' | 'users' | 'reports' | 'workflows' | 'contacts' | 'chatbot';

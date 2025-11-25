@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw } from 'lucide-react';
+import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw, Smile, Tag, Plus } from 'lucide-react';
 import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow } from '../types';
 import { generateSmartReply } from '../services/geminiService';
 import { sendRealMessage, sendRealMediaMessage, blobToBase64 } from '../services/whatsappService';
+import { AVAILABLE_TAGS, EMOJIS, STICKERS } from '../constants';
 
 interface ChatInterfaceProps {
   chats: Chat[];
@@ -28,6 +29,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const [isFinishingModalOpen, setIsFinishingModalOpen] = useState(false);
   const [isWorkflowCollapsed, setIsWorkflowCollapsed] = useState(false);
   
+  // New Features States
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showTagMenu, setShowTagMenu] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [messageSearchTerm, setMessageSearchTerm] = useState('');
+
   // Options Menu
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
 
@@ -63,8 +70,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     if (selectedChat) {
       setEditContactName(selectedChat.contactName);
       setEditClientCode(selectedChat.clientCode || '');
-      setIsEditingContact(false); // Reset edit mode when changing chats
-      setShowOptionsMenu(false); // Close menu
+      setIsEditingContact(false); 
+      setShowOptionsMenu(false); 
+      setMessageSearchTerm('');
+      setShowSearch(false);
     }
   }, [selectedChatId, selectedChat]);
 
@@ -89,7 +98,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
   useEffect(() => {
     scrollToBottom();
-  }, [selectedChat?.messages]);
+  }, [selectedChat?.messages, messageSearchTerm]);
 
   // --- CONTACT EDITING ---
   const handleSaveContactInfo = () => {
@@ -283,6 +292,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     setIsSending(false);
     setInputText('');
     setShowQuickReplies(false);
+    setShowEmojiPicker(false);
+  };
+
+  const handleSendSticker = async (url: string) => {
+      if (!selectedChat) return;
+      setIsSending(true);
+      
+      const newMessage: Message = {
+        id: `m_${Date.now()}`,
+        content: 'Sticker',
+        sender: 'agent',
+        timestamp: new Date(),
+        status: MessageStatus.SENT,
+        type: 'sticker',
+        mediaUrl: url
+      };
+
+      updateChatWithNewMessage(newMessage);
+      // In real API, download blob and send
+      await sendRealMessage(apiConfig, selectedChat.contactNumber, "[Sticker Enviado]"); 
+      
+      setIsSending(false);
+      setShowEmojiPicker(false);
   };
 
   const updateChatWithNewMessage = (msg: Message) => {
@@ -475,6 +507,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     onUpdateChat({ ...selectedChat, activeWorkflow: undefined });
   };
 
+  // --- TAG LOGIC ---
+  const handleAddTag = (tagName: string) => {
+      if (!selectedChat) return;
+      const currentTags = selectedChat.tags || [];
+      if (!currentTags.includes(tagName)) {
+          onUpdateChat({ ...selectedChat, tags: [...currentTags, tagName] });
+      }
+      setShowTagMenu(false);
+  };
+
+  const handleRemoveTag = (tagName: string) => {
+      if (!selectedChat || !selectedChat.tags) return;
+      onUpdateChat({ ...selectedChat, tags: selectedChat.tags.filter(t => t !== tagName) });
+  };
+
   const activeWorkflowDef = selectedChat?.activeWorkflow 
      ? workflows.find(w => w.id === selectedChat.activeWorkflow!.workflowId) 
      : null;
@@ -491,6 +538,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   };
 
   const renderMessageContent = (msg: Message) => {
+    // Search Highlight
+    const content = msg.content;
+    const highlight = messageSearchTerm.trim();
+    
+    const highlightedContent = (text: string) => {
+        if (!highlight || !text) return text;
+        const parts = text.split(new RegExp(`(${highlight})`, 'gi'));
+        return (
+            <>
+                {parts.map((part, i) => 
+                    part.toLowerCase() === highlight.toLowerCase() 
+                        ? <span key={i} className="bg-yellow-200 text-slate-800">{part}</span> 
+                        : part
+                )}
+            </>
+        );
+    };
+
+    if (msg.type === 'sticker' && msg.mediaUrl) {
+        return <img src={msg.mediaUrl} alt="Sticker" className="w-32 h-32 object-contain" />;
+    }
+
     if (msg.type === 'image' && msg.mediaUrl) {
       return (
         <div className="flex flex-col">
@@ -501,7 +570,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             onClick={() => window.open(msg.mediaUrl, '_blank')}
           />
           {msg.content && msg.content !== 'Imagem' && (
-             <p className="text-sm mt-1">{msg.content}</p>
+             <p className="text-sm mt-1">{highlightedContent(msg.content)}</p>
           )}
         </div>
       );
@@ -531,8 +600,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
            </div>
        );
     }
-    return <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{msg.content}</p>;
+    return <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{highlightedContent(msg.content)}</p>;
   };
+
+  const displayedMessages = selectedChat?.messages.filter(msg => {
+      if (!messageSearchTerm) return true;
+      if (msg.content.toLowerCase().includes(messageSearchTerm.toLowerCase())) return true;
+      return false;
+  }) || [];
 
   return (
     <div className="flex h-full bg-white md:rounded-lg shadow-sm overflow-hidden md:border border-slate-200">
@@ -612,6 +687,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                   )}
                 </div>
               </div>
+              
+              {/* TAGS PREVIEW */}
+              {chat.tags && chat.tags.length > 0 && (
+                  <div className="flex gap-1 mt-1">
+                      {chat.tags.map(tag => {
+                          const tagDef = AVAILABLE_TAGS.find(t => t.name === tag);
+                          return (
+                            <span key={tag} className={`text-[10px] px-1.5 py-0.5 rounded-full ${tagDef ? tagDef.color : 'bg-slate-200'}`}>
+                                {tag}
+                            </span>
+                          );
+                      })}
+                  </div>
+              )}
+
               <div className="flex justify-between items-center mt-2">
                 <div className="flex items-center gap-1 text-slate-600 max-w-[180px]">
                     {chat.messages[chat.messages.length -1]?.type === 'image' && <ImageIcon size={12} />}
@@ -659,103 +749,162 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         {selectedChat ? (
           <>
             {/* Header */}
-            <div className="h-16 bg-emerald-700 flex items-center justify-between px-2 md:px-4 text-white shadow-sm z-10 shrink-0">
-              <div className="flex items-center gap-2 md:gap-3 flex-1">
-                <button 
-                  onClick={() => setSelectedChatId(null)}
-                  className="md:hidden p-1 text-white hover:bg-white/10 rounded-full"
-                >
-                  <ArrowLeft size={24} />
-                </button>
+            <div className="bg-emerald-700 shadow-sm z-10 shrink-0">
+                <div className="h-16 flex items-center justify-between px-2 md:px-4 text-white">
+                    <div className="flex items-center gap-2 md:gap-3 flex-1">
+                        <button 
+                        onClick={() => setSelectedChatId(null)}
+                        className="md:hidden p-1 text-white hover:bg-white/10 rounded-full"
+                        >
+                        <ArrowLeft size={24} />
+                        </button>
 
-                <img src={selectedChat.contactAvatar} alt="" className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white" />
-                
-                {/* Contact Info / Editing Mode */}
-                <div className="flex-1 overflow-hidden">
-                    {isEditingContact ? (
-                        <div className="flex items-center gap-2 animate-in fade-in">
-                            <input 
-                                value={editContactName}
-                                onChange={(e) => setEditContactName(e.target.value)}
-                                className="bg-white/10 border border-white/30 text-white rounded px-2 py-1 text-sm outline-none focus:border-white w-full max-w-[150px]"
-                                placeholder="Nome"
-                            />
-                            <input 
-                                value={editClientCode}
-                                onChange={(e) => setEditClientCode(e.target.value)}
-                                className="bg-white/10 border border-white/30 text-white rounded px-2 py-1 text-sm outline-none focus:border-white w-20 font-mono"
-                                placeholder="Código"
-                            />
-                            <button onClick={handleSaveContactInfo} className="p-1 hover:bg-emerald-600 rounded text-emerald-200 hover:text-white" title="Salvar">
-                                <Save size={16} />
-                            </button>
-                            <button onClick={() => setIsEditingContact(false)} className="p-1 hover:bg-red-500/50 rounded text-red-200 hover:text-white" title="Cancelar">
-                                <X size={16} />
-                            </button>
+                        <img src={selectedChat.contactAvatar} alt="" className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white" />
+                        
+                        {/* Contact Info / Editing Mode */}
+                        <div className="flex-1 overflow-hidden">
+                            {isEditingContact ? (
+                                <div className="flex items-center gap-2 animate-in fade-in">
+                                    <input 
+                                        value={editContactName}
+                                        onChange={(e) => setEditContactName(e.target.value)}
+                                        className="bg-white/10 border border-white/30 text-white rounded px-2 py-1 text-sm outline-none focus:border-white w-full max-w-[150px]"
+                                        placeholder="Nome"
+                                    />
+                                    <input 
+                                        value={editClientCode}
+                                        onChange={(e) => setEditClientCode(e.target.value)}
+                                        className="bg-white/10 border border-white/30 text-white rounded px-2 py-1 text-sm outline-none focus:border-white w-20 font-mono"
+                                        placeholder="Código"
+                                    />
+                                    <button onClick={handleSaveContactInfo} className="p-1 hover:bg-emerald-600 rounded text-emerald-200 hover:text-white" title="Salvar">
+                                        <Save size={16} />
+                                    </button>
+                                    <button onClick={() => setIsEditingContact(false)} className="p-1 hover:bg-red-500/50 rounded text-red-200 hover:text-white" title="Cancelar">
+                                        <X size={16} />
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col group cursor-pointer" onClick={() => setIsEditingContact(true)}>
+                                    <div className="flex items-center gap-2">
+                                        <h2 className="font-semibold text-sm md:text-base truncate max-w-[150px] md:max-w-none">
+                                            {selectedChat.contactName}
+                                        </h2>
+                                        {selectedChat.clientCode && (
+                                            <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded font-mono text-emerald-50">
+                                                | COD: {selectedChat.clientCode}
+                                            </span>
+                                        )}
+                                        <Edit3 size={12} className="opacity-0 group-hover:opacity-50 text-white" />
+                                    </div>
+                                    <p className="text-xs opacity-90 text-emerald-100 truncate">
+                                        {getDepartmentName(selectedChat.departmentId)} 
+                                        {!isAssigned && selectedChat.status === 'open' && " • Aguardando Atendimento"}
+                                    </p>
+                                </div>
+                            )}
                         </div>
-                    ) : (
-                        <div className="flex flex-col group cursor-pointer" onClick={() => setIsEditingContact(true)}>
-                            <div className="flex items-center gap-2">
-                                <h2 className="font-semibold text-sm md:text-base truncate max-w-[150px] md:max-w-none">
-                                    {selectedChat.contactName}
-                                </h2>
-                                {selectedChat.clientCode && (
-                                    <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded font-mono text-emerald-50">
-                                        | COD: {selectedChat.clientCode}
-                                    </span>
-                                )}
-                                <Edit3 size={12} className="opacity-0 group-hover:opacity-50 text-white" />
+                    </div>
+
+                    <div className="flex items-center gap-1 md:gap-2 relative">
+                         {/* Search Toggle */}
+                        <button onClick={() => setShowSearch(!showSearch)} className={`p-2 rounded-full transition-colors ${showSearch ? 'bg-white text-emerald-700' : 'hover:bg-emerald-600'}`}>
+                            <Search size={20} />
+                        </button>
+
+                        {/* Tag Menu */}
+                        <div className="relative">
+                            <button onClick={() => setShowTagMenu(!showTagMenu)} className="p-2 hover:bg-emerald-600 rounded-full transition-colors" title="Adicionar Tag">
+                                <Tag size={20} />
+                            </button>
+                            {showTagMenu && (
+                                <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-50 animate-in fade-in zoom-in-95 origin-top-right text-slate-700">
+                                    <div className="px-3 py-2 text-xs font-bold text-slate-500 border-b border-slate-100 mb-1">ADICIONAR TAG</div>
+                                    {AVAILABLE_TAGS.map(tag => (
+                                        <button 
+                                            key={tag.name}
+                                            onClick={() => handleAddTag(tag.name)}
+                                            className="w-full text-left px-4 py-2 hover:bg-slate-50 text-sm flex items-center gap-2"
+                                        >
+                                            <div className={`w-3 h-3 rounded-full ${tag.color.split(' ')[0]}`}></div>
+                                            {tag.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {selectedChat.status === 'open' && isAssignedToMe && (
+                            <>
+                                <button 
+                                    onClick={() => setIsFinishingModalOpen(true)}
+                                    className="p-2 hover:bg-red-600/20 bg-black/10 rounded-full transition-colors tooltip relative group mr-1"
+                                    title="Finalizar Atendimento"
+                                >
+                                    <CheckCircle size={20} />
+                                </button>
+                                <button 
+                                    onClick={() => setIsTransferModalOpen(true)}
+                                    className="p-2 hover:bg-emerald-600 rounded-full transition-colors tooltip relative group"
+                                    title="Transferir Setor"
+                                >
+                                    <ArrowRightLeft size={20} />
+                                </button>
+                            </>
+                        )}
+                        <button 
+                            onClick={() => setShowOptionsMenu(!showOptionsMenu)}
+                            className="p-2 hover:bg-emerald-600 rounded-full transition-colors"
+                        >
+                        <MoreVertical size={20} />
+                        </button>
+
+                        {/* Dropdown Menu */}
+                        {showOptionsMenu && (
+                            <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-50 animate-in fade-in zoom-in-95 origin-top-right text-slate-700">
+                                <button 
+                                    onClick={simulateCustomerReply}
+                                    className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-2 text-sm border-b border-slate-100"
+                                >
+                                    <RefreshCw size={16} className="text-blue-500" /> Simular Resposta do Cliente
+                                </button>
+                                <button className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-2 text-sm">
+                                <Lock size={16} /> Bloquear Contato
+                                </button>
                             </div>
-                            <p className="text-xs opacity-90 text-emerald-100 truncate">
-                                {getDepartmentName(selectedChat.departmentId)} 
-                                {!isAssigned && selectedChat.status === 'open' && " • Aguardando Atendimento"}
-                            </p>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
-              </div>
-
-              <div className="flex items-center gap-1 md:gap-2 relative">
-                {selectedChat.status === 'open' && isAssignedToMe && (
-                    <>
-                        <button 
-                            onClick={() => setIsFinishingModalOpen(true)}
-                            className="p-2 hover:bg-red-600/20 bg-black/10 rounded-full transition-colors tooltip relative group mr-1"
-                            title="Finalizar Atendimento"
-                        >
-                            <CheckCircle size={20} />
-                        </button>
-                        <button 
-                            onClick={() => setIsTransferModalOpen(true)}
-                            className="p-2 hover:bg-emerald-600 rounded-full transition-colors tooltip relative group"
-                            title="Transferir Setor"
-                        >
-                            <ArrowRightLeft size={20} />
-                        </button>
-                    </>
-                )}
-                <button 
-                    onClick={() => setShowOptionsMenu(!showOptionsMenu)}
-                    className="p-2 hover:bg-emerald-600 rounded-full transition-colors"
-                >
-                  <MoreVertical size={20} />
-                </button>
-
-                {/* Dropdown Menu */}
-                {showOptionsMenu && (
-                    <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-50 animate-in fade-in zoom-in-95 origin-top-right text-slate-700">
-                        <button 
-                            onClick={simulateCustomerReply}
-                            className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-2 text-sm border-b border-slate-100"
-                        >
-                            <RefreshCw size={16} className="text-blue-500" /> Simular Resposta do Cliente
-                        </button>
-                        <button className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-2 text-sm">
-                           <Lock size={16} /> Bloquear Contato
-                        </button>
+                
+                {/* TAGS LIST & SEARCH BAR */}
+                {( (selectedChat.tags && selectedChat.tags.length > 0) || showSearch ) && (
+                    <div className="px-4 pb-2 flex items-center justify-between gap-4">
+                        <div className="flex gap-1 overflow-x-auto scrollbar-hide">
+                            {selectedChat.tags?.map(tag => {
+                                const tagDef = AVAILABLE_TAGS.find(t => t.name === tag);
+                                return (
+                                    <span key={tag} className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 ${tagDef ? tagDef.color : 'bg-slate-200'}`}>
+                                        {tag}
+                                        <button onClick={() => handleRemoveTag(tag)} className="hover:text-red-600"><X size={10} /></button>
+                                    </span>
+                                );
+                            })}
+                        </div>
+                        
+                        {showSearch && (
+                             <div className="flex items-center bg-emerald-800/30 rounded px-2 py-1 flex-1 max-w-[200px] animate-in slide-in-from-right">
+                                <input 
+                                    autoFocus
+                                    value={messageSearchTerm}
+                                    onChange={(e) => setMessageSearchTerm(e.target.value)}
+                                    placeholder="Buscar na conversa..."
+                                    className="bg-transparent border-none text-white text-xs placeholder-emerald-200 outline-none w-full"
+                                />
+                                <button onClick={() => {setShowSearch(false); setMessageSearchTerm('')}} className="text-emerald-200 hover:text-white"><X size={12}/></button>
+                             </div>
+                        )}
                     </div>
                 )}
-              </div>
             </div>
 
             {/* Active Workflow Panel */}
@@ -809,7 +958,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat' }}>
-              {selectedChat.messages.map((msg) => (
+              {displayedMessages.map((msg) => (
                 <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-start' : msg.sender === 'system' ? 'justify-center' : 'justify-end'}`}>
                   {msg.sender === 'system' ? (
                      <div className="bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-full shadow-sm my-2">
@@ -920,6 +1069,42 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                             </div>
                         )}
 
+                        {/* Emojis & Stickers Picker */}
+                        {showEmojiPicker && (
+                            <div className="absolute bottom-full left-0 mb-2 ml-10 w-72 bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden animate-in slide-in-from-bottom-2 z-50">
+                                <div className="flex border-b border-slate-100">
+                                    <div className="flex-1 p-2 text-center text-xs font-bold text-slate-500 bg-slate-50">EMOJIS & FIGURINHAS</div>
+                                    <button onClick={() => setShowEmojiPicker(false)} className="p-2 text-slate-400 hover:text-slate-600"><X size={14} /></button>
+                                </div>
+                                <div className="p-2 max-h-60 overflow-y-auto custom-scrollbar">
+                                    <div className="mb-2">
+                                        <p className="text-[10px] font-bold text-slate-400 mb-1">EMOJIS</p>
+                                        <div className="grid grid-cols-8 gap-1">
+                                            {EMOJIS.map(emoji => (
+                                                <button key={emoji} onClick={() => setInputText(prev => prev + emoji)} className="hover:bg-slate-100 rounded text-lg p-1">
+                                                    {emoji}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-bold text-slate-400 mb-1">FIGURINHAS (STICKERS)</p>
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {STICKERS.map((sticker, idx) => (
+                                                <img 
+                                                    key={idx} 
+                                                    src={sticker} 
+                                                    alt="Sticker" 
+                                                    className="w-full h-auto cursor-pointer hover:opacity-80 rounded"
+                                                    onClick={() => handleSendSticker(sticker)}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Attachment Preview Area */}
                         {selectedFile && (
                             <div className="bg-slate-200 p-3 rounded-t-lg border-b border-slate-300 flex items-center justify-between animate-in slide-in-from-bottom-2">
@@ -995,6 +1180,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                                         title="Fluxos de Atendimento"
                                     >
                                         <ListChecks size={20} />
+                                    </button>
+                                    <button 
+                                        onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                                        className={`p-2 rounded-full transition-colors flex-shrink-0 ${showEmojiPicker ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:bg-slate-200'}`}
+                                        title="Emojis e Figurinhas"
+                                    >
+                                        <Smile size={20} />
                                     </button>
                                     <button 
                                         onClick={() => fileInputRef.current?.click()}

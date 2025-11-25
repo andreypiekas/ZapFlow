@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Chat, Department, ViewState, ApiConfig, User, UserRole, QuickReply, Workflow } from './types';
-import { INITIAL_CHATS, INITIAL_DEPARTMENTS, INITIAL_USERS, INITIAL_QUICK_REPLIES, INITIAL_WORKFLOWS } from './constants';
+import { Chat, Department, ViewState, ApiConfig, User, UserRole, QuickReply, Workflow, Contact, ChatbotConfig } from './types';
+import { INITIAL_CHATS, INITIAL_DEPARTMENTS, INITIAL_USERS, INITIAL_QUICK_REPLIES, INITIAL_WORKFLOWS, MOCK_GOOGLE_CONTACTS, INITIAL_CHATBOT_CONFIG } from './constants';
 import Login from './components/Login';
 import ChatInterface from './components/ChatInterface';
 import Connection from './components/Connection';
@@ -11,7 +11,9 @@ import Settings from './components/Settings';
 import QuickMessageSettings from './components/QuickMessageSettings';
 import WorkflowSettings from './components/WorkflowSettings';
 import ReportsDashboard from './components/ReportsDashboard';
-import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Bell, Info, AlertTriangle, CheckCircle } from 'lucide-react';
+import Contacts from './components/Contacts';
+import ChatbotSettings from './components/ChatbotSettings';
+import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Bell, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot } from 'lucide-react';
 
 const loadConfig = (): ApiConfig => {
   const saved = localStorage.getItem('zapflow_config');
@@ -42,6 +44,8 @@ const App: React.FC = () => {
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>(INITIAL_QUICK_REPLIES);
   const [workflows, setWorkflows] = useState<Workflow[]>(INITIAL_WORKFLOWS);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [chatbotConfig, setChatbotConfig] = useState<ChatbotConfig>(INITIAL_CHATBOT_CONFIG);
   const [apiConfig, setApiConfig] = useState<ApiConfig>(loadConfig());
 
   // Notification State
@@ -154,6 +158,31 @@ const App: React.FC = () => {
   const handleUpdateWorkflow = (updatedWf: Workflow) => setWorkflows(workflows.map(w => w.id === updatedWf.id ? updatedWf : w));
   const handleDeleteWorkflow = (id: string) => setWorkflows(workflows.filter(w => w.id !== id));
 
+  const handleSyncGoogleContacts = async () => {
+    // Simula API Call
+    return new Promise<void>((resolve) => {
+        setTimeout(() => {
+            const newContacts = MOCK_GOOGLE_CONTACTS.map(c => ({...c, lastSync: new Date()}));
+            setContacts(newContacts);
+            
+            // Atualiza nomes nos chats existentes
+            const updatedChats = chats.map(chat => {
+                const match = newContacts.find(c => c.phone.replace(/\D/g, '') === chat.contactNumber.replace(/\D/g, ''));
+                if (match) {
+                    return { ...chat, contactName: match.name, contactAvatar: `https://ui-avatars.com/api/?name=${match.name}&background=random` };
+                }
+                return chat;
+            });
+            setChats(updatedChats);
+
+            addNotification('Sucesso', 'Contatos sincronizados com Google Contacts', 'success');
+            resolve();
+        }, 2000);
+    });
+  };
+
+  const handleUpdateChatbotConfig = (cfg: ChatbotConfig) => setChatbotConfig(cfg);
+
   // --- Access Control & Filtering Logic ---
   const filteredChats = useMemo(() => {
     if (!currentUser) return [];
@@ -181,7 +210,7 @@ const App: React.FC = () => {
   const canAccess = (view: ViewState): boolean => {
     if (!currentUser) return false;
     if (currentUser.role === UserRole.ADMIN) return true;
-    if (view === 'settings' || view === 'users' || view === 'connections' || view === 'departments' || view === 'reports' || view === 'workflows') return false;
+    if (view === 'settings' || view === 'users' || view === 'connections' || view === 'departments' || view === 'reports' || view === 'workflows' || view === 'contacts' || view === 'chatbot') return false;
     return true;
   };
 
@@ -265,6 +294,10 @@ const App: React.FC = () => {
         );
       case 'reports':
           return <ReportsDashboard chats={chats} departments={departments} />;
+      case 'contacts':
+          return <Contacts contacts={contacts} onSyncGoogle={handleSyncGoogleContacts} />;
+      case 'chatbot':
+          return <ChatbotSettings config={chatbotConfig} onSave={handleUpdateChatbotConfig} />;
       case 'connections':
         return <Connection config={apiConfig} onNavigateToSettings={() => setCurrentView('settings')} />;
       case 'departments':
@@ -366,6 +399,13 @@ const App: React.FC = () => {
             <MessageSquare size={20} /> Atendimento
           </button>
           
+          <button 
+              onClick={() => handleViewChange('contacts')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'contacts' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
+          >
+              <ContactIcon size={20} /> Contatos
+          </button>
+
           {currentUser.role === UserRole.ADMIN && (
             <>
                 <div className="pt-4 pb-2 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -377,6 +417,13 @@ const App: React.FC = () => {
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'reports' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
                 >
                     <BarChart size={20} /> Relatórios
+                </button>
+
+                <button 
+                    onClick={() => handleViewChange('chatbot')}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'chatbot' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
+                >
+                    <Bot size={20} /> Chatbot & Horários
                 </button>
 
                 <button 
