@@ -63,7 +63,7 @@ PASSO 5: SUBIR A EVOLUTION API (BACKEND)
 
 nano docker-compose.yml
 
-2. Cole o seguinte conteúdo CORRIGIDO (Variável AUTHENTICATION_API_KEY) dentro do editor nano:
+2. Cole o seguinte conteúdo CORRIGIDO (Lembre-se de alterar o SEU_IP_AQUI):
 
 services:
   evolution_api:
@@ -74,9 +74,11 @@ services:
       - "8080:8080"
     environment:
       - SERVER_PORT=8080
-      - SERVER_URL=http://localhost:8080
-      # ATENÇÃO: Na versão 2, a variável é AUTHENTICATION_API_KEY
+      # IMPORTANTE: Troque SEU_IP_AQUI pelo IP do seu servidor (ex: 192.168.16.133 ou IP Público VPS)
+      # Se deixar localhost, o QR Code pode não aparecer no Manager.
+      - SERVER_URL=http://SEU_IP_AQUI:8080
       - AUTHENTICATION_API_KEY=B8349283-F143-429D-B6C2-9386E8016558
+      - WEBSOCKET_ENABLED=true
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
       - DATABASE_CONNECTION_URI=postgresql://user:password@postgres:5432/evolution
@@ -141,10 +143,13 @@ pm2 startup
 SOLUÇÃO DE PROBLEMAS (TROUBLESHOOTING)
 ------------------------------------------------------------------------------
 
+PROBLEMA: QR CODE NÃO APARECE NO MANAGER
+1. Verifique se o SERVER_URL no docker-compose.yml está com o IP correto (não use localhost se estiver acessando de outro PC).
+2. Rode 'docker logs evolution_api' e veja se há erros de "Puppeteer" ou "Chrome".
+3. Tente excluir a instância no manager e criar novamente.
+
 PROBLEMA: "INVALID CREDENTIALS" NO LOGIN DA API
-1. Verifique se no docker-compose.yml a variável está como AUTHENTICATION_API_KEY.
-2. Se estiver apenas API_KEY, a Evolution V2 ignora e cria uma senha aleatória.
-3. Após alterar, rode 'docker compose down' e 'docker compose up -d'.
+1. Verifique se a variável AUTHENTICATION_API_KEY está correta.
 
 PROBLEMA: TELA BRANCA AO ACESSAR O SITE
 1. Rode 'npm run build' novamente.
