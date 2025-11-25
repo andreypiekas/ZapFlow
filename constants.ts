@@ -1,4 +1,5 @@
-import { Chat, Department, MessageStatus, QuickReply, User, UserRole } from './types';
+
+import { Chat, Department, MessageStatus, QuickReply, User, UserRole, Workflow } from './types';
 
 export const INITIAL_DEPARTMENTS: Department[] = [
   { id: 'dept_1', name: 'Comercial', description: 'Vendas e novos negócios', color: 'bg-blue-500' },
@@ -44,10 +45,33 @@ export const INITIAL_QUICK_REPLIES: QuickReply[] = [
   { id: 'qr_3', title: 'Pix', content: 'Nossa chave Pix é: financeiro@zapflow.com.br' },
 ];
 
+export const INITIAL_WORKFLOWS: Workflow[] = [
+  {
+    id: 'wf_1',
+    title: 'Atualizar Boleto Vencido',
+    steps: [
+      { id: 's1', title: 'Solicitar CPF/CNPJ do cliente' },
+      { id: 's2', title: 'Gerar boleto atualizado no sistema' },
+      { id: 's3', title: 'Enviar arquivo PDF no chat' },
+      { id: 's4', title: 'Confirmar recebimento com cliente' }
+    ]
+  },
+  {
+    id: 'wf_2',
+    title: 'Triagem e Encaminhamento',
+    steps: [
+      { id: 's1', title: 'Identificar necessidade do cliente' },
+      { id: 's2', title: 'Coletar dados cadastrais básicos' },
+      { id: 's3', title: 'Encaminhar para Financeiro', targetDepartmentId: 'dept_3' }
+    ]
+  }
+];
+
 export const INITIAL_CHATS: Chat[] = [
   {
     id: 'chat_1',
     contactName: 'Carlos Silva',
+    clientCode: '1005',
     contactNumber: '+55 11 99999-9999',
     contactAvatar: 'https://picsum.photos/200/200?random=2',
     departmentId: 'dept_1',
@@ -63,6 +87,7 @@ export const INITIAL_CHATS: Chat[] = [
   {
     id: 'chat_2',
     contactName: 'Mariana Costa',
+    clientCode: '2042',
     contactNumber: '+55 21 98888-8888',
     contactAvatar: 'https://picsum.photos/200/200?random=3',
     departmentId: null, // Triagem

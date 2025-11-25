@@ -1,3 +1,4 @@
+
 export enum UserRole {
   ADMIN = 'ADMIN',
   AGENT = 'AGENT'
@@ -35,6 +36,25 @@ export interface QuickReply {
   content: string;
 }
 
+// --- WORKFLOW TYPES ---
+export interface WorkflowStep {
+  id: string;
+  title: string;
+  targetDepartmentId?: string; // Se preenchido, sugere transferencia
+}
+
+export interface Workflow {
+  id: string;
+  title: string;
+  steps: WorkflowStep[];
+}
+
+export interface ActiveWorkflow {
+  workflowId: string;
+  completedStepIds: string[];
+}
+// ----------------------
+
 export interface Message {
   id: string;
   content: string;
@@ -52,6 +72,7 @@ export interface Chat {
   contactName: string;
   contactNumber: string;
   contactAvatar: string;
+  clientCode?: string;
   departmentId: string | null;
   unreadCount: number;
   lastMessage: string;
@@ -61,6 +82,7 @@ export interface Chat {
   assignedTo?: string;
   rating?: number; // 1 to 5 stars
   endedAt?: Date;
+  activeWorkflow?: ActiveWorkflow; // Fluxo ativo neste chat
 }
 
 export interface ApiConfig {
@@ -70,4 +92,4 @@ export interface ApiConfig {
   isDemo: boolean;
 }
 
-export type ViewState = 'dashboard' | 'chat' | 'connections' | 'departments' | 'settings' | 'users' | 'reports';
+export type ViewState = 'dashboard' | 'chat' | 'connections' | 'departments' | 'settings' | 'users' | 'reports' | 'workflows';

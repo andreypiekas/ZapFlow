@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp } from 'lucide-react';
-import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply } from '../types';
+import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow } from '../types';
 import { generateSmartReply } from '../services/geminiService';
 import { sendRealMessage, sendRealMediaMessage, blobToBase64 } from '../services/whatsappService';
 
@@ -11,9 +12,10 @@ interface ChatInterfaceProps {
   onUpdateChat: (chat: Chat) => void;
   apiConfig: ApiConfig;
   quickReplies?: QuickReply[];
+  workflows?: Workflow[];
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, currentUser, onUpdateChat, apiConfig, quickReplies = [] }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, currentUser, onUpdateChat, apiConfig, quickReplies = [], workflows = [] }) => {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [filterText, setFilterText] = useState('');
@@ -22,7 +24,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const [isSending, setIsSending] = useState(false);
   const [activeTab, setActiveTab] = useState<'open' | 'closed'>('open');
   const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [showWorkflowsMenu, setShowWorkflowsMenu] = useState(false);
   const [isFinishingModalOpen, setIsFinishingModalOpen] = useState(false);
+  const [isWorkflowCollapsed, setIsWorkflowCollapsed] = useState(false);
+  
+  // Contact Editing States
+  const [isEditingContact, setIsEditingContact] = useState(false);
+  const [editContactName, setEditContactName] = useState('');
+  const [editClientCode, setEditClientCode] = useState('');
   
   // File & Media States
   const [isDragging, setIsDragging] = useState(false);
@@ -42,6 +51,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
   const selectedChat = chats.find(c => c.id === selectedChatId);
 
+  // Sync editing state with selected chat
+  useEffect(() => {
+    if (selectedChat) {
+      setEditContactName(selectedChat.contactName);
+      setEditClientCode(selectedChat.clientCode || '');
+      setIsEditingContact(false); // Reset edit mode when changing chats
+    }
+  }, [selectedChatId, selectedChat]);
+
   // Logic: Filter by Tab AND Search
   const filteredChats = chats.filter(chat => {
     // 1. Filter by Tab
@@ -51,7 +69,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     
     // 2. Filter by Search Text
     const matchesSearch = chat.contactName.toLowerCase().includes(filterText.toLowerCase()) ||
-                          chat.contactNumber.includes(filterText);
+                          chat.contactNumber.includes(filterText) ||
+                          (chat.clientCode && chat.clientCode.includes(filterText));
     
     return matchesTab && matchesSearch;
   });
@@ -63,6 +82,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   useEffect(() => {
     scrollToBottom();
   }, [selectedChat?.messages]);
+
+  // --- CONTACT EDITING ---
+  const handleSaveContactInfo = () => {
+    if (!selectedChat) return;
+    
+    const updatedChat: Chat = {
+        ...selectedChat,
+        contactName: editContactName,
+        clientCode: editClientCode
+    };
+    onUpdateChat(updatedChat);
+    setIsEditingContact(false);
+  };
 
   // --- DRAG AND DROP HANDLERS ---
   const handleDragEnter = (e: React.DragEvent) => {
@@ -290,9 +322,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       ? 'Atendimento finalizado. Enviamos uma pesquisa de satisfação para o cliente.' 
       : 'Atendimento finalizado pelo agente.';
 
-    // Simulação da Pesquisa:
-    // Em um cenário real, enviaria uma mensagem interativa com botões 1-5.
-    // Aqui vamos "mockar" que o cliente respondeu 5 estrelas após 1 segundo para fins de relatório.
+    // Simulação da Pesquisa
     let rating: number | undefined = undefined;
     if (withSurvey) {
         rating = Math.floor(Math.random() * 2) + 4; // Random 4 or 5
@@ -303,6 +333,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       status: 'closed',
       endedAt: new Date(),
       rating: rating,
+      activeWorkflow: undefined, // Clear workflow on finish
       messages: [
         ...selectedChat.messages,
         {
@@ -316,7 +347,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       ]
     };
     
-    // Send survey msg via API if needed
     if (withSurvey) {
         sendRealMessage(apiConfig, selectedChat.contactNumber, "Por favor, avalie nosso atendimento de 1 a 5 estrelas.");
     }
@@ -333,6 +363,55 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     setInputText(suggestion);
     setIsGeneratingAI(false);
   };
+
+  // --- WORKFLOW LOGIC ---
+  const handleStartWorkflow = (wf: Workflow) => {
+    if (!selectedChat) return;
+    const activeWf: ActiveWorkflow = {
+        workflowId: wf.id,
+        completedStepIds: []
+    };
+    onUpdateChat({ ...selectedChat, activeWorkflow: activeWf });
+    setShowWorkflowsMenu(false);
+  };
+
+  const handleToggleStep = (stepId: string, isTransfer?: boolean, targetDept?: string) => {
+    if (!selectedChat || !selectedChat.activeWorkflow) return;
+    
+    const currentCompleted = selectedChat.activeWorkflow.completedStepIds;
+    let newCompleted;
+
+    if (currentCompleted.includes(stepId)) {
+        newCompleted = currentCompleted.filter(id => id !== stepId);
+    } else {
+        newCompleted = [...currentCompleted, stepId];
+        // If it's a transfer step and not already done
+        if (isTransfer && targetDept) {
+            handleTransfer(targetDept);
+            // We return here because handleTransfer updates the chat state entirely
+            // But we also want to mark the step as done in that update? 
+            // Ideally we'd combine them, but for now let's just trigger transfer.
+            // The step marking will happen below if we proceed.
+        }
+    }
+
+    onUpdateChat({
+        ...selectedChat,
+        activeWorkflow: {
+            ...selectedChat.activeWorkflow,
+            completedStepIds: newCompleted
+        }
+    });
+  };
+
+  const handleCancelWorkflow = () => {
+    if (!selectedChat) return;
+    onUpdateChat({ ...selectedChat, activeWorkflow: undefined });
+  };
+
+  const activeWorkflowDef = selectedChat?.activeWorkflow 
+     ? workflows.find(w => w.id === selectedChat.activeWorkflow!.workflowId) 
+     : null;
 
   const getDepartmentName = (id: string | null) => {
     if (!id) return 'Sem Departamento';
@@ -442,7 +521,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 <div className="flex items-center gap-3">
                   <img src={chat.contactAvatar} alt="" className="w-10 h-10 rounded-full object-cover" />
                   <div>
-                    <h3 className="font-semibold text-slate-800 text-sm">{chat.contactName}</h3>
+                    <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-1">
+                      {chat.contactName}
+                      {chat.clientCode && (
+                          <span className="text-[10px] text-slate-500 font-mono bg-slate-100 px-1 rounded">#{chat.clientCode}</span>
+                      )}
+                    </h3>
                     <p className="text-xs text-slate-500">{chat.contactNumber}</p>
                   </div>
                 </div>
@@ -502,8 +586,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         {selectedChat ? (
           <>
             {/* Header */}
-            <div className="h-16 bg-emerald-700 flex items-center justify-between px-2 md:px-4 text-white shadow-sm z-10">
-              <div className="flex items-center gap-2 md:gap-3">
+            <div className="h-16 bg-emerald-700 flex items-center justify-between px-2 md:px-4 text-white shadow-sm z-10 shrink-0">
+              <div className="flex items-center gap-2 md:gap-3 flex-1">
                 <button 
                   onClick={() => setSelectedChatId(null)}
                   className="md:hidden p-1 text-white hover:bg-white/10 rounded-full"
@@ -512,13 +596,51 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 </button>
 
                 <img src={selectedChat.contactAvatar} alt="" className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white" />
-                <div className="overflow-hidden">
-                  <h2 className="font-semibold text-sm md:text-base truncate max-w-[150px] md:max-w-none">{selectedChat.contactName}</h2>
-                  <p className="text-xs opacity-90 text-emerald-100 truncate">
-                    {getDepartmentName(selectedChat.departmentId)}
-                  </p>
+                
+                {/* Contact Info / Editing Mode */}
+                <div className="flex-1 overflow-hidden">
+                    {isEditingContact ? (
+                        <div className="flex items-center gap-2 animate-in fade-in">
+                            <input 
+                                value={editContactName}
+                                onChange={(e) => setEditContactName(e.target.value)}
+                                className="bg-white/10 border border-white/30 text-white rounded px-2 py-1 text-sm outline-none focus:border-white w-full max-w-[150px]"
+                                placeholder="Nome"
+                            />
+                            <input 
+                                value={editClientCode}
+                                onChange={(e) => setEditClientCode(e.target.value)}
+                                className="bg-white/10 border border-white/30 text-white rounded px-2 py-1 text-sm outline-none focus:border-white w-20 font-mono"
+                                placeholder="Código"
+                            />
+                            <button onClick={handleSaveContactInfo} className="p-1 hover:bg-emerald-600 rounded text-emerald-200 hover:text-white" title="Salvar">
+                                <Save size={16} />
+                            </button>
+                            <button onClick={() => setIsEditingContact(false)} className="p-1 hover:bg-red-500/50 rounded text-red-200 hover:text-white" title="Cancelar">
+                                <X size={16} />
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col group cursor-pointer" onClick={() => setIsEditingContact(true)}>
+                            <div className="flex items-center gap-2">
+                                <h2 className="font-semibold text-sm md:text-base truncate max-w-[150px] md:max-w-none">
+                                    {selectedChat.contactName}
+                                </h2>
+                                {selectedChat.clientCode && (
+                                    <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded font-mono text-emerald-50">
+                                        | COD: {selectedChat.clientCode}
+                                    </span>
+                                )}
+                                <Edit3 size={12} className="opacity-0 group-hover:opacity-50 text-white" />
+                            </div>
+                            <p className="text-xs opacity-90 text-emerald-100 truncate">
+                                {getDepartmentName(selectedChat.departmentId)}
+                            </p>
+                        </div>
+                    )}
                 </div>
               </div>
+
               <div className="flex items-center gap-1 md:gap-2">
                 {selectedChat.status === 'open' && (
                     <>
@@ -543,6 +665,55 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 </button>
               </div>
             </div>
+
+            {/* Active Workflow Panel */}
+            {activeWorkflowDef && (
+                <div className="bg-white border-b border-emerald-200 shadow-sm z-10 shrink-0">
+                    <div className="flex justify-between items-center p-3 bg-emerald-50">
+                        <div className="flex items-center gap-2 text-emerald-800 font-semibold text-sm">
+                            <ListChecks size={18} />
+                            <span>Fluxo: {activeWorkflowDef.title}</span>
+                            <span className="text-xs bg-emerald-200 px-2 py-0.5 rounded-full">
+                                {selectedChat.activeWorkflow!.completedStepIds.length} / {activeWorkflowDef.steps.length}
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => setIsWorkflowCollapsed(!isWorkflowCollapsed)} className="text-emerald-700 hover:bg-emerald-200 p-1 rounded">
+                                {isWorkflowCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                            </button>
+                            <button onClick={handleCancelWorkflow} className="text-red-400 hover:text-red-600 p-1 rounded">
+                                <X size={16} />
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {!isWorkflowCollapsed && (
+                        <div className="p-3 bg-white max-h-40 overflow-y-auto space-y-2">
+                            {activeWorkflowDef.steps.map(step => {
+                                const isCompleted = selectedChat.activeWorkflow!.completedStepIds.includes(step.id);
+                                return (
+                                    <div key={step.id} className={`flex items-center gap-3 p-2 rounded border ${isCompleted ? 'bg-emerald-50 border-emerald-100' : 'border-slate-100 hover:bg-slate-50'}`}>
+                                        <button 
+                                            onClick={() => handleToggleStep(step.id, !!step.targetDepartmentId, step.targetDepartmentId)}
+                                            className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isCompleted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 bg-white'}`}
+                                        >
+                                            {isCompleted && <Check size={12} />}
+                                        </button>
+                                        <div className="flex-1 text-sm text-slate-700">
+                                            <span className={isCompleted ? 'line-through opacity-70' : ''}>{step.title}</span>
+                                            {step.targetDepartmentId && (
+                                                <span className="block text-xs text-blue-500 flex items-center gap-1 mt-0.5">
+                                                    <ArrowRight size={10} /> Transferir para {getDepartmentName(step.targetDepartmentId)}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat' }}>
@@ -598,6 +769,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                               </button>
                           ))}
                           {quickReplies.length === 0 && <p className="p-3 text-xs text-slate-400">Nenhuma mensagem cadastrada.</p>}
+                      </div>
+                  </div>
+              )}
+
+               {/* Workflows Menu */}
+               {showWorkflowsMenu && (
+                  <div className="absolute bottom-full left-10 mb-2 w-72 bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden animate-in slide-in-from-bottom-2 z-50">
+                      <div className="bg-emerald-50 px-3 py-2 border-b border-emerald-100 text-xs font-bold text-emerald-700 flex justify-between items-center">
+                          <span className="flex items-center gap-2"><ListChecks size={14}/> Iniciar Fluxo de Atendimento</span>
+                          <button onClick={() => setShowWorkflowsMenu(false)}><X size={14} /></button>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto">
+                          {workflows.map(wf => (
+                              <button 
+                                key={wf.id}
+                                onClick={() => handleStartWorkflow(wf)}
+                                className="w-full text-left px-3 py-2 hover:bg-emerald-50 text-sm text-slate-700 border-b border-slate-50 last:border-0"
+                              >
+                                  <span className="font-semibold block text-slate-800">{wf.title}</span>
+                                  <span className="text-xs text-slate-500">{wf.steps.length} etapas</span>
+                              </button>
+                          ))}
+                          {workflows.length === 0 && <p className="p-3 text-xs text-slate-400">Nenhum fluxo cadastrado.</p>}
                       </div>
                   </div>
               )}
@@ -670,6 +864,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                             title="Mensagens Rápidas"
                         >
                             <Zap size={20} />
+                        </button>
+                        <button 
+                            onClick={() => setShowWorkflowsMenu(!showWorkflowsMenu)}
+                            className={`p-2 rounded-full transition-colors flex-shrink-0 ${showWorkflowsMenu || activeWorkflowDef ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:bg-slate-200'}`}
+                            title="Fluxos de Atendimento"
+                        >
+                            <ListChecks size={20} />
                         </button>
                         <button 
                             onClick={() => fileInputRef.current?.click()}

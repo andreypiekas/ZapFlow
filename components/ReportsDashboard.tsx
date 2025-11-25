@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { Chat, Department } from '../types';
-import { BarChart, Clock, ThumbsUp, MessageSquare, CheckCircle, TrendingUp, Users } from 'lucide-react';
+import { BarChart, Clock, ThumbsUp, MessageSquare, CheckCircle, TrendingUp, Users, Download } from 'lucide-react';
 
 interface ReportsDashboardProps {
   chats: Chat[];
@@ -33,16 +34,64 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
 
   const generalChats = chats.filter(c => !c.departmentId).length;
 
+  const handleExportCSV = () => {
+    // Cabeçalho do CSV
+    const headers = ['ID', 'Nome Contato', 'Telefone', 'Código Cliente', 'Departamento', 'Status', 'Avaliação', 'Data Última Mensagem', 'Data Finalização', 'Total Mensagens'];
+    
+    // Linhas de dados
+    const rows = chats.map(chat => {
+      const deptName = departments.find(d => d.id === chat.departmentId)?.name || 'Sem Departamento';
+      const lastMsg = chat.lastMessageTime ? new Date(chat.lastMessageTime).toLocaleString() : '';
+      const endedAt = chat.endedAt ? new Date(chat.endedAt).toLocaleString() : '';
+      const clientCode = chat.clientCode || '';
+      
+      return [
+        chat.id,
+        chat.contactName,
+        chat.contactNumber,
+        clientCode,
+        deptName,
+        chat.status === 'closed' ? 'Finalizado' : (chat.status === 'pending' ? 'Pendente' : 'Aberto'),
+        chat.rating || '',
+        lastMsg,
+        endedAt,
+        chat.messages.length
+      ].map(field => `"${String(field).replace(/"/g, '""')}"`).join(','); // Escapa aspas duplas
+    });
+  
+    // Monta o conteúdo com BOM para acentuação correta no Excel
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+    
+    // Cria o blob e dispara o download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `relatorio_atendimentos_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="max-w-7xl mx-auto py-8 px-4">
-      <div className="flex items-center gap-3 mb-8">
-        <div className="p-3 bg-indigo-100 text-indigo-700 rounded-lg">
-           <BarChart size={24} />
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div className="flex items-center gap-3">
+            <div className="p-3 bg-indigo-100 text-indigo-700 rounded-lg">
+            <BarChart size={24} />
+            </div>
+            <div>
+            <h2 className="text-2xl font-bold text-slate-800">Painel de Relatórios</h2>
+            <p className="text-slate-500">Métricas de performance, SLA e satisfação do cliente.</p>
+            </div>
         </div>
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800">Painel de Relatórios</h2>
-          <p className="text-slate-500">Métricas de performance, SLA e satisfação do cliente.</p>
-        </div>
+
+        <button 
+            onClick={handleExportCSV}
+            className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors shadow-sm"
+        >
+            <Download size={18} /> Exportar CSV
+        </button>
       </div>
 
       {/* KPI Cards */}

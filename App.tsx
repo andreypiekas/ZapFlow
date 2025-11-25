@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { Chat, Department, ViewState, ApiConfig, User, UserRole, QuickReply } from './types';
-import { INITIAL_CHATS, INITIAL_DEPARTMENTS, INITIAL_USERS, INITIAL_QUICK_REPLIES } from './constants';
+import { Chat, Department, ViewState, ApiConfig, User, UserRole, QuickReply, Workflow } from './types';
+import { INITIAL_CHATS, INITIAL_DEPARTMENTS, INITIAL_USERS, INITIAL_QUICK_REPLIES, INITIAL_WORKFLOWS } from './constants';
 import Login from './components/Login';
 import ChatInterface from './components/ChatInterface';
 import Connection from './components/Connection';
@@ -8,8 +9,9 @@ import DepartmentSettings from './components/DepartmentSettings';
 import UserSettings from './components/UserSettings';
 import Settings from './components/Settings';
 import QuickMessageSettings from './components/QuickMessageSettings';
+import WorkflowSettings from './components/WorkflowSettings';
 import ReportsDashboard from './components/ReportsDashboard';
-import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart } from 'lucide-react';
+import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks } from 'lucide-react';
 
 const loadConfig = (): ApiConfig => {
   const saved = localStorage.getItem('zapflow_config');
@@ -32,6 +34,7 @@ const App: React.FC = () => {
   const [departments, setDepartments] = useState<Department[]>(INITIAL_DEPARTMENTS);
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>(INITIAL_QUICK_REPLIES);
+  const [workflows, setWorkflows] = useState<Workflow[]>(INITIAL_WORKFLOWS);
   const [apiConfig, setApiConfig] = useState<ApiConfig>(loadConfig());
 
   useEffect(() => {
@@ -63,6 +66,9 @@ const App: React.FC = () => {
   };
 
   const handleAddDepartment = (dept: Department) => setDepartments([...departments, dept]);
+  const handleUpdateDepartment = (updatedDept: Department) => {
+    setDepartments(departments.map(d => d.id === updatedDept.id ? updatedDept : d));
+  };
   const handleDeleteDepartment = (id: string) => {
     setDepartments(departments.filter(d => d.id !== id));
     setChats(chats.map(c => c.departmentId === id ? { ...c, departmentId: null } : c));
@@ -77,6 +83,10 @@ const App: React.FC = () => {
   const handleAddQuickReply = (qr: QuickReply) => setQuickReplies([...quickReplies, qr]);
   const handleUpdateQuickReply = (updatedQr: QuickReply) => setQuickReplies(quickReplies.map(q => q.id === updatedQr.id ? updatedQr : q));
   const handleDeleteQuickReply = (id: string) => setQuickReplies(quickReplies.filter(q => q.id !== id));
+
+  const handleAddWorkflow = (wf: Workflow) => setWorkflows([...workflows, wf]);
+  const handleUpdateWorkflow = (updatedWf: Workflow) => setWorkflows(workflows.map(w => w.id === updatedWf.id ? updatedWf : w));
+  const handleDeleteWorkflow = (id: string) => setWorkflows(workflows.filter(w => w.id !== id));
 
   // --- Access Control & Filtering Logic ---
   const filteredChats = useMemo(() => {
@@ -105,7 +115,7 @@ const App: React.FC = () => {
   const canAccess = (view: ViewState): boolean => {
     if (!currentUser) return false;
     if (currentUser.role === UserRole.ADMIN) return true;
-    if (view === 'settings' || view === 'users' || view === 'connections' || view === 'departments' || view === 'reports') return false;
+    if (view === 'settings' || view === 'users' || view === 'connections' || view === 'departments' || view === 'reports' || view === 'workflows') return false;
     return true;
   };
 
@@ -183,6 +193,7 @@ const App: React.FC = () => {
                 onUpdateChat={handleUpdateChat}
                 apiConfig={apiConfig}
                 quickReplies={quickReplies}
+                workflows={workflows}
              />
           </div>
         );
@@ -191,11 +202,12 @@ const App: React.FC = () => {
       case 'connections':
         return <Connection config={apiConfig} onNavigateToSettings={() => setCurrentView('settings')} />;
       case 'departments':
-        return <DepartmentSettings departments={departments} onAdd={handleAddDepartment} onDelete={handleDeleteDepartment} />;
+        return <DepartmentSettings departments={departments} onAdd={handleAddDepartment} onUpdate={handleUpdateDepartment} onDelete={handleDeleteDepartment} />;
+      case 'workflows':
+        return <WorkflowSettings workflows={workflows} departments={departments} onAdd={handleAddWorkflow} onUpdate={handleUpdateWorkflow} onDelete={handleDeleteWorkflow} />;
       case 'users':
         return <UserSettings users={users} departments={departments} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} />;
       case 'settings':
-        // Agora dividimos Settings em Config Geral + Respostas Rápidas
         return (
            <div className="p-4 space-y-6 overflow-y-auto h-full">
               <Settings config={apiConfig} onSave={handleSaveConfig} />
@@ -275,6 +287,13 @@ const App: React.FC = () => {
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'reports' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
                 >
                     <BarChart size={20} /> Relatórios
+                </button>
+
+                <button 
+                    onClick={() => handleViewChange('workflows')}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'workflows' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
+                >
+                    <ListChecks size={20} /> Fluxos (SOP)
                 </button>
 
                 <button 
