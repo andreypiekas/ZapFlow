@@ -3,31 +3,13 @@
 GUIA DE INSTALAÇÃO E SOLUÇÃO DE PROBLEMAS - ZAPFLOW (UBUNTU 20.04+)
 ==============================================================================
 
-Se você já tem 4GB de RAM + SWAP e o QR Code não gera, siga este procedimento de
-LIMPEZA TOTAL para remover sessões corrompidas de tentativas anteriores.
+Se o QR Code funciona no CURL mas não no site, é problema de CORS.
+Atualize seu docker-compose.yml com as configurações abaixo.
 
 ------------------------------------------------------------------------------
-PASSO 1: LIMPEZA TOTAL (HARD RESET) - FAÇA ISSO PRIMEIRO!
-------------------------------------------------------------------------------
-Como houve falhas anteriores, é provável que o banco de dados tenha "lixo".
-Vamos limpar tudo para começar do zero.
-
-1. Pare os containers:
-   docker compose down
-
-2. Remova os volumes (ISSO APAGA AS SESSÕES TRAVADAS):
-   docker volume rm zapflow_evolution_instances zapflow_evolution_store zapflow_evolution_postgres zapflow_evolution_redis
-   
-   *(Se der erro dizendo que não existe, tudo bem, continue)*
-
-3. Remova containers orfãos:
-   docker system prune -f
-
-------------------------------------------------------------------------------
-PASSO 2: DOCKER COMPOSE BLINDADO (ATUALIZADO)
+PASSO 1: DOCKER COMPOSE BLINDADO (COM CORS ATIVADO)
 ------------------------------------------------------------------------------
 Edite seu arquivo com `nano docker-compose.yml` e substitua TUDO por este conteúdo.
-Ele contém configurações extras de estabilidade para o Chrome.
 
 version: '3.3'
 
@@ -36,7 +18,7 @@ services:
     image: atendai/evolution-api:v2.2.2
     container_name: evolution_api
     restart: always
-    shm_size: '2gb' # Aumentado para garantir
+    shm_size: '2gb'
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -56,9 +38,14 @@ services:
       - RABBITMQ_ENABLED=false
       - CACHE_REDIS_ENABLED=true
       - CACHE_REDIS_URI=redis://redis:6379/0
-      # Configurações Críticas para Estabilidade
+      # Configurações de Sessão
       - DEL_INSTANCE=false
       - CONFIG_SESSION_PHONE_CLIENT=ZapFlow 
+      # --- CONFIGURAÇÕES DE CORS (ESSENCIAL PARA O SITE) ---
+      - CORS_ORIGIN=*
+      - CORS_METHODS=POST,GET,PUT,DELETE,OPTIONS
+      - CORS_CREDENTIALS=true
+      # -----------------------------------------------------
       # Argumentos para evitar crash do Chrome
       - BROWSER_ARGS=--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu --disable-software-rasterizer --no-first-run --no-zygote --single-process
     depends_on:
@@ -91,42 +78,15 @@ volumes:
   evolution_redis:
 
 ------------------------------------------------------------------------------
-PASSO 3: SUBIR E TESTAR SEM INTERFACE (PROVA REAL)
+PASSO 2: APLICAR MUDANÇAS
 ------------------------------------------------------------------------------
-1. Suba o sistema:
-   docker compose up -d
-
-2. Aguarde cerca de 30 segundos para o banco iniciar.
-
-3. **TESTE DEFINITIVO VIA TERMINAL:**
-   Em vez de tentar pelo site, vamos forçar a criação via comando.
-   Copie e cole este comando no terminal (Substitua SEU_IP_AQUI se necessário):
-
-   curl -X POST http://localhost:8080/instance/create \
-   -H "apikey: B8349283-F143-429D-B6C2-9386E8016558" \
-   -H "Content-Type: application/json" \
-   -d '{
-     "instanceName": "zapflow_main",
-     "qrcode": true,
-     "integration": "WHATSAPP-BAILEYS"
-   }'
-
-   RESULTADO ESPERADO:
-   - Se aparecer um monte de letras aleatórias (Base64) ou um JSON com "qrcode": "...", FUNCIONOU!
-   - Significa que a API está gerando o QR Code, e o problema era apenas visual ou cache.
-
-4. Se o comando acima funcionou:
-   - Abra o site ZapFlow (http://SEU_IP:5173).
-   - Vá em Configurações.
-   - Coloque a URL http://SEU_IP:8080 e a chave B8349283-F143-429D-B6C2-9386E8016558.
-   - Nome da Instância: zapflow_main
-   - Salve e vá em Conexões. O QR Code deve aparecer.
+1. docker compose down
+2. docker compose up -d
 
 ------------------------------------------------------------------------------
-PASSO EXTRA: CRIAR SWAP (Se ainda não fez)
+PASSO 3: LIMPEZA DE VOLUMES (CASO AINDA DÊ ERRO)
 ------------------------------------------------------------------------------
-sudo fallocate -l 4G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+Se mesmo com CORS não funcionar, limpe as sessões antigas:
+1. docker compose down
+2. docker volume prune -f
+3. docker compose up -d

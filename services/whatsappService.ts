@@ -21,23 +21,27 @@ export const getSystemStatus = async (config: ApiConfig) => {
     if (!response.ok) throw new Error('Falha ao conectar na API');
     
     const data = await response.json();
-    // Adaptação para diferentes versões da Evolution API
-    // Pode retornar { instance: { state: 'open' } } ou apenas { state: 'open' }
     const state = data?.instance?.state || data?.state;
     
     return { status: state === 'open' ? 'connected' : 'disconnected' };
   } catch (error) {
-    console.error("Erro ao verificar status:", error);
+    // Silently fail logging to avoid spam, unless needed
     return null;
   }
 };
 
 export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null> => {
   if (config.isDemo) {
-    return null; // Demo mode handles simulation differently in the UI now
+    return null; 
   }
 
-  if (!config.baseUrl || !config.apiKey) return null;
+  if (!config.baseUrl || !config.apiKey) {
+      console.warn("Configuração incompleta para buscar QR Code");
+      return null;
+  }
+
+  console.log(`[ZapFlow] Iniciando busca de QR Code para instância: ${config.instanceName}`);
+  console.log(`[ZapFlow] URL: ${config.baseUrl}`);
 
   try {
     // 1. Tenta conectar para pegar o QR Code
@@ -49,9 +53,11 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
       }
     });
 
+    console.log(`[ZapFlow] Status resposta inicial: ${response.status}`);
+
     // 2. AUTO-FIX: Se a instância não existir (404), tenta criar automaticamente
     if (response.status === 404) {
-        console.warn(`Instância '${config.instanceName}' não encontrada. Tentando criar...`);
+        console.warn(`[ZapFlow] Instância '${config.instanceName}' não encontrada (404). Tentando criar...`);
         
         const createRes = await fetch(`${config.baseUrl}/instance/create`, {
             method: 'POST',
@@ -67,8 +73,9 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
         });
 
         if (createRes.ok) {
-             // Aguarda 2 segundos para o processo de criação iniciar
-             await new Promise(resolve => setTimeout(resolve, 2000));
+             console.log("[ZapFlow] Instância criada com sucesso. Aguardando inicialização...");
+             // Aguarda 3 segundos para o processo de criação iniciar
+             await new Promise(resolve => setTimeout(resolve, 3000));
              
              // Tenta buscar o QR novamente
              response = await fetch(`${config.baseUrl}/instance/connect/${config.instanceName}`, {
@@ -79,22 +86,26 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
                 }
             });
         } else {
-            console.error("Falha ao criar instância automaticamente:", await createRes.text());
+            console.error("[ZapFlow] Falha ao criar instância automaticamente:", await createRes.text());
             return null;
         }
     }
 
     if (!response.ok) {
-        console.error("Erro API:", response.statusText);
+        console.error(`[ZapFlow] Erro HTTP ao buscar QR: ${response.status} ${response.statusText}`);
         return null;
     }
 
     const data = await response.json();
+    console.log("[ZapFlow] Dados recebidos da API (QR)");
     
     // Evolution API geralmente retorna { base64: "..." } ou { code: "..." } ou { qrcode: "..." }
     let base64 = data.base64 || data.code || data.qrcode;
     
-    if (!base64) return null;
+    if (!base64) {
+        console.warn("[ZapFlow] Resposta da API não contém QR Code válido.", data);
+        return null;
+    }
 
     // Garante que o prefixo data:image exista
     if (!base64.startsWith('data:image')) {
@@ -103,7 +114,7 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
 
     return base64;
   } catch (error) {
-    console.error("Erro ao buscar QR Code:", error);
+    console.error("[ZapFlow] ERRO CRÍTICO AO BUSCAR QR CODE:", error);
     return null;
   }
 };
@@ -146,8 +157,6 @@ export const blobToBase64 = (blob: Blob): Promise<string> => {
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64String = reader.result as string;
-      // Remove o prefixo "data:image/png;base64," para enviar apenas o hash se a API exigir, 
-      // mas a Evolution API aceita com prefixo no campo "media".
       resolve(base64String); 
     };
     reader.onerror = reject;
