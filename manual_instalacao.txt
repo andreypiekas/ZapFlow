@@ -52,6 +52,7 @@ cd ZapFlow
 npm install
 
 # Gerar o Build de Produção (Otimizado)
+# IMPORTANTE: Sempre rode este comando após alterar qualquer código .tsx/.ts
 npm run build
 
 
@@ -133,6 +134,27 @@ pm2 start serve --name "zapflow-front" -- --single -p 5173 dist
 pm2 save
 pm2 startup
 
+
+------------------------------------------------------------------------------
+SOLUÇÃO DE PROBLEMAS (TROUBLESHOOTING)
+------------------------------------------------------------------------------
+
+PROBLEMA: TELA BRANCA AO ACESSAR O SITE
+1. Este erro geralmente ocorre se o código não foi compilado corretamente ou há erro de JavaScript.
+2. No seu navegador, aperte F12, vá na aba "Console" e veja se há erros vermelhos.
+3. Se houver erro "process is not defined", rode os comandos abaixo no servidor para atualizar:
+
+cd ZapFlow
+git pull
+npm run build
+pm2 restart zapflow-front
+
+4. Limpe o cache do seu navegador (CTRL+F5) e tente novamente.
+
+PROBLEMA: ERRO DE PERMISSÃO "EACCES"
+1. Se ocorrer erro de permissão ao rodar npm install, use:
+sudo chown -R $USER:$USER ~/.npm
+sudo chown -R $USER:$USER .
 
 ------------------------------------------------------------------------------
 FINALIZAÇÃO

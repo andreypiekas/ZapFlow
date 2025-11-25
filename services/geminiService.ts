@@ -1,9 +1,26 @@
 import { GoogleGenAI } from "@google/genai";
 import { Message } from "../types";
 
-// NOTE: In a real production environment, this key should be proxied through a backend.
-// Since this is a frontend-only demo, we rely on the env var being present.
-const apiKey = process.env.API_KEY || '';
+// Função segura para acessar variáveis de ambiente sem quebrar o app no navegador
+const getApiKey = () => {
+  try {
+    // Verifica se process existe (Node.js/Webpack)
+    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+      return process.env.API_KEY;
+    }
+    // Verifica import.meta (Vite)
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
+      // @ts-ignore
+      return import.meta.env.VITE_API_KEY;
+    }
+  } catch (error) {
+    // Silently fail
+  }
+  return '';
+};
+
+const apiKey = getApiKey();
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 export const generateSmartReply = async (
@@ -11,8 +28,8 @@ export const generateSmartReply = async (
   contactName: string
 ): Promise<string> => {
   if (!ai) {
-    console.warn("API Key not found for Gemini");
-    return "Erro: API Key não configurada.";
+    console.warn("API Key not found for Gemini. AI features disabled.");
+    return "Recurso de IA indisponível (Chave de API não configurada).";
   }
 
   // Format history for context
