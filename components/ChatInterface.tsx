@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock } from 'lucide-react';
+import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw } from 'lucide-react';
 import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow } from '../types';
 import { generateSmartReply } from '../services/geminiService';
 import { sendRealMessage, sendRealMediaMessage, blobToBase64 } from '../services/whatsappService';
@@ -28,6 +28,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const [isFinishingModalOpen, setIsFinishingModalOpen] = useState(false);
   const [isWorkflowCollapsed, setIsWorkflowCollapsed] = useState(false);
   
+  // Options Menu
+  const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+
   // Contact Editing States
   const [isEditingContact, setIsEditingContact] = useState(false);
   const [editContactName, setEditContactName] = useState('');
@@ -61,6 +64,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       setEditContactName(selectedChat.contactName);
       setEditClientCode(selectedChat.clientCode || '');
       setIsEditingContact(false); // Reset edit mode when changing chats
+      setShowOptionsMenu(false); // Close menu
     }
   }, [selectedChatId, selectedChat]);
 
@@ -291,6 +295,30 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       status: 'open' as const
     };
     onUpdateChat(updatedChat);
+  };
+
+  // For testing/Demo purposes
+  const simulateCustomerReply = () => {
+     if (!selectedChat) return;
+     const reply: Message = {
+        id: `m_${Date.now()}`,
+        content: "Obrigado pelo retorno. Pode me enviar mais detalhes?",
+        sender: 'user',
+        timestamp: new Date(),
+        status: MessageStatus.DELIVERED,
+        type: 'text'
+     };
+     
+     const updatedChat = {
+        ...selectedChat,
+        messages: [...selectedChat.messages, reply],
+        lastMessage: reply.content,
+        lastMessageTime: new Date(),
+        unreadCount: selectedChat.unreadCount + 1
+     };
+     
+     onUpdateChat(updatedChat);
+     setShowOptionsMenu(false);
   };
 
   const finalizeMessageStatus = (msg: Message, success: boolean) => {
@@ -687,7 +715,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 </div>
               </div>
 
-              <div className="flex items-center gap-1 md:gap-2">
+              <div className="flex items-center gap-1 md:gap-2 relative">
                 {selectedChat.status === 'open' && isAssignedToMe && (
                     <>
                         <button 
@@ -706,9 +734,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         </button>
                     </>
                 )}
-                <button className="p-2 hover:bg-emerald-600 rounded-full transition-colors">
+                <button 
+                    onClick={() => setShowOptionsMenu(!showOptionsMenu)}
+                    className="p-2 hover:bg-emerald-600 rounded-full transition-colors"
+                >
                   <MoreVertical size={20} />
                 </button>
+
+                {/* Dropdown Menu */}
+                {showOptionsMenu && (
+                    <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-50 animate-in fade-in zoom-in-95 origin-top-right text-slate-700">
+                        <button 
+                            onClick={simulateCustomerReply}
+                            className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-2 text-sm border-b border-slate-100"
+                        >
+                            <RefreshCw size={16} className="text-blue-500" /> Simular Resposta do Cliente
+                        </button>
+                        <button className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-2 text-sm">
+                           <Lock size={16} /> Bloquear Contato
+                        </button>
+                    </div>
+                )}
               </div>
             </div>
 

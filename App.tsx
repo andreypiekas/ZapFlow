@@ -11,7 +11,7 @@ import Settings from './components/Settings';
 import QuickMessageSettings from './components/QuickMessageSettings';
 import WorkflowSettings from './components/WorkflowSettings';
 import ReportsDashboard from './components/ReportsDashboard';
-import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks } from 'lucide-react';
+import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Bell, Info, AlertTriangle, CheckCircle } from 'lucide-react';
 
 const loadConfig = (): ApiConfig => {
   const saved = localStorage.getItem('zapflow_config');
@@ -23,6 +23,13 @@ const loadConfig = (): ApiConfig => {
     isDemo: false 
   };
 };
+
+interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'success';
+}
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -37,9 +44,26 @@ const App: React.FC = () => {
   const [workflows, setWorkflows] = useState<Workflow[]>(INITIAL_WORKFLOWS);
   const [apiConfig, setApiConfig] = useState<ApiConfig>(loadConfig());
 
+  // Notification State
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
   useEffect(() => {
     localStorage.setItem('zapflow_config', JSON.stringify(apiConfig));
   }, [apiConfig]);
+
+  const addNotification = (title: string, message: string, type: 'info' | 'warning' | 'success' = 'info') => {
+    const id = Date.now().toString();
+    setNotifications(prev => [...prev, { id, title, message, type }]);
+    
+    // Auto dismiss after 5 seconds
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  };
+
+  const removeNotification = (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
@@ -62,6 +86,48 @@ const App: React.FC = () => {
   };
 
   const handleUpdateChat = (updatedChat: Chat) => {
+    // Lógica de Notificação para Novas Mensagens
+    const oldChat = chats.find(c => c.id === updatedChat.id);
+    
+    if (oldChat && currentUser) {
+        const newMsgCount = updatedChat.messages.length;
+        const oldMsgCount = oldChat.messages.length;
+        
+        // Se houve nova mensagem
+        if (newMsgCount > oldMsgCount) {
+            const lastMsg = updatedChat.messages[updatedChat.messages.length - 1];
+            
+            // Só notifica se for mensagem do usuário (cliente)
+            if (lastMsg.sender === 'user') {
+                
+                // Cenário 1: Chat atribuído a mim
+                if (updatedChat.assignedTo === currentUser.id) {
+                    addNotification(
+                        `Nova mensagem de ${updatedChat.contactName}`,
+                        lastMsg.content.length > 50 ? lastMsg.content.substring(0, 50) + '...' : lastMsg.content,
+                        'info'
+                    );
+                    
+                    // Tocar som de notificação (opcional)
+                    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                    audio.play().catch(e => console.log('Audio autoplay blocked'));
+                }
+                
+                // Cenário 2: Chat na Triagem (sem departamento) e usuário tem permissão para ver
+                else if (!updatedChat.departmentId && currentUser.allowGeneralConnection) {
+                    addNotification(
+                        `Novo chamado na Triagem`,
+                        `${updatedChat.contactName}: ${lastMsg.content}`,
+                        'warning'
+                    );
+                    
+                    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                    audio.play().catch(e => console.log('Audio autoplay blocked'));
+                }
+            }
+        }
+    }
+
     setChats(chats.map(c => c.id === updatedChat.id ? updatedChat : c));
   };
 
@@ -222,6 +288,30 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-slate-100 font-sans overflow-hidden">
       
+      {/* Toast Notifications */}
+      <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2">
+        {notifications.map(n => (
+          <div 
+            key={n.id} 
+            className={`
+                min-w-[300px] max-w-sm p-4 rounded-lg shadow-xl border-l-4 bg-white animate-in slide-in-from-right flex items-start gap-3
+                ${n.type === 'info' ? 'border-blue-500' : n.type === 'warning' ? 'border-orange-500' : 'border-emerald-500'}
+            `}
+          >
+             <div className={`mt-1 ${n.type === 'info' ? 'text-blue-500' : n.type === 'warning' ? 'text-orange-500' : 'text-emerald-500'}`}>
+                {n.type === 'info' ? <Info size={20} /> : n.type === 'warning' ? <AlertTriangle size={20} /> : <CheckCircle size={20} />}
+             </div>
+             <div className="flex-1">
+                <h4 className="font-bold text-slate-800 text-sm">{n.title}</h4>
+                <p className="text-sm text-slate-600 mt-1 line-clamp-2">{n.message}</p>
+             </div>
+             <button onClick={() => removeNotification(n.id)} className="text-slate-400 hover:text-slate-600">
+                <X size={16} />
+             </button>
+          </div>
+        ))}
+      </div>
+
       {/* Mobile Header */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-slate-900 z-40 flex items-center justify-between px-4 shadow-md flex-shrink-0">
         <div className="flex items-center gap-3">
