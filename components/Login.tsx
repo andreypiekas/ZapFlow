@@ -89,9 +89,9 @@ const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
           <div className="mt-8 pt-6 border-t border-slate-100">
              <p className="text-xs font-bold text-slate-500 mb-2 text-center">Usuários de Teste:</p>
              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="bg-slate-50 p-2 rounded border border-slate-200 cursor-pointer hover:bg-slate-100" onClick={() => {setEmail('admin@zapflow.com.br'); setPassword('123')}}>
+                <div className="bg-slate-50 p-2 rounded border border-slate-200 cursor-pointer hover:bg-slate-100" onClick={() => {setEmail('admin@hostgator.com'); setPassword('123')}}>
                    <span className="block font-semibold text-emerald-600">Admin</span>
-                   <span className="text-slate-500">admin@zapflow.com.br</span>
+                   <span className="text-slate-500">admin@hostgator.com</span>
                    <span className="block text-slate-400">Senha: 123</span>
                 </div>
                 <div className="bg-slate-50 p-2 rounded border border-slate-200 cursor-pointer hover:bg-slate-100" onClick={() => {setEmail('joao@zapflow.com.br'); setPassword('123')}}>
@@ -103,7 +103,7 @@ const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
           </div>
 
           <div className="mt-6 text-center text-xs text-slate-400">
-            <p>Hospedado em HostGator • Versão 1.1.0</p>
+            <p>Desenvolvido por Andrey Gheno Piekas • Versão 1.1.0</p>
           </div>
         </div>
       </div>

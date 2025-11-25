@@ -15,10 +15,11 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  password?: string; // In a real app, this would be hashed
+  password?: string;
   role: UserRole;
   avatar: string;
-  departmentId?: string; // If null/undefined and role is AGENT, they might see nothing or unassigned
+  departmentId?: string;
+  allowGeneralConnection?: boolean; // Permite ver chats sem departamento
 }
 
 export interface Department {
@@ -28,9 +29,15 @@ export interface Department {
   color: string;
 }
 
+export interface QuickReply {
+  id: string;
+  title: string;
+  content: string;
+}
+
 export interface Message {
   id: string;
-  content: string; // Caption for media or text content
+  content: string;
   sender: 'user' | 'agent' | 'system';
   timestamp: Date;
   status: MessageStatus;
@@ -51,7 +58,9 @@ export interface Chat {
   lastMessageTime: Date;
   status: 'open' | 'pending' | 'closed';
   messages: Message[];
-  assignedTo?: string; // User ID
+  assignedTo?: string;
+  rating?: number; // 1 to 5 stars
+  endedAt?: Date;
 }
 
 export interface ApiConfig {
@@ -61,4 +70,4 @@ export interface ApiConfig {
   isDemo: boolean;
 }
 
-export type ViewState = 'dashboard' | 'chat' | 'connections' | 'departments' | 'settings' | 'users';
+export type ViewState = 'dashboard' | 'chat' | 'connections' | 'departments' | 'settings' | 'users' | 'reports';

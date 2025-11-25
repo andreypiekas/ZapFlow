@@ -1,20 +1,21 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Chat, Department, ViewState, ApiConfig, User, UserRole } from './types';
-import { INITIAL_CHATS, INITIAL_DEPARTMENTS, INITIAL_USERS } from './constants';
+import { Chat, Department, ViewState, ApiConfig, User, UserRole, QuickReply } from './types';
+import { INITIAL_CHATS, INITIAL_DEPARTMENTS, INITIAL_USERS, INITIAL_QUICK_REPLIES } from './constants';
 import Login from './components/Login';
 import ChatInterface from './components/ChatInterface';
 import Connection from './components/Connection';
 import DepartmentSettings from './components/DepartmentSettings';
 import UserSettings from './components/UserSettings';
 import Settings from './components/Settings';
-import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck } from 'lucide-react';
+import QuickMessageSettings from './components/QuickMessageSettings';
+import ReportsDashboard from './components/ReportsDashboard';
+import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart } from 'lucide-react';
 
-// Initial config loading from local storage
 const loadConfig = (): ApiConfig => {
   const saved = localStorage.getItem('zapflow_config');
   if (saved) return JSON.parse(saved);
   return {
-    baseUrl: '', // User needs to fill this via Settings
+    baseUrl: '', 
     apiKey: '',
     instanceName: 'zapflow_main',
     isDemo: false 
@@ -24,21 +25,21 @@ const loadConfig = (): ApiConfig => {
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // Application Data State
   const [chats, setChats] = useState<Chat[]>(INITIAL_CHATS);
   const [departments, setDepartments] = useState<Department[]>(INITIAL_DEPARTMENTS);
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>(INITIAL_QUICK_REPLIES);
   const [apiConfig, setApiConfig] = useState<ApiConfig>(loadConfig());
 
-  // Save config whenever it changes
   useEffect(() => {
     localStorage.setItem('zapflow_config', JSON.stringify(apiConfig));
   }, [apiConfig]);
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
-    // If user is agent, default to chat view
     if (user.role === UserRole.AGENT) {
         setCurrentView('chat');
     } else {
@@ -49,36 +50,35 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setCurrentUser(null);
     setCurrentView('dashboard');
+    setIsMobileMenuOpen(false);
   };
 
-  // --- Data Management Handlers ---
+  const handleViewChange = (view: ViewState) => {
+    setCurrentView(view);
+    setIsMobileMenuOpen(false);
+  };
 
   const handleUpdateChat = (updatedChat: Chat) => {
     setChats(chats.map(c => c.id === updatedChat.id ? updatedChat : c));
   };
 
-  const handleAddDepartment = (dept: Department) => {
-    setDepartments([...departments, dept]);
-  };
-
+  const handleAddDepartment = (dept: Department) => setDepartments([...departments, dept]);
   const handleDeleteDepartment = (id: string) => {
     setDepartments(departments.filter(d => d.id !== id));
-    // Optional: Reset chats that belonged to this department
     setChats(chats.map(c => c.departmentId === id ? { ...c, departmentId: null } : c));
   };
 
-  const handleSaveConfig = (newConfig: ApiConfig) => {
-    setApiConfig(newConfig);
-  };
+  const handleSaveConfig = (newConfig: ApiConfig) => setApiConfig(newConfig);
 
-  // User CRUD Handlers
   const handleAddUser = (user: User) => setUsers([...users, user]);
   const handleUpdateUser = (updatedUser: User) => setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u));
   const handleDeleteUser = (id: string) => setUsers(users.filter(u => u.id !== id));
 
-  // --- Access Control & Filtering Logic ---
+  const handleAddQuickReply = (qr: QuickReply) => setQuickReplies([...quickReplies, qr]);
+  const handleUpdateQuickReply = (updatedQr: QuickReply) => setQuickReplies(quickReplies.map(q => q.id === updatedQr.id ? updatedQr : q));
+  const handleDeleteQuickReply = (id: string) => setQuickReplies(quickReplies.filter(q => q.id !== id));
 
-  // Filter Chats based on User Role and Department
+  // --- Access Control & Filtering Logic ---
   const filteredChats = useMemo(() => {
     if (!currentUser) return [];
     
@@ -87,28 +87,27 @@ const App: React.FC = () => {
       return chats;
     }
     
-    // Agents see only chats from their department
+    // Agents see chats from their department OR chats without department if they have permission
     if (currentUser.role === UserRole.AGENT) {
-      if (!currentUser.departmentId) return []; // If agent has no dept, sees nothing (or could see unassigned)
-      
-      return chats.filter(chat => 
-        chat.departmentId === currentUser.departmentId
-      );
+       return chats.filter(chat => {
+          // 1. Chat belongs to user's department
+          const matchesDepartment = chat.departmentId === currentUser.departmentId;
+          // 2. Chat has NO department and user is allowed to see General
+          const matchesGeneral = !chat.departmentId && currentUser.allowGeneralConnection;
+
+          return matchesDepartment || matchesGeneral;
+       });
     }
     
     return [];
   }, [chats, currentUser]);
 
-  // View Access Control
   const canAccess = (view: ViewState): boolean => {
     if (!currentUser) return false;
     if (currentUser.role === UserRole.ADMIN) return true;
-    
-    // Agent restrictions
-    if (view === 'settings' || view === 'users' || view === 'connections' || view === 'departments') return false;
+    if (view === 'settings' || view === 'users' || view === 'connections' || view === 'departments' || view === 'reports') return false;
     return true;
   };
-
 
   if (!currentUser) {
     return <Login users={users} onLogin={handleLogin} />;
@@ -122,7 +121,7 @@ const App: React.FC = () => {
     switch (currentView) {
       case 'dashboard':
         return (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-4 md:p-6">
             <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
               <div className="flex items-center gap-4 mb-4">
                  <div className="p-3 bg-blue-100 text-blue-600 rounded-lg"><MessageSquare /></div>
@@ -167,22 +166,28 @@ const App: React.FC = () => {
                     ? "Você tem acesso total ao sistema. Utilize o menu lateral para gerenciar departamentos, usuários e conexões."
                     : `Você está visualizando os atendimentos do setor: ${departments.find(d => d.id === currentUser.departmentId)?.name || 'Nenhum'}.`
                 }
+                {currentUser.role === UserRole.AGENT && currentUser.allowGeneralConnection && (
+                    <span className="block mt-2 font-medium text-emerald-600">Você também tem permissão para acessar a Triagem (Geral).</span>
+                )}
               </p>
             </div>
           </div>
         );
       case 'chat':
         return (
-          <div className="h-[calc(100vh-2rem)] p-4">
+          <div className="h-full md:p-4">
              <ChatInterface 
-                chats={filteredChats} // Pass filtered chats
+                chats={filteredChats} 
                 departments={departments} 
                 currentUser={currentUser} 
                 onUpdateChat={handleUpdateChat}
                 apiConfig={apiConfig}
+                quickReplies={quickReplies}
              />
           </div>
         );
+      case 'reports':
+          return <ReportsDashboard chats={chats} departments={departments} />;
       case 'connections':
         return <Connection config={apiConfig} onNavigateToSettings={() => setCurrentView('settings')} />;
       case 'departments':
@@ -190,40 +195,70 @@ const App: React.FC = () => {
       case 'users':
         return <UserSettings users={users} departments={departments} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} />;
       case 'settings':
-        return <Settings config={apiConfig} onSave={handleSaveConfig} />;
+        // Agora dividimos Settings em Config Geral + Respostas Rápidas
+        return (
+           <div className="p-4 space-y-6 overflow-y-auto h-full">
+              <Settings config={apiConfig} onSave={handleSaveConfig} />
+              <QuickMessageSettings quickReplies={quickReplies} onAdd={handleAddQuickReply} onUpdate={handleUpdateQuickReply} onDelete={handleDeleteQuickReply} />
+           </div>
+        );
       default:
         return <div className="p-8">Página não encontrada</div>;
     }
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-100 font-sans">
+    <div className="flex h-screen bg-slate-100 font-sans overflow-hidden">
+      
+      {/* Mobile Header */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-slate-900 z-40 flex items-center justify-between px-4 shadow-md flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center text-white font-bold">Z</div>
+          <span className="text-xl font-bold text-white tracking-tight">ZapFlow</span>
+        </div>
+        <button 
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="text-white p-2 hover:bg-slate-800 rounded-lg"
+        >
+            {isMobileMenuOpen ? <X /> : <Menu />}
+        </button>
+      </div>
+
+      {isMobileMenuOpen && (
+        <div 
+          className="md:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar Navigation */}
-      <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col fixed h-full z-10">
-        <div className="p-6 border-b border-slate-800 flex items-center gap-3">
+      <aside className={`
+        fixed md:static inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 flex flex-col h-full transform transition-transform duration-300 ease-in-out flex-shrink-0
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 shadow-xl md:shadow-none
+      `}>
+        <div className="hidden md:flex p-6 border-b border-slate-800 items-center gap-3 flex-shrink-0">
           <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center text-white font-bold">Z</div>
           <span className="text-xl font-bold text-white tracking-tight">ZapFlow</span>
         </div>
         
-        {/* User Profile Mini */}
-        <div className="p-4 bg-slate-800/50 flex items-center gap-3 border-b border-slate-800">
-            <img src={currentUser.avatar} alt="User" className="w-8 h-8 rounded-full border border-slate-600"/>
+        <div className="p-4 bg-slate-800/50 flex items-center gap-3 border-b border-slate-800 mt-16 md:mt-0 flex-shrink-0">
+            <img src={currentUser.avatar} alt="User" className="w-8 h-8 rounded-full border border-slate-600 flex-shrink-0 object-cover"/>
             <div className="overflow-hidden">
                 <p className="text-sm font-semibold text-white truncate">{currentUser.name}</p>
                 <p className="text-xs text-slate-400 truncate capitalize">{currentUser.role === 'ADMIN' ? 'Administrador' : 'Agente'}</p>
             </div>
         </div>
 
-        <nav className="flex-1 py-6 px-3 space-y-2 overflow-y-auto">
+        <nav className="flex-1 py-6 px-3 space-y-2 overflow-y-auto custom-scrollbar">
           <button 
-            onClick={() => setCurrentView('dashboard')}
+            onClick={() => handleViewChange('dashboard')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'dashboard' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
           >
             <LayoutDashboard size={20} /> Dashboard
           </button>
           
           <button 
-            onClick={() => setCurrentView('chat')}
+            onClick={() => handleViewChange('chat')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'chat' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
           >
             <MessageSquare size={20} /> Atendimento
@@ -236,28 +271,35 @@ const App: React.FC = () => {
                 </div>
 
                 <button 
-                    onClick={() => setCurrentView('departments')}
+                    onClick={() => handleViewChange('reports')}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'reports' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
+                >
+                    <BarChart size={20} /> Relatórios
+                </button>
+
+                <button 
+                    onClick={() => handleViewChange('departments')}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'departments' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
                 >
                     <Users size={20} /> Departamentos
                 </button>
 
                 <button 
-                    onClick={() => setCurrentView('users')}
+                    onClick={() => handleViewChange('users')}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'users' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
                 >
                     <ShieldCheck size={20} /> Usuários
                 </button>
 
                 <button 
-                    onClick={() => setCurrentView('connections')}
+                    onClick={() => handleViewChange('connections')}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'connections' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
                 >
                     <Smartphone size={20} /> Conexões
                 </button>
 
                 <button 
-                    onClick={() => setCurrentView('settings')}
+                    onClick={() => handleViewChange('settings')}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'settings' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
                 >
                     <SettingsIcon size={20} /> Configurações
@@ -266,7 +308,7 @@ const App: React.FC = () => {
           )}
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-slate-800 flex-shrink-0">
           <button 
             onClick={handleLogout}
             className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors w-full px-2"
@@ -276,9 +318,10 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      {/* Main Content Area */}
-      <main className="flex-1 ml-64 overflow-y-auto h-screen">
-        {renderContent()}
+      <main className="flex-1 flex flex-col h-full relative min-w-0 bg-slate-100">
+         <div className={`flex-1 w-full pt-16 md:pt-0 ${currentView === 'chat' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+            {renderContent()}
+         </div>
       </main>
     </div>
   );

@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { User, Department, UserRole } from '../types';
-import { UserPlus, Trash2, Edit2, Shield, User as UserIcon, Check, Camera, Upload } from 'lucide-react';
+import { UserPlus, Trash2, Edit2, Shield, User as UserIcon, Check, Camera, Upload, Eye } from 'lucide-react';
 import { blobToBase64 } from '../services/whatsappService';
 
 interface UserSettingsProps {
@@ -22,6 +22,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
   const [role, setRole] = useState<UserRole>(UserRole.AGENT);
   const [departmentId, setDepartmentId] = useState<string>('');
   const [avatar, setAvatar] = useState('');
+  const [allowGeneralConnection, setAllowGeneralConnection] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -34,6 +35,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
       setRole(user.role);
       setDepartmentId(user.departmentId || '');
       setAvatar(user.avatar);
+      setAllowGeneralConnection(user.allowGeneralConnection || false);
     } else {
       setEditingUser(null);
       setName('');
@@ -42,6 +44,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
       setRole(UserRole.AGENT);
       setDepartmentId('');
       setAvatar(`https://picsum.photos/200/200?random=${Date.now()}`);
+      setAllowGeneralConnection(false);
     }
     setIsModalOpen(true);
   };
@@ -50,7 +53,6 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
     if (e.target.files && e.target.files[0]) {
       try {
         const file = e.target.files[0];
-        // Limite simples de tamanho (2MB)
         if (file.size > 2 * 1024 * 1024) {
           alert('A imagem deve ter no máximo 2MB.');
           return;
@@ -74,7 +76,8 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
       password,
       role,
       avatar: avatar,
-      departmentId: role === UserRole.ADMIN ? undefined : departmentId || undefined
+      departmentId: role === UserRole.ADMIN ? undefined : departmentId || undefined,
+      allowGeneralConnection
     };
 
     if (editingUser) {
@@ -92,87 +95,97 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
 
   return (
     <div className="max-w-6xl mx-auto py-8 px-4">
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
            <h2 className="text-2xl font-bold text-slate-800">Gestão de Usuários</h2>
            <p className="text-slate-500">Cadastre usuários, defina senhas e atribua departamentos.</p>
         </div>
         <button 
           onClick={() => openModal()}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-md flex items-center gap-2 transition-colors shadow-sm font-medium"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-md flex items-center gap-2 transition-colors shadow-sm font-medium w-full md:w-auto justify-center"
         >
           <UserPlus size={18} /> Novo Usuário
         </button>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr>
-              <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Usuário</th>
-              <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Função</th>
-              <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Departamento</th>
-              <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {users.map(user => (
-              <tr key={user.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-full object-cover border border-slate-200" />
-                    <div>
-                      <h4 className="font-medium text-slate-800">{user.name}</h4>
-                      <p className="text-xs text-slate-500">{user.email}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  {user.role === UserRole.ADMIN ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 border border-purple-200">
-                      <Shield size={12} /> Admin
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">
-                      <UserIcon size={12} /> Agente
-                    </span>
-                  )}
-                </td>
-                <td className="px-6 py-4 text-sm text-slate-600">
-                  {user.role === UserRole.ADMIN ? (
-                    <span className="text-slate-400 italic">Acesso Total</span>
-                  ) : (
-                    getDepartmentName(user.departmentId)
-                  )}
-                </td>
-                <td className="px-6 py-4 text-right">
-                  <div className="flex justify-end gap-2">
-                    <button 
-                      onClick={() => openModal(user)}
-                      className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                    <button 
-                      onClick={() => onDeleteUser(user.id)}
-                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Excluir"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[600px]">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Usuário</th>
+                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Função</th>
+                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Departamento</th>
+                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Permissões Extras</th>
+                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase text-right">Ações</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {users.map(user => (
+                <tr key={user.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-full object-cover border border-slate-200" />
+                      <div>
+                        <h4 className="font-medium text-slate-800">{user.name}</h4>
+                        <p className="text-xs text-slate-500">{user.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {user.role === UserRole.ADMIN ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 border border-purple-200">
+                        <Shield size={12} /> Admin
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">
+                        <UserIcon size={12} /> Agente
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600">
+                    {user.role === UserRole.ADMIN ? (
+                      <span className="text-slate-400 italic">Acesso Total</span>
+                    ) : (
+                      getDepartmentName(user.departmentId)
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600">
+                    {user.allowGeneralConnection && (
+                        <span className="inline-flex items-center gap-1 text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">
+                            <Eye size={12} /> Ver Triagem/Geral
+                        </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button 
+                        onClick={() => openModal(user)}
+                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                      <button 
+                        onClick={() => onDeleteUser(user.id)}
+                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Excluir"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in duration-200">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 sticky top-0 z-10">
               <h3 className="font-bold text-slate-800 text-lg">
                 {editingUser ? 'Editar Usuário' : 'Novo Usuário'}
               </h3>
@@ -247,7 +260,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Função</label>
                   <select 
@@ -273,13 +286,26 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
                       <option key={dept.id} value={dept.id}>{dept.name}</option>
                     ))}
                   </select>
-                  {role === UserRole.ADMIN && (
-                    <p className="text-[10px] text-slate-400 mt-1">Admins têm acesso a todos setores.</p>
-                  )}
                 </div>
               </div>
+              
+              {/* Opção para Visualizar Chats Gerais */}
+              <div className="pt-2">
+                 <label className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors">
+                    <input 
+                        type="checkbox"
+                        checked={allowGeneralConnection}
+                        onChange={(e) => setAllowGeneralConnection(e.target.checked)}
+                        className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                    />
+                    <div>
+                        <span className="block text-sm font-medium text-slate-700">Permitir visualizar chats sem departamento (Geral)</span>
+                        <span className="block text-xs text-slate-500">Permite que o usuário veja e atenda conversas que ainda não foram triadas ou atribuídas.</span>
+                    </div>
+                 </label>
+              </div>
 
-              <div className="pt-4 flex gap-3 justify-end">
+              <div className="pt-4 flex gap-3 justify-end sticky bottom-0 bg-white border-t border-slate-100">
                 <button 
                   type="button"
                   onClick={() => setIsModalOpen(false)}
@@ -291,7 +317,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
                   type="submit"
                   className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium shadow-sm flex items-center gap-2"
                 >
-                  <Check size={18} /> Salvar Usuário
+                  <Check size={18} /> Salvar
                 </button>
               </div>
             </form>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2 } from 'lucide-react';
-import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType } from '../types';
+import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp } from 'lucide-react';
+import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply } from '../types';
 import { generateSmartReply } from '../services/geminiService';
 import { sendRealMessage, sendRealMediaMessage, blobToBase64 } from '../services/whatsappService';
 
@@ -10,15 +10,19 @@ interface ChatInterfaceProps {
   currentUser: User;
   onUpdateChat: (chat: Chat) => void;
   apiConfig: ApiConfig;
+  quickReplies?: QuickReply[];
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, currentUser, onUpdateChat, apiConfig }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, currentUser, onUpdateChat, apiConfig, quickReplies = [] }) => {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [filterText, setFilterText] = useState('');
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [activeTab, setActiveTab] = useState<'open' | 'closed'>('open');
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [isFinishingModalOpen, setIsFinishingModalOpen] = useState(false);
   
   // File & Media States
   const [isDragging, setIsDragging] = useState(false);
@@ -38,10 +42,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
   const selectedChat = chats.find(c => c.id === selectedChatId);
 
-  const filteredChats = chats.filter(chat => 
-    chat.contactName.toLowerCase().includes(filterText.toLowerCase()) ||
-    chat.contactNumber.includes(filterText)
-  );
+  // Logic: Filter by Tab AND Search
+  const filteredChats = chats.filter(chat => {
+    // 1. Filter by Tab
+    const matchesTab = activeTab === 'open' 
+        ? (chat.status === 'open' || chat.status === 'pending')
+        : (chat.status === 'closed');
+    
+    // 2. Filter by Search Text
+    const matchesSearch = chat.contactName.toLowerCase().includes(filterText.toLowerCase()) ||
+                          chat.contactNumber.includes(filterText);
+    
+    return matchesTab && matchesSearch;
+  });
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -138,7 +151,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
     } catch (err) {
       console.error("Erro ao acessar microfone:", err);
-      // Tratamento para ambientes sem HTTPS ou permissões bloqueadas
       if (err instanceof DOMException && err.name === 'NotAllowedError') {
           alert("Acesso ao microfone negado. Por favor, permita o acesso nas configurações do navegador.");
       } else {
@@ -152,11 +164,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
     mediaRecorderRef.current.onstop = async () => {
       if (shouldSend && selectedChat) {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/mp3' }); // webm/mp3 dependendo do browser
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/mp3' });
         await sendMediaMessage(audioBlob, 'audio');
       }
       
-      // Cleanup
       const tracks = mediaRecorderRef.current?.stream.getTracks();
       tracks?.forEach(track => track.stop());
       mediaRecorderRef.current = null;
@@ -186,14 +197,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       timestamp: new Date(),
       status: MessageStatus.SENT,
       type: type,
-      mediaUrl: base64Preview, // Para demo, usamos base64 como URL
+      mediaUrl: base64Preview, 
       mimeType: blob.type,
       fileName: selectedFile?.name
     };
 
     updateChatWithNewMessage(newMessage);
 
-    // Send to API
     const success = await sendRealMediaMessage(apiConfig, selectedChat.contactNumber, blob, inputText, type, selectedFile?.name);
     
     finalizeMessageStatus(newMessage, success);
@@ -206,7 +216,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const handleSendMessage = async () => {
     if (!selectedChat) return;
 
-    // Se tiver arquivo selecionado, envia como mídia
     if (selectedFile) {
         const type = selectedFile.type.startsWith('image/') ? 'image' : 
                      selectedFile.type.startsWith('video/') ? 'video' : 'document';
@@ -233,9 +242,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     finalizeMessageStatus(newMessage, success);
     setIsSending(false);
     setInputText('');
+    setShowQuickReplies(false);
   };
 
-  // Helpers for optimistic UI updates
   const updateChatWithNewMessage = (msg: Message) => {
     if (!selectedChat) return;
     const updatedChat = {
@@ -250,13 +259,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
   const finalizeMessageStatus = (msg: Message, success: boolean) => {
     if (!selectedChat) return;
-    // Precisamos buscar o chat atualizado do estado (pode ter mudado se user digitou rapido)
-    // Para simplificar aqui, vamos assumir o selectedChat atual
-    // Num app real usariamos um gerenciador de estado global mais robusto
-    if (success) {
-       // Atualiza status localmente
-       // Nota: A lógica real de atualização viria via webhook/socket
-    }
+    // Em produção, isso seria via webhook
   };
 
   const handleTransfer = (deptId: string) => {
@@ -280,6 +283,49 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     setIsTransferModalOpen(false);
   };
 
+  const handleFinishChat = (withSurvey: boolean) => {
+    if (!selectedChat) return;
+
+    const endMessage = withSurvey 
+      ? 'Atendimento finalizado. Enviamos uma pesquisa de satisfação para o cliente.' 
+      : 'Atendimento finalizado pelo agente.';
+
+    // Simulação da Pesquisa:
+    // Em um cenário real, enviaria uma mensagem interativa com botões 1-5.
+    // Aqui vamos "mockar" que o cliente respondeu 5 estrelas após 1 segundo para fins de relatório.
+    let rating: number | undefined = undefined;
+    if (withSurvey) {
+        rating = Math.floor(Math.random() * 2) + 4; // Random 4 or 5
+    }
+
+    const updatedChat: Chat = {
+      ...selectedChat,
+      status: 'closed',
+      endedAt: new Date(),
+      rating: rating,
+      messages: [
+        ...selectedChat.messages,
+        {
+          id: `sys_${Date.now()}`,
+          content: endMessage,
+          sender: 'system' as const,
+          timestamp: new Date(),
+          status: MessageStatus.READ,
+          type: 'text' as const
+        }
+      ]
+    };
+    
+    // Send survey msg via API if needed
+    if (withSurvey) {
+        sendRealMessage(apiConfig, selectedChat.contactNumber, "Por favor, avalie nosso atendimento de 1 a 5 estrelas.");
+    }
+
+    onUpdateChat(updatedChat);
+    setIsFinishingModalOpen(false);
+    setSelectedChatId(null);
+  };
+
   const handleGenerateAI = async () => {
     if (!selectedChat) return;
     setIsGeneratingAI(true);
@@ -299,7 +345,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // --- RENDER MESSAGE CONTENT ---
   const renderMessageContent = (msg: Message) => {
     if (msg.type === 'image' && msg.mediaUrl) {
       return (
@@ -316,7 +361,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         </div>
       );
     }
-
     if (msg.type === 'audio' && msg.mediaUrl) {
       return (
         <div className="flex items-center gap-2 min-w-[200px]">
@@ -324,7 +368,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         </div>
       );
     }
-
     if (msg.type === 'document') {
        return (
            <div className="flex items-center gap-3 bg-black/5 p-3 rounded-lg">
@@ -343,15 +386,34 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
            </div>
        );
     }
-
     return <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{msg.content}</p>;
   };
 
   return (
-    <div className="flex h-full bg-white rounded-lg shadow-sm overflow-hidden border border-slate-200">
+    <div className="flex h-full bg-white md:rounded-lg shadow-sm overflow-hidden md:border border-slate-200">
+      
       {/* Sidebar List */}
-      <div className="w-1/3 border-r border-slate-200 flex flex-col bg-slate-50">
-        <div className="p-4 bg-white border-b border-slate-200">
+      <div className={`
+        flex-col bg-slate-50 border-r border-slate-200 w-full md:w-1/3
+        ${selectedChatId ? 'hidden md:flex' : 'flex'}
+      `}>
+        {/* Header da Sidebar */}
+        <div className="p-4 bg-white border-b border-slate-200 space-y-3">
+           <div className="flex bg-slate-100 p-1 rounded-lg">
+              <button 
+                onClick={() => setActiveTab('open')}
+                className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all ${activeTab === 'open' ? 'bg-white shadow text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Em Aberto
+              </button>
+              <button 
+                onClick={() => setActiveTab('closed')}
+                className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all ${activeTab === 'closed' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Finalizados
+              </button>
+           </div>
+
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
             <input 
@@ -365,7 +427,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         </div>
         
         <div className="flex-1 overflow-y-auto">
-          {filteredChats.map(chat => (
+          {filteredChats.length === 0 ? (
+             <div className="p-8 text-center text-slate-400 text-sm">
+                Nenhuma conversa encontrada.
+             </div>
+          ) : (
+             filteredChats.map(chat => (
             <div 
               key={chat.id}
               onClick={() => setSelectedChatId(chat.id)}
@@ -388,6 +455,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                       {chat.unreadCount}
                     </span>
                   )}
+                  {chat.status === 'closed' && chat.rating && (
+                     <span className="flex items-center gap-0.5 text-[10px] text-yellow-500 mt-1 justify-end">
+                        <ThumbsUp size={10} /> {chat.rating}
+                     </span>
+                  )}
                 </div>
               </div>
               <div className="flex justify-between items-center mt-2">
@@ -403,13 +475,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 )}
               </div>
             </div>
-          ))}
+          )))}
         </div>
       </div>
 
-      {/* Main Chat Area with Drag & Drop */}
+      {/* Main Chat Area */}
       <div 
-        className="flex-1 flex flex-col bg-[#e5ddd5] relative"
+        className={`
+           flex-1 flex-col bg-[#e5ddd5] relative
+           ${selectedChatId ? 'flex' : 'hidden md:flex'}
+        `}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -427,24 +502,42 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         {selectedChat ? (
           <>
             {/* Header */}
-            <div className="h-16 bg-emerald-700 flex items-center justify-between px-4 text-white shadow-sm z-10">
-              <div className="flex items-center gap-3">
-                <img src={selectedChat.contactAvatar} alt="" className="w-10 h-10 rounded-full bg-white" />
-                <div>
-                  <h2 className="font-semibold">{selectedChat.contactName}</h2>
-                  <p className="text-xs opacity-90 text-emerald-100">
+            <div className="h-16 bg-emerald-700 flex items-center justify-between px-2 md:px-4 text-white shadow-sm z-10">
+              <div className="flex items-center gap-2 md:gap-3">
+                <button 
+                  onClick={() => setSelectedChatId(null)}
+                  className="md:hidden p-1 text-white hover:bg-white/10 rounded-full"
+                >
+                  <ArrowLeft size={24} />
+                </button>
+
+                <img src={selectedChat.contactAvatar} alt="" className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white" />
+                <div className="overflow-hidden">
+                  <h2 className="font-semibold text-sm md:text-base truncate max-w-[150px] md:max-w-none">{selectedChat.contactName}</h2>
+                  <p className="text-xs opacity-90 text-emerald-100 truncate">
                     {getDepartmentName(selectedChat.departmentId)}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => setIsTransferModalOpen(true)}
-                  className="p-2 hover:bg-emerald-600 rounded-full transition-colors tooltip relative group"
-                  title="Transferir Setor"
-                >
-                  <ArrowRightLeft size={20} />
-                </button>
+              <div className="flex items-center gap-1 md:gap-2">
+                {selectedChat.status === 'open' && (
+                    <>
+                        <button 
+                            onClick={() => setIsFinishingModalOpen(true)}
+                            className="p-2 hover:bg-red-600/20 bg-black/10 rounded-full transition-colors tooltip relative group mr-1"
+                            title="Finalizar Atendimento"
+                        >
+                            <CheckCircle size={20} />
+                        </button>
+                        <button 
+                            onClick={() => setIsTransferModalOpen(true)}
+                            className="p-2 hover:bg-emerald-600 rounded-full transition-colors tooltip relative group"
+                            title="Transferir Setor"
+                        >
+                            <ArrowRightLeft size={20} />
+                        </button>
+                    </>
+                )}
                 <button className="p-2 hover:bg-emerald-600 rounded-full transition-colors">
                   <MoreVertical size={20} />
                 </button>
@@ -460,10 +553,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         {msg.content}
                      </div>
                   ) : (
-                    <div className={`max-w-[70%] rounded-lg px-2 py-2 shadow-sm relative ${
+                    <div className={`max-w-[85%] md:max-w-[70%] rounded-lg px-2 py-2 shadow-sm relative ${
                       msg.sender === 'user' ? 'bg-white rounded-tl-none' : 'bg-emerald-100 rounded-tr-none'
                     }`}>
-                      {/* Render Content Based on Type */}
                       <div className="px-2 pt-1">
                         {renderMessageContent(msg)}
                       </div>
@@ -484,8 +576,32 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             </div>
 
             {/* Input Area */}
-            <div className="bg-slate-100 p-3 relative z-20">
+            {selectedChat.status === 'open' ? (
+            <div className="bg-slate-100 p-2 md:p-3 relative z-20">
               
+              {/* Quick Replies Menu */}
+              {showQuickReplies && (
+                  <div className="absolute bottom-full left-0 mb-2 ml-2 w-64 bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden animate-in slide-in-from-bottom-2 z-50">
+                      <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 text-xs font-bold text-slate-500 flex justify-between items-center">
+                          <span>Respostas Rápidas</span>
+                          <button onClick={() => setShowQuickReplies(false)}><X size={14} /></button>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto">
+                          {quickReplies.map(qr => (
+                              <button 
+                                key={qr.id}
+                                onClick={() => { setInputText(qr.content); setShowQuickReplies(false); }}
+                                className="w-full text-left px-3 py-2 hover:bg-emerald-50 text-sm text-slate-700 border-b border-slate-50 last:border-0"
+                              >
+                                  <span className="font-bold block text-emerald-600 text-xs mb-0.5">{qr.title}</span>
+                                  <span className="truncate block">{qr.content}</span>
+                              </button>
+                          ))}
+                          {quickReplies.length === 0 && <p className="p-3 text-xs text-slate-400">Nenhuma mensagem cadastrada.</p>}
+                      </div>
+                  </div>
+              )}
+
               {/* Attachment Preview Area */}
               {selectedFile && (
                 <div className="bg-slate-200 p-3 rounded-t-lg border-b border-slate-300 flex items-center justify-between animate-in slide-in-from-bottom-2">
@@ -496,7 +612,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         <div className="w-12 h-12 bg-white rounded-md flex items-center justify-center text-emerald-600"><FileIcon /></div>
                       )}
                       <div>
-                         <p className="text-sm font-semibold truncate max-w-[200px] text-slate-800">{selectedFile.name}</p>
+                         <p className="text-sm font-semibold truncate max-w-[150px] text-slate-800">{selectedFile.name}</p>
                          <p className="text-xs text-slate-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
                       </div>
                    </div>
@@ -513,7 +629,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 </div>
               )}
               
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 md:gap-2">
                 
                 {/* File Input */}
                 <input 
@@ -525,10 +641,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
                 {isRecording ? (
                     // Recording UI
-                    <div className="flex-1 flex items-center gap-4 bg-white px-4 py-3 rounded-full shadow-sm animate-in fade-in">
-                        <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                        <span className="text-slate-700 font-mono font-medium min-w-[50px]">{formatTime(recordingTime)}</span>
-                        <div className="flex-1 text-xs text-slate-400">Gravando áudio...</div>
+                    <div className="flex-1 flex items-center gap-2 md:gap-4 bg-white px-2 md:px-4 py-3 rounded-full shadow-sm animate-in fade-in">
+                        <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse flex-shrink-0" />
+                        <span className="text-slate-700 font-mono font-medium min-w-[40px] text-sm">{formatTime(recordingTime)}</span>
+                        <div className="flex-1 text-xs text-slate-400 truncate">Gravando...</div>
                         
                         <button 
                           onClick={cancelRecording} 
@@ -549,8 +665,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                     // Standard Input UI
                     <>
                         <button 
+                            onClick={() => setShowQuickReplies(!showQuickReplies)}
+                            className="p-2 rounded-full text-slate-500 hover:bg-slate-200 transition-colors flex-shrink-0"
+                            title="Mensagens Rápidas"
+                        >
+                            <Zap size={20} />
+                        </button>
+                        <button 
                             onClick={() => fileInputRef.current?.click()}
-                            className={`p-2 rounded-full transition-colors ${selectedFile ? 'text-emerald-600 bg-emerald-100' : 'text-slate-500 hover:bg-slate-200'}`}
+                            className={`p-2 rounded-full transition-colors flex-shrink-0 ${selectedFile ? 'text-emerald-600 bg-emerald-100' : 'text-slate-500 hover:bg-slate-200'}`}
                         >
                             <Paperclip size={20} />
                         </button>
@@ -561,9 +684,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                             value={inputText}
                             onChange={(e) => setInputText(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                            placeholder={selectedFile ? "Adicione uma legenda..." : "Digite uma mensagem"}
+                            placeholder={selectedFile ? "Legenda..." : "Mensagem"}
                             disabled={isSending}
-                            className={`w-full px-4 py-3 rounded-lg border-none focus:ring-0 outline-none bg-white shadow-sm pr-10 ${selectedFile ? 'rounded-tl-none rounded-tr-none' : ''}`}
+                            className={`w-full px-4 py-3 rounded-lg border-none focus:ring-0 outline-none bg-white shadow-sm pr-10 text-sm ${selectedFile ? 'rounded-tl-none rounded-tr-none' : ''}`}
                             />
                             {!inputText && !selectedFile && (
                                 <button 
@@ -580,14 +703,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                             <button 
                                 onClick={handleSendMessage}
                                 disabled={isSending}
-                                className="p-3 bg-emerald-600 text-white rounded-full hover:bg-emerald-700 shadow-md transition-transform hover:scale-105 active:scale-95 disabled:bg-slate-400 disabled:scale-100"
+                                className="p-3 bg-emerald-600 text-white rounded-full hover:bg-emerald-700 shadow-md transition-transform hover:scale-105 active:scale-95 disabled:bg-slate-400 disabled:scale-100 flex-shrink-0"
                             >
                                 <Send size={20} />
                             </button>
                         ) : (
                             <button 
                                 onClick={startRecording}
-                                className="p-3 bg-slate-200 text-slate-600 rounded-full hover:bg-slate-300 shadow-sm transition-transform hover:scale-105 active:scale-95"
+                                className="p-3 bg-slate-200 text-slate-600 rounded-full hover:bg-slate-300 shadow-sm transition-transform hover:scale-105 active:scale-95 flex-shrink-0"
                             >
                                 <Mic size={20} />
                             </button>
@@ -596,6 +719,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 )}
               </div>
             </div>
+            ) : (
+              <div className="p-4 bg-slate-100 text-center text-slate-500 text-sm border-t border-slate-200">
+                Esta conversa foi finalizada.
+              </div>
+            )}
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-slate-50 border-b-8 border-emerald-500">
@@ -604,18 +732,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             </div>
             <h2 className="text-xl font-medium text-slate-700">ZapFlow Manager</h2>
             <p className="mt-2 text-sm">Selecione uma conversa para iniciar o atendimento</p>
-            <p className="mt-1 text-xs text-slate-400">Envie mensagens, áudios e arquivos facilmente.</p>
           </div>
         )}
       </div>
 
       {/* Transfer Modal */}
       {isTransferModalOpen && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-lg shadow-xl w-96 p-6 animate-in zoom-in duration-200">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 animate-in zoom-in duration-200">
             <h3 className="text-lg font-bold text-slate-800 mb-4">Transferir Atendimento</h3>
-            <p className="text-sm text-slate-500 mb-4">Selecione o departamento para transferir o cliente <b>{selectedChat?.contactName}</b>.</p>
-            
             <div className="space-y-2 mb-6">
               {departments.map(dept => (
                 <button
@@ -628,7 +753,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 </button>
               ))}
             </div>
-            
             <button 
               onClick={() => setIsTransferModalOpen(false)}
               className="w-full py-2 text-slate-500 hover:text-slate-700 font-medium text-sm"
@@ -638,6 +762,43 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
           </div>
         </div>
       )}
+
+      {/* Finishing Modal */}
+      {isFinishingModalOpen && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 animate-in zoom-in duration-200">
+             <div className="text-center mb-6">
+                 <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <CheckCircle size={32} />
+                 </div>
+                 <h3 className="text-lg font-bold text-slate-800">Finalizar Atendimento?</h3>
+                 <p className="text-sm text-slate-500 mt-2">Deseja enviar uma pesquisa de satisfação para o cliente?</p>
+             </div>
+             
+             <div className="space-y-3">
+                <button 
+                  onClick={() => handleFinishChat(true)}
+                  className="w-full py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 flex items-center justify-center gap-2"
+                >
+                   <ThumbsUp size={18} /> Finalizar e enviar pesquisa
+                </button>
+                <button 
+                  onClick={() => handleFinishChat(false)}
+                  className="w-full py-3 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200"
+                >
+                   Apenas finalizar
+                </button>
+                <button 
+                  onClick={() => setIsFinishingModalOpen(false)}
+                  className="w-full py-2 text-slate-400 text-sm hover:underline"
+                >
+                   Cancelar
+                </button>
+             </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
