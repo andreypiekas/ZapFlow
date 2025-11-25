@@ -10,100 +10,158 @@ Para rodar este projeto, você precisará ter instalado em sua máquina:
 
 1.  **Node.js** (Versão 18 ou superior) - O ambiente de execução.
 2.  **Git** - Para baixar o código.
-3.  **Evolution API** (Opcional para testes, Obrigatório para produção) - Gateway para conexão com WhatsApp.
+3.  **Evolution API** (Necessário para a conexão real com WhatsApp).
 
 ---
 
-## 🪟 Instalação no Windows
+## 🪟 Instalação Básica (Desenvolvimento)
 
-### Passo 1: Downloads Necessários
-1.  **Node.js**: [Baixe aqui (Versão LTS)](https://nodejs.org/en/download/)
-2.  **Git**: [Baixe aqui](https://git-scm.com/download/win)
-3.  **VS Code** (Recomendado para editar código): [Baixe aqui](https://code.visualstudio.com/)
+### Windows
 
-### Passo 2: Instalação
-1.  Instale o Node.js e o Git seguindo o assistente de instalação (Next, Next, Finish).
-2.  Abra o **PowerShell** ou **CMD** do Windows.
+1.  **Baixe as ferramentas:**
+    *   Node.js LTS: [nodejs.org](https://nodejs.org/)
+    *   Git: [git-scm.com](https://git-scm.com/)
 
-### Passo 3: Rodando o Projeto
-Digite os seguintes comandos no terminal, um por um:
+2.  **No PowerShell, execute:**
 
 ```powershell
-# 1. Clone o repositório (ou baixe o ZIP e extraia)
+# 1. Clone o repositório
 git clone https://github.com/seu-usuario/zapflow-manager.git
-
-# 2. Entre na pasta do projeto
 cd zapflow-manager
 
-# 3. Instale as dependências do projeto
+# 2. Instale as dependências
 npm install
 
-# 4. Inicie o servidor de desenvolvimento
+# 3. Inicie o servidor local
 npm run dev
 ```
-
-O sistema estará acessível em: `http://localhost:5173`
+O sistema abrirá em `http://localhost:5173`.
 
 ---
 
-## 🐧 Instalação no Linux (Ubuntu/Debian)
-
-### Passo 1: Instalar Dependências
-Abra o terminal e execute:
+### Linux (Ubuntu/Debian)
 
 ```bash
-# Atualiza os pacotes
+# 1. Instalar Node.js e Git
 sudo apt update
-
-# Instala Git e Curl
 sudo apt install git curl -y
-
-# Instala o Node.js (via NVM ou NodeSource recomendados, mas aqui via apt direto para simplificar)
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt install -y nodejs
-```
 
-### Passo 2: Rodando o Projeto
-
-```bash
-# 1. Clone o projeto
+# 2. Clonar e Rodar
 git clone https://github.com/seu-usuario/zapflow-manager.git
-
-# 2. Entre na pasta
 cd zapflow-manager
-
-# 3. Instale as bibliotecas
 npm install
-
-# 4. Rode a aplicação
 npm run dev
 ```
 
 ---
 
-## ⚙️ Configuração do WhatsApp (Evolution API)
+## 🏢 Implantação Completa em VM / Servidor Local (Full Stack)
 
-Para que o sistema envie mensagens reais e gere o QR Code, você precisa conectar a uma instância da **Evolution API**.
+Se você deseja rodar tudo (Sistema + API do WhatsApp) dentro de uma Máquina Virtual (VM) ou servidor local, siga este guia. Recomendamos usar **Docker** para a API.
 
-1.  **Instalação da API:** Recomendamos instalar a Evolution API em um servidor VPS (Hostgator, DigitalOcean, etc) usando Docker.
-    *   [Documentação Oficial da Evolution API](https://doc.evolution-api.com/v2/kB/Installation/docker)
-2.  **No ZapFlow:**
-    *   Acesse o menu **Configurações**.
-    *   Desmarque a opção "Modo Demonstração".
-    *   Insira a **URL da API** (ex: `https://api.seudominio.com`)
-    *   Insira a **Global API Key** (definida na instalação da Evolution).
-    *   Defina um nome para a instância (ex: `atendimento01`).
-    *   Salve e vá para o menu **Conexões** para ler o QR Code.
+### 1. Preparar a VM (Ubuntu 20.04/22.04)
+
+```bash
+# Atualizar sistema e instalar Docker
+sudo apt update && sudo apt upgrade -y
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+
+# Instalar Docker Compose
+sudo apt install docker-compose-plugin -y
+```
+
+### 2. Subir a API do WhatsApp (Evolution API)
+
+Crie uma pasta para a API e um arquivo `docker-compose.yml`:
+
+```bash
+mkdir evolution-api && cd evolution-api
+nano docker-compose.yml
+```
+
+**Cole o conteúdo abaixo no arquivo:**
+
+```yaml
+version: '3.3'
+services:
+  evolution-api:
+    image: attias/evolution-api:v2.1.1
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_PORT=8080
+      - AUTHENTICATION_API_KEY=sua_senha_segura_aqui
+      - DEL_INSTANCE=false
+    volumes:
+      - evolution_instances:/evolution/instances
+      - evolution_store:/evolution/store
+
+volumes:
+  evolution_instances:
+  evolution_store:
+```
+
+**Inicie a API:**
+```bash
+sudo docker compose up -d
+```
+*Sua API estará rodando em: `http://SEU_IP_DA_VM:8080`*
+*Sua chave (API Key) será: `sua_senha_segura_aqui`*
+
+### 3. Subir o ZapFlow Manager (Frontend)
+
+Volte para a raiz e clone o projeto do painel:
+
+```bash
+cd ~
+git clone https://github.com/seu-usuario/zapflow-manager.git
+cd zapflow-manager
+npm install
+```
+
+**Gerar Build de Produção (Otimizado):**
+Não use `npm run dev` em produção. Gere os arquivos estáticos:
+
+```bash
+npm run build
+```
+
+**Servir a Aplicação:**
+Vamos usar um servidor leve para rodar o site na porta 3000 (ou 80).
+
+```bash
+# Instala o servidor estático globalmente
+sudo npm install -g serve
+
+# Roda o projeto em background (usando nohup ou PM2)
+# Opção simples com serve na porta 3000:
+nohup serve -s dist -l 3000 &
+```
+
+### 4. Conectar o Sistema
+
+1. Acesse `http://SEU_IP_DA_VM:3000` no navegador.
+2. Faça login (Admin / 123).
+3. Vá em **Configurações**.
+4. Desmarque "Modo Demonstração".
+5. Preencha:
+   * **URL:** `http://SEU_IP_DA_VM:8080`
+   * **API Key:** `sua_senha_segura_aqui`
+   * **Instância:** `atendimento01`
+6. Salve e vá em **Conexões** para ler o QR Code.
 
 ---
 
 ## 🧠 Configuração da Inteligência Artificial (Google Gemini)
 
-O sistema utiliza a IA do Google para sugerir respostas.
+O sistema utiliza a IA do Google para sugerir respostas. Esta configuração é feita no código antes do build ou via variáveis de ambiente.
 
 1.  Obtenha sua chave gratuitamente em: [Google AI Studio](https://aistudio.google.com/app/apikey)
-2.  Crie um arquivo `.env` na raiz do projeto (copie do `.env.example` se existir).
-3.  Adicione sua chave:
+2.  Crie um arquivo `.env` na raiz do projeto:
 
 ```env
 VITE_API_KEY=sua_chave_gemini_aqui
@@ -116,8 +174,9 @@ VITE_API_KEY=sua_chave_gemini_aqui
 | Comando | Descrição |
 | :--- | :--- |
 | `npm run dev` | Roda o projeto localmente para testes |
-| `npm run build` | Gera os arquivos otimizados para colocar em hospedagem (cPanel/Vercel) |
-| `npm run preview` | Visualiza a versão de produção localmente |
+| `npm run build` | Gera a pasta `dist` otimizada para produção |
+| `sudo docker compose up -d` | Sobe a API do WhatsApp em background |
+| `sudo docker compose logs -f` | Vê os logs da API do WhatsApp |
 
 ---
 
