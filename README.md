@@ -45,18 +45,28 @@ O **ZapFlow Manager** é um sistema completo para centralizar, organizar e autom
 
 ---
 
-## 📋 Pré-requisitos Gerais
+## ⚡ Instalação Automática (Ubuntu 20.04/22.04+)
 
-Para rodar o sistema, você precisará de:
+Se você possui um servidor VPS (Hostgator, DigitalOcean, AWS) com Ubuntu, use este método para instalar tudo (Frontend + Backend + Banco) de uma vez.
 
-1.  **Node.js** (v20+ Recomendado / v18 Mínimo).
-2.  Uma instância da **Evolution API** rodando (Gateway de WhatsApp).
-3.  Uma conta no **Google Cloud Platform** (para sincronização de contatos - opcional).
-4.  Uma chave de API do **Google AI Studio** (para sugestões de IA - opcional).
+1.  **Baixe o repositório:**
+    ```bash
+    git clone https://github.com/andreypiekas/ZapFlow.git
+    cd ZapFlow
+    ```
+
+2.  **Dê permissão e execute o instalador:**
+    ```bash
+    chmod +x install.sh
+    sudo ./install.sh
+    ```
+
+3.  **Siga as instruções na tela.**
+    O script irá instalar Node.js, Docker, configurar a API e colocar o site no ar. Ao final, ele exibirá o IP e a Senha da API.
 
 ---
 
-## 🚀 Guia de Instalação (Local)
+## 🚀 Guia de Instalação Manual (Local / Windows)
 
 ### 1. Clonar o Repositório
 
@@ -67,7 +77,7 @@ cd ZapFlow
 
 ### 2. Instalação por Sistema Operacional
 
-#### 🐧 Ubuntu / Linux (Debian-based)
+#### 🐧 Ubuntu / Linux (Manual)
 
 1.  **Atualize o sistema e instale dependências básicas:**
     ```bash
@@ -85,13 +95,7 @@ cd ZapFlow
     npm install
     ```
 
-4.  **Configure o ambiente:**
-    Crie o arquivo `.env` na raiz do projeto:
-    ```bash
-    echo "VITE_API_KEY=sua_chave_gemini_aqui" > .env
-    ```
-
-5.  **Execute o projeto:**
+4.  **Execute o projeto:**
     ```bash
     npm run dev
     ```
@@ -99,11 +103,9 @@ cd ZapFlow
 #### 🪟 Windows
 
 1.  **Instale o Node.js:**
-    *   Baixe e instale a versão **LTS (Recommended for Most Users)** do site oficial: [https://nodejs.org/](https://nodejs.org/).
-    *   Isso instalará a versão 20.x ou 22.x, ambas compatíveis.
-    *   Durante a instalação, certifique-se de marcar a opção para adicionar ao PATH.
-
-2.  **Instale o Git (Opcional, se não tiver):**
+    *   Baixe e instale a versão **LTS (v20+)** do site oficial: [https://nodejs.org/](https://nodejs.org/).
+    
+2.  **Instale o Git (Opcional):**
     *   Baixe em: [https://git-scm.com/download/win](https://git-scm.com/download/win).
 
 3.  **Abra o terminal (PowerShell ou CMD):**
@@ -114,67 +116,11 @@ cd ZapFlow
     npm install
     ```
 
-5.  **Configure o ambiente:**
-    *   Crie um arquivo chamado `.env` na raiz do projeto.
-    *   Adicione sua chave de IA: `VITE_API_KEY=sua_chave_gemini_aqui`
-
-6.  **Execute o projeto:**
+5.  **Execute o projeto:**
     ```powershell
     npm run dev
     ```
     *   O navegador abrirá automaticamente em `http://localhost:5173`.
-
----
-
-## 🐳 Implantação em Servidor (VPS Produção)
-
-Para colocar o sistema no ar de forma profissional, utilize Docker para o backend (WhatsApp) e Nginx/Serve para o frontend.
-
-### Passo 1: Subir a Evolution API (Backend WhatsApp)
-
-No seu servidor Ubuntu/Linux com Docker instalado:
-
-Crie um arquivo `docker-compose.yml`:
-
-```yaml
-version: '3.3'
-services:
-  evolution-api:
-    image: attias/evolution-api:v2.1.1
-    restart: always
-    ports:
-      - "8080:8080"
-    environment:
-      - SERVER_PORT=8080
-      - AUTHENTICATION_API_KEY=sua_senha_secreta_api
-      - DEL_INSTANCE=false
-    volumes:
-      - evolution_instances:/evolution/instances
-
-volumes:
-  evolution_instances:
-```
-
-Execute: `docker compose up -d`
-
-### Passo 2: Build do Frontend
-
-No diretório do ZapFlow:
-
-```bash
-# Gere os arquivos estáticos otimizados
-npm run build
-```
-
-Isso criará a pasta `dist`. Você pode servir essa pasta usando um servidor web simples:
-
-```bash
-# Instale o servidor estático globalmente
-sudo npm install -g serve
-
-# Rode o site na porta 3000 (em background use pm2 ou nohup)
-serve -s dist -l 3000
-```
 
 ---
 
@@ -184,25 +130,12 @@ Após acessar o sistema pela primeira vez (Login padrão: `admin@hostgator.com` 
 
 1.  Vá em **Configurações**.
 2.  Desmarque "Modo Demonstração".
-3.  Preencha os dados da API:
+3.  Preencha os dados da API (Se usou o script automático, verifique o output do terminal):
     *   **URL:** `http://seu-ip-servidor:8080`
-    *   **API Key:** `sua_senha_secreta_api`
+    *   **API Key:** (A senha que você definiu na instalação)
     *   **Instância:** Escolha um nome (ex: `atendimento01`).
 4.  (Opcional) Preencha o **Google Client ID** para sincronizar contatos.
 5.  Salve e vá para a tela **Conexões** para ler o QR Code com seu celular.
-
----
-
-## ☁️ Como Configurar o Google Contacts (Sync)
-
-Para que o botão "Sincronizar Google" funcione:
-
-1.  Acesse o [Google Cloud Console](https://console.cloud.google.com/).
-2.  Crie um projeto e ative a **"People API"**.
-3.  Vá em **Credenciais** > **Criar Credenciais** > **ID do Cliente OAuth**.
-4.  Tipo de Aplicativo: **Aplicação Web**.
-5.  Em "Origens JavaScript autorizadas", adicione a URL do seu sistema (ex: `http://localhost:5173` ou `https://seu-dominio.com`).
-6.  Copie o **ID do Cliente** gerado e cole na tela de **Configurações** do ZapFlow.
 
 ---
 

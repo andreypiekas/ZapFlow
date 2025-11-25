@@ -1,0 +1,151 @@
+==============================================================================
+GUIA DE INSTALAÇÃO MANUAL - ZAPFLOW MANAGER (UBUNTU 20.04 / 22.04)
+==============================================================================
+
+Siga estes passos sequencialmente no terminal do seu servidor VPS.
+
+------------------------------------------------------------------------------
+PASSO 1: ATUALIZAR O SISTEMA E INSTALAR DEPENDÊNCIAS BÁSICAS
+------------------------------------------------------------------------------
+Copie e cole os comandos abaixo:
+
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y curl git unzip wget nano
+
+
+------------------------------------------------------------------------------
+PASSO 2: INSTALAR NODE.JS (VERSÃO 20 LTS)
+------------------------------------------------------------------------------
+O sistema requer o Node.js versão 20 ou superior.
+
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Verifique a instalação:
+node -v
+# Deve retornar v20.x.x
+
+
+------------------------------------------------------------------------------
+PASSO 3: INSTALAR DOCKER E DOCKER COMPOSE
+------------------------------------------------------------------------------
+Necessário para rodar a Evolution API (Backend do WhatsApp).
+
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+
+# Adicionar usuário atual ao grupo docker (para não precisar usar sudo no docker):
+sudo usermod -aG docker $USER
+
+
+------------------------------------------------------------------------------
+PASSO 4: BAIXAR E CONFIGURAR O PROJETO
+------------------------------------------------------------------------------
+Se você ainda não baixou o projeto:
+
+git clone https://github.com/andreypiekas/ZapFlow.git
+cd ZapFlow
+
+# Instalar dependências do Frontend
+npm install
+
+# Gerar o Build de Produção (Otimizado)
+npm run build
+
+
+------------------------------------------------------------------------------
+PASSO 5: SUBIR A EVOLUTION API (BACKEND)
+------------------------------------------------------------------------------
+1. Crie o arquivo de configuração do Docker:
+
+nano docker-compose.yml
+
+2. Cole o seguinte conteúdo dentro do editor nano:
+
+version: '3.3'
+services:
+  evolution_api:
+    image: attdevelopers/evolution-api:v2.1.1
+    container_name: evolution_api
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_PORT=8080
+      - SERVER_URL=http://localhost:8080
+      - API_KEY=B8349283-F143-429D-B6C2-9386E8016558
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://user:password@postgres:5432/evolution
+      - DATABASE_CLIENT_NAME=evolution_exchange
+      - RABBITMQ_ENABLED=false
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://redis:6379/0
+      - DEL_INSTANCE=false
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: evolution_postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=evolution
+    volumes:
+      - evolution_instances:/var/lib/postgresql/data
+
+  redis:
+    image: redis:alpine
+    container_name: evolution_redis
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - evolution_cache:/data
+
+volumes:
+  evolution_instances:
+  evolution_cache:
+
+3. Salve o arquivo (CTRL+O, Enter) e saia (CTRL+X).
+
+4. Inicie os containers:
+sudo docker compose up -d
+
+# Aguarde uns 30 segundos para o banco iniciar.
+
+
+------------------------------------------------------------------------------
+PASSO 6: COLOCAR O SITE NO AR (FRONTEND)
+------------------------------------------------------------------------------
+Usaremos o PM2 para manter o site rodando 24 horas.
+
+1. Instalar PM2 e Serve globalmente:
+sudo npm install -g pm2 serve
+
+2. Iniciar o servidor web na porta 5173:
+pm2 start serve --name "zapflow-front" -- --single -p 5173 dist
+
+3. Configurar para iniciar com o sistema (caso reinicie):
+pm2 save
+pm2 startup
+
+
+------------------------------------------------------------------------------
+FINALIZAÇÃO
+------------------------------------------------------------------------------
+
+Seu sistema está pronto!
+
+Acesse no navegador:
+Link: http://SEU_IP_DO_SERVIDOR:5173
+
+Dados de Acesso Padrão:
+Email: admin@hostgator.com
+Senha: 123
+
+Configuração da API (Dentro do painel -> Configurações):
+URL: http://SEU_IP_DO_SERVIDOR:8080
+API Key: B8349283-F143-429D-B6C2-9386E8016558
