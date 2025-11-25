@@ -49,7 +49,7 @@ O **ZapFlow Manager** é um sistema completo para centralizar, organizar e autom
 
 Para rodar o sistema, você precisará de:
 
-1.  **Node.js** (v18+) instalado.
+1.  **Node.js** (v20+ Recomendado / v18 Mínimo).
 2.  Uma instância da **Evolution API** rodando (Gateway de WhatsApp).
 3.  Uma conta no **Google Cloud Platform** (para sincronização de contatos - opcional).
 4.  Uma chave de API do **Google AI Studio** (para sugestões de IA - opcional).
@@ -74,9 +74,9 @@ cd ZapFlow
     sudo apt update && sudo apt install -y curl git
     ```
 
-2.  **Instale o Node.js (versão 18.x):**
+2.  **Instale o Node.js (Versão 20 LTS):**
     ```bash
-    curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
     sudo apt install -y nodejs
     ```
 
@@ -99,7 +99,8 @@ cd ZapFlow
 #### 🪟 Windows
 
 1.  **Instale o Node.js:**
-    *   Baixe e instale a versão LTS do site oficial: [https://nodejs.org/](https://nodejs.org/).
+    *   Baixe e instale a versão **LTS (Recommended for Most Users)** do site oficial: [https://nodejs.org/](https://nodejs.org/).
+    *   Isso instalará a versão 20.x ou 22.x, ambas compatíveis.
     *   Durante a instalação, certifique-se de marcar a opção para adicionar ao PATH.
 
 2.  **Instale o Git (Opcional, se não tiver):**
