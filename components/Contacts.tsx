@@ -1,21 +1,109 @@
 
 import React, { useState } from 'react';
 import { Contact } from '../types';
-import { RefreshCw, Search, Mail, User as UserIcon, Check, Loader2 } from 'lucide-react';
+import { RefreshCw, Search, Mail, User as UserIcon, Check, Loader2, AlertTriangle } from 'lucide-react';
+
+// Declare Google Global
+declare const google: any;
 
 interface ContactsProps {
   contacts: Contact[];
-  onSyncGoogle: () => Promise<void>;
+  onSyncGoogle: (contacts?: Contact[]) => Promise<void>;
+  clientId?: string;
 }
 
-const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle }) => {
+const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, clientId }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   const handleSync = async () => {
+    setError(null);
+
+    // 1. Validate Client ID
+    if (!clientId) {
+        setError('Google Client ID não configurado. Acesse Configurações.');
+        return;
+    }
+
+    // 2. Check if GSI is loaded
+    if (typeof google === 'undefined') {
+        setError('Biblioteca do Google não carregada. Verifique sua conexão.');
+        return;
+    }
+
     setIsSyncing(true);
-    await onSyncGoogle();
-    setIsSyncing(false);
+
+    try {
+        const tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: clientId,
+            scope: 'https://www.googleapis.com/auth/contacts.readonly',
+            callback: async (tokenResponse: any) => {
+                if (tokenResponse && tokenResponse.access_token) {
+                    await fetchGoogleContacts(tokenResponse.access_token);
+                } else {
+                    setIsSyncing(false);
+                }
+            },
+        });
+        
+        // Trigger Popup
+        tokenClient.requestAccessToken();
+
+    } catch (err) {
+        console.error(err);
+        setError('Erro ao iniciar autenticação Google.');
+        setIsSyncing(false);
+    }
+  };
+
+  const fetchGoogleContacts = async (accessToken: string) => {
+      try {
+          const response = await fetch(
+              'https://people.googleapis.com/v1/people/me/connections?personFields=names,phoneNumbers,emailAddresses,photos&pageSize=1000', 
+              {
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Accept': 'application/json'
+                }
+              }
+          );
+          
+          if (!response.ok) throw new Error('Falha ao buscar contatos na API People.');
+
+          const data = await response.json();
+          
+          if (data.connections) {
+              const mappedContacts: Contact[] = data.connections.map((person: any) => {
+                  const name = person.names?.[0]?.displayName || 'Sem Nome';
+                  const phone = person.phoneNumbers?.[0]?.value || '';
+                  const email = person.emailAddresses?.[0]?.value;
+                  const avatar = person.photos?.[0]?.url;
+                  const resourceName = person.resourceName;
+
+                  return {
+                      id: resourceName || `g_${Date.now()}_${Math.random()}`,
+                      name,
+                      phone,
+                      email,
+                      avatar,
+                      source: 'google',
+                      lastSync: new Date()
+                  } as Contact;
+              }).filter((c: Contact) => c.phone); // Filter out contacts without phone
+
+              await onSyncGoogle(mappedContacts);
+          } else {
+              // No connections found or empty
+              await onSyncGoogle([]);
+          }
+
+      } catch (err) {
+          console.error(err);
+          setError('Erro ao baixar contatos do Google.');
+      } finally {
+          setIsSyncing(false);
+      }
   };
 
   const filteredContacts = contacts.filter(c => 
@@ -33,15 +121,30 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle }) => {
            </h2>
            <p className="text-slate-500">Gerencie sua agenda e sincronize com o Google Contacts.</p>
         </div>
-        <button 
-          onClick={handleSync}
-          disabled={isSyncing}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 transition-colors shadow-sm font-medium disabled:opacity-70"
-        >
-          {isSyncing ? <Loader2 className="animate-spin" size={20} /> : <RefreshCw size={20} />}
-          {isSyncing ? 'Sincronizando...' : 'Sincronizar Google Contacts'}
-        </button>
+        
+        <div className="flex flex-col items-end gap-2">
+            <button 
+            onClick={handleSync}
+            disabled={isSyncing}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 transition-colors shadow-sm font-medium disabled:opacity-70"
+            >
+            {isSyncing ? <Loader2 className="animate-spin" size={20} /> : <RefreshCw size={20} />}
+            {isSyncing ? 'Sincronizando...' : 'Sincronizar Google Contacts'}
+            </button>
+            {!clientId && (
+                <span className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded border border-red-100 flex items-center gap-1">
+                    <AlertTriangle size={10} /> Configure o Client ID nas Configurações
+                </span>
+            )}
+        </div>
       </div>
+
+      {error && (
+          <div className="mb-6 p-4 bg-red-50 text-red-700 border border-red-200 rounded-lg flex items-center gap-2 animate-in slide-in-from-top-2">
+              <AlertTriangle size={20} />
+              {error}
+          </div>
+      )}
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
         {/* Search Bar */}
@@ -74,9 +177,13 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle }) => {
                 <tr key={contact.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs">
-                          {contact.name.charAt(0)}
-                      </div>
+                      {contact.avatar ? (
+                          <img src={contact.avatar} alt={contact.name} className="w-8 h-8 rounded-full" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs">
+                            {contact.name.charAt(0)}
+                        </div>
+                      )}
                       <span className="font-medium text-slate-800">{contact.name}</span>
                     </div>
                   </td>
@@ -98,7 +205,7 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle }) => {
                     )}
                   </td>
                   <td className="px-6 py-4 text-xs text-slate-500">
-                      {contact.lastSync ? contact.lastSync.toLocaleDateString() + ' ' + contact.lastSync.toLocaleTimeString() : '-'}
+                      {contact.lastSync ? new Date(contact.lastSync).toLocaleString() : '-'}
                   </td>
                 </tr>
               ))}

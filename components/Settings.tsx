@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import { ApiConfig } from '../types';
-import { Save, Server, Shield, Globe } from 'lucide-react';
+import { Save, Server, Shield, Globe, User } from 'lucide-react';
 
 interface SettingsProps {
   config: ApiConfig;
@@ -23,7 +24,7 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-6 border-b border-slate-200">
           <h2 className="text-xl font-bold text-slate-800">Configurações de Integração</h2>
-          <p className="text-slate-500 text-sm mt-1">Configure a conexão com sua instância do WhatsApp (Evolution API, Z-API, etc).</p>
+          <p className="text-slate-500 text-sm mt-1">Configure a conexão com sua instância do WhatsApp e integrações externas.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="p-8 space-y-8">
@@ -54,43 +55,73 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
             </div>
 
             <div className={`space-y-6 transition-opacity ${formData.isDemo ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
-                  <Globe size={16} /> URL da API
-                </label>
-                <input 
-                  type="text" 
-                  value={formData.baseUrl}
-                  onChange={(e) => setFormData({...formData, baseUrl: e.target.value})}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
-                  placeholder="https://api.seudominio.com.br"
-                />
-                <p className="text-xs text-slate-400 mt-1">Endereço base onde a API está instalada.</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="col-span-1 md:col-span-2">
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Evolution API</h3>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                      <Globe size={16} /> URL da API
+                    </label>
+                    <input 
+                      type="text" 
+                      value={formData.baseUrl}
+                      onChange={(e) => setFormData({...formData, baseUrl: e.target.value})}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="https://api.seudominio.com.br"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Endereço base onde a API está instalada.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                      <Shield size={16} /> Global API Key
+                    </label>
+                    <input 
+                      type="password" 
+                      value={formData.apiKey}
+                      onChange={(e) => setFormData({...formData, apiKey: e.target.value})}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="Sua chave de autenticação"
+                    />
+                  </div>
+
+                  <div className="col-span-1 md:col-span-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Nome da Instância</label>
+                    <input 
+                      type="text" 
+                      value={formData.instanceName}
+                      onChange={(e) => setFormData({...formData, instanceName: e.target.value})}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="Ex: hostgator_whatsapp"
+                    />
+                  </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
-                  <Shield size={16} /> Global API Key
-                </label>
-                <input 
-                  type="password" 
-                  value={formData.apiKey}
-                  onChange={(e) => setFormData({...formData, apiKey: e.target.value})}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
-                  placeholder="Sua chave de autenticação"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+                  <div className="col-span-1 md:col-span-2">
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Google Integration</h3>
+                  </div>
+                  
+                  <div className="col-span-1 md:col-span-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                      <User size={16} /> Google Client ID (OAuth 2.0)
+                    </label>
+                    <input 
+                      type="text" 
+                      value={formData.googleClientId || ''}
+                      onChange={(e) => setFormData({...formData, googleClientId: e.target.value})}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="ex: 123456789-abcdefgh.apps.googleusercontent.com"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">
+                        Necessário para sincronizar contatos. Crie em <a href="https://console.cloud.google.com/apis/credentials" target="_blank" className="text-blue-500 underline">Google Cloud Console</a>.
+                    </p>
+                  </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Nome da Instância</label>
-                <input 
-                  type="text" 
-                  value={formData.instanceName}
-                  onChange={(e) => setFormData({...formData, instanceName: e.target.value})}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
-                  placeholder="Ex: hostgator_whatsapp"
-                />
-              </div>
             </div>
           </div>
 

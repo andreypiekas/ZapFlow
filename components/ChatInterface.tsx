@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw, Smile, Tag, Plus } from 'lucide-react';
+import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw, Smile, Tag, Plus, Clock } from 'lucide-react';
 import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow } from '../types';
 import { generateSmartReply } from '../services/geminiService';
 import { sendRealMessage, sendRealMediaMessage, blobToBase64 } from '../services/whatsappService';
@@ -23,7 +23,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [activeTab, setActiveTab] = useState<'open' | 'closed'>('open');
+  
+  // Tabs: 'todo' (Inbox/User replied), 'waiting' (Agent replied), 'closed'
+  const [activeTab, setActiveTab] = useState<'todo' | 'waiting' | 'closed'>('todo');
+  
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [showWorkflowsMenu, setShowWorkflowsMenu] = useState(false);
   const [isFinishingModalOpen, setIsFinishingModalOpen] = useState(false);
@@ -77,20 +80,47 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     }
   }, [selectedChatId, selectedChat]);
 
-  // Logic: Filter by Tab AND Search
-  const filteredChats = chats.filter(chat => {
-    // 1. Filter by Tab
-    const matchesTab = activeTab === 'open' 
-        ? (chat.status === 'open' || chat.status === 'pending')
-        : (chat.status === 'closed');
-    
-    // 2. Filter by Search Text
-    const matchesSearch = chat.contactName.toLowerCase().includes(filterText.toLowerCase()) ||
-                          chat.contactNumber.includes(filterText) ||
-                          (chat.clientCode && chat.clientCode.includes(filterText));
-    
-    return matchesTab && matchesSearch;
-  });
+  // Logic: Filter by Tab AND Search + SORTING
+  const filteredChats = chats
+    .filter(chat => {
+        // 1. Common Search Filter (Applied to all tabs)
+        const matchesSearch = chat.contactName.toLowerCase().includes(filterText.toLowerCase()) ||
+                              chat.contactNumber.includes(filterText) ||
+                              (chat.clientCode && chat.clientCode.includes(filterText));
+        
+        if (!matchesSearch) return false;
+
+        // 2. Tab Logic
+        const isClosed = chat.status === 'closed';
+        const hasMessages = chat.messages.length > 0;
+        const lastSender = hasMessages ? chat.messages[chat.messages.length - 1].sender : 'system';
+        
+        // Logic: Agent replied = Waiting. User replied (or new) = To Do.
+        const isWaitingForCustomer = lastSender === 'agent' || lastSender === 'system'; 
+
+        if (activeTab === 'closed') {
+            return isClosed;
+        }
+
+        if (chat.status === 'open' || chat.status === 'pending') {
+            if (activeTab === 'todo') {
+                // Show if: NOT waiting for customer (so, user replied) OR Unread > 0
+                return !isWaitingForCustomer || chat.unreadCount > 0;
+            }
+            if (activeTab === 'waiting') {
+                // Show if: Waiting for customer AND No unread messages
+                return isWaitingForCustomer && chat.unreadCount === 0;
+            }
+        }
+        
+        return false;
+    })
+    .sort((a, b) => {
+        // Sort by Last Message Time (Descending - Newest First)
+        const timeA = new Date(a.lastMessageTime).getTime();
+        const timeB = new Date(b.lastMessageTime).getTime();
+        return timeB - timeA;
+    });
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -323,8 +353,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       ...selectedChat,
       messages: [...selectedChat.messages, msg],
       lastMessage: msg.type === 'text' ? msg.content : `📷 ${msg.type}`,
-      lastMessageTime: new Date(),
-      status: 'open' as const
+      lastMessageTime: new Date(), // This updates timestamp for sorting
+      status: 'open' as const,
+      unreadCount: 0 // Reset unread if agent sends
     };
     onUpdateChat(updatedChat);
   };
@@ -621,14 +652,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         <div className="p-4 bg-white border-b border-slate-200 space-y-3">
            <div className="flex bg-slate-100 p-1 rounded-lg">
               <button 
-                onClick={() => setActiveTab('open')}
-                className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all ${activeTab === 'open' ? 'bg-white shadow text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+                onClick={() => setActiveTab('todo')}
+                className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all flex justify-center items-center gap-1 ${activeTab === 'todo' ? 'bg-white shadow text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
               >
-                Em Aberto
+                A Fazer
+              </button>
+              <button 
+                onClick={() => setActiveTab('waiting')}
+                className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all flex justify-center items-center gap-1 ${activeTab === 'waiting' ? 'bg-white shadow text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                 <Clock size={12} /> Aguardando
               </button>
               <button 
                 onClick={() => setActiveTab('closed')}
-                className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all ${activeTab === 'closed' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all flex justify-center items-center gap-1 ${activeTab === 'closed' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
               >
                 Finalizados
               </button>
@@ -648,8 +685,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         
         <div className="flex-1 overflow-y-auto">
           {filteredChats.length === 0 ? (
-             <div className="p-8 text-center text-slate-400 text-sm">
-                Nenhuma conversa encontrada.
+             <div className="p-8 text-center text-slate-400 text-sm flex flex-col items-center gap-2">
+                <CheckCircle size={32} className="opacity-20"/>
+                {activeTab === 'todo' && "Tudo limpo! Você não tem conversas pendentes."}
+                {activeTab === 'waiting' && "Nenhuma conversa aguardando resposta do cliente."}
+                {activeTab === 'closed' && "Nenhuma conversa finalizada encontrada."}
              </div>
           ) : (
              filteredChats.map(chat => (
@@ -706,6 +746,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 <div className="flex items-center gap-1 text-slate-600 max-w-[180px]">
                     {chat.messages[chat.messages.length -1]?.type === 'image' && <ImageIcon size={12} />}
                     {chat.messages[chat.messages.length -1]?.type === 'audio' && <Mic size={12} />}
+                    {chat.messages[chat.messages.length -1]?.sender === 'agent' && <ArrowRight size={12} className="text-slate-400"/>}
                     <p className="text-sm truncate">{chat.lastMessage}</p>
                 </div>
                 <div className="flex gap-1">

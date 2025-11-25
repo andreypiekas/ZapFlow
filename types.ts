@@ -125,6 +125,7 @@ export interface ApiConfig {
   apiKey: string;
   instanceName: string;
   isDemo: boolean;
+  googleClientId?: string; // Client ID for Google People API
 }
 
 export type ViewState = 'dashboard' | 'chat' | 'connections' | 'departments' | 'settings' | 'users' | 'reports' | 'workflows' | 'contacts' | 'chatbot';

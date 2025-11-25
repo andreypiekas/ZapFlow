@@ -158,26 +158,52 @@ const App: React.FC = () => {
   const handleUpdateWorkflow = (updatedWf: Workflow) => setWorkflows(workflows.map(w => w.id === updatedWf.id ? updatedWf : w));
   const handleDeleteWorkflow = (id: string) => setWorkflows(workflows.filter(w => w.id !== id));
 
-  const handleSyncGoogleContacts = async () => {
-    // Simula API Call
+  const handleSyncGoogleContacts = async (importedContacts?: Contact[]) => {
     return new Promise<void>((resolve) => {
         setTimeout(() => {
-            const newContacts = MOCK_GOOGLE_CONTACTS.map(c => ({...c, lastSync: new Date()}));
+            let newContacts: Contact[] = [];
+            
+            if (importedContacts && importedContacts.length > 0) {
+                newContacts = importedContacts;
+            } else {
+                // If no real contacts (e.g. demo mode or empty), use mock
+                if (apiConfig.isDemo) {
+                   newContacts = MOCK_GOOGLE_CONTACTS.map(c => ({...c, lastSync: new Date()}));
+                }
+            }
+            
+            // For now, simply replace the google contacts list
+            // In a real DB we would upsert based on ID
             setContacts(newContacts);
             
-            // Atualiza nomes nos chats existentes
+            // Atualiza nomes nos chats existentes (Basic Fuzzy Matching on Phone)
             const updatedChats = chats.map(chat => {
-                const match = newContacts.find(c => c.phone.replace(/\D/g, '') === chat.contactNumber.replace(/\D/g, ''));
+                const chatPhone = chat.contactNumber.replace(/\D/g, '');
+                
+                // Find contact where phone ends with same last 8 digits (loose matching)
+                const match = newContacts.find(c => {
+                    const cPhone = c.phone.replace(/\D/g, '');
+                    return cPhone === chatPhone || (cPhone.length > 8 && chatPhone.endsWith(cPhone.slice(-8)));
+                });
+
                 if (match) {
-                    return { ...chat, contactName: match.name, contactAvatar: `https://ui-avatars.com/api/?name=${match.name}&background=random` };
+                    return { 
+                        ...chat, 
+                        contactName: match.name, 
+                        contactAvatar: match.avatar || chat.contactAvatar 
+                    };
                 }
                 return chat;
             });
             setChats(updatedChats);
 
-            addNotification('Sucesso', 'Contatos sincronizados com Google Contacts', 'success');
+            if (newContacts.length > 0) {
+               addNotification('Sincronização Concluída', `${newContacts.length} contatos atualizados do Google.`, 'success');
+            } else {
+               addNotification('Sincronização', `Nenhum contato encontrado.`, 'info');
+            }
             resolve();
-        }, 2000);
+        }, 500);
     });
   };
 
@@ -295,7 +321,7 @@ const App: React.FC = () => {
       case 'reports':
           return <ReportsDashboard chats={chats} departments={departments} />;
       case 'contacts':
-          return <Contacts contacts={contacts} onSyncGoogle={handleSyncGoogleContacts} />;
+          return <Contacts contacts={contacts} onSyncGoogle={handleSyncGoogleContacts} clientId={apiConfig.googleClientId} />;
       case 'chatbot':
           return <ChatbotSettings config={chatbotConfig} onSave={handleUpdateChatbotConfig} />;
       case 'connections':

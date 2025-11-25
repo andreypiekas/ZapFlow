@@ -1,88 +1,96 @@
-# ZapFlow Manager ⚡
+# ZapFlow Manager ⚡ v1.2.0
 
-Plataforma profissional de gestão de atendimento via WhatsApp, com suporte a múltiplos departamentos, sistema de tickets (Kanban/Lista), respostas rápidas, fluxos de trabalho (SOP) e Inteligência Artificial (Google Gemini) para sugestão de respostas.
+**Plataforma Profissional de Gestão de Atendimento para WhatsApp**
 
----
-
-## 📋 Pré-requisitos
-
-Para rodar este projeto, você precisará ter instalado em sua máquina:
-
-1.  **Node.js** (Versão 18 ou superior) - O ambiente de execução.
-2.  **Git** - Para baixar o código.
-3.  **Evolution API** (Necessário para a conexão real com WhatsApp).
+O **ZapFlow Manager** é um sistema completo para centralizar, organizar e automatizar o atendimento via WhatsApp da sua empresa. Ele transforma um único número de WhatsApp em uma central de atendimento multi-departamento, com suporte a múltiplos atendentes, inteligência artificial, fluxos de trabalho e métricas detalhadas.
 
 ---
 
-## 🪟 Instalação Básica (Desenvolvimento)
+## 🚀 Funcionalidades Principais
 
-### Windows
+### 💬 Gestão de Atendimento (Chat)
+*   **Multi-Atendentes:** Vários operadores utilizando o mesmo número.
+*   **Inbox Zero:** Organização inteligente com abas "A Fazer", "Aguardando" e "Finalizados".
+*   **Mídia Completa:** Envio e recebimento de Áudio (gravador nativo), Imagens, Vídeos e Arquivos.
+*   **Stickers e Emojis:** Suporte nativo a figurinhas e seletor de emojis.
+*   **Tags:** Categorização de clientes (ex: VIP, Inadimplente, Novo Lead).
+*   **Busca Avançada:** Pesquise mensagens dentro da conversa.
+*   **Transferência:** Encaminhe chats entre departamentos com histórico completo.
 
-1.  **Baixe as ferramentas:**
-    *   Node.js LTS: [nodejs.org](https://nodejs.org/)
-    *   Git: [git-scm.com](https://git-scm.com/)
+### 🤖 Automação e IA
+*   **Chatbot Integrado:** Mensagens automáticas de saudação e ausência baseadas em horário de funcionamento.
+*   **Sugestão de Respostas (IA):** Integração com **Google Gemini** para sugerir respostas inteligentes baseadas no histórico da conversa.
+*   **Fluxos de Trabalho (SOPs):** Crie checklists padronizados (ex: "Protocolo de Venda", "Triagem") para guiar a equipe.
 
-2.  **No PowerShell, execute:**
+### 👥 Gestão de Contatos
+*   **Sincronização Google:** Importe contatos da sua conta Google (Google People API) automaticamente.
+*   **Identificação:** Atualiza o nome e foto dos chats com base na sua agenda.
 
-```powershell
-# 1. Clone o repositório
+### 📊 Gestão e Relatórios
+*   **Dashboard Administrativo:** Visão geral de atendimentos ativos e filas.
+*   **Relatórios Detalhados:** Métricas de SLA, CSAT (Satisfação), Volume por Departamento.
+*   **Exportação CSV:** Baixe os dados para análise externa.
+*   **Departamentos e Usuários:** Controle de acesso (Admin/Agente) e setores (Financeiro, Suporte, etc).
+
+---
+
+## 🛠️ Stack Tecnológico
+
+*   **Frontend:** React 18, TypeScript, Vite.
+*   **Estilização:** Tailwind CSS.
+*   **Ícones:** Lucide React.
+*   **Conexão WhatsApp:** Integração via API REST (Compatível com **Evolution API**).
+*   **IA:** Google Generative AI SDK (Gemini).
+*   **Auth:** Google Identity Services (OAuth 2.0).
+
+---
+
+## 📋 Pré-requisitos de Instalação
+
+Para rodar o sistema em produção, você precisará de:
+
+1.  **Node.js** (v18+) instalado.
+2.  Uma instância da **Evolution API** rodando (Gateway de WhatsApp).
+3.  Uma conta no **Google Cloud Platform** (para sincronização de contatos - opcional).
+4.  Uma chave de API do **Google AI Studio** (para sugestões de IA - opcional).
+
+---
+
+## 🚀 Guia de Instalação (Passo a Passo)
+
+### 1. Clonar e Instalar Dependências
+
+```bash
 git clone https://github.com/seu-usuario/zapflow-manager.git
 cd zapflow-manager
-
-# 2. Instale as dependências
 npm install
+```
 
-# 3. Inicie o servidor local
+### 2. Configurar Variáveis de Ambiente (IA)
+
+Crie um arquivo `.env` na raiz do projeto para a IA do Google:
+
+```env
+VITE_API_KEY=sua_chave_gemini_aqui
+```
+*Obtenha a chave em: [aistudio.google.com](https://aistudio.google.com/)*
+
+### 3. Rodar Localmente (Desenvolvimento)
+
+```bash
 npm run dev
 ```
-O sistema abrirá em `http://localhost:5173`.
+Acesse `http://localhost:5173`.
 
 ---
 
-### Linux (Ubuntu/Debian)
+## 🐳 Implantação em Servidor (VPS/Docker)
 
-```bash
-# 1. Instalar Node.js e Git
-sudo apt update
-sudo apt install git curl -y
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt install -y nodejs
+Para colocar o sistema no ar de forma profissional, recomendamos usar Docker para a API do WhatsApp e servir o Frontend estático.
 
-# 2. Clonar e Rodar
-git clone https://github.com/seu-usuario/zapflow-manager.git
-cd zapflow-manager
-npm install
-npm run dev
-```
+### Passo 1: Subir a Evolution API (Backend WhatsApp)
 
----
-
-## 🏢 Implantação Completa em VM / Servidor Local (Full Stack)
-
-Se você deseja rodar tudo (Sistema + API do WhatsApp) dentro de uma Máquina Virtual (VM) ou servidor local, siga este guia. Recomendamos usar **Docker** para a API.
-
-### 1. Preparar a VM (Ubuntu 20.04/22.04)
-
-```bash
-# Atualizar sistema e instalar Docker
-sudo apt update && sudo apt upgrade -y
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-
-# Instalar Docker Compose
-sudo apt install docker-compose-plugin -y
-```
-
-### 2. Subir a API do WhatsApp (Evolution API)
-
-Crie uma pasta para a API e um arquivo `docker-compose.yml`:
-
-```bash
-mkdir evolution-api && cd evolution-api
-nano docker-compose.yml
-```
-
-**Cole o conteúdo abaixo no arquivo:**
+Crie um arquivo `docker-compose.yml` no seu servidor:
 
 ```yaml
 version: '3.3'
@@ -94,90 +102,63 @@ services:
       - "8080:8080"
     environment:
       - SERVER_PORT=8080
-      - AUTHENTICATION_API_KEY=sua_senha_segura_aqui
+      - AUTHENTICATION_API_KEY=sua_senha_secreta_api
       - DEL_INSTANCE=false
     volumes:
       - evolution_instances:/evolution/instances
-      - evolution_store:/evolution/store
 
 volumes:
   evolution_instances:
-  evolution_store:
 ```
 
-**Inicie a API:**
-```bash
-sudo docker compose up -d
-```
-*Sua API estará rodando em: `http://SEU_IP_DA_VM:8080`*
-*Sua chave (API Key) será: `sua_senha_segura_aqui`*
+Execute: `docker compose up -d`
 
-### 3. Subir o ZapFlow Manager (Frontend)
+### Passo 2: Build do Frontend
 
-Volte para a raiz e clone o projeto do painel:
-
-```bash
-cd ~
-git clone https://github.com/seu-usuario/zapflow-manager.git
-cd zapflow-manager
-npm install
-```
-
-**Gerar Build de Produção (Otimizado):**
-Não use `npm run dev` em produção. Gere os arquivos estáticos:
+Gere os arquivos otimizados para produção:
 
 ```bash
 npm run build
 ```
 
-**Servir a Aplicação:**
-Vamos usar um servidor leve para rodar o site na porta 3000 (ou 80).
+Isso criará a pasta `dist`. Você pode servir essa pasta usando Nginx, Apache ou um servidor Node simples como o `serve`:
 
 ```bash
-# Instala o servidor estático globalmente
-sudo npm install -g serve
-
-# Roda o projeto em background (usando nohup ou PM2)
-# Opção simples com serve na porta 3000:
-nohup serve -s dist -l 3000 &
-```
-
-### 4. Conectar o Sistema
-
-1. Acesse `http://SEU_IP_DA_VM:3000` no navegador.
-2. Faça login (Admin / 123).
-3. Vá em **Configurações**.
-4. Desmarque "Modo Demonstração".
-5. Preencha:
-   * **URL:** `http://SEU_IP_DA_VM:8080`
-   * **API Key:** `sua_senha_segura_aqui`
-   * **Instância:** `atendimento01`
-6. Salve e vá em **Conexões** para ler o QR Code.
-
----
-
-## 🧠 Configuração da Inteligência Artificial (Google Gemini)
-
-O sistema utiliza a IA do Google para sugerir respostas. Esta configuração é feita no código antes do build ou via variáveis de ambiente.
-
-1.  Obtenha sua chave gratuitamente em: [Google AI Studio](https://aistudio.google.com/app/apikey)
-2.  Crie um arquivo `.env` na raiz do projeto:
-
-```env
-VITE_API_KEY=sua_chave_gemini_aqui
+npm install -g serve
+serve -s dist -l 3000
 ```
 
 ---
 
-## 🛠️ Comandos Úteis
+## ⚙️ Configurações Pós-Instalação
 
-| Comando | Descrição |
-| :--- | :--- |
-| `npm run dev` | Roda o projeto localmente para testes |
-| `npm run build` | Gera a pasta `dist` otimizada para produção |
-| `sudo docker compose up -d` | Sobe a API do WhatsApp em background |
-| `sudo docker compose logs -f` | Vê os logs da API do WhatsApp |
+Após acessar o sistema pela primeira vez (Login padrão: `admin@hostgator.com` / `123`):
+
+1.  Vá em **Configurações**.
+2.  Desmarque "Modo Demonstração".
+3.  Preencha os dados da API:
+    *   **URL:** `http://seu-servidor:8080`
+    *   **API Key:** `sua_senha_secreta_api`
+    *   **Instância:** Escolha um nome (ex: `atendimento01`).
+4.  (Opcional) Preencha o **Google Client ID** para sincronizar contatos.
+5.  Salve e vá para a tela **Conexões** para ler o QR Code com seu celular.
 
 ---
 
-**Desenvolvido por Andrey Gheno Piekas**
+## ☁️ Como Configurar o Google Contacts (Sync)
+
+Para que o botão "Sincronizar Google" funcione:
+
+1.  Acesse o [Google Cloud Console](https://console.cloud.google.com/).
+2.  Crie um projeto e ative a **"People API"**.
+3.  Vá em **Credenciais** > **Criar Credenciais** > **ID do Cliente OAuth**.
+4.  Tipo de Aplicativo: **Aplicação Web**.
+5.  Em "Origens JavaScript autorizadas", adicione a URL do seu sistema (ex: `http://localhost:5173` ou `https://seu-dominio.com`).
+6.  Copie o **ID do Cliente** gerado e cole na tela de **Configurações** do ZapFlow.
+
+---
+
+## 📞 Suporte
+
+Desenvolvido por **Andrey Gheno Piekas**.
+Versão Atual: 1.2.0
