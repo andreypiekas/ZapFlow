@@ -1,3 +1,4 @@
+
 ==============================================================================
 GUIA DE INSTALAÇÃO MANUAL - ZAPFLOW MANAGER (UBUNTU 20.04 / 22.04)
 ==============================================================================
@@ -36,6 +37,7 @@ sudo sh get-docker.sh
 
 # Adicionar usuário atual ao grupo docker (para não precisar usar sudo no docker):
 sudo usermod -aG docker $USER
+newgrp docker
 
 
 ------------------------------------------------------------------------------
@@ -60,12 +62,11 @@ PASSO 5: SUBIR A EVOLUTION API (BACKEND)
 
 nano docker-compose.yml
 
-2. Cole o seguinte conteúdo dentro do editor nano:
+2. Cole o seguinte conteúdo CORRIGIDO dentro do editor nano:
 
-version: '3.3'
 services:
   evolution_api:
-    image: attdevelopers/evolution-api:v2.1.1
+    image: evolutionapi/evolution-api:v2.2.2
     container_name: evolution_api
     restart: always
     ports:
@@ -112,9 +113,9 @@ volumes:
 3. Salve o arquivo (CTRL+O, Enter) e saia (CTRL+X).
 
 4. Inicie os containers:
-sudo docker compose up -d
+docker compose up -d
 
-# Aguarde uns 30 segundos para o banco iniciar.
+# Aguarde cerca de 30-60 segundos para o banco iniciar e a API subir completamente.
 
 
 ------------------------------------------------------------------------------
