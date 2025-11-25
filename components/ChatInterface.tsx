@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock } from 'lucide-react';
 import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow } from '../types';
 import { generateSmartReply } from '../services/geminiService';
 import { sendRealMessage, sendRealMediaMessage, blobToBase64 } from '../services/whatsappService';
@@ -51,6 +51,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
   const selectedChat = chats.find(c => c.id === selectedChatId);
 
+  // Derived States for Assignment
+  const isAssigned = !!selectedChat?.assignedTo;
+  const isAssignedToMe = selectedChat?.assignedTo === currentUser.id;
+  
   // Sync editing state with selected chat
   useEffect(() => {
     if (selectedChat) {
@@ -299,6 +303,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     const updatedChat = {
       ...selectedChat,
       departmentId: deptId,
+      assignedTo: undefined, // Clear assignment on transfer
       messages: [
         ...selectedChat.messages,
         {
@@ -333,6 +338,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       status: 'closed',
       endedAt: new Date(),
       rating: rating,
+      assignedTo: undefined, // Clear assignment on close
       activeWorkflow: undefined, // Clear workflow on finish
       messages: [
         ...selectedChat.messages,
@@ -364,6 +370,42 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     setIsGeneratingAI(false);
   };
 
+  // --- ASSIGNMENT & GREETING LOGIC ---
+  const handleAssumeChat = () => {
+      if (!selectedChat) return;
+      const updatedChat: Chat = {
+          ...selectedChat,
+          assignedTo: currentUser.id,
+          status: 'open',
+          messages: [
+              ...selectedChat.messages,
+              {
+                  id: `sys_${Date.now()}`,
+                  content: `Atendimento assumido por ${currentUser.name}`,
+                  sender: 'system',
+                  timestamp: new Date(),
+                  status: MessageStatus.READ,
+                  type: 'text'
+              }
+          ]
+      };
+      onUpdateChat(updatedChat);
+  };
+
+  const getSmartGreeting = () => {
+      const hour = new Date().getHours();
+      let greeting = 'Bom dia';
+      if (hour >= 12 && hour < 18) greeting = 'Boa tarde';
+      if (hour >= 18) greeting = 'Boa noite';
+      
+      const firstName = currentUser.name.split(' ')[0];
+      return `${greeting}, sou ${firstName} e darei sequência no seu atendimento.`;
+  };
+
+  const handleInsertGreeting = () => {
+      setInputText(getSmartGreeting());
+  };
+
   // --- WORKFLOW LOGIC ---
   const handleStartWorkflow = (wf: Workflow) => {
     if (!selectedChat) return;
@@ -388,10 +430,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         // If it's a transfer step and not already done
         if (isTransfer && targetDept) {
             handleTransfer(targetDept);
-            // We return here because handleTransfer updates the chat state entirely
-            // But we also want to mark the step as done in that update? 
-            // Ideally we'd combine them, but for now let's just trigger transfer.
-            // The step marking will happen below if we proceed.
         }
     }
 
@@ -552,11 +590,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                     {chat.messages[chat.messages.length -1]?.type === 'audio' && <Mic size={12} />}
                     <p className="text-sm truncate">{chat.lastMessage}</p>
                 </div>
-                {chat.departmentId && (
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-600`}>
-                    {getDepartmentName(chat.departmentId)}
-                  </span>
-                )}
+                <div className="flex gap-1">
+                    {!chat.assignedTo && chat.status !== 'closed' && (
+                         <span className={`text-[10px] px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 flex items-center gap-0.5`}>
+                           <UserPlus size={10} /> Livre
+                         </span>
+                    )}
+                    {chat.departmentId && (
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-600`}>
+                        {getDepartmentName(chat.departmentId)}
+                    </span>
+                    )}
+                </div>
               </div>
             </div>
           )))}
@@ -574,7 +619,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {isDragging && selectedChat && (
+        {isDragging && selectedChat && isAssignedToMe && (
           <div className="absolute inset-0 z-50 bg-emerald-600/10 backdrop-blur-sm border-4 border-emerald-500 border-dashed m-4 rounded-xl flex items-center justify-center">
              <div className="bg-white p-8 rounded-full shadow-xl animate-bounce">
                 <FileIcon size={48} className="text-emerald-600" />
@@ -634,7 +679,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                                 <Edit3 size={12} className="opacity-0 group-hover:opacity-50 text-white" />
                             </div>
                             <p className="text-xs opacity-90 text-emerald-100 truncate">
-                                {getDepartmentName(selectedChat.departmentId)}
+                                {getDepartmentName(selectedChat.departmentId)} 
+                                {!isAssigned && selectedChat.status === 'open' && " • Aguardando Atendimento"}
                             </p>
                         </div>
                     )}
@@ -642,7 +688,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
               </div>
 
               <div className="flex items-center gap-1 md:gap-2">
-                {selectedChat.status === 'open' && (
+                {selectedChat.status === 'open' && isAssignedToMe && (
                     <>
                         <button 
                             onClick={() => setIsFinishingModalOpen(true)}
@@ -746,180 +792,214 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Area */}
+            {/* Input Area or Assume Button */}
             {selectedChat.status === 'open' ? (
-            <div className="bg-slate-100 p-2 md:p-3 relative z-20">
-              
-              {/* Quick Replies Menu */}
-              {showQuickReplies && (
-                  <div className="absolute bottom-full left-0 mb-2 ml-2 w-64 bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden animate-in slide-in-from-bottom-2 z-50">
-                      <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 text-xs font-bold text-slate-500 flex justify-between items-center">
-                          <span>Respostas Rápidas</span>
-                          <button onClick={() => setShowQuickReplies(false)}><X size={14} /></button>
-                      </div>
-                      <div className="max-h-48 overflow-y-auto">
-                          {quickReplies.map(qr => (
-                              <button 
-                                key={qr.id}
-                                onClick={() => { setInputText(qr.content); setShowQuickReplies(false); }}
-                                className="w-full text-left px-3 py-2 hover:bg-emerald-50 text-sm text-slate-700 border-b border-slate-50 last:border-0"
-                              >
-                                  <span className="font-bold block text-emerald-600 text-xs mb-0.5">{qr.title}</span>
-                                  <span className="truncate block">{qr.content}</span>
-                              </button>
-                          ))}
-                          {quickReplies.length === 0 && <p className="p-3 text-xs text-slate-400">Nenhuma mensagem cadastrada.</p>}
-                      </div>
-                  </div>
-              )}
-
-               {/* Workflows Menu */}
-               {showWorkflowsMenu && (
-                  <div className="absolute bottom-full left-10 mb-2 w-72 bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden animate-in slide-in-from-bottom-2 z-50">
-                      <div className="bg-emerald-50 px-3 py-2 border-b border-emerald-100 text-xs font-bold text-emerald-700 flex justify-between items-center">
-                          <span className="flex items-center gap-2"><ListChecks size={14}/> Iniciar Fluxo de Atendimento</span>
-                          <button onClick={() => setShowWorkflowsMenu(false)}><X size={14} /></button>
-                      </div>
-                      <div className="max-h-48 overflow-y-auto">
-                          {workflows.map(wf => (
-                              <button 
-                                key={wf.id}
-                                onClick={() => handleStartWorkflow(wf)}
-                                className="w-full text-left px-3 py-2 hover:bg-emerald-50 text-sm text-slate-700 border-b border-slate-50 last:border-0"
-                              >
-                                  <span className="font-semibold block text-slate-800">{wf.title}</span>
-                                  <span className="text-xs text-slate-500">{wf.steps.length} etapas</span>
-                              </button>
-                          ))}
-                          {workflows.length === 0 && <p className="p-3 text-xs text-slate-400">Nenhum fluxo cadastrado.</p>}
-                      </div>
-                  </div>
-              )}
-
-              {/* Attachment Preview Area */}
-              {selectedFile && (
-                <div className="bg-slate-200 p-3 rounded-t-lg border-b border-slate-300 flex items-center justify-between animate-in slide-in-from-bottom-2">
-                   <div className="flex items-center gap-3 overflow-hidden">
-                      {filePreview ? (
-                        <img src={filePreview} className="w-12 h-12 object-cover rounded-md border border-white" alt="Preview" />
-                      ) : (
-                        <div className="w-12 h-12 bg-white rounded-md flex items-center justify-center text-emerald-600"><FileIcon /></div>
-                      )}
-                      <div>
-                         <p className="text-sm font-semibold truncate max-w-[150px] text-slate-800">{selectedFile.name}</p>
-                         <p className="text-xs text-slate-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
-                      </div>
-                   </div>
-                   <button onClick={clearAttachment} className="p-1 hover:bg-slate-300 rounded-full text-slate-500">
-                      <X size={20} />
-                   </button>
-                </div>
-              )}
-
-              {/* AI Badge */}
-              {isGeneratingAI && (
-                <div className="absolute -top-10 left-4 bg-emerald-600 text-white text-xs px-3 py-1 rounded-full animate-pulse flex items-center gap-2">
-                   <Bot size={12} /> Gemini AI gerando resposta...
-                </div>
-              )}
-              
-              <div className="flex items-center gap-1 md:gap-2">
-                
-                {/* File Input */}
-                <input 
-                   type="file" 
-                   ref={fileInputRef}
-                   className="hidden" 
-                   onChange={(e) => e.target.files && e.target.files.length > 0 && handleFileSelect(e.target.files[0])}
-                />
-
-                {isRecording ? (
-                    // Recording UI
-                    <div className="flex-1 flex items-center gap-2 md:gap-4 bg-white px-2 md:px-4 py-3 rounded-full shadow-sm animate-in fade-in">
-                        <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse flex-shrink-0" />
-                        <span className="text-slate-700 font-mono font-medium min-w-[40px] text-sm">{formatTime(recordingTime)}</span>
-                        <div className="flex-1 text-xs text-slate-400 truncate">Gravando...</div>
-                        
+                <>
+                {isAssigned && !isAssignedToMe ? (
+                     <div className="p-4 bg-slate-100 text-center border-t border-slate-200">
+                        <p className="text-slate-500 text-sm flex items-center justify-center gap-2">
+                            <Lock size={16} /> 
+                            Este atendimento está sendo realizado por outro agente.
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1">Modo apenas visualização.</p>
+                     </div>
+                ) : !isAssigned ? (
+                    <div className="p-4 bg-slate-100 border-t border-slate-200 flex flex-col items-center justify-center gap-3">
+                        <p className="text-slate-600 font-medium">Este chat ainda não possui um responsável.</p>
                         <button 
-                          onClick={cancelRecording} 
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-full"
-                          title="Cancelar"
+                            onClick={handleAssumeChat}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-lg font-bold shadow-md transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
                         >
-                            <Trash2 size={20} />
-                        </button>
-                        <button 
-                           onClick={() => stopRecording(true)} 
-                           className="p-2 bg-emerald-500 text-white rounded-full hover:bg-emerald-600"
-                           title="Enviar Áudio"
-                        >
-                            <Send size={18} />
+                            <UserPlus size={20} /> ASSUMIR ATENDIMENTO
                         </button>
                     </div>
                 ) : (
-                    // Standard Input UI
-                    <>
-                        <button 
-                            onClick={() => setShowQuickReplies(!showQuickReplies)}
-                            className="p-2 rounded-full text-slate-500 hover:bg-slate-200 transition-colors flex-shrink-0"
-                            title="Mensagens Rápidas"
-                        >
-                            <Zap size={20} />
-                        </button>
-                        <button 
-                            onClick={() => setShowWorkflowsMenu(!showWorkflowsMenu)}
-                            className={`p-2 rounded-full transition-colors flex-shrink-0 ${showWorkflowsMenu || activeWorkflowDef ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:bg-slate-200'}`}
-                            title="Fluxos de Atendimento"
-                        >
-                            <ListChecks size={20} />
-                        </button>
-                        <button 
-                            onClick={() => fileInputRef.current?.click()}
-                            className={`p-2 rounded-full transition-colors flex-shrink-0 ${selectedFile ? 'text-emerald-600 bg-emerald-100' : 'text-slate-500 hover:bg-slate-200'}`}
-                        >
-                            <Paperclip size={20} />
-                        </button>
-                        
-                        <div className="flex-1 relative">
-                            <input 
-                            type="text" 
-                            value={inputText}
-                            onChange={(e) => setInputText(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                            placeholder={selectedFile ? "Legenda..." : "Mensagem"}
-                            disabled={isSending}
-                            className={`w-full px-4 py-3 rounded-lg border-none focus:ring-0 outline-none bg-white shadow-sm pr-10 text-sm ${selectedFile ? 'rounded-tl-none rounded-tr-none' : ''}`}
-                            />
-                            {!inputText && !selectedFile && (
+                    <div className="bg-slate-100 p-2 md:p-3 relative z-20">
+                    
+                        {/* Greeting Shortcut - Shows if assigned to me and no text yet */}
+                        {isAssignedToMe && !inputText && (
+                            <div className="absolute bottom-full left-0 w-full flex justify-center pb-2 pointer-events-none">
                                 <button 
-                                    onClick={handleGenerateAI}
-                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-purple-600 hover:text-purple-700 hover:bg-purple-50 p-1.5 rounded-full transition-colors"
-                                    title="Sugerir resposta com IA"
+                                    onClick={handleInsertGreeting}
+                                    className="pointer-events-auto bg-emerald-600 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-lg hover:bg-emerald-700 transition-transform hover:-translate-y-1 animate-in slide-in-from-bottom-2 flex items-center gap-1"
                                 >
-                                <Bot size={18} />
+                                    👋 Enviar Saudação Inicial
                                 </button>
+                            </div>
+                        )}
+
+                        {/* Quick Replies Menu */}
+                        {showQuickReplies && (
+                            <div className="absolute bottom-full left-0 mb-2 ml-2 w-64 bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden animate-in slide-in-from-bottom-2 z-50">
+                                <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 text-xs font-bold text-slate-500 flex justify-between items-center">
+                                    <span>Respostas Rápidas</span>
+                                    <button onClick={() => setShowQuickReplies(false)}><X size={14} /></button>
+                                </div>
+                                <div className="max-h-48 overflow-y-auto">
+                                    {quickReplies.map(qr => (
+                                        <button 
+                                            key={qr.id}
+                                            onClick={() => { setInputText(qr.content); setShowQuickReplies(false); }}
+                                            className="w-full text-left px-3 py-2 hover:bg-emerald-50 text-sm text-slate-700 border-b border-slate-50 last:border-0"
+                                        >
+                                            <span className="font-bold block text-emerald-600 text-xs mb-0.5">{qr.title}</span>
+                                            <span className="truncate block">{qr.content}</span>
+                                        </button>
+                                    ))}
+                                    {quickReplies.length === 0 && <p className="p-3 text-xs text-slate-400">Nenhuma mensagem cadastrada.</p>}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Workflows Menu */}
+                        {showWorkflowsMenu && (
+                            <div className="absolute bottom-full left-10 mb-2 w-72 bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden animate-in slide-in-from-bottom-2 z-50">
+                                <div className="bg-emerald-50 px-3 py-2 border-b border-emerald-100 text-xs font-bold text-emerald-700 flex justify-between items-center">
+                                    <span className="flex items-center gap-2"><ListChecks size={14}/> Iniciar Fluxo de Atendimento</span>
+                                    <button onClick={() => setShowWorkflowsMenu(false)}><X size={14} /></button>
+                                </div>
+                                <div className="max-h-48 overflow-y-auto">
+                                    {workflows.map(wf => (
+                                        <button 
+                                            key={wf.id}
+                                            onClick={() => handleStartWorkflow(wf)}
+                                            className="w-full text-left px-3 py-2 hover:bg-emerald-50 text-sm text-slate-700 border-b border-slate-50 last:border-0"
+                                        >
+                                            <span className="font-semibold block text-slate-800">{wf.title}</span>
+                                            <span className="text-xs text-slate-500">{wf.steps.length} etapas</span>
+                                        </button>
+                                    ))}
+                                    {workflows.length === 0 && <p className="p-3 text-xs text-slate-400">Nenhum fluxo cadastrado.</p>}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Attachment Preview Area */}
+                        {selectedFile && (
+                            <div className="bg-slate-200 p-3 rounded-t-lg border-b border-slate-300 flex items-center justify-between animate-in slide-in-from-bottom-2">
+                            <div className="flex items-center gap-3 overflow-hidden">
+                                {filePreview ? (
+                                    <img src={filePreview} className="w-12 h-12 object-cover rounded-md border border-white" alt="Preview" />
+                                ) : (
+                                    <div className="w-12 h-12 bg-white rounded-md flex items-center justify-center text-emerald-600"><FileIcon /></div>
+                                )}
+                                <div>
+                                    <p className="text-sm font-semibold truncate max-w-[150px] text-slate-800">{selectedFile.name}</p>
+                                    <p className="text-xs text-slate-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                                </div>
+                            </div>
+                            <button onClick={clearAttachment} className="p-1 hover:bg-slate-300 rounded-full text-slate-500">
+                                <X size={20} />
+                            </button>
+                            </div>
+                        )}
+
+                        {/* AI Badge */}
+                        {isGeneratingAI && (
+                            <div className="absolute -top-10 left-4 bg-emerald-600 text-white text-xs px-3 py-1 rounded-full animate-pulse flex items-center gap-2">
+                            <Bot size={12} /> Gemini AI gerando resposta...
+                            </div>
+                        )}
+                        
+                        <div className="flex items-center gap-1 md:gap-2">
+                            
+                            {/* File Input */}
+                            <input 
+                            type="file" 
+                            ref={fileInputRef}
+                            className="hidden" 
+                            onChange={(e) => e.target.files && e.target.files.length > 0 && handleFileSelect(e.target.files[0])}
+                            />
+
+                            {isRecording ? (
+                                // Recording UI
+                                <div className="flex-1 flex items-center gap-2 md:gap-4 bg-white px-2 md:px-4 py-3 rounded-full shadow-sm animate-in fade-in">
+                                    <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse flex-shrink-0" />
+                                    <span className="text-slate-700 font-mono font-medium min-w-[40px] text-sm">{formatTime(recordingTime)}</span>
+                                    <div className="flex-1 text-xs text-slate-400 truncate">Gravando...</div>
+                                    
+                                    <button 
+                                    onClick={cancelRecording} 
+                                    className="p-2 text-red-500 hover:bg-red-50 rounded-full"
+                                    title="Cancelar"
+                                    >
+                                        <Trash2 size={20} />
+                                    </button>
+                                    <button 
+                                    onClick={() => stopRecording(true)} 
+                                    className="p-2 bg-emerald-500 text-white rounded-full hover:bg-emerald-600"
+                                    title="Enviar Áudio"
+                                    >
+                                        <Send size={18} />
+                                    </button>
+                                </div>
+                            ) : (
+                                // Standard Input UI
+                                <>
+                                    <button 
+                                        onClick={() => setShowQuickReplies(!showQuickReplies)}
+                                        className="p-2 rounded-full text-slate-500 hover:bg-slate-200 transition-colors flex-shrink-0"
+                                        title="Mensagens Rápidas"
+                                    >
+                                        <Zap size={20} />
+                                    </button>
+                                    <button 
+                                        onClick={() => setShowWorkflowsMenu(!showWorkflowsMenu)}
+                                        className={`p-2 rounded-full transition-colors flex-shrink-0 ${showWorkflowsMenu || activeWorkflowDef ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:bg-slate-200'}`}
+                                        title="Fluxos de Atendimento"
+                                    >
+                                        <ListChecks size={20} />
+                                    </button>
+                                    <button 
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className={`p-2 rounded-full transition-colors flex-shrink-0 ${selectedFile ? 'text-emerald-600 bg-emerald-100' : 'text-slate-500 hover:bg-slate-200'}`}
+                                    >
+                                        <Paperclip size={20} />
+                                    </button>
+                                    
+                                    <div className="flex-1 relative">
+                                        <input 
+                                        type="text" 
+                                        value={inputText}
+                                        onChange={(e) => setInputText(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                                        placeholder={selectedFile ? "Legenda..." : "Mensagem"}
+                                        disabled={isSending}
+                                        className={`w-full px-4 py-3 rounded-lg border-none focus:ring-0 outline-none bg-white shadow-sm pr-10 text-sm ${selectedFile ? 'rounded-tl-none rounded-tr-none' : ''}`}
+                                        />
+                                        {!inputText && !selectedFile && (
+                                            <button 
+                                                onClick={handleGenerateAI}
+                                                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-purple-600 hover:text-purple-700 hover:bg-purple-50 p-1.5 rounded-full transition-colors"
+                                                title="Sugerir resposta com IA"
+                                            >
+                                            <Bot size={18} />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {inputText || selectedFile ? (
+                                        <button 
+                                            onClick={handleSendMessage}
+                                            disabled={isSending}
+                                            className="p-3 bg-emerald-600 text-white rounded-full hover:bg-emerald-700 shadow-md transition-transform hover:scale-105 active:scale-95 disabled:bg-slate-400 disabled:scale-100 flex-shrink-0"
+                                        >
+                                            <Send size={20} />
+                                        </button>
+                                    ) : (
+                                        <button 
+                                            onClick={startRecording}
+                                            className="p-3 bg-slate-200 text-slate-600 rounded-full hover:bg-slate-300 shadow-sm transition-transform hover:scale-105 active:scale-95 flex-shrink-0"
+                                        >
+                                            <Mic size={20} />
+                                        </button>
+                                    )}
+                                </>
                             )}
                         </div>
-
-                        {inputText || selectedFile ? (
-                            <button 
-                                onClick={handleSendMessage}
-                                disabled={isSending}
-                                className="p-3 bg-emerald-600 text-white rounded-full hover:bg-emerald-700 shadow-md transition-transform hover:scale-105 active:scale-95 disabled:bg-slate-400 disabled:scale-100 flex-shrink-0"
-                            >
-                                <Send size={20} />
-                            </button>
-                        ) : (
-                            <button 
-                                onClick={startRecording}
-                                className="p-3 bg-slate-200 text-slate-600 rounded-full hover:bg-slate-300 shadow-sm transition-transform hover:scale-105 active:scale-95 flex-shrink-0"
-                            >
-                                <Mic size={20} />
-                            </button>
-                        )}
-                    </>
+                    </div>
                 )}
-              </div>
-            </div>
+                </>
             ) : (
               <div className="p-4 bg-slate-100 text-center text-slate-500 text-sm border-t border-slate-200">
                 Esta conversa foi finalizada.
