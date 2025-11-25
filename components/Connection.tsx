@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { RefreshCw, CheckCircle, AlertTriangle, Settings, Loader2, Smartphone, WifiOff } from 'lucide-react';
+import { RefreshCw, CheckCircle, AlertTriangle, Settings, Loader2, Smartphone, WifiOff, Activity } from 'lucide-react';
 import { ApiConfig } from '../types';
-import { fetchRealQRCode, logoutInstance, getSystemStatus } from '../services/whatsappService';
+import { fetchRealQRCode, logoutInstance, getSystemStatus, getDetailedInstanceStatus } from '../services/whatsappService';
 
 interface ConnectionProps {
   config: ApiConfig;
@@ -10,6 +10,7 @@ interface ConnectionProps {
 
 const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings }) => {
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [detailedStatus, setDetailedStatus] = useState<string>('-');
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [refreshTimer, setRefreshTimer] = useState(0);
@@ -21,10 +22,22 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings })
   const checkStatus = async () => {
     if (config.isDemo || !isConfigured) return;
     
+    // Check simple status
     const result = await getSystemStatus(config);
     if (result && result.status === 'connected') {
        setStatus('connected');
        setQrCode(null);
+    }
+
+    // Check detailed status for debug
+    const details = await getDetailedInstanceStatus(config);
+    if (details) {
+        setDetailedStatus(details.state);
+        // Se estiver "open", força conectado
+        if (details.state === 'open') {
+            setStatus('connected');
+            setQrCode(null);
+        }
     }
   };
 
@@ -52,6 +65,7 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings })
     // Initial Load
     if (!config.isDemo && status !== 'connected' && isConfigured) {
         loadQR();
+        checkStatus(); // Initial detailed check
         
         // Refresh QR Code every 40s
         intervalId = setInterval(() => {
@@ -86,6 +100,7 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings })
         return;
     }
     setIsLoading(true);
+    await checkStatus();
     const qrData = await fetchRealQRCode(config);
     if (qrData) {
         setQrCode(qrData);
@@ -98,6 +113,7 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings })
     setIsLoading(true);
     await logoutInstance(config);
     setStatus('disconnected');
+    setDetailedStatus('close');
     setQrCode(null);
     setIsLoading(false);
   };
@@ -196,11 +212,25 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings })
                         </div>
                     </div>
 
-                    <div className="p-4 bg-slate-50 rounded-lg text-xs text-slate-500 border border-slate-100 mt-4">
-                        <p className="font-semibold mb-1">Status da API:</p>
-                        <p className={`truncate font-mono ${isConfigured ? 'text-slate-600' : 'text-red-500'}`}>
-                            {isConfigured ? config.baseUrl : 'Não Configurado'}
-                        </p>
+                    {/* DIAGNOSTIC PANEL */}
+                    <div className="p-4 bg-slate-50 rounded-lg text-xs text-slate-500 border border-slate-200 mt-4">
+                        <div className="flex items-center gap-2 mb-2 font-bold text-slate-700 border-b border-slate-200 pb-2">
+                             <Activity size={14} /> DIAGNÓSTICO
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                             <div>
+                                <span className="block text-[10px] uppercase text-slate-400">URL API</span>
+                                <span className={`block truncate font-mono ${isConfigured ? 'text-blue-600' : 'text-red-500'}`}>
+                                    {isConfigured ? config.baseUrl : 'OFF'}
+                                </span>
+                             </div>
+                             <div>
+                                <span className="block text-[10px] uppercase text-slate-400">Status Instância</span>
+                                <span className={`block font-mono uppercase font-bold ${detailedStatus === 'open' ? 'text-emerald-600' : detailedStatus === 'connecting' ? 'text-amber-500' : 'text-slate-600'}`}>
+                                    {detailedStatus}
+                                </span>
+                             </div>
+                        </div>
                     </div>
                 </div>
 
@@ -226,7 +256,9 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings })
                             {isLoading ? (
                                 <div className="flex flex-col items-center gap-3">
                                     <Loader2 className="animate-spin text-emerald-600" size={32} />
-                                    <span className="text-xs text-slate-400">Comunicando com servidor...</span>
+                                    <span className="text-xs text-slate-400">
+                                        {detailedStatus === 'connecting' ? 'Iniciando Navegador...' : 'Comunicando com servidor...'}
+                                    </span>
                                 </div>
                             ) : !isConfigured ? (
                                 <div className="text-center p-6">
@@ -250,9 +282,12 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings })
                             ) : (
                                 <div className="text-center p-6">
                                     <WifiOff className="text-red-400 mx-auto mb-2" size={32} />
-                                    <p className="text-sm text-slate-600 font-medium">Falha na conexão com API</p>
-                                    <p className="text-xs text-slate-400 mt-1">Verifique se a URL da API está correta e online.</p>
-                                    <button onClick={handleManualRefresh} className="mt-4 text-emerald-600 underline text-xs">Tentar novamente</button>
+                                    <p className="text-sm text-slate-600 font-medium">QR Code Indisponível</p>
+                                    <p className="text-xs text-slate-400 mt-1 mb-2">A API não retornou o código.</p>
+                                    <div className="text-[10px] bg-slate-50 p-2 rounded mb-2 border border-slate-200">
+                                        Status: {detailedStatus}
+                                    </div>
+                                    <button onClick={handleManualRefresh} className="mt-2 text-emerald-600 underline text-xs">Tentar novamente</button>
                                 </div>
                             )}
                         </div>

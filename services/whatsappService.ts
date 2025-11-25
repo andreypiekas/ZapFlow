@@ -30,6 +30,39 @@ export const getSystemStatus = async (config: ApiConfig) => {
   }
 };
 
+// Nova função para buscar status detalhado para debug
+export const getDetailedInstanceStatus = async (config: ApiConfig) => {
+    if (config.isDemo || !config.baseUrl || !config.apiKey) return null;
+
+    try {
+        const response = await fetch(`${config.baseUrl}/instance/fetchInstances`, {
+            method: 'GET',
+            headers: {
+                'apikey': config.apiKey
+            }
+        });
+        
+        if (!response.ok) return null;
+        
+        const data = await response.json();
+        // Evolution v2 retorna um array ou objeto
+        const instances = Array.isArray(data) ? data : (data.instances || []);
+        const myInstance = instances.find((i: any) => i.instance.instanceName === config.instanceName);
+        
+        if (myInstance) {
+            return {
+                state: myInstance.instance.status || 'unknown', // close, connecting, open
+                name: myInstance.instance.instanceName
+            };
+        }
+        return { state: 'not_found' };
+
+    } catch (e) {
+        console.error("Erro ao buscar status detalhado:", e);
+        return { state: 'error' };
+    }
+};
+
 export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null> => {
   if (config.isDemo) {
     return null; 
