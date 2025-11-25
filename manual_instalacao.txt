@@ -1,95 +1,52 @@
 
 ==============================================================================
-GUIA DE INSTALAÇÃO MANUAL - ZAPFLOW MANAGER (UBUNTU 20.04 / 22.04)
+GUIA DE INSTALAÇÃO E SOLUÇÃO DE PROBLEMAS - ZAPFLOW (UBUNTU 20.04+)
 ==============================================================================
 
-Siga estes passos sequencialmente no terminal do seu servidor VPS.
+Se você já tem 4GB de RAM + SWAP e o QR Code não gera, siga este procedimento de
+LIMPEZA TOTAL para remover sessões corrompidas de tentativas anteriores.
 
 ------------------------------------------------------------------------------
-PASSO 1: ATUALIZAR O SISTEMA E INSTALAR DEPENDÊNCIAS BÁSICAS
+PASSO 1: LIMPEZA TOTAL (HARD RESET) - FAÇA ISSO PRIMEIRO!
 ------------------------------------------------------------------------------
-Copie e cole os comandos abaixo:
+Como houve falhas anteriores, é provável que o banco de dados tenha "lixo".
+Vamos limpar tudo para começar do zero.
 
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y curl git unzip wget nano
+1. Pare os containers:
+   docker compose down
 
+2. Remova os volumes (ISSO APAGA AS SESSÕES TRAVADAS):
+   docker volume rm zapflow_evolution_instances zapflow_evolution_store zapflow_evolution_postgres zapflow_evolution_redis
+   
+   *(Se der erro dizendo que não existe, tudo bem, continue)*
 
-------------------------------------------------------------------------------
-PASSO EXTRA (CRUCIAL): CRIAR MEMÓRIA SWAP (Evitar travamentos)
-------------------------------------------------------------------------------
-Servidores com menos de 2GB de RAM podem travar o WhatsApp (Loop no Chrome). 
-Execute estes comandos um por um para criar 2GB de memória virtual:
-
-sudo fallocate -l 2G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-
+3. Remova containers orfãos:
+   docker system prune -f
 
 ------------------------------------------------------------------------------
-PASSO 2: INSTALAR NODE.JS (VERSÃO 20 LTS)
+PASSO 2: DOCKER COMPOSE BLINDADO (ATUALIZADO)
 ------------------------------------------------------------------------------
-O sistema requer o Node.js versão 20 ou superior.
+Edite seu arquivo com `nano docker-compose.yml` e substitua TUDO por este conteúdo.
+Ele contém configurações extras de estabilidade para o Chrome.
 
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
-
-# Verifique a instalação:
-node -v
-# Deve retornar v20.x.x
-
-
-------------------------------------------------------------------------------
-PASSO 3: INSTALAR DOCKER E DOCKER COMPOSE
-------------------------------------------------------------------------------
-Necessário para rodar a Evolution API (Backend do WhatsApp).
-
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-
-# Adicionar usuário atual ao grupo docker (para não precisar usar sudo no docker):
-sudo usermod -aG docker $USER
-newgrp docker
-
-
-------------------------------------------------------------------------------
-PASSO 4: BAIXAR E CONFIGURAR O PROJETO
-------------------------------------------------------------------------------
-Se você ainda não baixou o projeto:
-
-git clone https://github.com/andreypiekas/ZapFlow.git
-cd ZapFlow
-
-# Instalar dependências do Frontend
-npm install
-
-# Gerar o Build de Produção (Otimizado)
-# IMPORTANTE: Sempre rode este comando após alterar qualquer código .tsx/.ts
-npm run build
-
-
-------------------------------------------------------------------------------
-PASSO 5: SUBIR A EVOLUTION API (BACKEND)
-------------------------------------------------------------------------------
-1. Crie o arquivo de configuração do Docker:
-
-nano docker-compose.yml
-
-2. Cole o seguinte conteúdo CORRIGIDO (Lembre-se de alterar o SEU_IP_AQUI):
+version: '3.3'
 
 services:
   evolution_api:
     image: atendai/evolution-api:v2.2.2
     container_name: evolution_api
     restart: always
+    shm_size: '2gb' # Aumentado para garantir
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     ports:
       - "8080:8080"
-    environment:
+    environment:  
       - SERVER_PORT=8080
-      # IMPORTANTE: Troque SEU_IP_AQUI pelo IP do seu servidor (ex: 192.168.16.133 ou IP Público VPS)
-      # Se deixar localhost, o QR Code pode não aparecer no Manager.
+      # --- SUBSTITUA PELO SEU IP ABAIXO (NÃO USE LOCALHOST) ---
       - SERVER_URL=http://SEU_IP_AQUI:8080
+      # --------------------------------------------------------
       - AUTHENTICATION_API_KEY=B8349283-F143-429D-B6C2-9386E8016558
       - WEBSOCKET_ENABLED=true
       - DATABASE_ENABLED=true
@@ -99,7 +56,11 @@ services:
       - RABBITMQ_ENABLED=false
       - CACHE_REDIS_ENABLED=true
       - CACHE_REDIS_URI=redis://redis:6379/0
+      # Configurações Críticas para Estabilidade
       - DEL_INSTANCE=false
+      - CONFIG_SESSION_PHONE_CLIENT=ZapFlow 
+      # Argumentos para evitar crash do Chrome
+      - BROWSER_ARGS=--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu --disable-software-rasterizer --no-first-run --no-zygote --single-process
     depends_on:
       - postgres
       - redis
@@ -113,7 +74,7 @@ services:
       - POSTGRES_PASSWORD=password
       - POSTGRES_DB=evolution
     volumes:
-      - evolution_instances:/var/lib/postgresql/data
+      - evolution_postgres:/var/lib/postgresql/data
 
   redis:
     image: redis:alpine
@@ -121,66 +82,51 @@ services:
     restart: always
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
-      - evolution_cache:/data
+      - evolution_redis:/data
 
 volumes:
   evolution_instances:
-  evolution_cache:
-
-3. Salve o arquivo (CTRL+O, Enter) e saia (CTRL+X).
-
-4. Inicie os containers (ou reinicie se já existirem):
-docker compose down
-docker compose up -d
-
-# Aguarde cerca de 30-60 segundos para o banco iniciar e a API subir completamente.
-
+  evolution_store:
+  evolution_postgres:
+  evolution_redis:
 
 ------------------------------------------------------------------------------
-PASSO 6: COLOCAR O SITE NO AR (FRONTEND)
+PASSO 3: SUBIR E TESTAR SEM INTERFACE (PROVA REAL)
 ------------------------------------------------------------------------------
-Usaremos o PM2 para manter o site rodando 24 horas.
+1. Suba o sistema:
+   docker compose up -d
 
-1. Instalar PM2 e Serve globalmente:
-sudo npm install -g pm2 serve
+2. Aguarde cerca de 30 segundos para o banco iniciar.
 
-2. Iniciar o servidor web na porta 5173:
-pm2 start serve --name "zapflow-front" -- --single -p 5173 dist
+3. **TESTE DEFINITIVO VIA TERMINAL:**
+   Em vez de tentar pelo site, vamos forçar a criação via comando.
+   Copie e cole este comando no terminal (Substitua SEU_IP_AQUI se necessário):
 
-3. Configurar para iniciar com o sistema (caso reinicie):
-pm2 save
-pm2 startup
+   curl -X POST http://localhost:8080/instance/create \
+   -H "apikey: B8349283-F143-429D-B6C2-9386E8016558" \
+   -H "Content-Type: application/json" \
+   -d '{
+     "instanceName": "zapflow_main",
+     "qrcode": true,
+     "integration": "WHATSAPP-BAILEYS"
+   }'
 
+   RESULTADO ESPERADO:
+   - Se aparecer um monte de letras aleatórias (Base64) ou um JSON com "qrcode": "...", FUNCIONOU!
+   - Significa que a API está gerando o QR Code, e o problema era apenas visual ou cache.
+
+4. Se o comando acima funcionou:
+   - Abra o site ZapFlow (http://SEU_IP:5173).
+   - Vá em Configurações.
+   - Coloque a URL http://SEU_IP:8080 e a chave B8349283-F143-429D-B6C2-9386E8016558.
+   - Nome da Instância: zapflow_main
+   - Salve e vá em Conexões. O QR Code deve aparecer.
 
 ------------------------------------------------------------------------------
-SOLUÇÃO DE PROBLEMAS (TROUBLESHOOTING)
+PASSO EXTRA: CRIAR SWAP (Se ainda não fez)
 ------------------------------------------------------------------------------
-
-PROBLEMA: QR CODE NÃO APARECE NO MANAGER OU A INSTÂNCIA REINICIA (LOOP)
-1. Certifique-se de que criou a Memória SWAP (Passo Extra). VPS com 1GB de RAM não roda o navegador da API sem Swap.
-2. Verifique se o SERVER_URL no docker-compose.yml está com o IP correto.
-
-PROBLEMA: "INVALID CREDENTIALS"
-1. Verifique se AUTHENTICATION_API_KEY está correto no docker-compose e no painel do ZapFlow.
-
-PROBLEMA: TELA BRANCA
-1. Rode 'npm run build' novamente.
-2. Limpe cache do navegador.
-
-------------------------------------------------------------------------------
-FINALIZAÇÃO
-------------------------------------------------------------------------------
-
-Seu sistema está pronto!
-
-Acesse no navegador:
-Link: http://SEU_IP_DO_SERVIDOR:5173
-
-Dados de Acesso Padrão:
-Email: admin@hostgator.com
-Senha: 123
-
-Configuração da API (No painel do ZapFlow):
-URL: http://SEU_IP_DO_SERVIDOR:8080
-API Key Global: B8349283-F143-429D-B6C2-9386E8016558
-Instância: zapflow_main
+sudo fallocate -l 4G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
