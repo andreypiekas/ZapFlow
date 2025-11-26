@@ -7,52 +7,44 @@ PROBLEMA: QR Code não gera ({"count":0}) ou Loop Infinito.
 SOLUÇÃO: Resetar configuração do Docker e rodar Diagnóstico.
 
 ------------------------------------------------------------------------------
-PASSO 1: ATUALIZAR DOCKER COMPOSE (SEM ARGUMENTOS CONFLITANTES)
+PASSO 1: ATUALIZAR DOCKER COMPOSE
 ------------------------------------------------------------------------------
 Edite seu arquivo `nano docker-compose.yml` e substitua TUDO por isto:
 
-version: '3.3'
-
 services:
   evolution_api:
-    image: atendai/evolution-api:v2.2.2
+    image: atendai/evolution-api:v2.2.3
     container_name: evolution_api
     restart: always
-    # MEMORIA COMPARTILHADA (ESSENCIAL PARA NÃO TRAVAR O CHROME)
-    shm_size: '2gb'
-    # DNS DO GOOGLE PARA EVITAR ERRO DE TIMEOUT NO WHATSAPP WEB
+    shm_size: '2gb'  # Memória compartilhada para o Chrome
     dns:
       - 8.8.8.8
       - 8.8.4.4
     ports:
       - "8080:8080"
-    environment:  
+    environment:
       - SERVER_PORT=8080
-      # --- SEU IP REAL (NÃO USE LOCALHOST) ---
-      - SERVER_URL=http://192.168.16.133:8080
-      # ---------------------------------------
+      - SERVER_URL=http://192.168.101.234:8080  # IP REAL DO HOST
       - AUTHENTICATION_API_KEY=B8349283-F143-429D-B6C2-9386E8016558
       - WEBSOCKET_ENABLED=true
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
-      - DATABASE_CONNECTION_URI=postgresql://user:password@postgres:5432/evolution
+      - DATABASE_CONNECTION_URI=postgresql://user:password@evolution_postgres:5432/evolution
       - DATABASE_CLIENT_NAME=evolution_exchange
       - RABBITMQ_ENABLED=false
       - CACHE_REDIS_ENABLED=true
-      - CACHE_REDIS_URI=redis://redis:6379/0
-      # Configurações de Sessão
+      - CACHE_REDIS_URI=redis://evolution_redis:6379/0
       - DEL_INSTANCE=false
-      - CONFIG_SESSION_PHONE_CLIENT=ZapFlow 
-      # --- CORS (ESSENCIAL PARA O FRONTEND) ---
+      - CONFIG_SESSION_PHONE_CLIENT=ZapFlow
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1029255529
       - CORS_ORIGIN=*
       - CORS_METHODS=POST,GET,PUT,DELETE,OPTIONS
       - CORS_CREDENTIALS=true
-      # ----------------------------------------
     depends_on:
-      - postgres
-      - redis
+      - evolution_postgres
+      - evolution_redis
 
-  postgres:
+  evolution_postgres:
     image: postgres:15-alpine
     container_name: evolution_postgres
     restart: always
@@ -61,21 +53,19 @@ services:
       - POSTGRES_PASSWORD=password
       - POSTGRES_DB=evolution
     volumes:
-      - evolution_postgres:/var/lib/postgresql/data
+      - evolution_postgres_data:/var/lib/postgresql/data
 
-  redis:
+  evolution_redis:
     image: redis:alpine
     container_name: evolution_redis
     restart: always
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
-      - evolution_redis:/data
+      - evolution_redis_data:/data
 
 volumes:
-  evolution_instances:
-  evolution_store:
-  evolution_postgres:
-  evolution_redis:
+  evolution_postgres_data:
+  evolution_redis_data:
 
 ------------------------------------------------------------------------------
 PASSO 2: APLICAR E LIMPAR (HARD RESET)
