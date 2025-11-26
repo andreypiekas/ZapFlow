@@ -83,7 +83,7 @@ Automático:
 
 1. Ajusta e executa  
 ```bash
-`cp setup_evolution.txt setup.sh && chmod +x setup.sh && cp factory_reset.txt reset.sh && chmod +x reset.sh && ./reset.sh`
+cp setup_evolution.txt setup.sh && chmod +x setup.sh && cp factory_reset.txt reset.sh && chmod +x reset.sh && ./reset.sh
 ```
 
 ### Problema: QR Code não gera
