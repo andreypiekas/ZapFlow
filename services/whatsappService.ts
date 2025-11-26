@@ -174,10 +174,10 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
     const cleanPhone = phone.replace(/\D/g, '');
     
     // PAYLOAD SIMPLIFICADO E CORRIGIDO
-    // Evolution v2 exige 'text' na raiz em alguns contextos
+    // Apenas os campos essenciais para evitar erro de validação
     const payload = {
         number: cleanPhone,
-        options: { delay: 1200, presence: "composing", linkPreview: false },
+        options: { delay: 1200, presence: "composing" },
         text: text
     };
 
@@ -300,17 +300,55 @@ const normalizeJid = (jid: string | null | undefined): string => {
     return user + '@s.whatsapp.net';
 };
 
-// Varre recursivamente para encontrar onde está o array de chats
-const findChatsArray = (data: any): any[] => {
-    if (Array.isArray(data)) return data;
-    if (data && typeof data === 'object') {
-        if (Array.isArray(data.data)) return data.data;
-        if (Array.isArray(data.chats)) return data.chats;
-        if (Array.isArray(data.result)) return data.result;
-        // Às vezes a Evolution retorna um array dentro de chaves numéricas se algo falhar no parse do axios interno deles
-        if (data['0']) return Object.values(data); 
+// Parser Recursivo Profundo para encontrar mensagens/chats em qualquer estrutura
+const extractChatsRecursively = (data: any, collected = new Map<string, any>()) => {
+    if (!data || typeof data !== 'object') return;
+
+    // Se for array, percorre
+    if (Array.isArray(data)) {
+        data.forEach(item => extractChatsRecursively(item, collected));
+        return;
     }
-    return [];
+
+    // Verifica se o objeto atual parece ser um chat ou mensagem válida
+    // Evolution v2 usa 'id', 'remoteJid', 'key.remoteJid' ou 'jid'
+    let jid = data.id || data.remoteJid || data.key?.remoteJid || data.jid;
+    
+    if (jid && typeof jid === 'string' && jid.includes('@')) {
+        const normalized = normalizeJid(jid);
+        if (!normalized.includes('status@broadcast')) {
+            // Se encontrarmos um objeto com 'messages' ou 'lastMessage', é um chat
+            // Se encontrarmos um objeto com 'key' e 'message', é uma mensagem solta
+            
+            if (!collected.has(normalized)) {
+                // Cria estrutura base se não existir
+                collected.set(normalized, {
+                    id: normalized,
+                    raw: data,
+                    messages: []
+                });
+            }
+
+            const chatEntry = collected.get(normalized);
+
+            // Se o objeto atual for uma mensagem individual (tem key e message)
+            if (data.key && (data.message || data.messageTimestamp)) {
+                chatEntry.messages.push(data);
+            } 
+            // Se o objeto for um chat completo (tem array messages)
+            else if (Array.isArray(data.messages)) {
+                chatEntry.messages = [...chatEntry.messages, ...data.messages];
+                // Atualiza metadados se disponível
+                if (data.pushName) chatEntry.raw.pushName = data.pushName;
+                if (data.name) chatEntry.raw.name = data.name;
+                if (data.unreadCount) chatEntry.raw.unreadCount = data.unreadCount;
+                if (data.profilePictureUrl) chatEntry.raw.profilePictureUrl = data.profilePictureUrl;
+            }
+        }
+    }
+
+    // Continua a recursão em todas as propriedades (para achar aninhados)
+    Object.values(data).forEach(val => extractChatsRecursively(val, collected));
 };
 
 export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
@@ -329,41 +367,36 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         if (!response.ok) return [];
 
         const rawData = await response.json();
-        const chatsArray = findChatsArray(rawData);
+        
+        // Mapa para agrupar chats únicos pelo ID normalizado
+        const chatsMap = new Map<string, any>();
+        
+        // Scan profundo para encontrar tudo que parece chat ou mensagem
+        extractChatsRecursively(rawData, chatsMap);
+        
+        const chatsArray = Array.from(chatsMap.values());
 
-        if (chatsArray.length === 0) return [];
-
-        console.log(`[ZapFlow Sync] ${chatsArray.length} chats brutos encontrados.`);
+        console.log(`[ZapFlow Parser] Encontrados ${chatsArray.length} chats únicos na resposta da API.`);
 
         const mappedChats: Chat[] = chatsArray.map((item: any) => {
-            // Tenta pegar o ID de vários lugares possíveis
-            const rawId = item.id || item.remoteJid || item.key?.remoteJid || item.jid;
-            const remoteJid = normalizeJid(rawId);
+            const remoteJid = item.id; // Já normalizado no extrator
             
-            if (!remoteJid || remoteJid.includes('status@broadcast')) return null; // Ignora status
-
+            // Processa e mapeia as mensagens encontradas
             let messages: Message[] = [];
-            
-            // Tenta extrair mensagens (seja array completo ou apenas última)
             if (item.messages && Array.isArray(item.messages)) {
-               messages = item.messages.map((m: any) => mapApiMessageToInternal(m)).filter((m: Message | null): m is Message => m !== null);
-            } else if (item.lastMessage) {
-               const m = mapApiMessageToInternal(item.lastMessage);
-               if (m) messages = [m];
-            } else if (item.conversationTimestamp) {
-               // Chat sem mensagem explícita, mas com timestamp
-               // Pode ser que 'item' seja a própria mensagem em algumas versoes
-               const m = mapApiMessageToInternal(item);
-               if (m) messages = [m];
+                messages = item.messages
+                    .map((m: any) => mapApiMessageToInternal(m))
+                    .filter((m: Message | null): m is Message => m !== null);
             }
 
-            // Ordenação cronológica das mensagens
+            // Ordena mensagens por timestamp
             messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
             const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
             
-            const name = item.pushName || item.name || item.verifiedName || remoteJid.split('@')[0];
-            const avatarUrl = item.profilePictureUrl || item.ppUrl || item.profilePicUrl;
+            // Tenta pegar nome e foto do objeto raw ou fallback
+            const name = item.raw.pushName || item.raw.name || item.raw.verifiedName || remoteJid.split('@')[0];
+            const avatarUrl = item.raw.profilePictureUrl || item.raw.ppUrl || item.raw.profilePicUrl;
 
             return {
                 id: remoteJid,
@@ -371,7 +404,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                 contactNumber: remoteJid.split('@')[0],
                 contactAvatar: avatarUrl || `https://ui-avatars.com/api/?background=random&color=fff&name=${name || 'U'}`,
                 departmentId: null,
-                unreadCount: item.unreadCount || 0,
+                unreadCount: item.raw.unreadCount || 0,
                 lastMessage: lastMsg ? (lastMsg.type === 'text' ? lastMsg.content : `[${lastMsg.type}]`) : '',
                 lastMessageTime: lastMsg ? lastMsg.timestamp : new Date(),
                 status: 'open' as const,
@@ -406,11 +439,11 @@ const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         (msgObj.audioMessage ? 'Áudio' : '') ||
         (msgObj.stickerMessage ? 'Sticker' : '') ||
         (msgObj.documentMessage ? 'Arquivo' : '') ||
-        (typeof msgObj.text === 'string' ? msgObj.text : '') || // Fallback para payload simples
+        (typeof msgObj.text === 'string' ? msgObj.text : '') || 
         '';
     
-    if (!content && !msgObj.imageMessage && !msgObj.stickerMessage) {
-        // Se não achou nada relevante, ignora (pode ser protocol message, reaction, etc)
+    // Se não tiver conteúdo textual nem mídia conhecida, ignora
+    if (!content && !msgObj.imageMessage && !msgObj.stickerMessage && !msgObj.audioMessage) {
         return null;
     }
 
@@ -420,9 +453,11 @@ const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     
     // Correção do Timestamp (Segundos -> Milissegundos)
     let ts = apiMsg.messageTimestamp || apiMsg.timestamp;
-    // Se timestamp não existir, usa agora. Se for string numérica, converte.
     if (!ts) ts = Date.now();
-    const timestamp = new Date(Number(ts) * (String(ts).length > 11 ? 1 : 1000));
+    
+    // Se for string numérica, converte. Se for timestamp em segundos (10 digitos), multiplica por 1000
+    const tsNum = Number(ts);
+    const timestamp = new Date(tsNum * (String(tsNum).length > 11 ? 1 : 1000));
 
     let type: any = 'text';
     if (msgObj.imageMessage) type = 'image';
@@ -436,7 +471,7 @@ const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         content: content,
         sender: isFromMe ? 'agent' : 'user',
         timestamp: timestamp,
-        status: MessageStatus.READ, // Assume lido se veio do histórico
+        status: MessageStatus.READ, 
         type: type
     };
 };
