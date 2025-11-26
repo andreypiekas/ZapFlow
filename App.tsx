@@ -21,7 +21,7 @@ const loadConfig = (): ApiConfig => {
   return {
     baseUrl: '', 
     apiKey: '',
-    instanceName: 'zapflow_main',
+    instanceName: 'zapflow',
     isDemo: false 
   };
 };
