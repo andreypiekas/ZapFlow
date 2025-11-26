@@ -1,0 +1,129 @@
+#!/bin/bash
+
+# ==========================================================
+# Script de instalação e correção automática para Evolution API
+# ==========================================================
+
+set -e
+
+# -------------------------------
+# Configurações principais
+# -------------------------------
+API_IMAGE="atendai/evolution-api:v2.2.3"
+POSTGRES_IMAGE="postgres:15-alpine"
+REDIS_IMAGE="redis:alpine"
+
+API_CONTAINER="evolution_api"
+POSTGRES_CONTAINER="evolution_postgres"
+REDIS_CONTAINER="evolution_redis"
+
+POSTGRES_USER="user"
+POSTGRES_PASSWORD="password"
+POSTGRES_DB="evolution"
+SERVER_IP=$(hostname -I | awk '{print $1}') # IP da máquina host
+
+# -------------------------------
+# Criar docker-compose.yml
+# -------------------------------
+cat > docker-compose.yml <<EOL
+services:
+  evolution_api:
+    image: ${API_IMAGE}
+    container_name: ${API_CONTAINER}
+    restart: always
+    shm_size: '2gb'
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_PORT=8080
+      - SERVER_URL=http://${SERVER_IP}:8080
+      - AUTHENTICATION_API_KEY=B8349283-F143-429D-B6C2-9386E8016558
+      - WEBSOCKET_ENABLED=true
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_CONTAINER}:5432/${POSTGRES_DB}
+      - DATABASE_CLIENT_NAME=evolution_exchange
+      - RABBITMQ_ENABLED=false
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://${REDIS_CONTAINER}:6379/0
+      - DEL_INSTANCE=false
+      - CONFIG_SESSION_PHONE_CLIENT=ZapFlow
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1029255529
+      - CORS_ORIGIN=*
+      - CORS_METHODS=POST,GET,PUT,DELETE,OPTIONS
+      - CORS_CREDENTIALS=true
+    depends_on:
+      - ${POSTGRES_CONTAINER}
+      - ${REDIS_CONTAINER}
+
+  ${POSTGRES_CONTAINER}:
+    image: ${POSTGRES_IMAGE}
+    container_name: ${POSTGRES_CONTAINER}
+    restart: always
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - evolution_postgres_data:/var/lib/postgresql/data
+
+  ${REDIS_CONTAINER}:
+    image: ${REDIS_IMAGE}
+    container_name: ${REDIS_CONTAINER}
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - evolution_redis_data:/data
+
+volumes:
+  evolution_postgres_data:
+  evolution_redis_data:
+EOL
+
+echo "docker-compose.yml criado com sucesso!"
+
+# -------------------------------
+# Limpar containers e volumes antigos
+# -------------------------------
+echo "Removendo containers antigos e volumes..."
+docker compose down --remove-orphans --volumes || true
+
+# -------------------------------
+# Limpar migrations antigas
+# -------------------------------
+if [ -d "./prisma/migrations" ]; then
+    echo "Removendo migrations antigas..."
+    rm -rf ./prisma/migrations
+fi
+
+# -------------------------------
+# Puxar imagens atualizadas
+# -------------------------------
+echo "Baixando imagens mais recentes..."
+docker compose pull
+
+# -------------------------------
+# Iniciar containers
+# -------------------------------
+echo "Iniciando containers..."
+docker compose up -d
+
+# -------------------------------
+# Função de espera pelo Postgres
+# -------------------------------
+echo "Aguardando Postgres ficar disponível..."
+until docker exec ${POSTGRES_CONTAINER} pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} > /dev/null 2>&1; do
+    echo -n "."
+    sleep 2
+done
+echo "Postgres pronto!"
+
+# -------------------------------
+# Confirmar containers
+# -------------------------------
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+echo "Setup completo! Evolution API deve estar rodando em http://${SERVER_IP}:8080"

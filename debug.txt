@@ -1,0 +1,23 @@
+#!/bin/bash
+echo "=== DIAGNÓSTICO ZAPFLOW ==="
+echo "[1] Verificando Containers..."
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+echo -e "\n[2] Teste de Conexão INTERNA (Evolution -> Google DNS)..."
+if docker exec evolution_api ping -c 2 8.8.8.8 > /dev/null 2>&1; then
+    echo "SUCCESS: Container tem internet."
+else
+    echo "ERROR: Container SEM internet (Ping falhou)."
+fi
+
+echo -e "\n[3] Teste de Acesso ao WhatsApp Web..."
+if docker exec evolution_api curl -I https://web.whatsapp.com > /dev/null 2>&1; then
+    echo "SUCCESS: Container acessa web.whatsapp.com"
+else
+    echo "ERROR: Container bloqueado para web.whatsapp.com"
+fi
+
+echo -e "\n[4] Verificando Logs Recentes (Erros)..."
+docker logs evolution_api --tail 20 | grep -iE "error|fail|closed"
+
+echo -e "\n=== FIM ==="

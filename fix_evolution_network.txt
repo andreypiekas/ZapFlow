@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# ==========================================================
+# Script para corrigir problema de rede do Evolution API
+# ==========================================================
+# Remove regras de DROP da chain DOCKER que bloqueiam
+# WebSocket / ICMP / HTTP dentro dos containers
+# Salva regras persistentes
+
+set -e
+
+echo "[INFO] Listando regras da chain DOCKER com números..."
+sudo iptables -L DOCKER -n --line-numbers
+
+# Contar quantas regras DROP existem na chain DOCKER
+DROP_RULES=$(sudo iptables -L DOCKER -n --line-numbers | grep DROP | awk '{print $1}' | sort -r)
+
+if [ -z "$DROP_RULES" ]; then
+    echo "[INFO] Nenhuma regra DROP encontrada na chain DOCKER."
+else
+    echo "[INFO] Removendo regras DROP da chain DOCKER..."
+    for RULE_NUM in $DROP_RULES; do
+        echo "  -> Removendo regra número $RULE_NUM"
+        sudo iptables -D DOCKER $RULE_NUM
+    done
+fi
+
+# Testar conexão dentro do container
+CONTAINER_NAME="evolution_api"
+echo "[INFO] Testando conectividade dentro do container $CONTAINER_NAME..."
+docker exec -it $CONTAINER_NAME sh -c "ping -c 3 8.8.8.8 || echo 'Ping falhou'; wget -q --spider https://web.whatsapp.com && echo 'Conectividade HTTP OK' || echo 'HTTP falhou'"
+
+# Gerar QR Code novamente
+echo "[INFO] Aguarde alguns segundos para o QR Code aparecer:"
+docker logs -f $CONTAINER_NAME
+
+# Salvar regras persistentes
+echo "[INFO] Salvando regras para persistência..."
+if ! command -v netfilter-persistent >/dev/null 2>&1; then
+    echo "[INFO] Instalando iptables-persistent..."
+    sudo apt update && sudo apt install -y iptables-persistent
+fi
+
+sudo netfilter-persistent save
+echo "[INFO] Regras salvas com sucesso!"
+
+echo "[DONE] Problema de rede do Evolution API corrigido."

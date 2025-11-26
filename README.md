@@ -1,72 +1,22 @@
-# ZapFlow Manager ⚡ v1.2.0
+# ZapFlow Manager ⚡ v1.2.0 (Produção)
 
 **Plataforma Profissional de Gestão de Atendimento para WhatsApp**
 
-O **ZapFlow Manager** é um sistema completo para centralizar, organizar e automatizar o atendimento via WhatsApp da sua empresa. Ele transforma um único número de WhatsApp em uma central de atendimento multi-departamento, com suporte a múltiplos atendentes, inteligência artificial, fluxos de trabalho e métricas detalhadas.
+O **ZapFlow Manager** centraliza, organiza e automatiza o atendimento via WhatsApp. Com suporte a múltiplos atendentes, IA (Gemini), fluxos de trabalho (SOP) e métricas detalhadas. Compatível com **Evolution API v2.2.3**.
 
 ---
 
-## 🚀 Funcionalidades Principais
+## 📋 Pré-requisitos (Servidor Ubuntu)
 
-### 💬 Gestão de Atendimento (Chat)
-*   **Multi-Atendentes:** Vários operadores utilizando o mesmo número.
-*   **Inbox Zero:** Organização inteligente com abas "A Fazer", "Aguardando" e "Finalizados".
-*   **Mídia Completa:** Envio e recebimento de Áudio (gravador nativo), Imagens, Vídeos e Arquivos.
-*   **Stickers e Emojis:** Suporte nativo a figurinhas e seletor de emojis.
-*   **Tags:** Categorização de clientes (ex: VIP, Inadimplente, Novo Lead).
-*   **Busca Avançada:** Pesquise mensagens dentro da conversa.
-*   **Transferência:** Encaminhe chats entre departamentos com histórico completo.
-
-### 🤖 Automação e IA
-*   **Chatbot Integrado:** Mensagens automáticas de saudação e ausência baseadas em horário de funcionamento.
-*   **Sugestão de Respostas (IA):** Integração com **Google Gemini** para sugerir respostas inteligentes baseadas no histórico da conversa.
-*   **Fluxos de Trabalho (SOPs):** Crie checklists padronizados (ex: "Protocolo de Venda", "Triagem") para guiar a equipe.
-
-### 👥 Gestão de Contatos
-*   **Sincronização Google:** Importe contatos da sua conta Google (Google People API) automaticamente.
-*   **Identificação:** Atualiza o nome e foto dos chats com base na sua agenda.
-
-### 📊 Gestão e Relatórios
-*   **Dashboard Administrativo:** Visão geral de atendimentos ativos e filas.
-*   **Relatórios Detalhados:** Métricas de SLA, CSAT (Satisfação), Volume por Departamento.
-*   **Exportação CSV:** Baixe os dados para análise externa.
-*   **Departamentos e Usuários:** Controle de acesso (Admin/Agente) e setores (Financeiro, Suporte, etc).
+*   **OS:** Ubuntu 20.04 ou superior.
+*   **Recursos:** Mínimo 2GB RAM (4GB Recomendado) / 2 vCPU.
+*   **Portas:** 8080 (API), 5173 (Frontend) liberadas no Firewall.
 
 ---
 
-## 🛠️ Stack Tecnológico
+## ⚡ Instalação Automática
 
-*   **Frontend:** React 18, TypeScript, Vite.
-*   **Estilização:** Tailwind CSS.
-*   **Ícones:** Lucide React.
-*   **Conexão WhatsApp:** Integração via API REST (Compatível com **Evolution API**).
-*   **IA:** Google Generative AI SDK (Gemini).
-*   **Auth:** Google Identity Services (OAuth 2.0).
-
----
-
-## ⚡ Instalação Automática (Ubuntu 20.04/22.04+)
-
-Se você possui um servidor VPS (Hostgator, DigitalOcean, AWS) com Ubuntu, use este método para instalar tudo (Frontend + Backend + Banco) de uma vez.
-
-1.  **Baixe o repositório:**
-    ```bash
-    git clone https://github.com/andreypiekas/ZapFlow.git
-    cd ZapFlow
-    ```
-
-2.  **Dê permissão e execute o instalador:**
-    ```bash
-    chmod +x install.sh
-    sudo ./install.sh
-    ```
-
-3.  **Siga as instruções na tela.**
-    O script irá instalar Node.js, Docker, configurar a API e colocar o site no ar. Ao final, ele exibirá o IP e a Senha da API.
-
----
-
-## 🚀 Guia de Instalação Manual (Local / Windows)
+Disponibilizamos scripts prontos para configurar a API e o Banco de Dados automaticamente.
 
 ### 1. Clonar o Repositório
 
@@ -75,71 +25,85 @@ git clone https://github.com/andreypiekas/ZapFlow.git
 cd ZapFlow
 ```
 
-### 2. Instalação por Sistema Operacional
+### 2. Configurar a Evolution API (Backend)
 
-#### 🐧 Ubuntu / Linux (Manual)
+Utilize o arquivo `setup_evolution.txt` para criar o ambiente Docker:
 
-1.  **Atualize o sistema e instale dependências básicas:**
+1.  Crie o arquivo de script:
     ```bash
-    sudo apt update && sudo apt install -y curl git
+    nano setup.sh
     ```
-
-2.  **Instale o Node.js (Versão 20 LTS):**
+2.  **Copie e cole** o conteúdo do arquivo `setup_evolution.txt` disponível neste repositório.
+3.  Salve (CTRL+O) e saia (CTRL+X).
+4.  Execute:
     ```bash
-    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-    sudo apt install -y nodejs
+    chmod +x setup.sh
+    ./setup.sh
     ```
 
-3.  **Instale as dependências do projeto:**
-    ```bash
-    npm install
-    ```
+> O script irá gerar automaticamente o `docker-compose.yml` configurado com seu IP, limpar volumes antigos e iniciar a API.
 
-4.  **Execute o projeto:**
-    ```bash
-    npm run dev
-    ```
+### 3. Build e Deploy do Frontend (ZapFlow)
 
-#### 🪟 Windows
+Para rodar o site em modo produção:
 
-1.  **Instale o Node.js:**
-    *   Baixe e instale a versão **LTS (v20+)** do site oficial: [https://nodejs.org/](https://nodejs.org/).
-    
-2.  **Instale o Git (Opcional):**
-    *   Baixe em: [https://git-scm.com/download/win](https://git-scm.com/download/win).
+```bash
+# 1. Instale dependências
+npm install
 
-3.  **Abra o terminal (PowerShell ou CMD):**
-    *   Navegue até a pasta onde clonou o projeto.
+# 2. Gere o build otimizado
+npm run build
 
-4.  **Instale as dependências:**
-    ```powershell
-    npm install
-    ```
+# 3. Instale o PM2 (Gerenciador de Processos) e Serve
+sudo npm install -g pm2 serve
 
-5.  **Execute o projeto:**
-    ```powershell
-    npm run dev
-    ```
-    *   O navegador abrirá automaticamente em `http://localhost:5173`.
+# 4. Inicie o servidor
+pm2 start "serve -s dist -l 5173" --name zapflow-front
+pm2 save
+pm2 startup
+```
+
+Acesse o sistema em: `http://SEU_IP_SERVIDOR:5173`
 
 ---
 
-## ⚙️ Configurações Pós-Instalação
+## 🔧 Solução de Problemas (Troubleshooting)
 
-Após acessar o sistema pela primeira vez (Login padrão: `admin@hostgator.com` / `123`):
+### Problema: QR Code não gera / Loop de Reinicialização
 
-1.  Vá em **Configurações**.
-2.  Desmarque "Modo Demonstração".
-3.  Preencha os dados da API (Se usou o script automático, verifique o output do terminal):
-    *   **URL:** `http://seu-ip-servidor:8080`
-    *   **API Key:** (A senha que você definiu na instalação)
-    *   **Instância:** Escolha um nome (ex: `atendimento01`).
-4.  (Opcional) Preencha o **Google Client ID** para sincronizar contatos.
-5.  Salve e vá para a tela **Conexões** para ler o QR Code com seu celular.
+Se a API subir mas o QR Code não aparecer na tela de Conexão, siga estes passos:
+
+#### 1. Diagnóstico
+Utilize o script `debug.txt` para verificar a saúde dos containers.
+
+1.  Crie o script: `nano debug.sh`
+2.  Cole o conteúdo de `debug.txt`.
+3.  Execute: `chmod +x debug.sh && ./debug.sh`
+
+#### 2. Correção de Rede (Firewall/Docker)
+Se o diagnóstico apontar erro de internet ou se o QR Code continuar falhando, é provável que o firewall do Docker esteja bloqueando o WebSocket.
+
+1.  Crie o script de correção: `nano fix_network.sh`
+2.  Cole o conteúdo de `fix_evolution_network.txt`.
+3.  Execute: `chmod +x fix_network.sh && sudo ./fix_network.sh`
+
+Isso limpará regras restritivas do iptables e testará a conexão com o WhatsApp Web.
+
+---
+
+## ⚙️ Configuração Pós-Instalação
+
+1.  Acesse o ZapFlow (`http://SEU_IP:5173`).
+2.  Faça login (`admin@hostgator.com` / `123`).
+3.  Vá em **Configurações**.
+4.  Preencha os dados (baseados na saída do `setup.sh`):
+    *   **URL da API:** `http://SEU_IP:8080`
+    *   **API Key:** `B8349283-F143-429D-B6C2-9386E8016558` (Padrão do script)
+    *   **Instância:** `zapflow_main`
+5.  Salve e vá em **Conexões** para escanear o QR Code.
 
 ---
 
 ## 📞 Suporte
 
 Desenvolvido por **Andrey Gheno Piekas**.
-Versão Atual: 1.2.0
