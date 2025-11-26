@@ -1,0 +1,31 @@
+#!/bin/bash
+
+echo "=================================================="
+echo "      ZAPFLOW - FACTORY RESET (LIMPEZA TOTAL)     "
+echo "=================================================="
+echo "ATENÇÃO: Isso apagará TODOS os dados do WhatsApp,"
+echo "banco de dados e configurações locais."
+echo "=================================================="
+echo ""
+echo "Pressione ENTER para continuar ou CTRL+C para cancelar..."
+read
+
+echo "[1/4] Parando containers..."
+docker compose down
+
+echo "[2/4] Removendo volumes de dados (Postgres/Redis)..."
+docker volume prune -f
+
+echo "[3/4] Removendo arquivos temporários..."
+rm -rf store/
+rm -rf instances/
+
+echo "[4/4] Reiniciando instalação limpa..."
+if [ -f "./setup.sh" ]; then
+    ./setup.sh
+else
+    echo "ERRO: Arquivo setup.sh não encontrado. Recrie-o com o conteúdo de setup_evolution.txt"
+fi
+
+echo ""
+echo "✅ Reset concluído! Tente conectar novamente."

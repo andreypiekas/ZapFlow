@@ -69,25 +69,19 @@ Acesse o sistema em: `http://SEU_IP_SERVIDOR:5173`
 
 ## 🔧 Solução de Problemas (Troubleshooting)
 
-### Problema: QR Code não gera / Loop de Reinicialização
+### Problema: Erro 500 no Log / Loop de Reinicialização / Instância Travada
 
-Se a API subir mas o QR Code não aparecer na tela de Conexão, siga estes passos:
+Se o log mostrar `"error in handling message"` ou a instância ficar reiniciando, é necessário limpar o banco de dados corrompido.
 
-#### 1. Diagnóstico
-Utilize o script `debug.txt` para verificar a saúde dos containers.
+1.  Crie o script de reset: `nano reset.sh`
+2.  Cole o conteúdo do arquivo `factory_reset.txt`.
+3.  Execute: `chmod +x reset.sh && ./reset.sh`
 
-1.  Crie o script: `nano debug.sh`
-2.  Cole o conteúdo de `debug.txt`.
-3.  Execute: `chmod +x debug.sh && ./debug.sh`
+### Problema: QR Code não gera
 
-#### 2. Correção de Rede (Firewall/Docker)
-Se o diagnóstico apontar erro de internet ou se o QR Code continuar falhando, é provável que o firewall do Docker esteja bloqueando o WebSocket.
-
-1.  Crie o script de correção: `nano fix_network.sh`
-2.  Cole o conteúdo de `fix_evolution_network.txt`.
-3.  Execute: `chmod +x fix_network.sh && sudo ./fix_network.sh`
-
-Isso limpará regras restritivas do iptables e testará a conexão com o WhatsApp Web.
+1.  Verifique se o `SERVER_URL` no `docker-compose.yml` está com o IP correto (não use localhost).
+2.  Execute o diagnóstico: `chmod +x debug.sh && ./debug.sh`
+3.  Execute a correção de rede: `chmod +x fix_network.sh && sudo ./fix_network.sh`
 
 ---
 
