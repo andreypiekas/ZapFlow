@@ -13,7 +13,7 @@ import WorkflowSettings from './components/WorkflowSettings';
 import ReportsDashboard from './components/ReportsDashboard';
 import Contacts from './components/Contacts';
 import ChatbotSettings from './components/ChatbotSettings';
-import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Bell, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot } from 'lucide-react';
+import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const loadConfig = (): ApiConfig => {
   const saved = localStorage.getItem('zapflow_config');
@@ -44,6 +44,7 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(loadUserSession);
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
   // Application Data State
   const [chats, setChats] = useState<Chat[]>(INITIAL_CHATS);
@@ -107,49 +108,56 @@ const App: React.FC = () => {
   };
 
   const handleUpdateChat = (updatedChat: Chat) => {
-    // Lógica de Notificação para Novas Mensagens
-    const oldChat = chats.find(c => c.id === updatedChat.id);
-    
-    if (oldChat && currentUser) {
-        const newMsgCount = updatedChat.messages.length;
-        const oldMsgCount = oldChat.messages.length;
+    // Verifica se o chat já existe
+    const chatExists = chats.some(c => c.id === updatedChat.id);
+
+    if (chatExists) {
+        // Lógica de Notificação para Novas Mensagens
+        const oldChat = chats.find(c => c.id === updatedChat.id);
         
-        // Se houve nova mensagem
-        if (newMsgCount > oldMsgCount) {
-            const lastMsg = updatedChat.messages[updatedChat.messages.length - 1];
+        if (oldChat && currentUser) {
+            const newMsgCount = updatedChat.messages.length;
+            const oldMsgCount = oldChat.messages.length;
             
-            // Só notifica se for mensagem do usuário (cliente)
-            if (lastMsg.sender === 'user') {
+            // Se houve nova mensagem
+            if (newMsgCount > oldMsgCount) {
+                const lastMsg = updatedChat.messages[updatedChat.messages.length - 1];
                 
-                // Cenário 1: Chat atribuído a mim
-                if (updatedChat.assignedTo === currentUser.id) {
-                    addNotification(
-                        `Nova mensagem de ${updatedChat.contactName}`,
-                        lastMsg.content.length > 50 ? lastMsg.content.substring(0, 50) + '...' : lastMsg.content,
-                        'info'
-                    );
+                // Só notifica se for mensagem do usuário (cliente)
+                if (lastMsg.sender === 'user') {
                     
-                    // Tocar som de notificação (opcional)
-                    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-                    audio.play().catch(e => console.log('Audio autoplay blocked'));
-                }
-                
-                // Cenário 2: Chat na Triagem (sem departamento) e usuário tem permissão para ver
-                else if (!updatedChat.departmentId && currentUser.allowGeneralConnection) {
-                    addNotification(
-                        `Novo chamado na Triagem`,
-                        `${updatedChat.contactName}: ${lastMsg.content}`,
-                        'warning'
-                    );
+                    // Cenário 1: Chat atribuído a mim
+                    if (updatedChat.assignedTo === currentUser.id) {
+                        addNotification(
+                            `Nova mensagem de ${updatedChat.contactName}`,
+                            lastMsg.content.length > 50 ? lastMsg.content.substring(0, 50) + '...' : lastMsg.content,
+                            'info'
+                        );
+                        
+                        // Tocar som de notificação (opcional)
+                        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                        audio.play().catch(e => console.log('Audio autoplay blocked'));
+                    }
                     
-                    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-                    audio.play().catch(e => console.log('Audio autoplay blocked'));
+                    // Cenário 2: Chat na Triagem (sem departamento) e usuário tem permissão para ver
+                    else if (!updatedChat.departmentId && currentUser.allowGeneralConnection) {
+                        addNotification(
+                            `Novo chamado na Triagem`,
+                            `${updatedChat.contactName}: ${lastMsg.content}`,
+                            'warning'
+                        );
+                        
+                        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                        audio.play().catch(e => console.log('Audio autoplay blocked'));
+                    }
                 }
             }
         }
+        setChats(chats.map(c => c.id === updatedChat.id ? updatedChat : c));
+    } else {
+        // Adiciona novo chat ao topo da lista
+        setChats([updatedChat, ...chats]);
     }
-
-    setChats(chats.map(c => c.id === updatedChat.id ? updatedChat : c));
   };
 
   const handleAddDepartment = (dept: Department) => setDepartments([...departments, dept]);
@@ -332,6 +340,7 @@ const App: React.FC = () => {
                 apiConfig={apiConfig}
                 quickReplies={quickReplies}
                 workflows={workflows}
+                contacts={contacts}
              />
           </div>
         );
@@ -360,6 +369,18 @@ const App: React.FC = () => {
         return <div className="p-8">Página não encontrada</div>;
     }
   };
+
+  // Helper to render sidebar items
+  const SidebarItem = ({ view, icon: Icon, label }: { view: ViewState, icon: any, label: string }) => (
+    <button 
+        onClick={() => handleViewChange(view)}
+        className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-all ${currentView === view ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800 text-slate-300'} ${isSidebarCollapsed ? 'justify-center' : ''}`}
+        title={isSidebarCollapsed ? label : ''}
+    >
+        <Icon size={20} className="flex-shrink-0" /> 
+        {!isSidebarCollapsed && <span className="truncate">{label}</span>}
+    </button>
+  );
 
   return (
     <div className="flex h-screen bg-slate-100 font-sans overflow-hidden">
@@ -411,109 +432,65 @@ const App: React.FC = () => {
 
       {/* Sidebar Navigation */}
       <aside className={`
-        fixed md:static inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 flex flex-col h-full transform transition-transform duration-300 ease-in-out flex-shrink-0
-        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 shadow-xl md:shadow-none
+        fixed md:static inset-y-0 left-0 z-50 bg-slate-900 flex flex-col h-full transform transition-all duration-300 ease-in-out flex-shrink-0
+        ${isMobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full'} md:translate-x-0 shadow-xl md:shadow-none
+        ${isSidebarCollapsed ? 'md:w-20' : 'md:w-64'}
       `}>
-        <div className="hidden md:flex p-6 border-b border-slate-800 items-center gap-3 flex-shrink-0">
-          <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center text-white font-bold">Z</div>
-          <span className="text-xl font-bold text-white tracking-tight">ZapFlow</span>
+        <div className={`hidden md:flex p-6 border-b border-slate-800 items-center gap-3 flex-shrink-0 ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}>
+          <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center text-white font-bold flex-shrink-0">Z</div>
+          {!isSidebarCollapsed && <span className="text-xl font-bold text-white tracking-tight animate-in fade-in">ZapFlow</span>}
         </div>
         
-        <div className="p-4 bg-slate-800/50 flex items-center gap-3 border-b border-slate-800 mt-16 md:mt-0 flex-shrink-0">
+        <div className={`p-4 bg-slate-800/50 flex items-center gap-3 border-b border-slate-800 mt-16 md:mt-0 flex-shrink-0 ${isSidebarCollapsed ? 'justify-center' : ''}`}>
             <img src={currentUser.avatar} alt="User" className="w-8 h-8 rounded-full border border-slate-600 flex-shrink-0 object-cover"/>
-            <div className="overflow-hidden">
-                <p className="text-sm font-semibold text-white truncate">{currentUser.name}</p>
-                <p className="text-xs text-slate-400 truncate capitalize">{currentUser.role === 'ADMIN' ? 'Administrador' : 'Agente'}</p>
-            </div>
+            {!isSidebarCollapsed && (
+                <div className="overflow-hidden animate-in fade-in">
+                    <p className="text-sm font-semibold text-white truncate">{currentUser.name}</p>
+                    <p className="text-xs text-slate-400 truncate capitalize">{currentUser.role === 'ADMIN' ? 'Administrador' : 'Agente'}</p>
+                </div>
+            )}
         </div>
 
-        <nav className="flex-1 py-6 px-3 space-y-2 overflow-y-auto custom-scrollbar">
-          <button 
-            onClick={() => handleViewChange('dashboard')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'dashboard' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
-          >
-            <LayoutDashboard size={20} /> Dashboard
-          </button>
-          
-          <button 
-            onClick={() => handleViewChange('chat')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'chat' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
-          >
-            <MessageSquare size={20} /> Atendimento
-          </button>
-          
-          <button 
-              onClick={() => handleViewChange('contacts')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'contacts' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
-          >
-              <ContactIcon size={20} /> Contatos
-          </button>
+        <nav className="flex-1 py-4 px-3 space-y-2 overflow-y-auto custom-scrollbar overflow-x-hidden">
+          <SidebarItem view="dashboard" icon={LayoutDashboard} label="Dashboard" />
+          <SidebarItem view="chat" icon={MessageSquare} label="Atendimento" />
+          <SidebarItem view="contacts" icon={ContactIcon} label="Contatos" />
 
           {currentUser.role === UserRole.ADMIN && (
             <>
-                <div className="pt-4 pb-2 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    Administração
+                <div className={`pt-4 pb-2 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider ${isSidebarCollapsed ? 'text-center' : ''}`}>
+                    {isSidebarCollapsed ? 'Admin' : 'Administração'}
                 </div>
 
-                <button 
-                    onClick={() => handleViewChange('reports')}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'reports' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
-                >
-                    <BarChart size={20} /> Relatórios
-                </button>
-
-                <button 
-                    onClick={() => handleViewChange('chatbot')}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'chatbot' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
-                >
-                    <Bot size={20} /> Chatbot & Horários
-                </button>
-
-                <button 
-                    onClick={() => handleViewChange('workflows')}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'workflows' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
-                >
-                    <ListChecks size={20} /> Fluxos (SOP)
-                </button>
-
-                <button 
-                    onClick={() => handleViewChange('departments')}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'departments' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
-                >
-                    <Users size={20} /> Departamentos
-                </button>
-
-                <button 
-                    onClick={() => handleViewChange('users')}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'users' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
-                >
-                    <ShieldCheck size={20} /> Usuários
-                </button>
-
-                <button 
-                    onClick={() => handleViewChange('connections')}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'connections' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
-                >
-                    <Smartphone size={20} /> Conexões
-                </button>
-
-                <button 
-                    onClick={() => handleViewChange('settings')}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors ${currentView === 'settings' ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800'}`}
-                >
-                    <SettingsIcon size={20} /> Configurações
-                </button>
+                <SidebarItem view="reports" icon={BarChart} label="Relatórios" />
+                <SidebarItem view="chatbot" icon={Bot} label="Chatbot & Horários" />
+                <SidebarItem view="workflows" icon={ListChecks} label="Fluxos (SOP)" />
+                <SidebarItem view="departments" icon={Users} label="Departamentos" />
+                <SidebarItem view="users" icon={ShieldCheck} label="Usuários" />
+                <SidebarItem view="connections" icon={Smartphone} label="Conexões" />
+                <SidebarItem view="settings" icon={SettingsIcon} label="Configurações" />
             </>
           )}
         </nav>
 
-        <div className="p-4 border-t border-slate-800 flex-shrink-0">
-          <button 
-            onClick={handleLogout}
-            className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors w-full px-2"
-          >
-            <LogOut size={18} /> Sair
-          </button>
+        <div className="p-4 border-t border-slate-800 flex-shrink-0 flex flex-col gap-2">
+            {/* Collapse Button (Desktop Only) */}
+            <button 
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                className="hidden md:flex items-center justify-center p-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded transition-colors w-full"
+                title={isSidebarCollapsed ? "Expandir Menu" : "Recolher Menu"}
+            >
+                {isSidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+            </button>
+
+            <button 
+                onClick={handleLogout}
+                className={`flex items-center gap-2 text-slate-400 hover:text-white transition-colors w-full px-2 py-2 rounded hover:bg-slate-800 ${isSidebarCollapsed ? 'justify-center' : ''}`}
+                title="Sair"
+            >
+                <LogOut size={18} /> 
+                {!isSidebarCollapsed && <span>Sair</span>}
+            </button>
         </div>
       </aside>
 

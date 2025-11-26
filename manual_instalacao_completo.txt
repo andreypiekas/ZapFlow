@@ -1,0 +1,133 @@
+
+==============================================================================
+GUIA DE INSTALAÇÃO DEFINITIVO - ZAPFLOW + EVOLUTION API v2.2.3
+(Ubuntu 20.04 / 22.04 LTS)
+==============================================================================
+
+Este guia cobre a preparação do servidor, criação de Swap, instalação do Docker,
+Deploy da API e do Frontend.
+
+------------------------------------------------------------------------------
+PASSO 1: PREPARAÇÃO DO SERVIDOR (SWAP E DEPENDÊNCIAS)
+------------------------------------------------------------------------------
+Acesse seu terminal como root (ou sudo) e rode:
+
+# 1. Atualizar sistema
+sudo apt update && sudo apt upgrade -y
+
+# 2. Instalar utilitários básicos
+sudo apt install -y curl git unzip gnupg build-essential
+
+# 3. CRIAR MEMÓRIA SWAP (CRUCIAL PARA EVITAR TRAVAMENTOS DO CHROME)
+# Cria um arquivo de 4GB para usar como memória extra
+sudo fallocate -l 4G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+# 4. Instalar Node.js v20 (LTS)
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# 5. Instalar Docker e Docker Compose
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+
+------------------------------------------------------------------------------
+PASSO 2: INSTALAÇÃO DO PROJETO
+------------------------------------------------------------------------------
+
+# 1. Clonar repositório
+git clone https://github.com/andreypiekas/ZapFlow.git
+cd ZapFlow
+
+# 2. Instalar dependências do Frontend
+npm install
+
+------------------------------------------------------------------------------
+PASSO 3: CONFIGURAÇÃO DO BACKEND (EVOLUTION API)
+------------------------------------------------------------------------------
+Vamos usar os scripts de automação inclusos no projeto.
+
+# 1. Preparar o script de setup
+cp setup_evolution.txt setup.sh
+chmod +x setup.sh
+
+# 2. Executar a instalação
+./setup.sh
+
+# O QUE ESSE SCRIPT FAZ?
+# - Detecta seu IP automaticamente.
+# - Cria o docker-compose.yml otimizado (shm_size: 2gb, DNS Google, CORS liberado).
+# - Configura para NÃO baixar histórico antigo (evita travamentos).
+# - Sobe os containers (API + Postgres + Redis).
+
+# AGUARDE: Pode levar uns 2 minutos para o Postgres iniciar.
+# Verifique se está rodando:
+docker ps
+
+------------------------------------------------------------------------------
+PASSO 4: DEPLOY DO FRONTEND (PRODUÇÃO)
+------------------------------------------------------------------------------
+
+# 1. Gerar o Build otimizado
+npm run build
+
+# 2. Instalar PM2 (Gerenciador de Processos) e Serve
+sudo npm install -g pm2 serve
+
+# 3. Iniciar o servidor web na porta 5173
+pm2 start "serve -s dist -l 5173" --name zapflow-front
+
+# 4. Salvar para iniciar com o sistema
+pm2 save
+pm2 startup
+# (Rode o comando que o pm2 startup sugerir no terminal)
+
+------------------------------------------------------------------------------
+PASSO 5: LIBERAÇÃO DE FIREWALL (SE NECESSÁRIO)
+------------------------------------------------------------------------------
+Se você usa UFW (Firewall padrão do Ubuntu):
+
+sudo ufw allow 22/tcp
+sudo ufw allow 8080/tcp  # API
+sudo ufw allow 5173/tcp  # Frontend
+sudo ufw enable
+
+------------------------------------------------------------------------------
+PASSO 6: CONFIGURAÇÃO FINAL E TESTE
+------------------------------------------------------------------------------
+
+1. Abra seu navegador: http://SEU_IP_DO_SERVIDOR:5173
+2. Login: admin@hostgator.com / 123456
+3. Vá em "Configurações":
+   - URL API: http://SEU_IP_DO_SERVIDOR:8080
+   - API Key: B8349283-F143-429D-B6C2-9386E8016558
+   - Instância: zapflow
+4. Salve e vá em "Conexões".
+5. Escaneie o QR Code.
+
+------------------------------------------------------------------------------
+SOLUÇÃO DE PROBLEMAS (TROUBLESHOOTING)
+------------------------------------------------------------------------------
+
+PROBLEMA: QR Code não aparece ou dá erro de rede.
+SOLUÇÃO: Rode o script de correção de rede.
+  cp fix_evolution_network.txt fix_network.sh
+  chmod +x fix_network.sh
+  sudo ./fix_network.sh
+
+PROBLEMA: Instância travada / Erro 500 / Loop infinito.
+SOLUÇÃO: Limpeza total (Factory Reset).
+  cp factory_reset.txt reset.sh
+  chmod +x reset.sh
+  sudo ./reset.sh
+
+PROBLEMA: Diagnóstico geral.
+SOLUÇÃO:
+  cp debug.txt debug.sh
+  chmod +x debug.sh
+  ./debug.sh
+
+==============================================================================

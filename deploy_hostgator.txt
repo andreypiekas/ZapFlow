@@ -1,0 +1,160 @@
+
+==============================================================================
+GUIA DE DEPLOY - HOSTGATOR VPS (ZAPFLOW)
+==============================================================================
+
+IMPORTANTE: Este guia é exclusivo para planos VPS ou DEDICADO.
+Não funciona em hospedagem compartilhada (Planos P, M, Business, Turbo),
+pois estes não suportam Docker.
+
+------------------------------------------------------------------------------
+PASSO 1: PREPARAÇÃO DO SERVIDOR (PORTAL HOSTGATOR)
+------------------------------------------------------------------------------
+
+1. Acesse o Portal do Cliente HostGator.
+2. Vá na gestão do seu Servidor VPS.
+3. Procure a opção "Rebuild" ou "Reinstalar OS".
+4. SELECIONE: Ubuntu 20.04 LTS ou Ubuntu 22.04 LTS.
+   (Não use CentOS ou AlmaLinux, pois os scripts deste projeto são para Debian/Ubuntu).
+5. Defina a senha de root e aguarde a reinstalação.
+
+------------------------------------------------------------------------------
+PASSO 2: ACESSO SSH E LIMPEZA INICIAL
+------------------------------------------------------------------------------
+Servidores HostGator muitas vezes vêm com o Apache instalado ocupando a porta 80.
+Precisamos removê-lo para usar o Nginx (nosso Proxy Reverso).
+
+1. Abra o terminal (CMD ou PowerShell no Windows, Terminal no Linux/Mac):
+   ssh root@SEU_IP_DA_HOSTGATOR
+
+2. Remova o Apache (para evitar conflito):
+   systemctl stop apache2
+   systemctl disable apache2
+   apt remove apache2 -y
+   apt autoremove -y
+
+3. Atualize o sistema:
+   apt update && apt upgrade -y
+
+------------------------------------------------------------------------------
+PASSO 3: INSTALAÇÃO DO SISTEMA
+------------------------------------------------------------------------------
+Agora que o Ubuntu está limpo, siga o procedimento padrão do projeto.
+
+1. Clone o projeto:
+   git clone https://github.com/andreypiekas/ZapFlow.git
+   cd ZapFlow
+
+2. Crie a memória SWAP (ESSENCIAL em VPS HostGator para não travar):
+   fallocate -l 4G /swapfile
+   chmod 600 /swapfile
+   mkswap /swapfile
+   swapon /swapfile
+   echo '/swapfile none swap sw 0 0' | tee -a /etc/fstab
+
+3. Instale o Docker e a API (Use o script automático):
+   cp setup_evolution.txt setup.sh
+   chmod +x setup.sh
+   ./setup.sh
+
+4. Instale o Frontend:
+   curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+   apt install -y nodejs
+   npm install
+   # ATENÇÃO: O Build será feito no PASSO 5 ou 6 dependendo do seu domínio
+
+------------------------------------------------------------------------------
+PASSO 4: CONFIGURAÇÃO DE DOMÍNIO (DNS)
+------------------------------------------------------------------------------
+Para acessar via link, configure no registro do seu domínio (Registro.br, etc):
+
+CENÁRIO A: Subdomínio (app.eprosatacado.com.br) -> Siga o PASSO 5
+CENÁRIO B: Subdiretório (www.eprosatacado.com.br/atendimento) -> Siga o PASSO 7
+
+Entradas DNS necessárias (Tipo A):
+- Nome: @ (ou www) -> Destino: IP DA VPS
+- Nome: api        -> Destino: IP DA VPS (Para o Backend)
+
+------------------------------------------------------------------------------
+PASSO 5: CONFIGURAR ACESSO PADRÃO (SUBDOMÍNIO)
+------------------------------------------------------------------------------
+(Pule este passo se você quer usar /atendimento)
+
+1. Build padrão:
+   npm run build
+   npm install -g pm2 serve
+   pm2 start "serve -s dist -l 5173" --name zapflow-front
+
+2. Configure Nginx conforme guia anterior (proxy_pass para porta 5173).
+
+------------------------------------------------------------------------------
+PASSO 6: DEPLOY EM SUBDIRETÓRIO (CENÁRIO ESPECIAL)
+------------------------------------------------------------------------------
+Use este passo se você quer acessar via: https://www.eprosatacado.com.br/atendimento
+
+1. **Build com Caminho Base:**
+   Precisamos avisar ao React que ele vai rodar dentro de /atendimento.
+   No terminal da VPS, dentro da pasta ZapFlow:
+
+   npx vite build --base=/atendimento/
+
+   (Isso cria a pasta 'dist' configurada corretamente).
+
+2. **Configurar Nginx:**
+   Vamos editar o arquivo de configuração do Nginx para servir essa pasta.
+   
+   nano /etc/nginx/sites-available/eprosatacado
+
+   Cole o seguinte conteúdo (Ajuste conforme necessário):
+
+   server {
+       server_name www.eprosatacado.com.br eprosatacado.com.br;
+
+       # --- Configuração do Site Principal (Se houver) ---
+       # root /var/www/html;
+       # index index.html;
+
+       # --- Configuração do ZapFlow (/atendimento) ---
+       location /atendimento {
+           alias /root/ZapFlow/dist; # Caminho exato onde está a pasta dist
+           try_files $uri $uri/ /atendimento/index.html;
+       }
+
+       # --- Configuração da API (Recomendamos manter em subdomínio) ---
+       # Se preferir api.eprosatacado.com.br
+   }
+   
+   server {
+       server_name api.eprosatacado.com.br;
+       
+       location / {
+           proxy_pass http://localhost:8080;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection "upgrade";
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+
+3. **Ativar e Reiniciar:**
+   ln -s /etc/nginx/sites-available/eprosatacado /etc/nginx/sites-enabled/
+   nginx -t
+   systemctl restart nginx
+
+4. **SSL (HTTPS):**
+   certbot --nginx -d www.eprosatacado.com.br -d eprosatacado.com.br -d api.eprosatacado.com.br
+
+------------------------------------------------------------------------------
+PASSO 7: CONFIGURAÇÃO FINAL NO PAINEL
+------------------------------------------------------------------------------
+1. Acesse https://www.eprosatacado.com.br/atendimento
+2. Login: admin@hostgator.com / 123456
+3. Configurações:
+   - URL API: https://api.eprosatacado.com.br
+   - API Key: B8349283-F143-429D-B6C2-9386E8016558
+4. Salve e Conecte.
+
+==============================================================================

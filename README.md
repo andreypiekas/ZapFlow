@@ -1,119 +1,110 @@
+
 # ZapFlow Manager ⚡ v1.2.0 (Produção)
 
 **Plataforma Profissional de Gestão de Atendimento para WhatsApp**
 
-O **ZapFlow Manager** centraliza, organiza e automatiza o atendimento via WhatsApp. Com suporte a múltiplos atendentes, IA (Gemini), fluxos de trabalho (SOP) e métricas detalhadas. Compatível com **Evolution API v2.2.3**.
+O **ZapFlow Manager** centraliza, organiza e automatiza o atendimento via WhatsApp. Com suporte a múltiplos atendentes, IA (Gemini), fluxos de trabalho (SOP), métricas detalhadas e sincronização de contatos Google. Compatível com **Evolution API v2.2.3**.
 
 ---
 
-## 📋 Pré-requisitos (Servidor Ubuntu)
+## 📋 Pré-requisitos
 
-*   **OS:** Ubuntu 20.04 ou superior.
-*   **Recursos:** Mínimo 2GB RAM (4GB Recomendado) / 2 vCPU.
-*   **Portas:** 8080 (API), 5173 (Frontend) liberadas no Firewall.
+*   **Servidor:** Ubuntu 20.04 ou 22.04 LTS.
+*   **Hardware Mínimo:** 2GB RAM (4GB Recomendado) / 2 vCPU.
+*   **Dependências:** Node.js v20+, Docker, Docker Compose.
 
 ---
 
-## ⚡ Instalação Automática
+## 🚀 Instalação Rápida (Scripts Automatizados)
 
-Disponibilizamos scripts prontos para configurar a API e o Banco de Dados automaticamente.
+Para facilitar a implantação, incluímos scripts que configuram todo o ambiente backend automaticamente.
 
-### 1. Clonar o Repositório
+### 1. Backend (Evolution API)
 
-```bash
-git clone https://github.com/andreypiekas/ZapFlow.git
-cd ZapFlow
-```
-
-### 2. Configurar a Evolution API (Backend)
-
-Utilize o arquivo `setup_evolution.txt` para criar o ambiente Docker:
-
-1.  Crie o arquivo de script:
+1.  **Prepare o script de instalação:**
+    Copie o conteúdo do arquivo `setup_evolution.txt` para um arquivo `setup.sh` no servidor e dê permissão de execução:
     ```bash
     cp setup_evolution.txt setup.sh && chmod +x setup.sh
     ```
-2.  Execute:
+
+2.  **Execute a instalação:**
     ```bash
     ./setup.sh
     ```
+    *Este script irá instalar o Docker (se necessário), criar o `docker-compose.yml` com seu IP real, configurar o Postgres/Redis e iniciar a API na porta 8080.*
 
-> O script irá gerar automaticamente o `docker-compose.yml` configurado com seu IP, limpar volumes antigos e iniciar a API.
+### 2. Frontend (ZapFlow Web)
 
-### 3. Build e Deploy do Frontend (ZapFlow)
+1.  **Instale as dependências e faça o Build:**
+    ```bash
+    npm install
+    npm run build
+    ```
 
-Para rodar o site em modo produção:
+2.  **Coloque em produção (PM2):**
+    ```bash
+    sudo npm install -g pm2 serve
+    pm2 start "serve -s dist -l 5173" --name zapflow-front
+    pm2 save
+    pm2 startup
+    ```
 
-```bash
-# 1. Instale dependências
-npm install
-
-# 2. Gere o build otimizado
-npm run build
-
-# 3. Instale o PM2 (Gerenciador de Processos) e Serve
-sudo npm install -g pm2 serve
-
-# 4. Inicie o servidor
-pm2 start "serve -s dist -l 5173" --name zapflow-front
-pm2 save
-pm2 startup
-```
-
-Acesse o sistema em: `http://SEU_IP_SERVIDOR:5173`
+Acesse: `http://SEU_IP_SERVIDOR:5173`
 
 ---
 
-## 🔧 Solução de Problemas (Troubleshooting)
+## 🌐 Colocando em Produção (VPS / HostGator)
 
-### Problema: Erro 500 no Log / Loop de Reinicialização / Instância Travada
+Para configurar um domínio profissional (ex: `app.suaempresa.com.br`), ativar SSL e proteger seu servidor:
 
-Se o log mostrar `"error in handling message"` ou a instância ficar reiniciando, é necessário limpar o banco de dados corrompido.
-
-1.  Crie o script de reset: 
-```bash
-cp setup_evolution.txt setup.sh && chmod +x setup.sh && cp factory_reset.txt reset.sh && chmod +x reset.sh
-```
-2.  Execute: 
-```bash
-sudo ./reset.sh
-```
-
-Automático: 
-
-1. Ajusta e executa  
-```bash
-cp setup_evolution.txt setup.sh && chmod +x setup.sh && cp factory_reset.txt reset.sh && chmod +x reset.sh && ./reset.sh
-```
-
-### Problema: QR Code não gera
-
-1.  Verifique se o `SERVER_URL` no `docker-compose.yml` está com o IP correto (não use localhost).
-2.  Execute o diagnóstico: 
-```bash
-chmod +x debug.sh && ./debug.sh
-```
-3.  Ajuste o arquivo de correção de rede 
-```bash
-cp fix_evolution_networ.txt fix_network.sh && chmod +x fix_network.sh
-```
-4.  Execute a correção de rede: 
-```bash
-sudo ./fix_network.sh
-```
+*   📄 **[deploy.txt](./deploy.txt)** - Guia Genérico para VPS (DigitalOcean, AWS, etc).
+*   📄 **[deploy_hostgator.txt](./deploy_hostgator.txt)** - Guia Específico para **HostGator VPS** (Troca de OS, Subdiretórios).
+*   📄 **[security_hostgator.txt](./security_hostgator.txt)** - 🔒 **Guia de Segurança** (Firewall, Anti-DDoS, SSH Hardening).
 
 ---
 
-## ⚙️ Configuração Pós-Instalação
+## 🛠️ Ferramentas de Manutenção
+
+Na raiz do projeto, você encontrará arquivos `.txt` que podem ser convertidos em scripts `.sh` para manutenção:
+
+| Arquivo Original | Comando Sugerido | Função |
+| :--- | :--- | :--- |
+| `setup_evolution.txt` | `./setup.sh` | Instalação limpa, atualização e recriação do docker-compose. |
+| `debug.txt` | `./debug.sh` | Testa conectividade interna (Ping, DNS, WhatsApp Web) para diagnosticar erros. |
+| `fix_evolution_network.txt` | `./fix_network.sh` | Corrige regras de Firewall/IPTables que bloqueiam o QR Code. |
+| `factory_reset.txt` | `./reset.sh` | **PERIGO:** Apaga todos os dados do banco e reinicia a instalação do zero. |
+| `deploy.txt` | - | Manual de configuração de Nginx e HTTPS. |
+
+---
+
+## ⚙️ Configuração Inicial no Painel
 
 1.  Acesse o ZapFlow (`http://SEU_IP:5173`).
-2.  Faça login (`admin@hopiekas.com` / `123`).
-3.  Vá em **Configurações**.
+2.  Login padrão: `admin@hostgator.com` / `123456`.
+3.  Vá em **Configurações** no menu lateral.
 4.  Preencha os dados (baseados na saída do `setup.sh`):
     *   **URL da API:** `http://SEU_IP:8080`
-    *   **API Key:** `B8349283-F143-429D-B6C2-9386E8016558` (Padrão do script)
-    *   **Instância:** `zapflow`
-5.  Salve e vá em **Conexões** para escanear o QR Code.
+    *   **API Key:** `B8349283-F143-429D-B6C2-9386E8016558`
+    *   **Nome da Instância:** `zapflow`
+5.  Salve e vá em **Conexões**.
+6.  Se houver divergência de nome, clique no botão "Corrigir Nome" que aparecerá. Escaneie o QR Code.
+
+---
+
+## 🐛 Solução de Problemas Comuns
+
+### 1. Loop Infinito / QR Code não carrega
+Geralmente causado por falta de memória ou bloqueio de rede.
+*   **Solução A:** Crie Memória SWAP (Veja `manual_instalacao_completo.txt`).
+*   **Solução B:** Rode `./fix_network.sh` para liberar o tráfego do Docker.
+
+### 2. Erro "Internal Server Error" ao conectar
+Causado por tentativa de baixar histórico antigo gigante.
+*   **Solução:** Rode `./reset.sh` para limpar o banco corrompido. O sistema já está configurado para **NÃO** baixar histórico antigo (`CONFIG_SESSION_PHONE_SYNC_FULL_HISTORY=false`) nas novas instalações.
+
+### 3. Tela Branca ao acessar o site
+Ocorre se o arquivo `.env` não for lido corretamente ou erro de build.
+*   **Solução:** Rode `npm run build` novamente e reinicie o PM2. Verifique o console do navegador (F12).
 
 ---
 

@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw, Smile, Tag, Plus, Clock } from 'lucide-react';
-import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow } from '../types';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw, Smile, Tag, Plus, Clock, User as UserIcon } from 'lucide-react';
+import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow, Contact } from '../types';
 import { generateSmartReply } from '../services/geminiService';
 import { sendRealMessage, sendRealMediaMessage, blobToBase64 } from '../services/whatsappService';
 import { AVAILABLE_TAGS, EMOJIS, STICKERS } from '../constants';
@@ -14,9 +14,10 @@ interface ChatInterfaceProps {
   apiConfig: ApiConfig;
   quickReplies?: QuickReply[];
   workflows?: Workflow[];
+  contacts?: Contact[];
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, currentUser, onUpdateChat, apiConfig, quickReplies = [], workflows = [] }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, currentUser, onUpdateChat, apiConfig, quickReplies = [], workflows = [], contacts = [] }) => {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [inputText, setInputText] = useState('');
   const [filterText, setFilterText] = useState('');
@@ -24,6 +25,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isSending, setIsSending] = useState(false);
   
+  // Resizable Sidebar State
+  const [listWidth, setListWidth] = useState(380); // Default width in pixels
+  const [isResizing, setIsResizing] = useState(false);
+
   // Tabs: 'todo' (Inbox/User replied), 'waiting' (Agent replied), 'closed'
   const [activeTab, setActiveTab] = useState<'todo' | 'waiting' | 'closed'>('todo');
   
@@ -37,6 +42,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const [showTagMenu, setShowTagMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [messageSearchTerm, setMessageSearchTerm] = useState('');
+
+  // New Chat Modal
+  const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
+  const [newChatInput, setNewChatInput] = useState('');
 
   // Options Menu
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
@@ -129,6 +138,106 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   useEffect(() => {
     scrollToBottom();
   }, [selectedChat?.messages, messageSearchTerm]);
+
+  // --- RESIZE HANDLER LOGIC ---
+  const startResizing = useCallback((e: React.MouseEvent) => {
+    setIsResizing(true);
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  const resize = useCallback((e: MouseEvent) => {
+    if (isResizing) {
+      // Calculate new width relative to the sidebar
+      // We assume the sidebar starts at 0 or after the main navigation sidebar
+      // Simply using e.clientX usually works if we account for offset, but 
+      // since the list is the first element in this flex container, we can calculate width based on cursor position
+      // minus the approximate width of the main App Sidebar (collapsed or expanded).
+      // However, a simpler way is to rely on movementX or clientX and just set a reasonable bound.
+      
+      // Let's rely on the chat interface container.
+      // Ideally we would use a ref for the container, but let's try a direct approach
+      // Assuming standard layout, clientX is the position from left of screen.
+      // We need to subtract the Main App Sidebar width. 
+      // Since we don't know if it's 64px or 256px here easily without prop drilling, 
+      // we can use `e.movementX` to adjust current width.
+      
+      setListWidth((prevWidth) => {
+          const newWidth = prevWidth + e.movementX;
+          if (newWidth < 250) return 250; // Min width
+          if (newWidth > 600) return 600; // Max width
+          return newWidth;
+      });
+    }
+  }, [isResizing]);
+
+  useEffect(() => {
+    window.addEventListener('mousemove', resize);
+    window.addEventListener('mouseup', stopResizing);
+    return () => {
+      window.removeEventListener('mousemove', resize);
+      window.removeEventListener('mouseup', stopResizing);
+    };
+  }, [resize, stopResizing]);
+
+
+  // --- NEW CHAT LOGIC ---
+  const handleStartNewChat = (contact?: Contact) => {
+      let contactNumber = '';
+      let contactName = '';
+      let avatar = 'https://ui-avatars.com/api/?background=random&color=fff&name=NC';
+
+      if (contact) {
+          contactNumber = contact.phone.replace(/\D/g, '');
+          contactName = contact.name;
+          avatar = contact.avatar || avatar;
+      } else {
+          // Input manual
+          const cleaned = newChatInput.replace(/\D/g, '');
+          if (cleaned.length < 10) {
+              alert('Número inválido. Digite DDD + Número.');
+              return;
+          }
+          contactNumber = cleaned;
+          contactName = newChatInput; // Use input as name initially or format number
+      }
+
+      // Check if chat exists
+      const existingChat = chats.find(c => c.contactNumber.replace(/\D/g, '') === contactNumber);
+      
+      if (existingChat) {
+          setSelectedChatId(existingChat.id);
+          setIsNewChatModalOpen(false);
+          setNewChatInput('');
+          return;
+      }
+
+      // Create new chat
+      const newChat: Chat = {
+          id: `chat_${Date.now()}`,
+          contactName: contactName || contactNumber,
+          contactNumber: contactNumber,
+          contactAvatar: avatar,
+          departmentId: null,
+          unreadCount: 0,
+          lastMessage: '',
+          lastMessageTime: new Date(),
+          status: 'open',
+          messages: [],
+          assignedTo: currentUser.id // Auto assign to creator
+      };
+
+      onUpdateChat(newChat);
+      setSelectedChatId(newChat.id);
+      setIsNewChatModalOpen(false);
+      setNewChatInput('');
+  };
+
+  const suggestedContacts = newChatInput.length > 0 
+    ? contacts.filter(c => c.name.toLowerCase().includes(newChatInput.toLowerCase()) || c.phone.includes(newChatInput))
+    : [];
 
   // --- CONTACT EDITING ---
   const handleSaveContactInfo = () => {
@@ -641,34 +750,43 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   }) || [];
 
   return (
-    <div className="flex h-full bg-white md:rounded-lg shadow-sm overflow-hidden md:border border-slate-200">
+    <div className={`flex h-full bg-white md:rounded-lg shadow-sm overflow-hidden md:border border-slate-200 ${isResizing ? 'select-none' : ''}`}>
       
-      {/* Sidebar List */}
-      <div className={`
-        flex-col bg-slate-50 border-r border-slate-200 w-full md:w-1/3
-        ${selectedChatId ? 'hidden md:flex' : 'flex'}
-      `}>
+      {/* Sidebar List (Resizable) */}
+      <div 
+        className={`flex-col bg-slate-50 border-r border-slate-200 ${selectedChatId ? 'hidden md:flex' : 'flex'}`}
+        style={{ width: selectedChatId ? listWidth : '100%' }} // On mobile, if no chat selected, it takes full width
+      >
         {/* Header da Sidebar */}
         <div className="p-4 bg-white border-b border-slate-200 space-y-3">
-           <div className="flex bg-slate-100 p-1 rounded-lg">
-              <button 
-                onClick={() => setActiveTab('todo')}
-                className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all flex justify-center items-center gap-1 ${activeTab === 'todo' ? 'bg-white shadow text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                A Fazer
-              </button>
-              <button 
-                onClick={() => setActiveTab('waiting')}
-                className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all flex justify-center items-center gap-1 ${activeTab === 'waiting' ? 'bg-white shadow text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                 <Clock size={12} /> Aguardando
-              </button>
-              <button 
-                onClick={() => setActiveTab('closed')}
-                className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all flex justify-center items-center gap-1 ${activeTab === 'closed' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                Finalizados
-              </button>
+           <div className="flex items-center gap-2 mb-2">
+                <div className="flex flex-1 bg-slate-100 p-1 rounded-lg">
+                    <button 
+                        onClick={() => setActiveTab('todo')}
+                        className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all flex justify-center items-center gap-1 ${activeTab === 'todo' ? 'bg-white shadow text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        A Fazer
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('waiting')}
+                        className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all flex justify-center items-center gap-1 ${activeTab === 'waiting' ? 'bg-white shadow text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        <Clock size={12} /> Aguardando
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('closed')}
+                        className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all flex justify-center items-center gap-1 ${activeTab === 'closed' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                        Finalizados
+                    </button>
+                </div>
+                <button 
+                    onClick={() => setIsNewChatModalOpen(true)}
+                    className="p-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm"
+                    title="Novo Atendimento"
+                >
+                    <Plus size={18} />
+                </button>
            </div>
 
           <div className="relative">
@@ -766,6 +884,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
           )))}
         </div>
       </div>
+      
+      {/* Resizer Handle */}
+      {selectedChatId && (
+        <div
+            className="hidden md:block w-1 bg-slate-200 hover:bg-emerald-500 cursor-col-resize z-20 transition-colors"
+            onMouseDown={startResizing}
+        />
+      )}
 
       {/* Main Chat Area */}
       <div 
@@ -1295,6 +1421,60 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
           </div>
         )}
       </div>
+
+      {/* New Chat Modal */}
+      {isNewChatModalOpen && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 animate-in zoom-in duration-200">
+             <div className="flex justify-between items-center mb-4">
+                 <h3 className="text-lg font-bold text-slate-800">Iniciar Novo Atendimento</h3>
+                 <button onClick={() => setIsNewChatModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+             </div>
+             
+             <div className="space-y-4">
+                 <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Buscar Contato ou Digitar Número</label>
+                    <input 
+                        autoFocus
+                        value={newChatInput}
+                        onChange={(e) => setNewChatInput(e.target.value)}
+                        placeholder="Nome ou 55 + DDD + Número"
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                 </div>
+
+                 {/* Suggestions List */}
+                 {newChatInput.length > 0 && suggestedContacts.length > 0 && (
+                     <div className="border border-slate-200 rounded-lg max-h-40 overflow-y-auto">
+                         {suggestedContacts.map(contact => (
+                             <button
+                                key={contact.id}
+                                onClick={() => handleStartNewChat(contact)}
+                                className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-50 last:border-0 flex items-center gap-2"
+                             >
+                                <img src={contact.avatar || 'https://ui-avatars.com/api/?name=' + contact.name} className="w-6 h-6 rounded-full" />
+                                <div>
+                                    <p className="text-sm font-medium text-slate-800">{contact.name}</p>
+                                    <p className="text-xs text-slate-500">{contact.phone}</p>
+                                </div>
+                             </button>
+                         ))}
+                     </div>
+                 )}
+                 
+                 <div className="pt-2">
+                    <button 
+                        onClick={() => handleStartNewChat()}
+                        className="w-full bg-emerald-600 text-white py-2 rounded-lg font-bold hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                        disabled={newChatInput.length < 3}
+                    >
+                        Iniciar Conversa
+                    </button>
+                 </div>
+             </div>
+          </div>
+        </div>
+      )}
 
       {/* Transfer Modal */}
       {isTransferModalOpen && (

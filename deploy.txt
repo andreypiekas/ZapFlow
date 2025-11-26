@@ -1,0 +1,116 @@
+
+==============================================================================
+GUIA DE DEPLOY EM PRODUÇÃO (VPS + DOMÍNIO + HTTPS)
+==============================================================================
+
+Este guia transforma sua instalação básica (que roda via IP:Porta) em um
+sistema profissional acessível via domínio (ex: https://app.suaempresa.com.br)
+com certificado de segurança SSL (Cadeado).
+
+PRÉ-REQUISITOS:
+1. Um Domínio registrado (ex: no Registro.br, GoDaddy, Cloudflare).
+2. Acesso à VPS onde o ZapFlow já está instalado (seguindo o manual_instalacao.txt).
+
+------------------------------------------------------------------------------
+PASSO 1: CONFIGURAR O DNS (Apontamento)
+------------------------------------------------------------------------------
+Acesse o painel onde você comprou seu domínio e crie 2 registros do tipo "A":
+
+1. Entrada (Name): app
+   Destino (IP): O IP PÚBLICO da sua VPS (ex: 123.45.67.89)
+   -> Isso criará app.seudominio.com.br (Para o Site)
+
+2. Entrada (Name): api
+   Destino (IP): O IP PÚBLICO da sua VPS (ex: 123.45.67.89)
+   -> Isso criará api.seudominio.com.br (Para o Backend)
+
+*Aguarde alguns minutos para propagar.*
+
+------------------------------------------------------------------------------
+PASSO 2: INSTALAR O SERVIDOR WEB (NGINX) E CERTBOT
+------------------------------------------------------------------------------
+No terminal da sua VPS, execute:
+
+sudo apt update
+sudo apt install -y nginx certbot python3-certbot-nginx
+
+------------------------------------------------------------------------------
+PASSO 3: CONFIGURAR O PROXY REVERSO
+------------------------------------------------------------------------------
+Vamos configurar o Nginx para receber o tráfego da internet e repassar para
+o Docker (API) e para o PM2 (Frontend).
+
+1. Crie o arquivo de configuração:
+sudo nano /etc/nginx/sites-available/zapflow
+
+2. Cole o conteúdo abaixo (ALTERE 'seudominio.com.br' PELO SEU DOMÍNIO REAL):
+
+# --- BLOCO DO FRONTEND (O SITE) ---
+server {
+    server_name app.seudominio.com.br;
+
+    location / {
+        proxy_pass http://localhost:5173;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+
+# --- BLOCO DO BACKEND (A API) ---
+server {
+    server_name api.seudominio.com.br;
+
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+3. Salve (CTRL+O, Enter) e Saia (CTRL+X).
+
+4. Ative o site e reinicie o Nginx:
+sudo ln -s /etc/nginx/sites-available/zapflow /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+
+------------------------------------------------------------------------------
+PASSO 4: ATIVAR HTTPS (SSL GRATUITO)
+------------------------------------------------------------------------------
+O Certbot vai configurar o cadeado de segurança automaticamente.
+
+sudo certbot --nginx -d app.seudominio.com.br -d api.seudominio.com.br
+
+*Siga as instruções na tela (digite seu email, aceite os termos).*
+
+------------------------------------------------------------------------------
+PASSO 5: AJUSTES FINAIS NA APLICAÇÃO
+------------------------------------------------------------------------------
+Agora que sua API tem um endereço seguro (HTTPS), precisamos atualizar a configuração.
+
+1. Acesse o site pelo novo link: https://app.seudominio.com.br
+2. Vá em Configurações.
+3. Atualize a URL da API para: https://api.seudominio.com.br (sem a porta 8080).
+4. Salve.
+
+------------------------------------------------------------------------------
+PASSO 6: AJUSTE NO DOCKER (Opcional mas Recomendado)
+------------------------------------------------------------------------------
+Para garantir que a API saiba que está rodando via HTTPS, edite o docker-compose.yml:
+
+1. nano ~/ZapFlow/docker-compose.yml
+2. Altere SERVER_URL para: https://api.seudominio.com.br
+3. Reinicie a API:
+   cd ~/ZapFlow
+   docker compose down && docker compose up -d
+
+PRONTO! 🚀
+Seu sistema agora é profissional, seguro e acessível de qualquer lugar.

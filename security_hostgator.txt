@@ -1,0 +1,159 @@
+
+==============================================================================
+GUIA DE SEGURANÇA AVANÇADA - VPS HOSTGATOR (ZAPFLOW)
+==============================================================================
+
+Este guia contém as melhores práticas para blindar seu servidor contra ataques
+de força bruta, invasões e ataques DDoS.
+
+IMPORTANTE: Execute os comandos com cuidado. Um erro na configuração do SSH
+ou Firewall pode bloquear seu próprio acesso ao servidor.
+
+------------------------------------------------------------------------------
+CAMADA 1: PROTEÇÃO BÁSICA DO SISTEMA (SSH E USUÁRIO)
+------------------------------------------------------------------------------
+O maior vetor de ataques em VPS é a tentativa de adivinhar a senha do root.
+
+1. CRIAR UM USUÁRIO SUDO (Não use o root diretamente)
+   adduser admin_user
+   usermod -aG sudo admin_user
+
+2. CONFIGURAR AUTENTICAÇÃO POR CHAVE SSH (Opcional, mas Recomendado)
+   No seu computador local (não na VPS):
+   ssh-copy-id admin_user@SEU_IP_VPS
+
+3. ENDURECER O SSH (Desativar login por senha)
+   Edite o arquivo:
+   nano /etc/ssh/sshd_config
+
+   Altere/Adicione:
+   PermitRootLogin no
+   PasswordAuthentication no
+   Port 22 (Ou mude para uma porta não padrão, ex: 2222, para evitar bots)
+
+   Reinicie o SSH:
+   service ssh restart
+
+------------------------------------------------------------------------------
+CAMADA 2: FIREWALL LOCAL (UFW)
+------------------------------------------------------------------------------
+Vamos fechar todas as portas e deixar aberta apenas a entrada web (80/443) e SSH.
+Isso impede que acessem seu Banco de Dados ou Docker diretamente.
+
+1. Instalar UFW:
+   apt install ufw -y
+
+2. Configurar Regras:
+   ufw default deny incoming  (Bloqueia tudo que entra)
+   ufw default allow outgoing (Libera tudo que sai)
+   ufw allow ssh              (Libera SSH - MUITO IMPORTANTE)
+   ufw allow 80/tcp           (HTTP)
+   ufw allow 443/tcp          (HTTPS)
+
+   # Se você mudou a porta SSH no passo anterior, libere a porta nova (ex: ufw allow 2222/tcp)
+
+3. Ativar:
+   ufw enable
+   (Confirme com 'y')
+
+------------------------------------------------------------------------------
+CAMADA 3: PREVENÇÃO DE INTRUSÃO (FAIL2BAN)
+------------------------------------------------------------------------------
+O Fail2Ban monitora os logs. Se alguém errar a senha do SSH muitas vezes,
+ele banirá o IP do atacante automaticamente.
+
+1. Instalar:
+   apt install fail2ban -y
+
+2. Configurar:
+   cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local
+   nano /etc/fail2ban/jail.local
+
+   Procure por [sshd] e garanta que está assim:
+   [sshd]
+   enabled = true
+   port    = ssh
+   logpath = %(sshd_log)s
+   backend = %(sshd_backend)s
+   maxretry = 3
+   bantime = 3600
+
+3. Reiniciar:
+   systemctl restart fail2ban
+
+------------------------------------------------------------------------------
+CAMADA 4: SEGURANÇA WEB (NGINX RATE LIMITING)
+------------------------------------------------------------------------------
+Para evitar que bots ou usuários mal intencionados derrubem sua API fazendo
+milhares de requisições por segundo.
+
+1. Edite o arquivo do Nginx:
+   nano /etc/nginx/nginx.conf
+
+2. Adicione dentro do bloco http { ... }:
+   # Limita a 10 requisições por segundo por IP
+   limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+
+3. Aplique no arquivo do seu site (/etc/nginx/sites-available/eprosatacado):
+   
+   location / {
+       limit_req zone=api_limit burst=20 nodelay;
+       proxy_pass http://localhost:8080;
+       ...
+   }
+
+4. Recarregue:
+   systemctl reload nginx
+
+------------------------------------------------------------------------------
+CAMADA 5: ANTI-DDOS (CLOUDFLARE) - CRUCIAL
+------------------------------------------------------------------------------
+A HostGator possui proteção DDoS básica, mas ela é focada na rede (volumétrica).
+Para proteger sua aplicação Web, a melhor solução gratuita é a CLOUDFLARE.
+
+1. Crie uma conta em https://www.cloudflare.com
+2. Adicione seu site (eprosatacado.com.br).
+3. A Cloudflare vai te dar 2 Nameservers (ex: bob.ns.cloudflare.com).
+4. Vá no registro do seu domínio (Registro.br ou Hostgator) e troque os DNS
+   atuais pelos da Cloudflare.
+
+5. No painel da Cloudflare (Menu DNS):
+   - Certifique-se de que a "Nuvem Laranja" (Proxy) está ATIVADA para suas entradas 'A' (www, app, api).
+
+   O QUE ISSO FAZ?
+   - Oculta o IP real da sua VPS (os atacantes só veem o IP da Cloudflare).
+   - A Cloudflare absorve o ataque DDoS antes de chegar na HostGator.
+   - Fornece SSL/HTTPS gratuito e rápido.
+
+6. No painel da Cloudflare (Menu Security > Settings):
+   - Security Level: Medium ou High.
+   - Bot Fight Mode: On (Bloqueia robôs simples).
+
+------------------------------------------------------------------------------
+CAMADA 6: SEGURANÇA DO DOCKER
+------------------------------------------------------------------------------
+Nunca exponha o Banco de Dados (Postgres/Redis) para a internet pública.
+
+No seu arquivo `docker-compose.yml`, certifique-se de que as portas do Postgres
+e Redis NÃO estão mapeadas para o host globalmente.
+
+Errado (Expõe para o mundo):
+ports:
+  - "5432:5432"
+
+Correto (Apenas interno no Docker):
+# Não coloque a seção ports no postgres/redis se apenas a API usa eles.
+# Ou mapeie apenas para local:
+ports:
+  - "127.0.0.1:5432:5432"
+
+------------------------------------------------------------------------------
+CHECKLIST DE MANUTENÇÃO MENSAL
+------------------------------------------------------------------------------
+1. Rodar atualizações de segurança:
+   apt update && apt upgrade -y
+
+2. Verificar logs de bloqueio:
+   fail2ban-client status sshd
+
+3. Fazer backup do banco de dados (Postgres) e baixar para seu computador.
