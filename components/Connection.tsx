@@ -164,9 +164,9 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
               {config.isDemo ? 'Ambiente de Simulação (Demo)' : `Instância: ${config.instanceName}`}
             </p>
           </div>
-          <div className={`px-4 py-1.5 rounded-full text-sm font-bold flex items-center gap-2 ${status === 'connected' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : status === 'connecting' ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-slate-200 text-slate-600 border border-slate-300'}`}>
-            <div className={`w-2 h-2 rounded-full ${status === 'connected' ? 'bg-emerald-500 animate-pulse' : status === 'connecting' ? 'bg-amber-500 animate-bounce' : 'bg-slate-500'}`} />
-            {status === 'connected' ? 'SESSÃO ATIVA' : status === 'connecting' ? 'CONECTANDO...' : 'DESCONECTADO'}
+          <div className={`px-4 py-1.5 rounded-full text-sm font-bold flex items-center gap-2 ${status === 'connected' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : status === 'connecting' ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-slate-200 text-slate-600 border border-slate-300'}`}>
+            <div className={`w-2 h-2 rounded-full ${status === 'connected' ? 'bg-emerald-500 animate-pulse' : status === 'connecting' ? 'bg-blue-500 animate-bounce' : 'bg-slate-500'}`} />
+            {status === 'connected' ? 'SESSÃO ATIVA' : status === 'connecting' ? 'SINCRONIZANDO...' : 'DESCONECTADO'}
           </div>
         </div>
 
@@ -249,7 +249,7 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                              </div>
                              <div>
                                 <span className="block text-[10px] uppercase text-slate-400">Status Instância</span>
-                                <span className={`block font-mono uppercase font-bold ${detailedStatus === 'open' ? 'text-emerald-600' : detailedStatus === 'connecting' ? 'text-amber-500' : 'text-slate-600'}`}>
+                                <span className={`block font-mono uppercase font-bold ${detailedStatus === 'open' ? 'text-emerald-600' : detailedStatus === 'connecting' ? 'text-blue-500' : 'text-slate-600'}`}>
                                     {detailedStatus}
                                 </span>
                              </div>
@@ -297,7 +297,7 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                                 <div className="flex flex-col items-center gap-3">
                                     <Loader2 className="animate-spin text-emerald-600" size={32} />
                                     <span className="text-xs text-slate-400">
-                                        {detailedStatus === 'connecting' ? 'Iniciando Navegador...' : 'Comunicando com servidor...'}
+                                        {detailedStatus === 'connecting' ? 'Sincronizando dados...' : 'Comunicando com servidor...'}
                                     </span>
                                 </div>
                             ) : !isConfigured ? (

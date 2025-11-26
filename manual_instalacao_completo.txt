@@ -39,21 +39,21 @@ services:
       - CACHE_REDIS_URI=redis://evolution_redis:6379/0
       - DEL_INSTANCE=false
       
-      # --- CONFIGURAÇÃO DE ESTABILIDADE (GOLDILOCKS v4) ---
+      # --- CONFIGURAÇÃO DE ESTABILIDADE (GOLDILOCKS v5) ---
       # Define cliente para garantir a geração do QR Code
       - CONFIG_SESSION_PHONE_CLIENT=ZapFlow
       - CONFIG_SESSION_PHONE_NAME=Chrome
       - CONFIG_SESSION_PHONE_OS=Windows
       
-      # Versão Automática (Mais estável para evitar erro 515)
-      # - CONFIG_SESSION_PHONE_VERSION=2.2413.1
+      # Versão Validada (Corrige erro de geração de QR Code)
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1029255529
       
       # Proteções de Performance
       - CONFIG_SESSION_PHONE_SYNC_FULL_HISTORY=false
       - CONFIG_SESSION_PHONE_REJECT_CALL=true
       - CONFIG_SESSION_PHONE_MSG_CALL="Não aceitamos chamadas por aqui. Por favor, envie texto."
       
-      # Argumentos OTIMIZADOS para VPS (Sem single-process para evitar crash)
+      # Argumentos OTIMIZADOS para VPS (Sem single-process para evitar crash loop em v2.2.3)
       - BROWSER_ARGS=["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-accelerated-2d-canvas","--no-first-run","--disable-gpu","--disable-software-rasterizer"]
       
       - CORS_ORIGIN=*
