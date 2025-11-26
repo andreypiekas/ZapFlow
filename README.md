@@ -31,13 +31,10 @@ Utilize o arquivo `setup_evolution.txt` para criar o ambiente Docker:
 
 1.  Crie o arquivo de script:
     ```bash
-    nano setup.sh
+    cp setup_evolution.txt setup.sh && chmod +x setup.sh
     ```
-2.  **Copie e cole** o conteúdo do arquivo `setup_evolution.txt` disponível neste repositório.
-3.  Salve (CTRL+O) e saia (CTRL+X).
-4.  Execute:
+2.  Execute:
     ```bash
-    chmod +x setup.sh
     ./setup.sh
     ```
 
@@ -73,19 +70,37 @@ Acesse o sistema em: `http://SEU_IP_SERVIDOR:5173`
 
 Se o log mostrar `"error in handling message"` ou a instância ficar reiniciando, é necessário limpar o banco de dados corrompido.
 
-1.  Crie o script de reset: `cp setup_evolution.txt setup.sh && chmod +x setup.sh && cp factory_reset.txt reset.sh && chmod +x reset.sh`
-2.  Execute: `sudo ./reset.sh`
+1.  Crie o script de reset: 
+```bash
+cp setup_evolution.txt setup.sh && chmod +x setup.sh && cp factory_reset.txt reset.sh && chmod +x reset.sh
+```
+2.  Execute: 
+```bash
+sudo ./reset.sh
+```
 
 Automático: 
 
-1. Ajusta e executa  `cp setup_evolution.txt setup.sh && chmod +x setup.sh && cp factory_reset.txt reset.sh && chmod +x reset.sh && ./reset.sh`
+1. Ajusta e executa  
+```bash
+`cp setup_evolution.txt setup.sh && chmod +x setup.sh && cp factory_reset.txt reset.sh && chmod +x reset.sh && ./reset.sh`
+```
 
 ### Problema: QR Code não gera
 
 1.  Verifique se o `SERVER_URL` no `docker-compose.yml` está com o IP correto (não use localhost).
-2.  Execute o diagnóstico: `chmod +x debug.sh && ./debug.sh`
-3.  Ajuste o arquivo de correção de rede `cp fix_evolution_networ.txt fix_network.sh && chmod +x fix_network.sh`
-4.  Execute a correção de rede: `sudo ./fix_network.sh`
+2.  Execute o diagnóstico: 
+```bash
+chmod +x debug.sh && ./debug.sh
+```
+3.  Ajuste o arquivo de correção de rede 
+```bash
+cp fix_evolution_networ.txt fix_network.sh && chmod +x fix_network.sh
+```
+4.  Execute a correção de rede: 
+```bash
+sudo ./fix_network.sh
+```
 
 ---
 
