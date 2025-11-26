@@ -26,6 +26,13 @@ const loadConfig = (): ApiConfig => {
   };
 };
 
+// Carregar usuário salvo na sessão
+const loadUserSession = (): User | null => {
+  const saved = localStorage.getItem('zapflow_user');
+  if (saved) return JSON.parse(saved);
+  return null;
+};
+
 interface Notification {
   id: string;
   title: string;
@@ -34,7 +41,7 @@ interface Notification {
 }
 
 const App: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(loadUserSession);
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
@@ -55,6 +62,13 @@ const App: React.FC = () => {
     localStorage.setItem('zapflow_config', JSON.stringify(apiConfig));
   }, [apiConfig]);
 
+  // Redirecionar para chat se for agente ao carregar sessão
+  useEffect(() => {
+    if (currentUser && currentUser.role === UserRole.AGENT && currentView === 'dashboard') {
+        setCurrentView('chat');
+    }
+  }, []);
+
   const addNotification = (title: string, message: string, type: 'info' | 'warning' | 'success' = 'info') => {
     const id = Date.now().toString();
     setNotifications(prev => [...prev, { id, title, message, type }]);
@@ -71,6 +85,8 @@ const App: React.FC = () => {
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
+    localStorage.setItem('zapflow_user', JSON.stringify(user)); // Salvar sessão
+    
     if (user.role === UserRole.AGENT) {
         setCurrentView('chat');
     } else {
@@ -79,6 +95,7 @@ const App: React.FC = () => {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('zapflow_user'); // Limpar sessão
     setCurrentUser(null);
     setCurrentView('dashboard');
     setIsMobileMenuOpen(false);
@@ -325,7 +342,7 @@ const App: React.FC = () => {
       case 'chatbot':
           return <ChatbotSettings config={chatbotConfig} onSave={handleUpdateChatbotConfig} />;
       case 'connections':
-        return <Connection config={apiConfig} onNavigateToSettings={() => setCurrentView('settings')} />;
+        return <Connection config={apiConfig} onNavigateToSettings={() => setCurrentView('settings')} onUpdateConfig={handleSaveConfig} />;
       case 'departments':
         return <DepartmentSettings departments={departments} onAdd={handleAddDepartment} onUpdate={handleUpdateDepartment} onDelete={handleDeleteDepartment} />;
       case 'workflows':

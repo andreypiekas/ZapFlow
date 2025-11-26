@@ -4,12 +4,45 @@ import { ApiConfig } from "../types";
 // Serviço compatível com Evolution API v1.x/v2.x ou similares
 // Documentação base: https://doc.evolution-api.com/
 
+// Helper interno para encontrar instância ativa se a configurada falhar
+const findActiveInstance = async (config: ApiConfig) => {
+    try {
+        const response = await fetch(`${config.baseUrl}/instance/fetchInstances`, {
+            method: 'GET',
+            headers: { 'apikey': config.apiKey }
+        });
+        
+        if (!response.ok) return null;
+        
+        const data = await response.json();
+        const instances = Array.isArray(data) ? data : (data.instances || []);
+        
+        if (instances.length === 0) return null;
+
+        // 1. Tenta achar uma CONECTADA ('open')
+        const connected = instances.find((i: any) => i.instance.status === 'open');
+        if (connected) return connected.instance;
+
+        // 2. Tenta achar uma CONECTANDO ('connecting')
+        const connecting = instances.find((i: any) => i.instance.status === 'connecting');
+        if (connecting) return connecting.instance;
+
+        // 3. Retorna a primeira que achar
+        return instances[0].instance;
+
+    } catch (error) {
+        console.error("Erro no Auto-Discovery:", error);
+        return null;
+    }
+};
+
 export const getSystemStatus = async (config: ApiConfig) => {
   if (config.isDemo) return { status: 'connected' };
   
   if (!config.baseUrl || !config.apiKey) return null;
 
   try {
+    // Tenta conexão direta
     const response = await fetch(`${config.baseUrl}/instance/connectionState/${config.instanceName}`, {
       method: 'GET',
       headers: {
@@ -18,14 +51,20 @@ export const getSystemStatus = async (config: ApiConfig) => {
       }
     });
     
-    if (!response.ok) throw new Error('Falha ao conectar na API');
-    
-    const data = await response.json();
-    const state = data?.instance?.state || data?.state;
-    
-    return { status: state === 'open' ? 'connected' : 'disconnected' };
+    if (response.ok) {
+        const data = await response.json();
+        const state = data?.instance?.state || data?.state;
+        return { status: state === 'open' ? 'connected' : 'disconnected' };
+    }
+
+    // Se falhou, tenta Auto-Discovery
+    const foundInstance = await findActiveInstance(config);
+    if (foundInstance && foundInstance.status === 'open') {
+        return { status: 'connected', realName: foundInstance.instanceName };
+    }
+
+    return null;
   } catch (error) {
-    // Silently fail logging to avoid spam, unless needed
     return null;
   }
 };
@@ -42,19 +81,31 @@ export const getDetailedInstanceStatus = async (config: ApiConfig) => {
             }
         });
         
-        if (!response.ok) return null;
+        if (!response.ok) return { state: 'error_network' };
         
         const data = await response.json();
-        // Evolution v2 retorna um array ou objeto
         const instances = Array.isArray(data) ? data : (data.instances || []);
+        
+        // Procura EXATAMENTE a configurada
         const myInstance = instances.find((i: any) => i.instance.instanceName === config.instanceName);
         
         if (myInstance) {
             return {
-                state: myInstance.instance.status || 'unknown', // close, connecting, open
+                state: myInstance.instance.status || 'unknown',
                 name: myInstance.instance.instanceName
             };
         }
+
+        // Se não achou, vê se tem OUTRA instância rodando (Erro de nome)
+        if (instances.length > 0) {
+            const other = instances[0].instance;
+            return {
+                state: other.status || 'unknown',
+                name: other.instanceName,
+                isMismatch: true // Flag para avisar a UI
+            };
+        }
+
         return { state: 'not_found' };
 
     } catch (e) {
@@ -64,109 +115,90 @@ export const getDetailedInstanceStatus = async (config: ApiConfig) => {
 };
 
 export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null> => {
-  if (config.isDemo) {
-    return null; 
-  }
+  if (config.isDemo) return null;
+  if (!config.baseUrl || !config.apiKey) return null;
 
-  if (!config.baseUrl || !config.apiKey) {
-      console.warn("Configuração incompleta para buscar QR Code");
-      return null;
-  }
-
-  console.log(`[ZapFlow] Iniciando busca de QR Code para instância: ${config.instanceName}`);
+  console.log(`[ZapFlow] Buscando QR Code... Configurado: ${config.instanceName}`);
   
+  // Lógica inteligente: Usa o nome configurado OU tenta descobrir o real
+  let targetInstance = config.instanceName;
+
+  // Verifica se precisamos trocar o nome da instância
+  const statusCheck = await getDetailedInstanceStatus(config);
+  if (statusCheck && statusCheck.isMismatch && statusCheck.name) {
+      console.warn(`[ZapFlow] Nome incorreto! Usando instância real encontrada: ${statusCheck.name}`);
+      targetInstance = statusCheck.name;
+  }
+
   try {
-    // 1. Tenta conectar para pegar o QR Code
-    let response = await fetch(`${config.baseUrl}/instance/connect/${config.instanceName}`, {
+    // 1. Tenta conectar
+    let response = await fetch(`${config.baseUrl}/instance/connect/${targetInstance}`, {
       method: 'GET',
-      headers: {
-        'apikey': config.apiKey,
-        'Content-Type': 'application/json'
-      }
+      headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' }
     });
 
-    // 2. AUTO-FIX: Se a instância não existir (404), tenta criar automaticamente
+    // 2. AUTO-FIX: Se 404, cria a instância
     if (response.status === 404) {
-        console.warn(`[ZapFlow] Instância '${config.instanceName}' não encontrada (404). Tentando criar...`);
-        
+        console.warn(`[ZapFlow] Instância '${targetInstance}' não existe. Criando...`);
         const createRes = await fetch(`${config.baseUrl}/instance/create`, {
             method: 'POST',
-            headers: {
-                'apikey': config.apiKey,
-                'Content-Type': 'application/json'
-            },
+            headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                instanceName: config.instanceName,
+                instanceName: targetInstance,
                 qrcode: true,
                 integration: "WHATSAPP-BAILEYS"
             })
         });
 
         if (createRes.ok) {
-             console.log("[ZapFlow] Instância criada com sucesso. Aguardando inicialização...");
              await new Promise(resolve => setTimeout(resolve, 3000));
-             
-             // Tenta buscar o QR novamente
-             response = await fetch(`${config.baseUrl}/instance/connect/${config.instanceName}`, {
+             response = await fetch(`${config.baseUrl}/instance/connect/${targetInstance}`, {
                 method: 'GET',
-                headers: {
-                    'apikey': config.apiKey,
-                    'Content-Type': 'application/json'
-                }
+                headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' }
             });
         } else {
-            console.error("[ZapFlow] Falha ao criar instância automaticamente:", await createRes.text());
             return null;
         }
     }
 
-    if (!response.ok) {
-        console.error(`[ZapFlow] Erro HTTP ao buscar QR: ${response.status} ${response.statusText}`);
-        return null;
-    }
+    if (!response.ok) return null;
 
     const data = await response.json();
     
-    // TRATAMENTO ESPECÍFICO PARA RESPOSTA "count: 0"
-    // Isso acontece quando a Evolution recebeu o comando mas o navegador ainda não gerou a imagem.
+    // Tratamento para "count: 0" (Carregando)
     if (data && typeof data.count === 'number') {
-        console.log("[ZapFlow] Instância conectando... QR Code sendo gerado (Count: " + data.count + ")");
-        // Retornamos null mas sem erro, para que o Connection.tsx continue tentando (polling)
+        console.log("[ZapFlow] Aguardando QR Code (Count: " + data.count + ")");
         return null; 
     }
 
-    // Evolution API geralmente retorna { base64: "..." } ou { code: "..." } ou { qrcode: "..." }
     let base64 = data.base64 || data.code || data.qrcode;
     
-    if (!base64) {
-        // Se veio vazio e não é count, algo está estranho, mas não é erro fatal.
-        return null;
-    }
-
-    // Garante que o prefixo data:image exista
+    if (!base64) return null;
     if (!base64.startsWith('data:image')) {
         base64 = `data:image/png;base64,${base64}`;
     }
 
-    console.log("[ZapFlow] QR Code recebido com sucesso!");
     return base64;
   } catch (error) {
-    console.error("[ZapFlow] ERRO DE CONEXÃO AO BUSCAR QR:", error);
+    console.error("[ZapFlow] Erro ao buscar QR:", error);
     return null;
   }
 };
 
 export const sendRealMessage = async (config: ApiConfig, phone: string, text: string) => {
   if (config.isDemo) {
-    console.log("DEMO MODE: Mensagem enviada:", text);
     await new Promise(resolve => setTimeout(resolve, 800));
     return true;
   }
 
   try {
-    const cleanPhone = phone.replace(/\D/g, '');
+    // Tenta Auto-Discovery se a configurada falhar? 
+    // Por performance, vamos assumir que o usuário corrigiu a config na tela de conexão.
+    // Mas podemos fazer um fallback rápido:
+    let instanceName = config.instanceName;
 
-    const response = await fetch(`${config.baseUrl}/message/sendText/${config.instanceName}`, {
+    const cleanPhone = phone.replace(/\D/g, '');
+    const response = await fetch(`${config.baseUrl}/message/sendText/${instanceName}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -186,7 +218,6 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
   }
 };
 
-// Helper para converter Blob/File para Base64
 export const blobToBase64 = (blob: Blob): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -208,7 +239,6 @@ export const sendRealMediaMessage = async (
   fileName: string = 'file'
 ) => {
   if (config.isDemo) {
-    console.log(`DEMO MODE: Enviando mídia (${mediaType})`);
     await new Promise(resolve => setTimeout(resolve, 1500));
     return true;
   }
@@ -258,19 +288,15 @@ export const logoutInstance = async (config: ApiConfig) => {
     await new Promise(resolve => setTimeout(resolve, 500));
     return true;
   }
-
   if (!config.baseUrl || !config.apiKey) return false;
 
   try {
     const response = await fetch(`${config.baseUrl}/instance/logout/${config.instanceName}`, {
       method: 'DELETE',
-      headers: {
-        'apikey': config.apiKey
-      }
+      headers: { 'apikey': config.apiKey }
     });
     return response.ok;
   } catch (error) {
-    console.error("Erro ao desconectar:", error);
     return false;
   }
 };

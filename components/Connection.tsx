@@ -1,16 +1,19 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { RefreshCw, CheckCircle, AlertTriangle, Settings, Loader2, Smartphone, WifiOff, Activity } from 'lucide-react';
+import { RefreshCw, CheckCircle, AlertTriangle, Settings, Loader2, Smartphone, WifiOff, Activity, ArrowRight } from 'lucide-react';
 import { ApiConfig } from '../types';
 import { fetchRealQRCode, logoutInstance, getSystemStatus, getDetailedInstanceStatus } from '../services/whatsappService';
 
 interface ConnectionProps {
   config: ApiConfig;
   onNavigateToSettings: () => void;
+  onUpdateConfig?: (newConfig: ApiConfig) => void; // New prop to auto-fix config
 }
 
-const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings }) => {
+const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, onUpdateConfig }) => {
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [detailedStatus, setDetailedStatus] = useState<string>('-');
+  const [detectedName, setDetectedName] = useState<string | null>(null); // For mismatch handling
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [refreshTimer, setRefreshTimer] = useState(0);
@@ -22,21 +25,25 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings })
   const checkStatus = async () => {
     if (config.isDemo || !isConfigured) return;
     
-    // Check simple status
-    const result = await getSystemStatus(config);
-    if (result && result.status === 'connected') {
-       setStatus('connected');
-       setQrCode(null);
-    }
-
-    // Check detailed status for debug
+    // Check detailed status for debug & mismatch detection
     const details = await getDetailedInstanceStatus(config);
     if (details) {
         setDetailedStatus(details.state);
-        // Se estiver "open", força conectado
+        
+        // Handle Mismatch
+        if (details.isMismatch && details.name) {
+            setDetectedName(details.name);
+        } else {
+            setDetectedName(null);
+        }
+
+        // Handle Connection
         if (details.state === 'open') {
             setStatus('connected');
             setQrCode(null);
+        } else {
+            // Se estava conectado e caiu, muda status
+            if (status === 'connected') setStatus('disconnected');
         }
     }
   };
@@ -48,6 +55,9 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings })
     const loadQR = async () => {
       if (status === 'connected' || config.isDemo || !isConfigured) return;
       
+      // Don't fetch QR if we found a mismatch (user needs to fix first)
+      if (detectedName) return; 
+
       setIsLoading(true);
       const qrData = await fetchRealQRCode(config);
       setIsLoading(false);
@@ -55,24 +65,20 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings })
       if (qrData) {
         setQrCode(qrData);
         setStatus('disconnected');
-        setRefreshTimer(40); // Reset timer to 40 seconds
+        setRefreshTimer(40); 
       } else {
-        // Se falhar a busca do QR, verifica se já está conectado ou se deu erro
         await checkStatus();
       }
     };
 
-    // Initial Load
     if (!config.isDemo && status !== 'connected' && isConfigured) {
         loadQR();
-        checkStatus(); // Initial detailed check
+        checkStatus(); 
         
-        // Refresh QR Code every 40s
         intervalId = setInterval(() => {
            loadQR();
         }, 40000); 
 
-        // Status Polling every 5s
         const statusInterval = setInterval(checkStatus, 5000);
 
         return () => {
@@ -80,7 +86,7 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings })
             clearInterval(statusInterval);
         };
     }
-  }, [config, status, isConfigured]);
+  }, [config, status, isConfigured, detectedName]);
 
   // Countdown timer effect
   useEffect(() => {
@@ -101,10 +107,13 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings })
     }
     setIsLoading(true);
     await checkStatus();
-    const qrData = await fetchRealQRCode(config);
-    if (qrData) {
-        setQrCode(qrData);
-        setRefreshTimer(40);
+    // Only fetch QR if no mismatch
+    if (!detectedName) {
+        const qrData = await fetchRealQRCode(config);
+        if (qrData) {
+            setQrCode(qrData);
+            setRefreshTimer(40);
+        }
     }
     setIsLoading(false);
   };
@@ -116,6 +125,19 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings })
     setDetailedStatus('close');
     setQrCode(null);
     setIsLoading(false);
+  };
+
+  const handleFixInstanceName = () => {
+      if (detectedName && onUpdateConfig) {
+          onUpdateConfig({
+              ...config,
+              instanceName: detectedName
+          });
+          setDetectedName(null);
+          // Force reload logic
+          setStatus('disconnected'); 
+          alert(`Instância atualizada para: ${detectedName}`);
+      }
   };
 
   const simulateDemoConnection = () => {
@@ -148,7 +170,6 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings })
 
         <div className="p-8">
           {config.isDemo ? (
-             // DEMO MODE UI
              <div className="flex flex-col items-center justify-center py-12 text-center">
                  <div className="mb-6 p-4 bg-blue-50 text-blue-800 rounded-lg border border-blue-100 max-w-lg">
                     <h3 className="font-bold flex items-center justify-center gap-2 mb-2">
@@ -235,6 +256,23 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings })
                 </div>
 
                 <div className="flex-1 flex flex-col items-center justify-center min-h-[400px]">
+                    {/* INSTANCE NAME MISMATCH FIXER */}
+                    {detectedName && detectedName !== config.instanceName && (
+                        <div className="bg-amber-50 border border-amber-200 p-6 rounded-xl text-center mb-6 max-w-sm animate-in zoom-in">
+                            <AlertTriangle className="mx-auto text-amber-500 mb-2" size={32} />
+                            <h4 className="font-bold text-amber-800">Nome da Instância Incorreto</h4>
+                            <p className="text-sm text-amber-700 mt-1 mb-4">
+                                Você configurou <b>{config.instanceName}</b>, mas o servidor está usando <b>{detectedName}</b>.
+                            </p>
+                            <button 
+                                onClick={handleFixInstanceName}
+                                className="bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-amber-700 flex items-center gap-2 mx-auto"
+                            >
+                                <ArrowRight size={16} /> Usar {detectedName}
+                            </button>
+                        </div>
+                    )}
+
                     {status === 'connected' ? (
                     <div className="text-center animate-in fade-in zoom-in">
                         <div className="w-32 h-32 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -250,7 +288,7 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings })
                         </button>
                     </div>
                     ) : (
-                    <div className="bg-white p-4 rounded-xl shadow-lg border border-slate-100 relative group">
+                    <div className={`bg-white p-4 rounded-xl shadow-lg border border-slate-100 relative group ${detectedName ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
                         {/* QR Container */}
                         <div className="w-[280px] h-[280px] bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden relative">
                             {isLoading ? (
