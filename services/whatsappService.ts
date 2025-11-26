@@ -1,5 +1,5 @@
 
-import { ApiConfig } from "../types";
+import { ApiConfig, Chat, Message, MessageStatus } from "../types";
 
 // Serviço compatível com Evolution API v1.x/v2.x
 // Documentação base: https://doc.evolution-api.com/
@@ -7,7 +7,7 @@ import { ApiConfig } from "../types";
 // Helper interno para encontrar instância ativa se a configurada falhar
 const findActiveInstance = async (config: ApiConfig) => {
     try {
-        console.log("[AutoDiscovery] Buscando instâncias disponíveis...");
+        // console.log("[AutoDiscovery] Buscando instâncias disponíveis...");
         const response = await fetch(`${config.baseUrl}/instance/fetchInstances`, {
             method: 'GET',
             headers: { 'apikey': config.apiKey }
@@ -21,19 +21,19 @@ const findActiveInstance = async (config: ApiConfig) => {
         
         if (instances.length === 0) return null;
 
-        console.log(`[AutoDiscovery] Encontradas ${instances.length} instâncias.`);
+        // console.log(`[AutoDiscovery] Encontradas ${instances.length} instâncias.`);
 
         // 1. Tenta achar uma CONECTADA ('open')
         const connected = instances.find((i: any) => i.instance.status === 'open');
         if (connected) {
-            console.log(`[AutoDiscovery] Usando instância ativa: ${connected.instance.instanceName}`);
+            // console.log(`[AutoDiscovery] Usando instância ativa: ${connected.instance.instanceName}`);
             return connected.instance;
         }
 
         // 2. Tenta achar uma CONECTANDO ('connecting')
         const connecting = instances.find((i: any) => i.instance.status === 'connecting');
         if (connecting) {
-            console.log(`[AutoDiscovery] Usando instância conectando: ${connecting.instance.instanceName}`);
+            // console.log(`[AutoDiscovery] Usando instância conectando: ${connecting.instance.instanceName}`);
             return connecting.instance;
         }
 
@@ -346,4 +346,96 @@ export const logoutInstance = async (config: ApiConfig) => {
   } catch (error) {
     return false;
   }
+};
+
+// --- NOVA FUNÇÃO: BUSCAR CHATS REAIS DA API (SYNC) ---
+export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
+    if (config.isDemo) return [];
+    if (!config.baseUrl || !config.apiKey) return [];
+
+    try {
+        let instanceName = config.instanceName;
+        const active = await findActiveInstance(config);
+        if (active) instanceName = active.instanceName;
+
+        // Busca chats do banco de dados da Evolution
+        const response = await fetch(`${config.baseUrl}/chat/findChats/${instanceName}`, {
+            method: 'GET',
+            headers: { 'apikey': config.apiKey }
+        });
+
+        if (!response.ok) return [];
+
+        const data = await response.json();
+        // O retorno geralmente é um array de chats
+        if (!Array.isArray(data)) return [];
+
+        // Mapeia os dados da Evolution para o formato do ZapFlow
+        const mappedChats: Chat[] = data.map((item: any) => {
+            const remoteJid = item.id || item.remoteJid;
+            
+            // Processa mensagens (pode vir como array ou objeto único)
+            let messages: Message[] = [];
+            
+            // Se a API retornar um array de mensagens
+            if (item.messages && Array.isArray(item.messages)) {
+               messages = item.messages.map((m: any) => mapApiMessageToInternal(m));
+            } 
+            // Se tiver apenas a última mensagem
+            else if (item.lastMessage) {
+               messages = [mapApiMessageToInternal(item.lastMessage)];
+            }
+
+            // Ordena mensagens por data
+            messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+            const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+
+            return {
+                id: remoteJid,
+                contactName: item.pushName || item.name || remoteJid.split('@')[0],
+                contactNumber: remoteJid.split('@')[0],
+                contactAvatar: item.profilePictureUrl || 'https://ui-avatars.com/api/?background=random&color=fff&name=' + (item.pushName || 'User'),
+                departmentId: null, // API não tem essa info, será mesclada no App.tsx
+                unreadCount: item.unreadCount || 0,
+                lastMessage: lastMsg ? (lastMsg.type === 'text' ? lastMsg.content : `[${lastMsg.type}]`) : '',
+                lastMessageTime: lastMsg ? lastMsg.timestamp : new Date(),
+                status: 'open',
+                messages: messages,
+                assignedTo: undefined // API não tem essa info
+            };
+        });
+
+        return mappedChats;
+
+    } catch (error) {
+        console.error("Erro ao buscar chats:", error);
+        return [];
+    }
+};
+
+// Helper para converter mensagem da API para formato interno
+const mapApiMessageToInternal = (apiMsg: any): Message => {
+    const content = apiMsg.message?.conversation || 
+                    apiMsg.message?.extendedTextMessage?.text || 
+                    apiMsg.message?.imageMessage?.caption ||
+                    (apiMsg.message?.imageMessage ? 'Imagem' : '') ||
+                    '';
+    
+    const isFromMe = apiMsg.key?.fromMe === true;
+    const timestamp = apiMsg.messageTimestamp ? new Date(Number(apiMsg.messageTimestamp) * 1000) : new Date();
+
+    let type: any = 'text';
+    if (apiMsg.message?.imageMessage) type = 'image';
+    if (apiMsg.message?.audioMessage) type = 'audio';
+    if (apiMsg.message?.stickerMessage) type = 'sticker';
+
+    return {
+        id: apiMsg.key?.id || `msg_${Date.now()}_${Math.random()}`,
+        content: content,
+        sender: isFromMe ? 'agent' : 'user',
+        timestamp: timestamp,
+        status: MessageStatus.READ, // Assume lido se veio do histórico
+        type: type
+    };
 };

@@ -14,6 +14,7 @@ import ReportsDashboard from './components/ReportsDashboard';
 import Contacts from './components/Contacts';
 import ChatbotSettings from './components/ChatbotSettings';
 import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot, ChevronLeft, ChevronRight } from 'lucide-react';
+import { fetchChats } from './services/whatsappService'; // Importa serviço de busca
 
 const loadConfig = (): ApiConfig => {
   const saved = localStorage.getItem('zapflow_config');
@@ -62,6 +63,68 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('zapflow_config', JSON.stringify(apiConfig));
   }, [apiConfig]);
+
+  // --- POLLING DE MENSAGENS REAIS ---
+  useEffect(() => {
+    // Não roda em modo demo ou se não estiver logado/configurado
+    if (!currentUser || apiConfig.isDemo || !apiConfig.baseUrl) return;
+
+    const syncChats = async () => {
+        const realChats = await fetchChats(apiConfig);
+        
+        if (realChats.length > 0) {
+            setChats(currentChats => {
+                // Mesclar chats da API com o estado local (mantendo departamentos/atribuições)
+                const mergedChats = realChats.map(realChat => {
+                    const existingChat = currentChats.find(c => c.id === realChat.id);
+                    
+                    if (existingChat) {
+                        // Se o chat já existe, atualizamos as mensagens e status
+                        // MAS mantemos os metadados locais (departamento, dono, tags, codigo)
+                        
+                        // Lógica de Notificação
+                        const newMsgCount = realChat.messages.length;
+                        const oldMsgCount = existingChat.messages.length;
+                        
+                        if (newMsgCount > oldMsgCount) {
+                            const lastMsg = realChat.messages[realChat.messages.length - 1];
+                            if (lastMsg.sender === 'user') {
+                                if (existingChat.assignedTo === currentUser.id) {
+                                    // Notifica se for meu
+                                    // (Opcional: Tocar som aqui)
+                                }
+                            }
+                        }
+
+                        return {
+                            ...realChat,
+                            contactName: existingChat.contactName, // Mantém nome editado se houver
+                            clientCode: existingChat.clientCode,
+                            departmentId: existingChat.departmentId,
+                            assignedTo: existingChat.assignedTo,
+                            tags: existingChat.tags,
+                            status: existingChat.status === 'closed' ? 'closed' : realChat.status,
+                            rating: existingChat.rating
+                        };
+                    } else {
+                        // Chat Novo vindo da API
+                        return realChat;
+                    }
+                });
+
+                // Mantém chats fechados que podem não estar mais no retorno da API (se tiver paginação)
+                // Por enquanto, substituímos pelos da API para garantir sincronia
+                return mergedChats;
+            });
+        }
+    };
+
+    // Roda imediatamente e depois a cada 5 segundos
+    syncChats();
+    const intervalId = setInterval(syncChats, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [currentUser, apiConfig]);
 
   // Redirecionar para chat se for agente ao carregar sessão
   useEffect(() => {
