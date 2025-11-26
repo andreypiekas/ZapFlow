@@ -73,27 +73,31 @@ Acesse o sistema em: `http://SEU_IP_SERVIDOR:5173`
 
 Se o log mostrar `"error in handling message"` ou a instância ficar reiniciando, é necessário limpar o banco de dados corrompido.
 
-1.  Crie o script de reset: `nano reset.sh`
-2.  Cole o conteúdo do arquivo `factory_reset.txt`.
-3.  Execute: `chmod +x reset.sh && ./reset.sh`
+1.  Crie o script de reset: `cp setup_evolution.txt setup.sh && chmod +x setup.sh && cp factory_reset.txt reset.sh && chmod +x reset.sh`
+2.  Execute: `sudo ./reset.sh`
+
+Automático: 
+
+1. Ajusta e executa  `cp setup_evolution.txt setup.sh && chmod +x setup.sh && cp factory_reset.txt reset.sh && chmod +x reset.sh && ./reset.sh`
 
 ### Problema: QR Code não gera
 
 1.  Verifique se o `SERVER_URL` no `docker-compose.yml` está com o IP correto (não use localhost).
 2.  Execute o diagnóstico: `chmod +x debug.sh && ./debug.sh`
-3.  Execute a correção de rede: `chmod +x fix_network.sh && sudo ./fix_network.sh`
+3.  Ajuste o arquivo de correção de rede `cp fix_evolution_networ.txt fix_network.sh && chmod +x fix_network.sh`
+4.  Execute a correção de rede: `sudo ./fix_network.sh`
 
 ---
 
 ## ⚙️ Configuração Pós-Instalação
 
 1.  Acesse o ZapFlow (`http://SEU_IP:5173`).
-2.  Faça login (`admin@hostgator.com` / `123`).
+2.  Faça login (`admin@hopiekas.com` / `123`).
 3.  Vá em **Configurações**.
 4.  Preencha os dados (baseados na saída do `setup.sh`):
     *   **URL da API:** `http://SEU_IP:8080`
     *   **API Key:** `B8349283-F143-429D-B6C2-9386E8016558` (Padrão do script)
-    *   **Instância:** `zapflow_main`
+    *   **Instância:** `zapflow`
 5.  Salve e vá em **Conexões** para escanear o QR Code.
 
 ---
