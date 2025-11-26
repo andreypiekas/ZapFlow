@@ -41,6 +41,8 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
         if (details.state === 'open') {
             setStatus('connected');
             setQrCode(null);
+        } else if (details.state === 'connecting') {
+            setStatus('connecting');
         } else {
             // Se estava conectado e caiu, muda status
             if (status === 'connected') setStatus('disconnected');
@@ -162,9 +164,9 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
               {config.isDemo ? 'Ambiente de Simulação (Demo)' : `Instância: ${config.instanceName}`}
             </p>
           </div>
-          <div className={`px-4 py-1.5 rounded-full text-sm font-bold flex items-center gap-2 ${status === 'connected' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-slate-200 text-slate-600 border border-slate-300'}`}>
-            <div className={`w-2 h-2 rounded-full ${status === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-500'}`} />
-            {status === 'connected' ? 'SESSÃO ATIVA' : 'DESCONECTADO'}
+          <div className={`px-4 py-1.5 rounded-full text-sm font-bold flex items-center gap-2 ${status === 'connected' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : status === 'connecting' ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-slate-200 text-slate-600 border border-slate-300'}`}>
+            <div className={`w-2 h-2 rounded-full ${status === 'connected' ? 'bg-emerald-500 animate-pulse' : status === 'connecting' ? 'bg-amber-500 animate-bounce' : 'bg-slate-500'}`} />
+            {status === 'connected' ? 'SESSÃO ATIVA' : status === 'connecting' ? 'CONECTANDO...' : 'DESCONECTADO'}
           </div>
         </div>
 
