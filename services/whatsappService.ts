@@ -174,7 +174,6 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
     const cleanPhone = phone.replace(/\D/g, '');
     
     // PAYLOAD SIMPLIFICADO E CORRIGIDO
-    // Apenas os campos essenciais para evitar erro de validação
     const payload = {
         number: cleanPhone,
         options: { delay: 1200, presence: "composing" },
