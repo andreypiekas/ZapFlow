@@ -1,5 +1,5 @@
 {
-  "name": "Copy of ZapFlow Manager",
+  "name": "ZapFlow Manager",
   "description": "Plataforma profissional de gestão de WhatsApp com suporte a múltiplos departamentos, transferência de chamados e inteligência artificial para sugestão de respostas.",
   "requestFramePermissions": [
     "camera",

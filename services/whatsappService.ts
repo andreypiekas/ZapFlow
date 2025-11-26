@@ -1,12 +1,13 @@
 
 import { ApiConfig } from "../types";
 
-// Serviço compatível com Evolution API v1.x/v2.x ou similares
+// Serviço compatível com Evolution API v1.x/v2.x
 // Documentação base: https://doc.evolution-api.com/
 
 // Helper interno para encontrar instância ativa se a configurada falhar
 const findActiveInstance = async (config: ApiConfig) => {
     try {
+        console.log("[AutoDiscovery] Buscando instâncias disponíveis...");
         const response = await fetch(`${config.baseUrl}/instance/fetchInstances`, {
             method: 'GET',
             headers: { 'apikey': config.apiKey }
@@ -15,23 +16,32 @@ const findActiveInstance = async (config: ApiConfig) => {
         if (!response.ok) return null;
         
         const data = await response.json();
+        // Evolution v2 retorna array direto ou objeto com chave instances
         const instances = Array.isArray(data) ? data : (data.instances || []);
         
         if (instances.length === 0) return null;
 
+        console.log(`[AutoDiscovery] Encontradas ${instances.length} instâncias.`);
+
         // 1. Tenta achar uma CONECTADA ('open')
         const connected = instances.find((i: any) => i.instance.status === 'open');
-        if (connected) return connected.instance;
+        if (connected) {
+            console.log(`[AutoDiscovery] Usando instância ativa: ${connected.instance.instanceName}`);
+            return connected.instance;
+        }
 
         // 2. Tenta achar uma CONECTANDO ('connecting')
         const connecting = instances.find((i: any) => i.instance.status === 'connecting');
-        if (connecting) return connecting.instance;
+        if (connecting) {
+            console.log(`[AutoDiscovery] Usando instância conectando: ${connecting.instance.instanceName}`);
+            return connecting.instance;
+        }
 
-        // 3. Retorna a primeira que achar
+        // 3. Retorna a primeira que achar (fallback)
         return instances[0].instance;
 
     } catch (error) {
-        console.error("Erro no Auto-Discovery:", error);
+        console.error("[AutoDiscovery] Erro ao buscar instâncias:", error);
         return null;
     }
 };
@@ -42,7 +52,7 @@ export const getSystemStatus = async (config: ApiConfig) => {
   if (!config.baseUrl || !config.apiKey) return null;
 
   try {
-    // Tenta conexão direta
+    // Tenta conexão direta com o nome configurado
     const response = await fetch(`${config.baseUrl}/instance/connectionState/${config.instanceName}`, {
       method: 'GET',
       headers: {
@@ -53,11 +63,13 @@ export const getSystemStatus = async (config: ApiConfig) => {
     
     if (response.ok) {
         const data = await response.json();
+        // Evolution v2 pode retornar state dentro de instance ou na raiz
         const state = data?.instance?.state || data?.state;
         return { status: state === 'open' ? 'connected' : 'disconnected' };
     }
 
-    // Se falhou, tenta Auto-Discovery
+    // Se falhou (404/500), tenta Auto-Discovery
+    // Isso resolve o problema de 'zapflow' vs 'zaptflow'
     const foundInstance = await findActiveInstance(config);
     if (foundInstance && foundInstance.status === 'open') {
         return { status: 'connected', realName: foundInstance.instanceName };
@@ -65,11 +77,12 @@ export const getSystemStatus = async (config: ApiConfig) => {
 
     return null;
   } catch (error) {
+    console.error("Erro ao verificar status do sistema:", error);
     return null;
   }
 };
 
-// Nova função para buscar status detalhado para debug
+// Nova função para buscar status detalhado para debug na tela de Conexão
 export const getDetailedInstanceStatus = async (config: ApiConfig) => {
     if (config.isDemo || !config.baseUrl || !config.apiKey) return null;
 
@@ -96,13 +109,13 @@ export const getDetailedInstanceStatus = async (config: ApiConfig) => {
             };
         }
 
-        // Se não achou, vê se tem OUTRA instância rodando (Erro de nome)
+        // Se não achou a configurada, vê se tem OUTRA instância rodando (Erro de nome)
         if (instances.length > 0) {
             const other = instances[0].instance;
             return {
                 state: other.status || 'unknown',
                 name: other.instanceName,
-                isMismatch: true // Flag para avisar a UI
+                isMismatch: true // Flag para avisar a UI que o nome está errado
             };
         }
 
@@ -118,26 +131,26 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
   if (config.isDemo) return null;
   if (!config.baseUrl || !config.apiKey) return null;
 
-  console.log(`[ZapFlow] Buscando QR Code... Configurado: ${config.instanceName}`);
-  
   // Lógica inteligente: Usa o nome configurado OU tenta descobrir o real
   let targetInstance = config.instanceName;
 
-  // Verifica se precisamos trocar o nome da instância
-  const statusCheck = await getDetailedInstanceStatus(config);
-  if (statusCheck && statusCheck.isMismatch && statusCheck.name) {
-      console.warn(`[ZapFlow] Nome incorreto! Usando instância real encontrada: ${statusCheck.name}`);
-      targetInstance = statusCheck.name;
+  // Tenta encontrar o nome real antes de pedir o QR Code
+  const activeInstance = await findActiveInstance(config);
+  if (activeInstance) {
+      targetInstance = activeInstance.instanceName;
+      if (targetInstance !== config.instanceName) {
+          console.log(`[QR] Redirecionando solicitação para instância real: ${targetInstance}`);
+      }
   }
 
   try {
-    // 1. Tenta conectar
+    // 1. Tenta conectar na instância alvo
     let response = await fetch(`${config.baseUrl}/instance/connect/${targetInstance}`, {
       method: 'GET',
       headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' }
     });
 
-    // 2. AUTO-FIX: Se 404, cria a instância
+    // 2. AUTO-FIX: Se 404 (Não encontrada), cria a instância
     if (response.status === 404) {
         console.warn(`[ZapFlow] Instância '${targetInstance}' não existe. Criando...`);
         const createRes = await fetch(`${config.baseUrl}/instance/create`, {
@@ -151,7 +164,9 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
         });
 
         if (createRes.ok) {
+             // Aguarda um pouco para o navegador iniciar
              await new Promise(resolve => setTimeout(resolve, 3000));
+             // Tenta conectar novamente
              response = await fetch(`${config.baseUrl}/instance/connect/${targetInstance}`, {
                 method: 'GET',
                 headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' }
@@ -165,15 +180,17 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
 
     const data = await response.json();
     
-    // Tratamento para "count: 0" (Carregando)
+    // Tratamento para "count: 0" (Ainda carregando o navegador)
     if (data && typeof data.count === 'number') {
-        console.log("[ZapFlow] Aguardando QR Code (Count: " + data.count + ")");
-        return null; 
+        return null; // Retorna null para tentar novamente no próximo ciclo
     }
 
+    // Suporte a diferentes formatos de resposta da API
     let base64 = data.base64 || data.code || data.qrcode;
     
     if (!base64) return null;
+    
+    // Adiciona prefixo se faltar
     if (!base64.startsWith('data:image')) {
         base64 = `data:image/png;base64,${base64}`;
     }
@@ -192,12 +209,13 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
   }
 
   try {
-    // Tenta Auto-Discovery se a configurada falhar? 
-    // Por performance, vamos assumir que o usuário corrigiu a config na tela de conexão.
-    // Mas podemos fazer um fallback rápido:
+    // Garante que estamos usando a instância correta
     let instanceName = config.instanceName;
+    const active = await findActiveInstance(config);
+    if (active) instanceName = active.instanceName;
 
     const cleanPhone = phone.replace(/\D/g, '');
+    
     const response = await fetch(`${config.baseUrl}/message/sendText/${instanceName}`, {
       method: 'POST',
       headers: {
@@ -244,6 +262,11 @@ export const sendRealMediaMessage = async (
   }
 
   try {
+    // Garante instância correta
+    let instanceName = config.instanceName;
+    const active = await findActiveInstance(config);
+    if (active) instanceName = active.instanceName;
+
     const cleanPhone = phone.replace(/\D/g, '');
     const base64 = await blobToBase64(mediaBlob);
     
@@ -266,7 +289,7 @@ export const sendRealMediaMessage = async (
         endpoint = 'sendWhatsAppAudio'; 
     }
 
-    const response = await fetch(`${config.baseUrl}/message/${endpoint}/${config.instanceName}`, {
+    const response = await fetch(`${config.baseUrl}/message/${endpoint}/${instanceName}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -291,7 +314,12 @@ export const logoutInstance = async (config: ApiConfig) => {
   if (!config.baseUrl || !config.apiKey) return false;
 
   try {
-    const response = await fetch(`${config.baseUrl}/instance/logout/${config.instanceName}`, {
+    // Tenta logout na instância ativa
+    let instanceName = config.instanceName;
+    const active = await findActiveInstance(config);
+    if (active) instanceName = active.instanceName;
+
+    const response = await fetch(`${config.baseUrl}/instance/logout/${instanceName}`, {
       method: 'DELETE',
       headers: { 'apikey': config.apiKey }
     });
