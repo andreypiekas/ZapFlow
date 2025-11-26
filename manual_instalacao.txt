@@ -39,11 +39,17 @@ services:
       - CACHE_REDIS_URI=redis://evolution_redis:6379/0
       - DEL_INSTANCE=false
       
-      # CONFIGURAÇÃO CRÍTICA: CLIENTE DEFINIDO, VERSÃO AUTOMÁTICA
+      # --- CONFIGURAÇÃO ESTÁVEL (GOLDILOCKS) ---
       - CONFIG_SESSION_PHONE_CLIENT=ZapFlow
       - CONFIG_SESSION_PHONE_NAME=Chrome
+      - CONFIG_SESSION_PHONE_OS=Windows
+      - CONFIG_SESSION_PHONE_VERSION=2.2413.1  # Versão fixa estável
+      
       - CONFIG_SESSION_PHONE_SYNC_FULL_HISTORY=false
       - CONFIG_SESSION_PHONE_REJECT_CALL=true
+      
+      # Argumentos para evitar crash do navegador
+      - BROWSER_ARGS=["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-accelerated-2d-canvas","--no-first-run","--no-zygote","--disable-gpu"]
       
       - CORS_ORIGIN=*
       - CORS_METHODS=POST,GET,PUT,DELETE,OPTIONS
