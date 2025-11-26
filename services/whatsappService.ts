@@ -1,4 +1,3 @@
-
 import { ApiConfig, Chat, Message, MessageStatus } from "../types";
 
 // Serviço compatível com Evolution API v1.x/v2.x
@@ -175,7 +174,7 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
     const cleanPhone = phone.replace(/\D/g, '');
     
     // PAYLOAD SIMPLIFICADO E CORRIGIDO
-    // Removemos 'textMessage' aninhado que causava erro de validação
+    // Evolution v2 exige 'text' na raiz em alguns contextos
     const payload = {
         number: cleanPhone,
         options: { delay: 1200, presence: "composing", linkPreview: false },
@@ -285,6 +284,35 @@ export const logoutInstance = async (config: ApiConfig) => {
   }
 };
 
+// --- UTILS PARA SYNC ---
+
+// Normaliza IDs do WhatsApp removendo sufixos de dispositivo
+const normalizeJid = (jid: string | null | undefined): string => {
+    if (!jid) return '';
+    // Remove :11, :12, etc e mantem apenas o user@server
+    const parts = jid.split(':');
+    let user = parts[0];
+    
+    // Se já tem @, ótimo. Se não, adiciona @s.whatsapp.net se for numérico
+    if (user.includes('@')) {
+        return user.split('@')[0] + '@' + user.split('@')[1];
+    }
+    return user + '@s.whatsapp.net';
+};
+
+// Varre recursivamente para encontrar onde está o array de chats
+const findChatsArray = (data: any): any[] => {
+    if (Array.isArray(data)) return data;
+    if (data && typeof data === 'object') {
+        if (Array.isArray(data.data)) return data.data;
+        if (Array.isArray(data.chats)) return data.chats;
+        if (Array.isArray(data.result)) return data.result;
+        // Às vezes a Evolution retorna um array dentro de chaves numéricas se algo falhar no parse do axios interno deles
+        if (data['0']) return Object.values(data); 
+    }
+    return [];
+};
+
 export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
     if (config.isDemo || !config.baseUrl || !config.apiKey) return [];
 
@@ -300,41 +328,57 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
         if (!response.ok) return [];
 
-        const data = await response.json();
-        if (!Array.isArray(data)) return [];
+        const rawData = await response.json();
+        const chatsArray = findChatsArray(rawData);
 
-        // Log para debug no console do navegador
-        console.log("[ZapFlow Sync] Chats recebidos:", data.length);
+        if (chatsArray.length === 0) return [];
 
-        const mappedChats: Chat[] = data.map((item: any) => {
-            const remoteJid = item.id || item.remoteJid;
+        console.log(`[ZapFlow Sync] ${chatsArray.length} chats brutos encontrados.`);
+
+        const mappedChats: Chat[] = chatsArray.map((item: any) => {
+            // Tenta pegar o ID de vários lugares possíveis
+            const rawId = item.id || item.remoteJid || item.key?.remoteJid || item.jid;
+            const remoteJid = normalizeJid(rawId);
+            
+            if (!remoteJid || remoteJid.includes('status@broadcast')) return null; // Ignora status
+
             let messages: Message[] = [];
             
+            // Tenta extrair mensagens (seja array completo ou apenas última)
             if (item.messages && Array.isArray(item.messages)) {
-               messages = item.messages.map((m: any) => mapApiMessageToInternal(m));
+               messages = item.messages.map((m: any) => mapApiMessageToInternal(m)).filter((m: Message | null): m is Message => m !== null);
             } else if (item.lastMessage) {
-               messages = [mapApiMessageToInternal(item.lastMessage)];
+               const m = mapApiMessageToInternal(item.lastMessage);
+               if (m) messages = [m];
+            } else if (item.conversationTimestamp) {
+               // Chat sem mensagem explícita, mas com timestamp
+               // Pode ser que 'item' seja a própria mensagem em algumas versoes
+               const m = mapApiMessageToInternal(item);
+               if (m) messages = [m];
             }
 
             // Ordenação cronológica das mensagens
             messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
             const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
+            
+            const name = item.pushName || item.name || item.verifiedName || remoteJid.split('@')[0];
+            const avatarUrl = item.profilePictureUrl || item.ppUrl || item.profilePicUrl;
 
             return {
                 id: remoteJid,
-                contactName: item.pushName || item.name || remoteJid.split('@')[0],
+                contactName: name,
                 contactNumber: remoteJid.split('@')[0],
-                contactAvatar: item.profilePictureUrl || `https://ui-avatars.com/api/?background=random&color=fff&name=${item.pushName || 'U'}`,
+                contactAvatar: avatarUrl || `https://ui-avatars.com/api/?background=random&color=fff&name=${name || 'U'}`,
                 departmentId: null,
                 unreadCount: item.unreadCount || 0,
                 lastMessage: lastMsg ? (lastMsg.type === 'text' ? lastMsg.content : `[${lastMsg.type}]`) : '',
                 lastMessageTime: lastMsg ? lastMsg.timestamp : new Date(),
-                status: 'open',
+                status: 'open' as const,
                 messages: messages,
                 assignedTo: undefined
             };
-        });
+        }).filter((c: Chat | null): c is Chat => c !== null);
 
         return mappedChats;
 
@@ -344,33 +388,55 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
     }
 };
 
-const mapApiMessageToInternal = (apiMsg: any): Message => {
-    // Logica robusta para extrair texto de qualquer lugar
-    const msgObj = apiMsg.message || {};
-    const content = msgObj.conversation || 
-                    msgObj.extendedTextMessage?.text || 
-                    msgObj.imageMessage?.caption ||
-                    (msgObj.imageMessage ? 'Imagem' : '') ||
-                    (msgObj.audioMessage ? 'Áudio' : '') ||
-                    '';
+const mapApiMessageToInternal = (apiMsg: any): Message | null => {
+    if (!apiMsg) return null;
+
+    // Normaliza o objeto de mensagem
+    const msgObj = apiMsg.message || apiMsg;
     
-    const isFromMe = apiMsg.key?.fromMe === true;
+    // Tenta extrair texto de todas as variações possíveis do Baileys
+    const content = 
+        msgObj.conversation || 
+        msgObj.extendedTextMessage?.text || 
+        msgObj.imageMessage?.caption ||
+        msgObj.videoMessage?.caption ||
+        msgObj.documentMessage?.caption ||
+        (msgObj.imageMessage ? 'Imagem' : '') ||
+        (msgObj.videoMessage ? 'Vídeo' : '') ||
+        (msgObj.audioMessage ? 'Áudio' : '') ||
+        (msgObj.stickerMessage ? 'Sticker' : '') ||
+        (msgObj.documentMessage ? 'Arquivo' : '') ||
+        (typeof msgObj.text === 'string' ? msgObj.text : '') || // Fallback para payload simples
+        '';
+    
+    if (!content && !msgObj.imageMessage && !msgObj.stickerMessage) {
+        // Se não achou nada relevante, ignora (pode ser protocol message, reaction, etc)
+        return null;
+    }
+
+    const key = apiMsg.key || {};
+    const isFromMe = key.fromMe === true;
+    const id = key.id || apiMsg.id || `msg_${Date.now()}_${Math.random()}`;
     
     // Correção do Timestamp (Segundos -> Milissegundos)
-    const ts = apiMsg.messageTimestamp;
-    const timestamp = ts ? new Date(Number(ts) * (String(ts).length > 11 ? 1 : 1000)) : new Date();
+    let ts = apiMsg.messageTimestamp || apiMsg.timestamp;
+    // Se timestamp não existir, usa agora. Se for string numérica, converte.
+    if (!ts) ts = Date.now();
+    const timestamp = new Date(Number(ts) * (String(ts).length > 11 ? 1 : 1000));
 
     let type: any = 'text';
     if (msgObj.imageMessage) type = 'image';
-    if (msgObj.audioMessage) type = 'audio';
-    if (msgObj.stickerMessage) type = 'sticker';
+    else if (msgObj.audioMessage) type = 'audio';
+    else if (msgObj.videoMessage) type = 'video';
+    else if (msgObj.stickerMessage) type = 'sticker';
+    else if (msgObj.documentMessage) type = 'document';
 
     return {
-        id: apiMsg.key?.id || `msg_${Date.now()}_${Math.random()}`,
+        id: id,
         content: content,
         sender: isFromMe ? 'agent' : 'user',
         timestamp: timestamp,
-        status: MessageStatus.READ,
+        status: MessageStatus.READ, // Assume lido se veio do histórico
         type: type
     };
 };
