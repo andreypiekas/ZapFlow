@@ -15,7 +15,6 @@ interface ErrorBoundaryState {
 // Error Boundary para capturar falhas na renderização
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   public state: ErrorBoundaryState;
-  // Remove public props declaration to avoid conflict
 
   constructor(props: ErrorBoundaryProps) {
     super(props);
