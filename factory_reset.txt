@@ -1,31 +1,38 @@
+
 #!/bin/bash
 
 echo "=================================================="
 echo "      ZAPFLOW - FACTORY RESET (LIMPEZA TOTAL)     "
 echo "=================================================="
-echo "ATENÇÃO: Isso apagará TODOS os dados do WhatsApp,"
-echo "banco de dados e configurações locais."
+echo "ATENÇÃO: Este comando corrige erros de 'Bad MAC' e"
+echo "'Stream Errored' apagando TODA a sessão atual."
+echo "Você precisará escanear o QR Code novamente."
 echo "=================================================="
 echo ""
 echo "Pressione ENTER para continuar ou CTRL+C para cancelar..."
 read
 
-echo "[1/4] Parando containers..."
-docker compose down
+echo "[1/4] Parando containers e removendo volumes associados..."
+# O flag -v remove os volumes declarados no docker-compose (postgres_data, redis_data)
+docker compose down -v --remove-orphans
 
-echo "[2/4] Removendo volumes de dados (Postgres/Redis)..."
-docker volume prune -f
+echo "[2/4] Forçando limpeza de containers zumbis..."
+docker rm -f evolution_api evolution_postgres evolution_redis 2>/dev/null || true
 
-echo "[3/4] Removendo arquivos temporários..."
+echo "[3/4] Removendo arquivos de sessão locais (se existirem)..."
 rm -rf store/
 rm -rf instances/
+rm -rf .wwebjs_auth/
+rm -rf .wwebjs_cache/
 
 echo "[4/4] Reiniciando instalação limpa..."
 if [ -f "./setup.sh" ]; then
     ./setup.sh
 else
-    echo "ERRO: Arquivo setup.sh não encontrado. Recrie-o com o conteúdo de setup_evolution.txt"
+    echo "AVISO: Arquivo setup.sh não encontrado. Tentando rodar docker compose diretamente..."
+    docker compose up -d
 fi
 
 echo ""
-echo "✅ Reset concluído! Tente conectar novamente."
+echo "✅ Reset concluído! O sistema está limpo."
+echo "Aguarde 30 segundos e tente conectar novamente pelo painel."

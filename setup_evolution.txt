@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 # ==========================================================
@@ -53,6 +54,8 @@ services:
       - CONFIG_SESSION_PHONE_CLIENT=ZapFlow
       - CONFIG_SESSION_PHONE_VERSION=2.3000.1029255529
       - CONFIG_SESSION_PHONE_SYNC_FULL_HISTORY=false
+      - CONFIG_SESSION_PHONE_REJECT_CALL=true
+      - CONFIG_SESSION_PHONE_MSG_CALL="Não aceitamos chamadas por aqui. Por favor, envie texto."
       - CORS_ORIGIN=*
       - CORS_METHODS=POST,GET,PUT,DELETE,OPTIONS
       - CORS_CREDENTIALS=true

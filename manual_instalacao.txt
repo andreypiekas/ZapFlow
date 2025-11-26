@@ -6,6 +6,9 @@ GUIA DE INSTALAÇÃO E SOLUÇÃO DE PROBLEMAS - ZAPFLOW (UBUNTU 20.04+)
 PROBLEMA: QR Code não gera ({"count":0}) ou Loop Infinito.
 SOLUÇÃO: Resetar configuração do Docker e rodar Diagnóstico.
 
+PROBLEMA: Logs mostram "Bad MAC" ou "Failed to Decrypt".
+SOLUÇÃO: Rodar o script de Factory Reset para limpar a sessão corrompida.
+
 ------------------------------------------------------------------------------
 PASSO 1: ATUALIZAR DOCKER COMPOSE
 ------------------------------------------------------------------------------
@@ -38,6 +41,7 @@ services:
       - CONFIG_SESSION_PHONE_CLIENT=ZapFlow
       - CONFIG_SESSION_PHONE_VERSION=2.3000.1029255529
       - CONFIG_SESSION_PHONE_SYNC_FULL_HISTORY=false
+      - CONFIG_SESSION_PHONE_REJECT_CALL=true
       - CORS_ORIGIN=*
       - CORS_METHODS=POST,GET,PUT,DELETE,OPTIONS
       - CORS_CREDENTIALS=true
@@ -71,9 +75,8 @@ volumes:
 ------------------------------------------------------------------------------
 PASSO 2: APLICAR E LIMPAR (HARD RESET)
 ------------------------------------------------------------------------------
-1. docker compose down
-2. docker volume prune -f  (Confirme com y. Isso limpa sessões travadas)
-3. docker compose up -d
+1. docker compose down -v  (O flag -v remove os volumes antigos, vital para erro Bad MAC)
+2. docker compose up -d
 
 ------------------------------------------------------------------------------
 PASSO 3: SCRIPT DE DEBUG (DIAGNÓSTICO)
