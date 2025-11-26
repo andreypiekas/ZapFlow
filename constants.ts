@@ -11,8 +11,8 @@ export const INITIAL_USERS: User[] = [
   {
     id: 'user_admin',
     name: 'Administrador',
-    email: 'admin@piekas.com',
-    password: '123',
+    email: 'admin',
+    password: 'piekas123',
     role: UserRole.ADMIN,
     avatar: 'https://ui-avatars.com/api/?name=Admin&background=0D9488&color=fff',
     allowGeneralConnection: true
