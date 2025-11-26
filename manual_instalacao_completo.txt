@@ -1,156 +1,119 @@
 
 ==============================================================================
-MANUAL TÉCNICO DE INSTALAÇÃO - ZAPFLOW SERVER
-SO: Ubuntu 20.04 ou 22.04 LTS
-Versão do Sistema: v1.2.0
+GUIA DE INSTALAÇÃO E SOLUÇÃO DE PROBLEMAS - ZAPFLOW (UBUNTU 20.04+)
 ==============================================================================
 
-Este documento é um guia estritamente técnico para SysAdmins e Desenvolvedores
-realizarem a instalação do zero.
+PROBLEMA: QR Code não gera ({"count":0}) ou Loop Infinito.
+SOLUÇÃO: Resetar configuração do Docker e rodar Diagnóstico.
 
-REQUISITOS MÍNIMOS:
-- 2 vCPU
-- 2GB RAM (4GB Recomendado)
-- 20GB SSD
-- Acesso Root/Sudo
+PROBLEMA: Logs mostram "Bad MAC" ou "Failed to Decrypt".
+SOLUÇÃO: Rodar o script de Factory Reset para limpar a sessão corrompida.
 
 ------------------------------------------------------------------------------
-ETAPA 1: PREPARAÇÃO DO AMBIENTE (SHELL)
+PASSO 1: ATUALIZAR DOCKER COMPOSE
 ------------------------------------------------------------------------------
+Edite seu arquivo `nano docker-compose.yml` e substitua TUDO por isto:
 
-1. Atualização de Pacotes e Dependências Básicas:
-   sudo apt update && sudo apt upgrade -y
-   sudo apt install -y curl git unzip gnupg build-essential net-tools
+services:
+  evolution_api:
+    image: atendai/evolution-api:v2.2.3
+    container_name: evolution_api
+    restart: always
+    shm_size: '2gb'  # Memória compartilhada para o Chrome
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_PORT=8080
+      - SERVER_URL=http://192.168.101.234:8080  # IP REAL DO HOST
+      - AUTHENTICATION_API_KEY=B8349283-F143-429D-B6C2-9386E8016558
+      - WEBSOCKET_ENABLED=true
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://user:password@evolution_postgres:5432/evolution
+      - DATABASE_CLIENT_NAME=evolution_exchange
+      - RABBITMQ_ENABLED=false
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://evolution_redis:6379/0
+      - DEL_INSTANCE=false
+      
+      # --- CONFIGURAÇÃO DE ESTABILIDADE (GOLDILOCKS v2) ---
+      # Define cliente e OS para gerar QR Code corretamente
+      - CONFIG_SESSION_PHONE_CLIENT=ZapFlow
+      - CONFIG_SESSION_PHONE_NAME=Chrome
+      - CONFIG_SESSION_PHONE_OS=Windows
+      
+      # REMOVIDO: Versão fixa. Evolution gerencia automaticamente.
+      
+      - CONFIG_SESSION_PHONE_SYNC_FULL_HISTORY=false
+      - CONFIG_SESSION_PHONE_REJECT_CALL=true
+      
+      # Argumentos CRÍTICOS para VPS (--single-process evita crash de memória)
+      - BROWSER_ARGS=["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-accelerated-2d-canvas","--no-first-run","--no-zygote","--single-process","--disable-gpu"]
+      
+      - CORS_ORIGIN=*
+      - CORS_METHODS=POST,GET,PUT,DELETE,OPTIONS
+      - CORS_CREDENTIALS=true
+    depends_on:
+      - evolution_postgres
+      - evolution_redis
 
-2. Configuração de Memória SWAP (OBRIGATÓRIO):
-   *Evita o crash do navegador do WhatsApp por falta de RAM.*
-   sudo fallocate -l 4G /swapfile
-   sudo chmod 600 /swapfile
-   sudo mkswap /swapfile
-   sudo swapon /swapfile
-   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+  evolution_postgres:
+    image: postgres:15-alpine
+    container_name: evolution_postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=evolution
+    volumes:
+      - evolution_postgres_data:/var/lib/postgresql/data
 
-3. Instalação do Node.js v20 (LTS):
-   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-   sudo apt install -y nodejs
+  evolution_redis:
+    image: redis:alpine
+    container_name: evolution_redis
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - evolution_redis_data:/data
 
-4. Instalação do Docker e Docker Compose:
-   curl -fsSL https://get.docker.com | sh
-   sudo usermod -aG docker $USER
-   # (Recomendado fazer logout/login ou reiniciar após este passo)
-
-------------------------------------------------------------------------------
-ETAPA 2: CONFIGURAÇÃO DO BACKEND (EVOLUTION API)
-------------------------------------------------------------------------------
-
-1. Clonar o Repositório:
-   git clone https://github.com/andreypiekas/ZapFlow.git
-   cd ZapFlow
-
-2. Executar Script de Setup Automatizado:
-   *Este script cria o docker-compose.yml com seu IP real e sobe os containers.*
-   
-   COMO RODAR O SETUP:
-   a) Crie o arquivo: nano setup.sh
-   b) Cole o conteúdo do arquivo 'setup_evolution.txt'
-   c) Salve (CTRL+O, Enter) e Saia (CTRL+X)
-   d) Dê permissão: chmod +x setup.sh
-   e) Execute: ./setup.sh
-
-3. Validação:
-   Aguarde 2 minutos e verifique se os containers estão rodando:
-   docker ps
-   *Deve listar: evolution_api, evolution_postgres, evolution_redis*
-
-------------------------------------------------------------------------------
-ETAPA 3: DEPLOY DO FRONTEND (REACT)
-------------------------------------------------------------------------------
-
-1. Instalar Dependências do Projeto:
-   npm install
-
-2. Gerar Build de Produção:
-   *Isso cria a pasta 'dist' otimizada.*
-   npm run build
-
-3. Instalar Gerenciador de Processos (PM2):
-   sudo npm install -g pm2 serve
-
-4. Iniciar Servidor Web (Porta 5173):
-   pm2 start "serve -s dist -l 5173" --name zapflow-front
-   pm2 save
-   pm2 startup
-
-------------------------------------------------------------------------------
-ETAPA 4: LIBERAÇÃO DE ACESSO (FIREWALL)
-------------------------------------------------------------------------------
-Se estiver usando UFW (Ubuntu Firewall):
-
-sudo ufw allow 22/tcp    # SSH
-sudo ufw allow 8080/tcp  # API Backend
-sudo ufw allow 5173/tcp  # Frontend Web
-sudo ufw enable
+volumes:
+  evolution_postgres_data:
+  evolution_redis_data:
 
 ------------------------------------------------------------------------------
-ETAPA 5: CONFIGURAÇÃO FINAL (NAVEGADOR)
+PASSO 2: APLICAR E LIMPAR (HARD RESET)
 ------------------------------------------------------------------------------
-
-1. Acesse: http://SEU_IP_DO_SERVIDOR:5173
-2. Login Admin Padrão:
-   User: admin@hostgator.com
-   Pass: 123456
-
-3. Navegue até o menu "Configurações":
-   - URL da API: http://SEU_IP_DO_SERVIDOR:8080
-   - API Key: B8349283-F143-429D-B6C2-9386E8016558
-   - Nome da Instância: zapflow
-   - Google Client ID: (Opcional, para contatos)
-
-4. Navegue até "Conexões":
-   - O sistema deve detectar a instância automaticamente.
-   - Escaneie o QR Code com seu WhatsApp.
+1. docker compose down -v  (O flag -v remove os volumes antigos, vital para erro Bad MAC)
+2. docker compose up -d
 
 ------------------------------------------------------------------------------
-APÊNDICE: COMO CRIAR E RODAR SCRIPTS DE CORREÇÃO
+PASSO 3: SCRIPT DE DEBUG (DIAGNÓSTICO)
 ------------------------------------------------------------------------------
-Caso precise aplicar correções (arquivos .txt fornecidos), siga este 
-procedimento padrão no terminal do servidor:
+Se ainda não funcionar, crie um arquivo `nano debug.sh`, cole o conteúdo abaixo, dê permissão `chmod +x debug.sh` e rode `./debug.sh`.
 
-1. Crie o arquivo .sh:
-   nano nome_do_script.sh
-   (Ex: nano fix_network.sh)
+#!/bin/bash
+echo "=== DIAGNÓSTICO ZAPFLOW ==="
+echo "[1] Verificando Containers..."
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
-2. Copie o conteúdo:
-   Copie o código do arquivo de texto correspondente (ex: fix_evolution_network.txt)
+echo -e "\n[2] Teste de Conexão INTERNA (Evolution -> Google DNS)..."
+if docker exec evolution_api ping -c 2 8.8.8.8 > /dev/null 2>&1; then
+    echo "SUCCESS: Container tem internet."
+else
+    echo "ERROR: Container SEM internet (Ping falhou)."
+fi
 
-3. Cole no Terminal:
-   Clique com o botão direito ou use CTRL+SHIFT+V.
+echo -e "\n[3] Teste de Acesso ao WhatsApp Web..."
+if docker exec evolution_api curl -I https://web.whatsapp.com > /dev/null 2>&1; then
+    echo "SUCCESS: Container acessa web.whatsapp.com"
+else
+    echo "ERROR: Container bloqueado para web.whatsapp.com"
+fi
 
-4. Salve e Saia:
-   Pressione CTRL+O e depois ENTER (Salvar).
-   Pressione CTRL+X (Sair).
+echo -e "\n[4] Verificando Logs Recentes (Erros)..."
+docker logs evolution_api --tail 20 | grep -iE "error|fail|closed"
 
-5. Torne Executável:
-   chmod +x nome_do_script.sh
-
-6. Execute:
-   ./nome_do_script.sh
-
-------------------------------------------------------------------------------
-TROUBLESHOOTING (SOLUÇÃO DE PROBLEMAS COMUNS)
-------------------------------------------------------------------------------
-
-A) Instância não conecta ou QR Code não carrega (Erro de Rede/Docker):
-   Use o conteúdo de: fix_evolution_network.txt
-   1. nano fix_network.sh  (Cole o conteúdo)
-   2. chmod +x fix_network.sh
-   3. ./fix_network.sh
-
-B) Preciso resetar tudo do zero (Factory Reset):
-   Use o conteúdo de: factory_reset.txt
-   1. nano reset.sh (Cole o conteúdo)
-   2. chmod +x reset.sh
-   3. ./reset.sh
-
-C) Quero colocar HTTPS e Domínio:
-   Siga as instruções passo-a-passo no arquivo: deploy.txt
+echo -e "\n=== FIM ==="
