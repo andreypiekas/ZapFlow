@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { RefreshCw, CheckCircle, AlertTriangle, Settings, Loader2, Smartphone, WifiOff, Activity, ArrowRight } from 'lucide-react';
+import { RefreshCw, CheckCircle, AlertTriangle, Settings, Loader2, Smartphone, WifiOff, Activity, ArrowRight, Clock } from 'lucide-react';
 import { ApiConfig } from '../types';
 import { fetchRealQRCode, logoutInstance, getSystemStatus, getDetailedInstanceStatus } from '../services/whatsappService';
 
@@ -37,14 +37,14 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
             setDetectedName(null);
         }
 
-        // Handle Connection
+        // Handle Connection Status Logic
+        // connecting = API is working but Baileys is syncing/connecting
         if (details.state === 'open') {
             setStatus('connected');
             setQrCode(null);
         } else if (details.state === 'connecting') {
             setStatus('connecting');
-        } else {
-            // Se estava conectado e caiu, muda status
+        } else if (details.state === 'close' || details.state === 'closed') {
             if (status === 'connected') setStatus('disconnected');
         }
     }
@@ -59,6 +59,9 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
       
       // Don't fetch QR if we found a mismatch (user needs to fix first)
       if (detectedName) return; 
+      
+      // Don't fetch QR if connecting (syncing)
+      if (status === 'connecting') return;
 
       setIsLoading(true);
       const qrData = await fetchRealQRCode(config);
@@ -165,8 +168,22 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
             </p>
           </div>
           <div className={`px-4 py-1.5 rounded-full text-sm font-bold flex items-center gap-2 ${status === 'connected' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : status === 'connecting' ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-slate-200 text-slate-600 border border-slate-300'}`}>
-            <div className={`w-2 h-2 rounded-full ${status === 'connected' ? 'bg-emerald-500 animate-pulse' : status === 'connecting' ? 'bg-blue-500 animate-bounce' : 'bg-slate-500'}`} />
-            {status === 'connected' ? 'SESSÃO ATIVA' : status === 'connecting' ? 'SINCRONIZANDO...' : 'DESCONECTADO'}
+            {status === 'connected' ? (
+                <>
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    SESSÃO ATIVA
+                </>
+            ) : status === 'connecting' ? (
+                <>
+                    <Clock size={14} className="animate-spin" />
+                    SINCRONIZANDO...
+                </>
+            ) : (
+                <>
+                    <div className="w-2 h-2 rounded-full bg-slate-500" />
+                    DESCONECTADO
+                </>
+            )}
           </div>
         </div>
 
@@ -293,11 +310,11 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                     <div className={`bg-white p-4 rounded-xl shadow-lg border border-slate-100 relative group ${detectedName ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
                         {/* QR Container */}
                         <div className="w-[280px] h-[280px] bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden relative">
-                            {isLoading ? (
+                            {isLoading || status === 'connecting' ? (
                                 <div className="flex flex-col items-center gap-3">
                                     <Loader2 className="animate-spin text-emerald-600" size={32} />
                                     <span className="text-xs text-slate-400">
-                                        {detailedStatus === 'connecting' ? 'Sincronizando dados...' : 'Comunicando com servidor...'}
+                                        {detailedStatus === 'connecting' || status === 'connecting' ? 'Sincronizando dados...' : 'Comunicando com servidor...'}
                                     </span>
                                 </div>
                             ) : !isConfigured ? (

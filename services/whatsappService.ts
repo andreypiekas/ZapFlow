@@ -61,24 +61,33 @@ export const getSystemStatus = async (config: ApiConfig) => {
       }
     });
     
+    // Se der erro 500/502 (Stream Error/Bad Gateway), assumimos que está tentando conectar
+    if (response.status >= 500) {
+        return { status: 'connecting' };
+    }
+    
     if (response.ok) {
         const data = await response.json();
         // Evolution v2 pode retornar state dentro de instance ou na raiz
         const state = data?.instance?.state || data?.state;
-        return { status: state === 'open' ? 'connected' : 'disconnected' };
+        
+        if (state === 'open') return { status: 'connected' };
+        if (state === 'connecting') return { status: 'connecting' };
+        return { status: 'disconnected' };
     }
 
-    // Se falhou (404/500), tenta Auto-Discovery
+    // Se falhou (404), tenta Auto-Discovery
     // Isso resolve o problema de 'zapflow' vs 'zaptflow'
     const foundInstance = await findActiveInstance(config);
-    if (foundInstance && foundInstance.status === 'open') {
-        return { status: 'connected', realName: foundInstance.instanceName };
+    if (foundInstance) {
+        if (foundInstance.status === 'open') return { status: 'connected', realName: foundInstance.instanceName };
+        if (foundInstance.status === 'connecting') return { status: 'connecting', realName: foundInstance.instanceName };
     }
 
     return null;
   } catch (error) {
     console.error("Erro ao verificar status do sistema:", error);
-    return null;
+    return { status: 'connecting' }; // Em caso de erro de rede, assume tentando reconectar
   }
 };
 
@@ -94,6 +103,7 @@ export const getDetailedInstanceStatus = async (config: ApiConfig) => {
             }
         });
         
+        if (response.status >= 500) return { state: 'connecting' }; // Server busy/restarting
         if (!response.ok) return { state: 'error_network' };
         
         const data = await response.json();
@@ -216,19 +226,28 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
 
     const cleanPhone = phone.replace(/\D/g, '');
     
+    // PAYLOAD CORRIGIDO PARA EVOLUTION API V2
+    // Algumas versões validam a presença de 'text' na raiz ou dentro de textMessage
+    const payload = {
+        number: cleanPhone,
+        options: { delay: 1200, presence: "composing", linkPreview: false },
+        textMessage: { text: text },
+        text: text // Redundância para passar na validação "instance requires property text"
+    };
+
     const response = await fetch(`${config.baseUrl}/message/sendText/${instanceName}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'apikey': config.apiKey
       },
-      body: JSON.stringify({
-        number: cleanPhone,
-        options: { delay: 1200, presence: "composing", linkPreview: false },
-        textMessage: { text: text }
-      })
+      body: JSON.stringify(payload)
     });
     
+    if (!response.ok) {
+        console.error("Falha no envio:", await response.text());
+    }
+
     return response.ok;
   } catch (error) {
     console.error("Erro ao enviar mensagem:", error);
