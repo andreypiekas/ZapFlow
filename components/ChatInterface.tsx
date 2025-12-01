@@ -76,8 +76,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const isAssigned = !!selectedChat?.assignedTo;
   const isAssignedToMe = selectedChat?.assignedTo === currentUser.id;
   
-  // Check if phone number is valid (>= 10 digits after cleaning)
-  const isInvalidNumber = selectedChat ? selectedChat.contactNumber.replace(/\D/g, '').length < 10 : false;
+  // Validation Logic
+  const isLID = selectedChat?.id?.includes('@lid');
+  const isGroup = selectedChat?.id?.includes('@g.us');
+  const rawContactNumber = selectedChat?.contactNumber || '';
+  const cleanedNumber = rawContactNumber.replace(/\D/g, '');
+  
+  // Flag as invalid only if:
+  // 1. It is NOT a special ID (LID or Group)
+  // 2. AND it has less than 10 digits
+  const isInvalidNumber = selectedChat && !isLID && !isGroup ? cleanedNumber.length < 10 : false;
 
   // Sync editing state with selected chat
   useEffect(() => {
@@ -362,10 +370,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   // --- SENDING LOGIC ---
   const sendMediaMessage = async (blob: Blob | File, type: 'image' | 'audio' | 'document' | 'video') => {
     if (!selectedChat) return;
-    if (isInvalidNumber) {
-        alert("Número inválido. Atualize o cadastro do contato antes de enviar.");
-        return;
-    }
+    // Removed strict block on isInvalidNumber. User can force send.
     setIsSending(true);
 
     const base64Preview = await blobToBase64(blob);
@@ -395,10 +400,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
   const handleSendMessage = async () => {
     if (!selectedChat) return;
-
+    
+    // User warning but not blocking
     if (isInvalidNumber) {
-        alert("Número inválido. Atualize o cadastro do contato antes de enviar.");
-        return;
+        console.warn("Enviando mensagem para número marcado como inválido (possível erro de detecção ou número curto).");
     }
 
     if (selectedFile) {
@@ -984,7 +989,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
                     <div className="flex items-center gap-1 md:gap-2 relative">
                         {isInvalidNumber && (
-                             <div className="bg-red-500 text-white text-[10px] px-2 py-1 rounded flex items-center gap-1 animate-pulse" title="Número inválido ou incompleto. Verifique.">
+                             <div 
+                                className="bg-red-500 text-white text-[10px] px-2 py-1 rounded flex items-center gap-1 animate-pulse cursor-pointer hover:bg-red-600 transition-colors" 
+                                title={`Número detectado: "${rawContactNumber}" (Limpo: ${cleanedNumber}). Clique para corrigir.`}
+                                onClick={() => setIsEditingContact(true)}
+                             >
                                 <AlertTriangle size={12} /> <span className="hidden md:inline">Número Inválido</span>
                              </div>
                         )}
@@ -1404,7 +1413,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                                     {inputText || selectedFile ? (
                                         <button 
                                             onClick={handleSendMessage}
-                                            disabled={isSending || isInvalidNumber}
+                                            disabled={isSending}
                                             className="p-3 bg-emerald-600 text-white rounded-full hover:bg-emerald-700 shadow-md transition-transform hover:scale-105 active:scale-95 disabled:bg-slate-400 disabled:scale-100 flex-shrink-0"
                                         >
                                             <Send size={20} />

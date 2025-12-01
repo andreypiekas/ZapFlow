@@ -248,7 +248,7 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
   const cleanPhone = formatPhoneForApi(phone);
 
   // Validação para evitar 400 Bad Request
-  if (cleanPhone.length < 10) {
+  if (cleanPhone.length < 5) {
       console.warn(`[sendRealMessage] Número inválido: ${cleanPhone}`);
       return false;
   }
@@ -309,7 +309,7 @@ export const sendRealMediaMessage = async (
   const cleanPhone = formatPhoneForApi(phone);
 
   // Validação para evitar 400 Bad Request
-  if (cleanPhone.length < 10) {
+  if (cleanPhone.length < 5) {
       console.warn(`[sendRealMediaMessage] Número inválido: ${cleanPhone}`);
       return false;
   }
