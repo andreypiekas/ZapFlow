@@ -1,3 +1,4 @@
+
 import { ApiConfig, Chat, Message, MessageStatus } from "../types";
 
 // Serviço compatível com Evolution API v1.x/v2.x
@@ -44,16 +45,16 @@ const findActiveInstance = async (config: ApiConfig) => {
             else if (rawData.instanceName) instances = [rawData];
             else if (Object.keys(rawData).length > 0) {
                 // Tenta converter objeto em array se parecer uma lista de instâncias
-                instances = Object.values(rawData).filter((i: any) => i && (i.instanceName || i.instance?.instanceName));
+                instances = Object.values(rawData).filter((i: any) => i && (i.instanceName || i?.instance?.instanceName));
             }
         }
         
         if (!instances || instances.length === 0) return null;
 
-        // Helper seguro para evitar crash por undefined
+        // Helper seguro para evitar crash por undefined (Usa Optional Chaining ?.)
         const getSafeStatus = (item: any) => {
             if (!item) return 'unknown';
-            // Tenta acessar status com optional chaining para evitar erros
+            // Verifica profundamente sem quebrar
             return item?.instance?.status || item?.status || 'unknown';
         };
         
@@ -83,7 +84,7 @@ const findActiveInstance = async (config: ApiConfig) => {
         return null;
 
     } catch (error) {
-        console.error("[AutoDiscovery] Erro crítico ao buscar instâncias:", error);
+        console.error("[AutoDiscovery] Erro crítico ao buscar instâncias (Ignorado para não travar):", error);
         return null;
     }
 };
@@ -426,9 +427,9 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             return [];
         }
 
-        // 2. Tenta buscar os dados
         let rawData: any = null;
         
+        // 2. Tenta buscar os dados com FALLBACK ROBUSTO
         try {
             // Tenta POST findChats (V2 padrão)
             const res = await fetch(`${config.baseUrl}/chat/findChats/${instanceName}`, {
@@ -440,14 +441,24 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             if (res.ok) {
                 rawData = await res.json();
             } else {
-                // Fallback: Se findChats falhar, busca mensagens diretamente (V2 fallback)
-                console.log('[fetchChats] findChats falhou, tentando fetchMessages...');
+                // Fallback: Se findChats falhar, busca mensagens diretamente via fetchMessages
+                console.log(`[fetchChats] findChats falhou (${res.status}), tentando fetchMessages...`);
                 const resMsg = await fetch(`${config.baseUrl}/message/fetchMessages/${instanceName}`, {
                     method: 'POST',
                     headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ limit: 50 }) 
                 });
-                if (resMsg.ok) rawData = await resMsg.json();
+                
+                if (resMsg.ok) {
+                    rawData = await resMsg.json();
+                } else {
+                    // Fallback Final: fetchAllMessages (V2 antigo)
+                    const resAll = await fetch(`${config.baseUrl}/message/fetchAllMessages/${instanceName}`, {
+                        method: 'GET',
+                        headers: { 'apikey': config.apiKey }
+                    });
+                    if (resAll.ok) rawData = await resAll.json();
+                }
             }
         } catch (e) {
             console.error('[fetchChats] Falha na requisição:', e);
@@ -456,7 +467,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
         if (!rawData) return [];
 
-        console.log('[ZapFlow Parser] Dados brutos recebidos:', Array.isArray(rawData) ? `Array[${rawData.length}]` : typeof rawData);
+        console.log('[ZapFlow Parser] Dados recebidos. Processando...');
 
         // 3. Processa os dados usando o Parser Recursivo Universal
         const chatsMap = new Map<string, any>();

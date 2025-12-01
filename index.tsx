@@ -12,13 +12,17 @@ interface ErrorBoundaryState {
 }
 
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Explicitly declare props to satisfy TypeScript if strict class property initialization is enabled
+  // Explicitly declare props to satisfy TypeScript
   declare props: Readonly<ErrorBoundaryProps>;
 
   public state: ErrorBoundaryState = {
     hasError: false,
     error: null
   };
+
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+  }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
