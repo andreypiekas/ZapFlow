@@ -392,14 +392,14 @@ const App: React.FC = () => {
                         data = event.data;
                     }
                     
-                    console.log('[App] 📨 Mensagem recebida via WebSocket:', {
+                    console.error('[App] 📨📨📨 MENSAGEM RECEBIDA VIA WEBSOCKET:', {
                         event: data.event,
                         type: data.type,
                         hasData: !!data.data,
                         hasKey: !!data.key,
                         remoteJid: data.key?.remoteJid || data.data?.key?.remoteJid || data.remoteJid,
                         fromMe: data.key?.fromMe || data.data?.key?.fromMe || data.fromMe,
-                        fullData: data
+                        fullData: JSON.stringify(data).substring(0, 500)
                     });
                     
                     // Processa mensagens recebidas - múltiplos formatos possíveis
@@ -426,14 +426,16 @@ const App: React.FC = () => {
                             const remoteJid = normalizeJid(messageData.key.remoteJid);
                             const mapped = mapApiMessageToInternal(messageData);
                             
-                            console.log('[App] 🔄 Processando mensagem WebSocket:', {
+                            console.error('[App] 🔄 Processando mensagem WebSocket:', {
                                 remoteJid,
                                 fromMe: messageData.key.fromMe,
                                 mapped: mapped ? { 
                                     content: mapped.content?.substring(0, 30), 
                                     sender: mapped.sender,
-                                    id: mapped.id
-                                } : null
+                                    id: mapped.id,
+                                    timestamp: mapped.timestamp
+                                } : null,
+                                chatJids: currentChats.map(c => normalizeJid(c.id))
                             });
                             
                             if (mapped) {
@@ -444,8 +446,16 @@ const App: React.FC = () => {
                                         const chatJid = normalizeJid(chat.id);
                                         const messageJid = normalizeJid(remoteJid);
                                         
-                                        if (chatJid === messageJid || 
-                                            (chat.contactNumber && messageJid.includes(chat.contactNumber.replace(/\D/g, '')))) {
+                                        // Comparação mais flexível de JIDs
+                                        const chatNumber = chat.contactNumber?.replace(/\D/g, '') || '';
+                                        const messageNumber = messageJid.split('@')[0].replace(/\D/g, '');
+                                        const chatNumberMatch = chatNumber && messageNumber && (
+                                            chatNumber === messageNumber || 
+                                            chatNumber.endsWith(messageNumber.slice(-8)) ||
+                                            messageNumber.endsWith(chatNumber.slice(-8))
+                                        );
+                                        
+                                        if (chatJid === messageJid || chatNumberMatch) {
                                             // Verifica se a mensagem já existe
                                             const exists = chat.messages.some(m => 
                                                 m.id === mapped.id || 
@@ -456,7 +466,13 @@ const App: React.FC = () => {
                                             
                                             if (!exists) {
                                                 chatUpdated = true;
-                                                console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}:`, mapped.content?.substring(0, 30));
+                                                console.error(`[App] ✅✅✅ NOVA MENSAGEM ADICIONADA AO CHAT ${chat.contactName}:`, {
+                                                    content: mapped.content?.substring(0, 30),
+                                                    sender: mapped.sender,
+                                                    id: mapped.id,
+                                                    chatJid,
+                                                    messageJid
+                                                });
                                                 const updatedMessages = [...chat.messages, mapped].sort((a, b) => 
                                                     a.timestamp.getTime() - b.timestamp.getTime()
                                                 );
