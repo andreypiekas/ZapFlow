@@ -16,7 +16,7 @@ const findActiveInstance = async (config: ApiConfig) => {
         
         const data = await response.json();
         
-        // Normaliza a resposta da API
+        // Normaliza a resposta da API para sempre ser um array
         let instances: any[] = [];
         if (Array.isArray(data)) {
             instances = data;
@@ -24,31 +24,45 @@ const findActiveInstance = async (config: ApiConfig) => {
             instances = data.instances;
         } else if (data && typeof data === 'object') {
             // Caso retorne um único objeto de instância sem estar em array
-            // Verifica se é um objeto de instância válido antes de adicionar
+            // Alguns endpoints retornam { instance: { ... } } ou direto { instanceName: ... }
             if (data.instance || data.instanceName) {
                 instances = [data];
             }
         }
         
-        if (instances.length === 0) return null;
+        if (!instances || instances.length === 0) return null;
 
         // Helper seguro para pegar dados, independente da estrutura (v1 vs v2)
         const getStatus = (item: any) => {
             if (!item) return 'unknown';
-            return item.instance?.status || item.status || 'unknown';
+            // Tenta ler status em vários níveis com segurança
+            if (item.instance && item.instance.status) return item.instance.status;
+            if (item.status) return item.status;
+            return 'unknown';
         };
+        
         const getName = (item: any) => {
             if (!item) return null;
-            return item.instance?.instanceName || item.instanceName || item.name;
+            // Tenta ler nome em vários níveis
+            if (item.instance && item.instance.instanceName) return item.instance.instanceName;
+            if (item.instanceName) return item.instanceName;
+            if (item.name) return item.name;
+            return null;
         };
 
         // 1. Tenta achar uma CONECTADA ('open')
         const connected = instances.find((i: any) => i && getStatus(i) === 'open');
-        if (connected) return { instanceName: getName(connected), status: 'open' };
+        if (connected) {
+            const name = getName(connected);
+            if (name) return { instanceName: name, status: 'open' };
+        }
 
         // 2. Tenta achar uma CONECTANDO ('connecting')
         const connecting = instances.find((i: any) => i && getStatus(i) === 'connecting');
-        if (connecting) return { instanceName: getName(connecting), status: 'connecting' };
+        if (connecting) {
+            const name = getName(connecting);
+            if (name) return { instanceName: name, status: 'connecting' };
+        }
 
         // 3. Retorna a primeira que achar (fallback), se tiver nome
         const first = instances[0];
@@ -329,8 +343,10 @@ export const logoutInstance = async (config: ApiConfig) => {
 
 const normalizeJid = (jid: string | null | undefined): string => {
     if (!jid) return '';
+    // Remove :11, :12 etc
     const parts = jid.split(':');
     let user = parts[0];
+    // Garante @s.whatsapp.net
     if (user.includes('@')) {
         return user; 
     }
@@ -345,10 +361,10 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
         return;
     }
 
-    // Identifica Objeto de Chat
-    if (data.id && typeof data.id === 'string' && (Array.isArray(data.messages) || data.unreadCount !== undefined)) {
+    // Identifica Objeto de Chat (Metadata)
+    if (data.id && typeof data.id === 'string' && (Array.isArray(data.messages) || data.unreadCount !== undefined || data.pushName)) {
         const jid = normalizeJid(data.id);
-        if (jid.includes('@')) {
+        if (jid.includes('@') && !jid.includes('status@broadcast')) {
             if (!collectedChats.has(jid)) {
                 collectedChats.set(jid, { id: jid, raw: data, messages: [] });
             }
@@ -367,7 +383,7 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
         }
     }
 
-    // Identifica Mensagem Solta (pode estar dentro de um chat ou solta na lista)
+    // Identifica Mensagem Solta (Message Object)
     if (data.key && data.key.remoteJid) {
         const jid = normalizeJid(data.key.remoteJid);
         if (jid.includes('@') && !jid.includes('status@broadcast')) {
@@ -388,10 +404,11 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
         }
     }
 
-    // Continua descendo na árvore (exceto se já processamos msg ou chat para evitar loop infinito em estruturas circulares, mas JSON padrão não tem isso)
-    // Para segurança, iteramos chaves
+    // Continua descendo na árvore (exceto se já processamos msg ou chat para evitar loop)
     Object.keys(data).forEach(key => {
-        // Evita processar string como objeto
+        // Evita recursão infinita em propriedades que já são conhecidas
+        if (key === 'messages' || key === 'key') return; 
+        
         if (typeof data[key] === 'object' && data[key] !== null) {
              extractChatsRecursively(data[key], collectedChats);
         }
