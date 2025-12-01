@@ -52,6 +52,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   // Contact Editing States
   const [isEditingContact, setIsEditingContact] = useState(false);
   const [editContactName, setEditContactName] = useState('');
+  const [editContactNumber, setEditContactNumber] = useState('');
   const [editClientCode, setEditClientCode] = useState('');
   
   // File & Media States
@@ -92,6 +93,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   useEffect(() => {
     if (selectedChat) {
       setEditContactName(selectedChat.contactName);
+      setEditContactNumber(selectedChat.contactNumber);
       setEditClientCode(selectedChat.clientCode || '');
       setIsEditingContact(false); 
       setShowOptionsMenu(false); 
@@ -243,6 +245,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     const updatedChat: Chat = {
         ...selectedChat,
         contactName: editContactName,
+        contactNumber: editContactNumber,
         clientCode: editClientCode
     };
     onUpdateChat(updatedChat);
@@ -954,6 +957,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                                         placeholder="Nome"
                                     />
                                     <input 
+                                        value={editContactNumber}
+                                        onChange={(e) => setEditContactNumber(e.target.value)}
+                                        className="bg-white/10 border border-white/30 text-white rounded px-2 py-1 text-sm outline-none focus:border-white w-32 font-mono"
+                                        placeholder="Número"
+                                    />
+                                    <input 
                                         value={editClientCode}
                                         onChange={(e) => setEditClientCode(e.target.value)}
                                         className="bg-white/10 border border-white/30 text-white rounded px-2 py-1 text-sm outline-none focus:border-white w-20 font-mono"
@@ -989,7 +998,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                     </div>
 
                     <div className="flex items-center gap-1 md:gap-2 relative">
-                        {isInvalidNumber && (
+                        {isInvalidNumber && !isEditingContact && (
                              <div 
                                 className="bg-red-500 text-white text-[10px] px-2 py-1 rounded flex items-center gap-1 animate-pulse cursor-pointer hover:bg-red-600 transition-colors" 
                                 title={`Número detectado: "${rawContactNumber}" | Limpo: "${cleanedNumber}" (Dígitos: ${cleanedNumber.length}). Parece faltar o DDD (mínimo 10 dígitos). Clique para corrigir.`}

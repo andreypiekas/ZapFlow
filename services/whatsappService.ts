@@ -250,7 +250,7 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
   // Validação estrita para evitar 400 Bad Request
   // O número deve ter pelo menos 10 dígitos (DDD + Número) para ser válido no envio
   if (cleanPhone.length < 10 && !cleanPhone.includes('@')) {
-      console.warn(`[sendRealMessage] Número inválido ou muito curto (Recusado): ${cleanPhone}. Verifique se possui DDD.`);
+      console.warn(`[sendRealMessage] Número inválido ou muito curto (Recusado): ${cleanPhone}. Verifique se possui DDD e DDI (ex: 5511999999999).`);
       // Retornar false evita a chamada à API que geraria erro 400
       return false;
   }
