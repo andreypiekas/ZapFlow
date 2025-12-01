@@ -450,7 +450,17 @@ const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     else if (msgObj.documentMessage) type = 'document';
 
     // Determina o autor real (importante para grupos ou chats com ID errado)
-    const author = key.participant || key.remoteJid;
+    // Sempre normaliza o JID para garantir formato correto
+    let author: string | undefined = undefined;
+    if (key.participant) {
+        author = normalizeJid(key.participant);
+    } else if (key.remoteJid) {
+        author = normalizeJid(key.remoteJid);
+    }
+    // Se ainda não tem author, tenta pegar do próprio objeto da mensagem
+    if (!author && apiMsg.remoteJid) {
+        author = normalizeJid(apiMsg.remoteJid);
+    }
 
     return {
         id: key.id || `msg_${Math.random()}`,
@@ -459,7 +469,7 @@ const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         timestamp,
         status: mapStatus(apiMsg.status),
         type,
-        author: author // Salva o JID real para correção automática
+        author: author // Salva o JID real para correção automática (sempre normalizado)
     };
 };
 
