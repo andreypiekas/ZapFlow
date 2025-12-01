@@ -45,7 +45,29 @@ const App: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
-  const [chats, setChats] = useState<Chat[]>(INITIAL_CHATS);
+  // Carrega chats do localStorage se existir, senão usa INITIAL_CHATS
+  const loadChatsFromStorage = (): Chat[] => {
+    try {
+      const saved = localStorage.getItem('zapflow_chats');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Converte timestamps de string para Date
+        return parsed.map((chat: Chat) => ({
+          ...chat,
+          lastMessageTime: new Date(chat.lastMessageTime),
+          messages: chat.messages.map((msg: Message) => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp)
+          }))
+        }));
+      }
+    } catch (e) {
+      console.error('[App] Erro ao carregar chats do localStorage:', e);
+    }
+    return INITIAL_CHATS;
+  };
+
+  const [chats, setChats] = useState<Chat[]>(loadChatsFromStorage());
   const [departments, setDepartments] = useState<Department[]>(INITIAL_DEPARTMENTS);
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>(INITIAL_QUICK_REPLIES);
@@ -59,6 +81,15 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('zapflow_config', JSON.stringify(apiConfig));
   }, [apiConfig]);
+
+  // Persiste chats no localStorage sempre que mudarem
+  useEffect(() => {
+    try {
+      localStorage.setItem('zapflow_chats', JSON.stringify(chats));
+    } catch (e) {
+      console.error('[App] Erro ao salvar chats no localStorage:', e);
+    }
+  }, [chats]);
 
   useEffect(() => {
     if (!currentUser || apiConfig.isDemo || !apiConfig.baseUrl) return;
@@ -170,16 +201,50 @@ const App: React.FC = () => {
                                 return false;
                             });
                             
-                            // Se não existe na API e é uma mensagem recente (últimas 5 minutos) ou tem ID local (m_*), mantém
-                            const isRecent = msg.timestamp && (Date.now() - msg.timestamp.getTime()) < 5 * 60 * 1000;
-                            const isLocalMessage = msg.id?.startsWith('m_');
-                            
-                            if (!existsInApi && (isRecent || isLocalMessage)) {
+                            // Se não existe na API, mantém a mensagem local (não apenas recentes)
+                            // Isso garante que mensagens enviadas não desapareçam mesmo após F5
+                            if (!existsInApi) {
                                 if (!messageMap.has(msgKey)) {
                                     messageMap.set(msgKey, msg);
                                 }
                             }
                         });
+                        
+                        // Se não há mensagens na API mas há mensagens locais, tenta buscar mensagens do chat
+                        if (realChat.messages.length === 0 && existingChat.messages.length > 0) {
+                            // Busca mensagens do chat de forma assíncrona (não bloqueia o merge)
+                            fetchChatMessages(apiConfig, realChat.id || existingChat.id, 100).then(apiMessages => {
+                                if (apiMessages.length > 0) {
+                                    setChats(currentChats => {
+                                        return currentChats.map(c => {
+                                            if (c.id === (realChat.id || existingChat.id)) {
+                                                // Merge das mensagens da API com as locais
+                                                const allMessages = [...existingChat.messages, ...apiMessages];
+                                                const uniqueMessages = Array.from(
+                                                    new Map(allMessages.map(msg => [msg.id || `${msg.timestamp?.getTime()}_${msg.content}`, msg])).values()
+                                                ).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+                                                
+                                                return {
+                                                    ...c,
+                                                    messages: uniqueMessages,
+                                                    lastMessage: uniqueMessages.length > 0 ? 
+                                                        (uniqueMessages[uniqueMessages.length - 1].type === 'text' ? 
+                                                            uniqueMessages[uniqueMessages.length - 1].content : 
+                                                            `📷 ${uniqueMessages[uniqueMessages.length - 1].type}`) : 
+                                                        c.lastMessage,
+                                                    lastMessageTime: uniqueMessages.length > 0 && uniqueMessages[uniqueMessages.length - 1].timestamp ? 
+                                                        uniqueMessages[uniqueMessages.length - 1].timestamp : 
+                                                        c.lastMessageTime
+                                                };
+                                            }
+                                            return c;
+                                        });
+                                    });
+                                }
+                            }).catch(err => {
+                                console.error(`[App] Erro ao buscar mensagens do chat ${realChat.id}:`, err);
+                            });
+                        }
                         
                         // Converte para array e ordena por timestamp
                         mergedMessages.push(...Array.from(messageMap.values()));
