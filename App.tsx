@@ -335,39 +335,81 @@ const App: React.FC = () => {
     
     // Inicializa WebSocket de forma assíncrona
     const initWebSocket = async () => {
-        if (apiConfig.isDemo || !apiConfig.baseUrl) return;
+        if (apiConfig.isDemo || !apiConfig.baseUrl) {
+            console.log('[App] WebSocket desabilitado: isDemo ou baseUrl vazio');
+            return;
+        }
         
         try {
             const active = await findActiveInstance(apiConfig);
             const instanceName = active?.instanceName || apiConfig.instanceName;
             
-            if (!instanceName) return;
+            if (!instanceName) {
+                console.log('[App] WebSocket desabilitado: instância não encontrada');
+                return;
+            }
             
-            // Converte http:// para ws:// ou https:// para wss://
-            const wsUrl = apiConfig.baseUrl.replace(/^http/, 'ws') + `/chat/${instanceName}`;
+            // Tenta múltiplos formatos de URL do WebSocket
+            const baseWsUrl = apiConfig.baseUrl.replace(/^http/, 'ws');
+            const wsUrls = [
+                `${baseWsUrl}/chat/${instanceName}`,
+                `${baseWsUrl}/socket.io/?instance=${instanceName}`,
+                `${baseWsUrl}/socket.io/?EIO=4&transport=websocket&instance=${instanceName}`,
+                `${baseWsUrl}/ws/${instanceName}`
+            ];
+            
+            console.log(`[App] Tentando conectar WebSocket para instância: ${instanceName}`);
+            
+            // Tenta o primeiro formato (mais comum)
+            const wsUrl = wsUrls[0];
             console.log(`[App] Conectando WebSocket: ${wsUrl}`);
             
             ws = new WebSocket(wsUrl);
             
             ws.onopen = () => {
-                console.log('[App] WebSocket conectado');
+                console.log('[App] ✅ WebSocket conectado com sucesso!');
                 // Envia autenticação se necessário
                 if (apiConfig.apiKey) {
                     ws?.send(JSON.stringify({ apikey: apiConfig.apiKey }));
+                    console.log('[App] Autenticação enviada ao WebSocket');
                 }
             };
             
             ws.onmessage = (event) => {
                 try {
-                    const data = JSON.parse(event.data);
-                    console.log('[App] Mensagem recebida via WebSocket:', data);
+                    let data: any;
+                    // Tenta parsear como JSON, se falhar trata como string
+                    if (typeof event.data === 'string') {
+                        data = JSON.parse(event.data);
+                    } else {
+                        data = event.data;
+                    }
                     
-                    // Processa mensagens recebidas
-                    if (data.event === 'messages.upsert' || data.event === 'messages.update' || data.event === 'message') {
-                        const messageData = data.data || data;
-                        if (messageData && messageData.key && messageData.key.remoteJid) {
-                            const remoteJid = normalizeJid(messageData.key.remoteJid);
-                            const mapped = mapApiMessageToInternal(messageData);
+                    console.log('[App] 📨 Mensagem recebida via WebSocket:', {
+                        event: data.event,
+                        hasData: !!data.data,
+                        hasKey: !!data.key,
+                        remoteJid: data.key?.remoteJid || data.data?.key?.remoteJid,
+                        fromMe: data.key?.fromMe || data.data?.key?.fromMe
+                    });
+                    
+                    // Processa mensagens recebidas - múltiplos formatos possíveis
+                    const messageData = data.data || data;
+                    const eventType = data.event || data.type || '';
+                    
+                    if (eventType.includes('message') || eventType.includes('upsert') || 
+                        (messageData && messageData.key && messageData.key.remoteJid)) {
+                        
+                        const msgToProcess = messageData.key ? messageData : data;
+                        
+                        if (msgToProcess && msgToProcess.key && msgToProcess.key.remoteJid) {
+                            const remoteJid = normalizeJid(msgToProcess.key.remoteJid);
+                            const mapped = mapApiMessageToInternal(msgToProcess);
+                            
+                            console.log('[App] Processando mensagem WebSocket:', {
+                                remoteJid,
+                                mapped: mapped ? { content: mapped.content.substring(0, 30), sender: mapped.sender } : null
+                            });
                             
                             if (mapped) {
                                 setChats(currentChats => {
@@ -387,6 +429,7 @@ const App: React.FC = () => {
                                             );
                                             
                                             if (!exists) {
+                                                console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}:`, mapped.content.substring(0, 30));
                                                 const updatedMessages = [...chat.messages, mapped].sort((a, b) => 
                                                     a.timestamp.getTime() - b.timestamp.getTime()
                                                 );
@@ -407,6 +450,8 @@ const App: React.FC = () => {
                                                     lastMessageTime: mapped.timestamp,
                                                     unreadCount: mapped.sender === 'user' ? (chat.unreadCount || 0) + 1 : chat.unreadCount
                                                 };
+                                            } else {
+                                                console.log(`[App] Mensagem já existe no chat ${chat.contactName}`);
                                             }
                                         }
                                         return chat;
@@ -421,17 +466,27 @@ const App: React.FC = () => {
             };
             
             ws.onerror = (error) => {
-                console.error('[App] Erro no WebSocket:', error);
-            };
-            
-            ws.onclose = () => {
-                console.log('[App] WebSocket desconectado, tentando reconectar em 5s...');
+                console.error('[App] ❌ Erro no WebSocket:', error);
+                // Tenta reconectar após erro
                 setTimeout(() => {
-                    // Reconecta após 5 segundos
                     if (currentUser && apiConfig.baseUrl && !apiConfig.isDemo) {
+                        console.log('[App] Tentando reconectar WebSocket após erro...');
                         initWebSocket();
                     }
                 }, 5000);
+            };
+            
+            ws.onclose = (event) => {
+                console.log(`[App] WebSocket desconectado (code: ${event.code}, reason: ${event.reason})`);
+                // Só reconecta se não foi fechado intencionalmente (code 1000)
+                if (event.code !== 1000) {
+                    setTimeout(() => {
+                        if (currentUser && apiConfig.baseUrl && !apiConfig.isDemo) {
+                            console.log('[App] Tentando reconectar WebSocket em 5s...');
+                            initWebSocket();
+                        }
+                    }, 5000);
+                }
             };
         } catch (err) {
             console.error('[App] Erro ao criar WebSocket:', err);
