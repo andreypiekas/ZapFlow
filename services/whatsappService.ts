@@ -932,15 +932,17 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                 
                 if (res.ok) {
                     const data = await res.json();
-                    console.log(`[fetchChatMessages] Resposta do ${endpoint.url}:`, {
+                    console.log(`[fetchChatMessages] [${i+1}/${endpoints.length}] 📦 Resposta do ${endpoint.url}:`, {
                         isArray: Array.isArray(data),
                         keys: data && typeof data === 'object' ? Object.keys(data).slice(0, 10) : [],
                         length: Array.isArray(data) ? data.length : (data?.messages?.length || 0),
                         firstItem: Array.isArray(data) && data.length > 0 ? {
                             keys: Object.keys(data[0]).slice(0, 10),
                             hasKey: !!data[0].key,
-                            keyRemoteJid: data[0].key?.remoteJid
-                        } : undefined
+                            keyRemoteJid: data[0].key?.remoteJid,
+                            sample: JSON.stringify(data[0]).substring(0, 200)
+                        } : undefined,
+                        fullResponse: JSON.stringify(data).substring(0, 500)
                     });
                     
                     if (Array.isArray(data)) {
