@@ -827,17 +827,28 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         
         // Função para processar mensagens recursivamente
         const processMessages = (items: any[]) => {
-            items.forEach(item => {
-                if (item.key && item.key.remoteJid) {
+            if (!Array.isArray(items)) {
+                console.log(`[fetchChatMessages] processMessages recebeu não-array:`, typeof items);
+                return;
+            }
+            console.log(`[fetchChatMessages] processMessages processando ${items.length} itens`);
+            items.forEach((item, index) => {
+                if (item && item.key && item.key.remoteJid) {
                     const normalizedJid = normalizeJid(item.key.remoteJid);
                     // Aceita mensagens que correspondem ao JID completo ou contém o número
                     if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
                         const mapped = mapApiMessageToInternal(item);
                         if (mapped) {
                             messages.push(mapped);
-                            console.log(`[fetchChatMessages] Mensagem encontrada: ${mapped.content?.substring(0, 30)} (${mapped.sender})`);
+                            console.log(`[fetchChatMessages] ✅ Mensagem encontrada [${index}]: ${mapped.content?.substring(0, 30)} (${mapped.sender})`);
+                        } else {
+                            console.log(`[fetchChatMessages] ⚠️ Mensagem não mapeada [${index}]:`, item.key?.remoteJid);
                         }
+                    } else {
+                        console.log(`[fetchChatMessages] Mensagem ignorada [${index}]: JID ${normalizedJid} não corresponde a ${chatId}`);
                     }
+                } else {
+                    console.log(`[fetchChatMessages] Item [${index}] sem key.remoteJid:`, item ? Object.keys(item).slice(0, 5) : 'null');
                 }
                 // Recursão em arrays aninhados
                 if (Array.isArray(item)) {
@@ -884,9 +895,12 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
             }
         ];
         
-        for (const endpoint of endpoints) {
+        console.log(`[fetchChatMessages] Iniciando loop de ${endpoints.length} endpoints...`);
+        
+        for (let i = 0; i < endpoints.length; i++) {
+            const endpoint = endpoints[i];
             try {
-                console.log(`[fetchChatMessages] Tentando endpoint: ${endpoint.url}`, endpoint.body || 'GET');
+                console.log(`[fetchChatMessages] [${i+1}/${endpoints.length}] Tentando endpoint: ${endpoint.url}`, endpoint.body || 'GET');
                 const res = await fetch(endpoint.url, {
                     method: endpoint.body ? 'POST' : 'GET',
                     headers: { 
@@ -896,7 +910,7 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                     body: endpoint.body ? JSON.stringify(endpoint.body) : undefined
                 });
                 
-                console.log(`[fetchChatMessages] Resposta de ${endpoint.url}: status=${res.status}, ok=${res.ok}`);
+                console.log(`[fetchChatMessages] [${i+1}/${endpoints.length}] Resposta de ${endpoint.url}: status=${res.status}, ok=${res.ok}`);
                 
                 if (res.ok) {
                     const data = await res.json();
