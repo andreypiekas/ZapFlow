@@ -452,6 +452,16 @@ const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     // Determina o autor real (importante para grupos ou chats com ID errado)
     // Sempre normaliza o JID para garantir formato correto
     let author: string | undefined = undefined;
+    
+    // Debug: Log para entender estrutura da mensagem
+    if (!key.participant && !key.remoteJid && !apiMsg.remoteJid) {
+        console.warn('[MessageAuthor] Mensagem sem remoteJid:', { 
+            hasKey: !!key, 
+            keyKeys: key ? Object.keys(key) : [],
+            apiMsgKeys: Object.keys(apiMsg).slice(0, 10)
+        });
+    }
+    
     if (key.participant) {
         author = normalizeJid(key.participant);
     } else if (key.remoteJid) {
@@ -460,6 +470,19 @@ const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     // Se ainda não tem author, tenta pegar do próprio objeto da mensagem
     if (!author && apiMsg.remoteJid) {
         author = normalizeJid(apiMsg.remoteJid);
+    }
+    
+    // Último recurso: tenta extrair do ID do chat se disponível
+    // (algumas APIs podem retornar o JID em outros campos)
+    if (!author) {
+        // Tenta encontrar JID em outros campos comuns
+        const possibleJidFields = ['jid', 'chatId', 'chat', 'to', 'from'];
+        for (const field of possibleJidFields) {
+            if (apiMsg[field] && typeof apiMsg[field] === 'string' && apiMsg[field].includes('@')) {
+                author = normalizeJid(apiMsg[field]);
+                break;
+            }
+        }
     }
 
     return {
@@ -582,7 +605,22 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             }
             
             const messages: Message[] = item.messages
-                .map((m: any) => mapApiMessageToInternal(m))
+                .map((m: any) => {
+                    const mapped = mapApiMessageToInternal(m);
+                    // Debug: Log se mensagem não tem author após mapeamento
+                    if (mapped && !mapped.author && m.key && m.key.remoteJid) {
+                        console.warn('[MessageAuthor] Mensagem mapeada sem author, mas tem remoteJid:', {
+                            msgId: mapped.id,
+                            remoteJid: m.key.remoteJid,
+                            key: m.key
+                        });
+                        // Tenta corrigir: adiciona author diretamente se tiver remoteJid
+                        if (m.key.remoteJid) {
+                            mapped.author = normalizeJid(m.key.remoteJid);
+                        }
+                    }
+                    return mapped;
+                })
                 .filter((m: any) => m !== null)
                 .sort((a: any, b: any) => a.timestamp.getTime() - b.timestamp.getTime());
 
