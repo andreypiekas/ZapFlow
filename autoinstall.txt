@@ -56,6 +56,7 @@ services:
       - SERVER_PORT=8080
       - SERVER_URL=http://${SERVER_IP}:8080
       - AUTHENTICATION_API_KEY=B8349283-F143-429D-B6C2-9386E8016558
+      - WEBSOCKET_ENABLED=true
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
       - DATABASE_CONNECTION_URI=postgresql://user:password@evolution_postgres:5432/evolution
@@ -64,6 +65,10 @@ services:
       - CACHE_REDIS_ENABLED=true
       - CACHE_REDIS_URI=redis://evolution_redis:6379/0
       - DEL_INSTANCE=false
+      - STORE_MESSAGES=true
+      - STORE_MESSAGE_UP=true
+      - STORE_CONTACTS=true
+      - STORE_CHATS=true
       - CONFIG_SESSION_PHONE_CLIENT=ZapFlow
       - CONFIG_SESSION_PHONE_NAME=Chrome
       - CONFIG_SESSION_PHONE_OS=Windows
