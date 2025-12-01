@@ -210,40 +210,77 @@ const App: React.FC = () => {
                             }
                         });
                         
-                        // Se não há mensagens na API mas há mensagens locais, tenta buscar mensagens do chat
-                        if (realChat.messages.length === 0 && existingChat.messages.length > 0) {
+                        // Se não há mensagens na API, tenta buscar mensagens do chat (mesmo sem mensagens locais)
+                        // Isso garante que mensagens recebidas apareçam mesmo quando a API não retorna no findChats
+                        if (realChat.messages.length === 0) {
                             // Busca mensagens do chat de forma assíncrona (não bloqueia o merge)
-                            fetchChatMessages(apiConfig, realChat.id || existingChat.id, 100).then(apiMessages => {
-                                if (apiMessages.length > 0) {
-                                    setChats(currentChats => {
-                                        return currentChats.map(c => {
-                                            if (c.id === (realChat.id || existingChat.id)) {
-                                                // Merge das mensagens da API com as locais
-                                                const allMessages = [...existingChat.messages, ...apiMessages];
-                                                const uniqueMessages = Array.from(
-                                                    new Map(allMessages.map(msg => [msg.id || `${msg.timestamp?.getTime()}_${msg.content}`, msg])).values()
-                                                ).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-                                                
-                                                return {
-                                                    ...c,
-                                                    messages: uniqueMessages,
-                                                    lastMessage: uniqueMessages.length > 0 ? 
-                                                        (uniqueMessages[uniqueMessages.length - 1].type === 'text' ? 
-                                                            uniqueMessages[uniqueMessages.length - 1].content : 
-                                                            `📷 ${uniqueMessages[uniqueMessages.length - 1].type}`) : 
-                                                        c.lastMessage,
-                                                    lastMessageTime: uniqueMessages.length > 0 && uniqueMessages[uniqueMessages.length - 1].timestamp ? 
-                                                        uniqueMessages[uniqueMessages.length - 1].timestamp : 
-                                                        c.lastMessageTime
-                                                };
-                                            }
-                                            return c;
+                            // Usa um debounce para evitar múltiplas buscas simultâneas
+                            const chatId = realChat.id || existingChat.id;
+                            const lastFetchKey = `last_fetch_${chatId}`;
+                            const lastFetch = sessionStorage.getItem(lastFetchKey);
+                            const now = Date.now();
+                            
+                            // Só busca se não buscou nos últimos 5 segundos (evita spam)
+                            if (!lastFetch || (now - parseInt(lastFetch)) > 5000) {
+                                sessionStorage.setItem(lastFetchKey, now.toString());
+                                
+                                fetchChatMessages(apiConfig, chatId, 100).then(apiMessages => {
+                                    if (apiMessages.length > 0) {
+                                        setChats(currentChats => {
+                                            return currentChats.map(c => {
+                                                if (c.id === chatId) {
+                                                    // Merge das mensagens da API com as locais
+                                                    const allMessages = [...c.messages, ...apiMessages];
+                                                    const uniqueMessages = Array.from(
+                                                        new Map(allMessages.map(msg => [msg.id || `${msg.timestamp?.getTime()}_${msg.content}`, msg])).values()
+                                                    ).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+                                                    
+                                                    // Detecta se há novas mensagens recebidas
+                                                    const newReceivedMessages = apiMessages.filter(apiMsg => 
+                                                        apiMsg.sender === 'user' && 
+                                                        !c.messages.some(existingMsg => 
+                                                            existingMsg.id === apiMsg.id || 
+                                                            (existingMsg.timestamp && apiMsg.timestamp && 
+                                                             Math.abs(existingMsg.timestamp.getTime() - apiMsg.timestamp.getTime()) < 5000 &&
+                                                             existingMsg.content === apiMsg.content)
+                                                        )
+                                                    );
+                                                    
+                                                    if (newReceivedMessages.length > 0 && currentUser) {
+                                                        const lastNewMsg = newReceivedMessages[newReceivedMessages.length - 1];
+                                                        if (c.assignedTo === currentUser.id) {
+                                                            addNotification(
+                                                                `Nova mensagem de ${c.contactName}`,
+                                                                lastNewMsg.content.length > 50 ? lastNewMsg.content.substring(0, 50) + '...' : lastNewMsg.content,
+                                                                'info'
+                                                            );
+                                                        }
+                                                    }
+                                                    
+                                                    return {
+                                                        ...c,
+                                                        messages: uniqueMessages,
+                                                        lastMessage: uniqueMessages.length > 0 ? 
+                                                            (uniqueMessages[uniqueMessages.length - 1].type === 'text' ? 
+                                                                uniqueMessages[uniqueMessages.length - 1].content : 
+                                                                `📷 ${uniqueMessages[uniqueMessages.length - 1].type}`) : 
+                                                            c.lastMessage,
+                                                        lastMessageTime: uniqueMessages.length > 0 && uniqueMessages[uniqueMessages.length - 1].timestamp ? 
+                                                            uniqueMessages[uniqueMessages.length - 1].timestamp : 
+                                                            c.lastMessageTime,
+                                                        unreadCount: newReceivedMessages.length > 0 ? 
+                                                            (c.unreadCount || 0) + newReceivedMessages.length : 
+                                                            c.unreadCount
+                                                    };
+                                                }
+                                                return c;
+                                            });
                                         });
-                                    });
-                                }
-                            }).catch(err => {
-                                console.error(`[App] Erro ao buscar mensagens do chat ${realChat.id}:`, err);
-                            });
+                                    }
+                                }).catch(err => {
+                                    console.error(`[App] Erro ao buscar mensagens do chat ${chatId}:`, err);
+                                });
+                            }
                         }
                         
                         // Converte para array e ordena por timestamp
