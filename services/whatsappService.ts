@@ -865,6 +865,7 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         
         for (const endpoint of endpoints) {
             try {
+                console.log(`[fetchChatMessages] Tentando endpoint: ${endpoint.url}`, endpoint.body || 'GET');
                 const res = await fetch(endpoint.url, {
                     method: endpoint.body ? 'POST' : 'GET',
                     headers: { 
@@ -874,22 +875,35 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                     body: endpoint.body ? JSON.stringify(endpoint.body) : undefined
                 });
                 
+                console.log(`[fetchChatMessages] Resposta de ${endpoint.url}: status=${res.status}, ok=${res.ok}`);
+                
                 if (res.ok) {
                     const data = await res.json();
                     console.log(`[fetchChatMessages] Resposta do ${endpoint.url}:`, {
                         isArray: Array.isArray(data),
                         keys: data && typeof data === 'object' ? Object.keys(data).slice(0, 10) : [],
-                        length: Array.isArray(data) ? data.length : (data?.messages?.length || 0)
+                        length: Array.isArray(data) ? data.length : (data?.messages?.length || 0),
+                        firstItem: Array.isArray(data) && data.length > 0 ? {
+                            keys: Object.keys(data[0]).slice(0, 10),
+                            hasKey: !!data[0].key,
+                            keyRemoteJid: data[0].key?.remoteJid
+                        } : undefined
                     });
                     
                     if (Array.isArray(data)) {
+                        console.log(`[fetchChatMessages] Processando array com ${data.length} itens`);
                         processMessages(data);
                     } else if (data.messages && Array.isArray(data.messages)) {
+                        console.log(`[fetchChatMessages] Processando data.messages com ${data.messages.length} itens`);
                         processMessages(data.messages);
                     } else if (data && typeof data === 'object') {
+                        console.log(`[fetchChatMessages] Processando objeto, procurando arrays em valores`);
                         // Tenta encontrar mensagens em qualquer campo do objeto
                         Object.values(data).forEach(val => {
-                            if (Array.isArray(val)) processMessages(val);
+                            if (Array.isArray(val)) {
+                                console.log(`[fetchChatMessages] Encontrado array com ${val.length} itens`);
+                                processMessages(val);
+                            }
                         });
                     }
                     
@@ -897,9 +911,12 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                     if (messages.length > 0) {
                         console.log(`[fetchChatMessages] ✅ Encontradas ${messages.length} mensagens via ${endpoint.url}`);
                         break;
+                    } else {
+                        console.log(`[fetchChatMessages] ⚠️ Nenhuma mensagem encontrada em ${endpoint.url}`);
                     }
                 } else {
-                    console.log(`[fetchChatMessages] Endpoint ${endpoint.url} retornou ${res.status}`);
+                    const errorText = await res.text().catch(() => '');
+                    console.log(`[fetchChatMessages] Endpoint ${endpoint.url} retornou ${res.status}:`, errorText.substring(0, 200));
                 }
             } catch (err) {
                 console.error(`[fetchChatMessages] Erro ao tentar ${endpoint.url}:`, err);
