@@ -416,7 +416,10 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
 };
 
 export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
-    if (config.isDemo || !config.baseUrl || !config.apiKey) return [];
+    if (config.isDemo || !config.baseUrl || !config.apiKey) {
+        console.log('[fetchChats] Modo demo ou config inválida, retornando vazio');
+        return [];
+    }
 
     try {
         let instanceName = config.instanceName;
@@ -426,29 +429,137 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
         // Se mesmo assim não tiver nome, aborta para evitar 404
         if (!instanceName) {
-            console.warn('[ZapFlow Sync] Nenhuma instância ativa encontrada.');
+            console.warn('[fetchChats] Nenhuma instância ativa encontrada.');
             return [];
         }
 
-        const response = await fetch(`${config.baseUrl}/chat/findChats/${instanceName}`, {
-            method: 'GET',
-            headers: { 'apikey': config.apiKey }
-        });
-
-        if (!response.ok) {
-            console.error(`[ZapFlow Sync] Erro ${response.status} ao buscar chats.`);
-            return [];
-        }
-
-        const rawData = await response.json();
+        console.log(`[fetchChats] Buscando chats da instância: ${instanceName}`);
         
-        console.log('[ZapFlow Raw Data]', rawData); 
+        let rawData: any = null;
+        let response: Response | null = null;
+        
+        // Tenta primeiro com POST (método correto para Evolution API v2.2.3)
+        try {
+            response = await fetch(`${config.baseUrl}/chat/findChats/${instanceName}`, {
+                method: 'POST',
+                headers: { 
+                    'apikey': config.apiKey,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            });
+
+            if (response.ok) {
+                rawData = await response.json();
+                console.log('[fetchChats] POST funcionou!');
+            } else if (response.status === 404) {
+                // Se 404, tenta com GET (algumas versões podem usar GET)
+                console.log('[fetchChats] POST retornou 404, tentando GET...');
+                response = await fetch(`${config.baseUrl}/chat/findChats/${instanceName}`, {
+                    method: 'GET',
+                    headers: { 'apikey': config.apiKey }
+                });
+                
+                if (response.ok) {
+                    rawData = await response.json();
+                    console.log('[fetchChats] GET funcionou!');
+                } else {
+                    // Tenta endpoint alternativo
+                    console.log('[fetchChats] GET também falhou, tentando fetchAllChats...');
+                    response = await fetch(`${config.baseUrl}/chat/fetchAllChats/${instanceName}`, {
+                        method: 'GET',
+                        headers: { 'apikey': config.apiKey }
+                    });
+                    
+                    if (response.ok) {
+                        rawData = await response.json();
+                        console.log('[fetchChats] fetchAllChats funcionou!');
+                    } else {
+                        console.error(`[fetchChats] Todos os endpoints falharam. Último erro: ${response.status} ${response.statusText}`);
+                        const errorText = await response.text();
+                        console.error(`[fetchChats] Resposta de erro:`, errorText);
+                        return [];
+                    }
+                }
+            } else {
+                console.error(`[fetchChats] Erro HTTP ${response.status}: ${response.statusText}`);
+                const errorText = await response.text();
+                console.error(`[fetchChats] Resposta de erro:`, errorText);
+                return [];
+            }
+        } catch (error) {
+            console.error('[fetchChats] Erro na requisição:', error);
+            return [];
+        }
+
+        if (!rawData) {
+            console.error('[fetchChats] Nenhum dado retornado da API');
+            return [];
+        }
+
+        console.log(`[fetchChats] Resposta bruta da API (primeiros 1000 chars):`, JSON.stringify(rawData).substring(0, 1000));
+        console.log(`[fetchChats] Tipo da resposta:`, Array.isArray(rawData) ? 'Array' : typeof rawData); 
 
         const chatsMap = new Map<string, any>();
         extractChatsRecursively(rawData, chatsMap);
+        
+        // Se não encontrou nada, tenta formato alternativo (Evolution API v2 pode retornar diferente)
+        if (chatsMap.size === 0) {
+            console.log('[fetchChats] Nenhum chat encontrado no scan recursivo, tentando formato alternativo...');
+            
+            // Tenta formato direto: array de chats
+            if (Array.isArray(rawData)) {
+                rawData.forEach((chat: any) => {
+                    const jid = chat.id || chat.remoteJid || chat.jid;
+                    if (jid && typeof jid === 'string' && jid.includes('@')) {
+                        const normalized = normalizeJid(jid);
+                        if (!normalized.includes('status@broadcast')) {
+                            chatsMap.set(normalized, {
+                                id: normalized,
+                                raw: chat,
+                                messages: chat.messages || []
+                            });
+                        }
+                    }
+                });
+            }
+            // Tenta formato com wrapper: { chats: [...] }
+            else if (rawData.chats && Array.isArray(rawData.chats)) {
+                rawData.chats.forEach((chat: any) => {
+                    const jid = chat.id || chat.remoteJid || chat.jid;
+                    if (jid && typeof jid === 'string' && jid.includes('@')) {
+                        const normalized = normalizeJid(jid);
+                        if (!normalized.includes('status@broadcast')) {
+                            chatsMap.set(normalized, {
+                                id: normalized,
+                                raw: chat,
+                                messages: chat.messages || []
+                            });
+                        }
+                    }
+                });
+            }
+            // Tenta formato com data: { data: [...] }
+            else if (rawData.data && Array.isArray(rawData.data)) {
+                rawData.data.forEach((chat: any) => {
+                    const jid = chat.id || chat.remoteJid || chat.jid;
+                    if (jid && typeof jid === 'string' && jid.includes('@')) {
+                        const normalized = normalizeJid(jid);
+                        if (!normalized.includes('status@broadcast')) {
+                            chatsMap.set(normalized, {
+                                id: normalized,
+                                raw: chat,
+                                messages: chat.messages || []
+                            });
+                        }
+                    }
+                });
+            }
+        }
+        
         const chatsArray = Array.from(chatsMap.values());
 
-        console.log(`[ZapFlow Parser] Encontrados ${chatsArray.length} chats únicos.`);
+        console.log(`[ZapFlow Parser] Encontrados ${chatsArray.length} chats únicos na resposta da API.`);
 
         const mappedChats: Chat[] = chatsArray.map((item: any) => {
             const remoteJid = item.id;
@@ -456,9 +567,13 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             let messages: Message[] = [];
             // As mensagens já foram agrupadas no `extractChatsRecursively`
             if (item.messages && Array.isArray(item.messages)) {
+                console.log(`[fetchChats] Chat ${remoteJid}: ${item.messages.length} mensagens brutas encontradas`);
                 messages = item.messages
                     .map((m: any) => mapApiMessageToInternal(m))
                     .filter((m: Message | null): m is Message => m !== null);
+                console.log(`[fetchChats] Chat ${remoteJid}: ${messages.length} mensagens mapeadas com sucesso`);
+            } else {
+                console.log(`[fetchChats] Chat ${remoteJid}: Nenhuma mensagem encontrada (item.messages não é array ou está vazio)`);
             }
 
             // Ordena mensagens por timestamp
@@ -484,16 +599,57 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             };
         }).filter((c: Chat | null): c is Chat => c !== null);
 
+        console.log(`[fetchChats] Total de ${mappedChats.length} chats mapeados e retornados`);
+        mappedChats.forEach(chat => {
+            console.log(`[fetchChats] Chat: ${chat.contactName} (${chat.id}) - ${chat.messages.length} mensagens`);
+        });
+
+        // Se os chats não têm mensagens, tenta buscar mensagens individualmente
+        if (mappedChats.length > 0 && mappedChats.every(c => c.messages.length === 0)) {
+            console.log('[fetchChats] Nenhum chat tem mensagens, tentando buscar mensagens individualmente...');
+            for (const chat of mappedChats) {
+                try {
+                    const messagesResponse = await fetch(`${config.baseUrl}/chat/fetchMessages/${instanceName}/${encodeURIComponent(chat.id)}`, {
+                        method: 'GET',
+                        headers: { 'apikey': config.apiKey }
+                    });
+                    
+                    if (messagesResponse.ok) {
+                        const messagesData = await messagesResponse.json();
+                        console.log(`[fetchChats] Mensagens encontradas para ${chat.id}:`, messagesData);
+                        
+                        // Processa mensagens se encontradas
+                        if (messagesData && Array.isArray(messagesData)) {
+                            const mappedMessages = messagesData
+                                .map((m: any) => mapApiMessageToInternal(m))
+                                .filter((m: Message | null): m is Message => m !== null);
+                            chat.messages = mappedMessages;
+                            chat.messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+                            console.log(`[fetchChats] ${mappedMessages.length} mensagens adicionadas ao chat ${chat.id}`);
+                        }
+                    }
+                } catch (err) {
+                    console.warn(`[fetchChats] Erro ao buscar mensagens do chat ${chat.id}:`, err);
+                }
+            }
+        }
+
         return mappedChats;
 
     } catch (error) {
-        console.error("Erro sync chats:", error);
+        console.error("[fetchChats] Erro ao sincronizar chats:", error);
+        if (error instanceof Error) {
+            console.error("[fetchChats] Stack trace:", error.stack);
+        }
         return [];
     }
 };
 
 const mapApiMessageToInternal = (apiMsg: any): Message | null => {
-    if (!apiMsg) return null;
+    if (!apiMsg) {
+        console.warn('[mapApiMessageToInternal] Mensagem nula ou indefinida');
+        return null;
+    }
 
     const msgObj = apiMsg.message || apiMsg;
     
@@ -514,6 +670,7 @@ const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     
     // Se não tem conteúdo de texto nem mídia conhecida, ignora (ex: protocolMessage)
     if (!content && !msgObj.imageMessage && !msgObj.stickerMessage && !msgObj.audioMessage && !msgObj.videoMessage && !msgObj.documentMessage) {
+        console.warn('[mapApiMessageToInternal] Mensagem ignorada (sem conteúdo ou mídia):', JSON.stringify(apiMsg).substring(0, 200));
         return null;
     }
 
