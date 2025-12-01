@@ -1,7 +1,3 @@
-
-
-
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw, Smile, Tag, Plus, Clock, User as UserIcon, AlertTriangle } from 'lucide-react';
 import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow, Contact } from '../types';
@@ -80,6 +76,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const isAssigned = !!selectedChat?.assignedTo;
   const isAssignedToMe = selectedChat?.assignedTo === currentUser.id;
   
+  // Check if phone number is valid (>= 10 digits after cleaning)
+  const isInvalidNumber = selectedChat ? selectedChat.contactNumber.replace(/\D/g, '').length < 10 : false;
+
   // Sync editing state with selected chat
   useEffect(() => {
     if (selectedChat) {
@@ -153,20 +152,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
   const resize = useCallback((e: MouseEvent) => {
     if (isResizing) {
-      // Calculate new width relative to the sidebar
-      // We assume the sidebar starts at 0 or after the main navigation sidebar
-      // Simply using e.clientX usually works if we account for offset, but 
-      // since the list is the first element in this flex container, we can calculate width based on cursor position
-      // minus the approximate width of the main App Sidebar (collapsed or expanded).
-      // However, a simpler way is to rely on movementX or clientX and just set a reasonable bound.
-      
-      // Let's rely on the chat interface container.
-      // Ideally we would use a ref for the container, but let's try a direct approach
-      // Assuming standard layout, clientX is the position from left of screen.
-      // We need to subtract the Main App Sidebar width. 
-      // Since we don't know if it's 64px or 256px here easily without prop drilling, 
-      // we can use `e.movementX` to adjust current width.
-      
       setListWidth((prevWidth) => {
           const newWidth = prevWidth + e.movementX;
           if (newWidth < 250) return 250; // Min width
@@ -200,7 +185,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
           // Input manual
           const cleaned = newChatInput.replace(/\D/g, '');
           if (cleaned.length < 10) {
-              alert('Número inválido. Digite DDD + Número.');
+              alert('Número inválido. Digite DDD + Número (ex: 11999999999).');
               return;
           }
           contactNumber = cleaned;
@@ -377,6 +362,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   // --- SENDING LOGIC ---
   const sendMediaMessage = async (blob: Blob | File, type: 'image' | 'audio' | 'document' | 'video') => {
     if (!selectedChat) return;
+    if (isInvalidNumber) {
+        alert("Número inválido. Atualize o cadastro do contato antes de enviar.");
+        return;
+    }
     setIsSending(true);
 
     const base64Preview = await blobToBase64(blob);
@@ -406,6 +395,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
   const handleSendMessage = async () => {
     if (!selectedChat) return;
+
+    if (isInvalidNumber) {
+        alert("Número inválido. Atualize o cadastro do contato antes de enviar.");
+        return;
+    }
 
     if (selectedFile) {
         const type = selectedFile.type.startsWith('image/') ? 'image' : 
@@ -979,7 +973,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                                         )}
                                         <Edit3 size={12} className="opacity-0 group-hover:opacity-50 text-white" />
                                     </div>
-                                    <p className="text-xs opacity-90 text-emerald-100 truncate">
+                                    <p className="text-xs opacity-90 text-emerald-100 truncate flex items-center gap-1">
                                         {getDepartmentName(selectedChat.departmentId)} 
                                         {!isAssigned && selectedChat.status === 'open' && " • Aguardando Atendimento"}
                                     </p>
@@ -989,6 +983,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                     </div>
 
                     <div className="flex items-center gap-1 md:gap-2 relative">
+                        {isInvalidNumber && (
+                             <div className="bg-red-500 text-white text-[10px] px-2 py-1 rounded flex items-center gap-1 animate-pulse" title="Número inválido ou incompleto. Verifique.">
+                                <AlertTriangle size={12} /> <span className="hidden md:inline">Número Inválido</span>
+                             </div>
+                        )}
+
                          {/* Search Toggle */}
                         <button onClick={() => setShowSearch(!showSearch)} className={`p-2 rounded-full transition-colors ${showSearch ? 'bg-white text-emerald-700' : 'hover:bg-emerald-600'}`}>
                             <Search size={20} />
@@ -1160,6 +1160,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         </span>
                         {msg.sender === 'agent' && (
                           msg.status === MessageStatus.READ ? <CheckCheck size={14} className="text-blue-500" /> : 
+                          msg.status === MessageStatus.DELIVERED ? <CheckCheck size={14} className="text-slate-400" /> :
                           msg.status === MessageStatus.ERROR ? <span title="Falha ao enviar"><AlertTriangle size={14} className="text-red-500" /></span> :
                           <Check size={14} className="text-slate-400" />
                         )}
@@ -1403,7 +1404,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                                     {inputText || selectedFile ? (
                                         <button 
                                             onClick={handleSendMessage}
-                                            disabled={isSending}
+                                            disabled={isSending || isInvalidNumber}
                                             className="p-3 bg-emerald-600 text-white rounded-full hover:bg-emerald-700 shadow-md transition-transform hover:scale-105 active:scale-95 disabled:bg-slate-400 disabled:scale-100 flex-shrink-0"
                                         >
                                             <Send size={20} />

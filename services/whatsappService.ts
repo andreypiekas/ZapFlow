@@ -1,6 +1,3 @@
-
-
-
 import { ApiConfig, Chat, Message, MessageStatus } from "../types";
 
 // Serviço compatível com Evolution API v1.x/v2.x
@@ -250,6 +247,12 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
   // Formata o número (Adiciona 55 se faltar)
   const cleanPhone = formatPhoneForApi(phone);
 
+  // Validação para evitar 400 Bad Request
+  if (cleanPhone.length < 10) {
+      console.warn(`[sendRealMessage] Número inválido: ${cleanPhone}`);
+      return false;
+  }
+
   try {
     // Payload simplificado para máxima compatibilidade com v2.x
     const payload = {
@@ -304,6 +307,12 @@ export const sendRealMediaMessage = async (
   
   // Formata o número
   const cleanPhone = formatPhoneForApi(phone);
+
+  // Validação para evitar 400 Bad Request
+  if (cleanPhone.length < 10) {
+      console.warn(`[sendRealMediaMessage] Número inválido: ${cleanPhone}`);
+      return false;
+  }
 
   const base64 = await blobToBase64(mediaBlob);
     
@@ -404,6 +413,20 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
     });
 };
 
+const mapStatus = (status: any): MessageStatus => {
+    // Mapping Evolution API statuses to Internal
+    // 1=PENDING, 2=SERVER_ACK, 3=DELIVERY_ACK, 4=READ, 5=PLAYED
+    // Also supports string values
+    
+    if (status === 'READ' || status === 'PLAYED' || status === 4 || status === 5) return MessageStatus.READ;
+    if (status === 'DELIVERY_ACK' || status === 3) return MessageStatus.DELIVERED;
+    if (status === 'SERVER_ACK' || status === 2) return MessageStatus.SENT;
+    if (status === 'PENDING' || status === 1) return MessageStatus.SENT;
+    if (status === 'ERROR' || status === 0) return MessageStatus.ERROR;
+    
+    return MessageStatus.SENT; // Default
+};
+
 const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     if (!apiMsg) return null;
     const msgObj = apiMsg.message || apiMsg;
@@ -442,7 +465,7 @@ const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         content,
         sender: key.fromMe ? 'agent' : 'user',
         timestamp,
-        status: MessageStatus.READ,
+        status: mapStatus(apiMsg.status),
         type
     };
 };
