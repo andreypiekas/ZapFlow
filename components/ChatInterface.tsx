@@ -306,8 +306,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       }
 
       // Create new chat
+      // Usa o número como parte do ID para facilitar merge com Evolution API
+      // Formato: número@s.whatsapp.net (padrão WhatsApp)
+      const chatId = contactNumber.includes('@') ? contactNumber : `${contactNumber}@s.whatsapp.net`;
+      
       const newChat: Chat = {
-          id: `chat_${Date.now()}`,
+          id: chatId,
           contactName: contactName || contactNumber,
           contactNumber: contactNumber,
           contactAvatar: avatar,

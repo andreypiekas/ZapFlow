@@ -79,13 +79,29 @@ const App: React.FC = () => {
                     if (!existingChat && realChat.contactNumber) {
                         const realContactDigits = realChat.contactNumber.replace(/\D/g, '').length;
                         if (realContactDigits >= 10) {
+                            // Busca exata primeiro
                             existingChat = currentChats.find(c => {
-                                const existingDigits = c.contactNumber?.replace(/\D/g, '').length || 0;
-                                // Encontra se os últimos dígitos coincidem (para casos onde um tem DDI e outro não)
-                                const realLastDigits = realChat.contactNumber.replace(/\D/g, '').slice(-Math.min(realContactDigits, 11));
-                                const existingLastDigits = c.contactNumber?.replace(/\D/g, '').slice(-Math.min(existingDigits, 11)) || '';
-                                return existingLastDigits === realLastDigits && existingLastDigits.length >= 8;
+                                const existingNumber = c.contactNumber?.replace(/\D/g, '') || '';
+                                const realNumber = realChat.contactNumber.replace(/\D/g, '');
+                                // Busca exata ou pelos últimos dígitos (para casos onde um tem DDI e outro não)
+                                return existingNumber === realNumber || 
+                                       (existingNumber.length >= 8 && realNumber.length >= 8 && 
+                                        existingNumber.slice(-Math.min(existingNumber.length, 11)) === realNumber.slice(-Math.min(realNumber.length, 11)));
                             });
+                            
+                            // Se ainda não encontrou, tenta pelo ID do chat (extraindo número do ID)
+                            if (!existingChat) {
+                                existingChat = currentChats.find(c => {
+                                    if (c.id.includes('@') && !c.id.includes('@g.us')) {
+                                        const idNumber = c.id.split('@')[0].replace(/\D/g, '');
+                                        const realNumber = realChat.contactNumber.replace(/\D/g, '');
+                                        return idNumber === realNumber || 
+                                               (idNumber.length >= 8 && realNumber.length >= 8 && 
+                                                idNumber.slice(-Math.min(idNumber.length, 11)) === realNumber.slice(-Math.min(realNumber.length, 11)));
+                                    }
+                                    return false;
+                                });
+                            }
                         }
                     }
                     
