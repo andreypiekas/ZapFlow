@@ -13,7 +13,7 @@ import ReportsDashboard from './components/ReportsDashboard';
 import Contacts from './components/Contacts';
 import ChatbotSettings from './components/ChatbotSettings';
 import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot, ChevronLeft, ChevronRight } from 'lucide-react';
-import { fetchChats } from './services/whatsappService'; 
+import { fetchChats, fetchChatMessages } from './services/whatsappService'; 
 
 const loadConfig = (): ApiConfig => {
   const saved = localStorage.getItem('zapflow_config');
