@@ -212,23 +212,23 @@ const App: React.FC = () => {
                         
                         // Se não há mensagens na API, tenta buscar mensagens do chat (mesmo sem mensagens locais)
                         // Isso garante que mensagens recebidas apareçam mesmo quando a API não retorna no findChats
-                        if (realChat.messages.length === 0) {
-                            // Busca mensagens do chat de forma assíncrona (não bloqueia o merge)
-                            // Usa um debounce para evitar múltiplas buscas simultâneas
-                            const chatId = realChat.id || existingChat.id;
-                            const lastFetchKey = `last_fetch_${chatId}`;
-                            const lastFetch = sessionStorage.getItem(lastFetchKey);
-                            const now = Date.now();
+                        // SEMPRE tenta buscar mensagens via fetchChatMessages (mesmo que já tenha algumas)
+                        // Isso garante que mensagens recebidas apareçam mesmo se o WebSocket não funcionar
+                        const chatId = realChat.id || existingChat.id;
+                        const lastFetchKey = `last_fetch_${chatId}`;
+                        const lastFetch = sessionStorage.getItem(lastFetchKey);
+                        const now = Date.now();
+                        
+                        // Só busca se não buscou nos últimos 3 segundos (evita spam, mas garante atualização)
+                        if (!lastFetch || (now - parseInt(lastFetch)) > 3000) {
+                            sessionStorage.setItem(lastFetchKey, now.toString());
                             
-                            // Só busca se não buscou nos últimos 5 segundos (evita spam)
-                            if (!lastFetch || (now - parseInt(lastFetch)) > 5000) {
-                                sessionStorage.setItem(lastFetchKey, now.toString());
-                                
-                                fetchChatMessages(apiConfig, chatId, 100).then(apiMessages => {
-                                    if (apiMessages.length > 0) {
-                                        setChats(currentChats => {
-                                            return currentChats.map(c => {
-                                                if (c.id === chatId) {
+                            fetchChatMessages(apiConfig, chatId, 100).then(apiMessages => {
+                                if (apiMessages.length > 0) {
+                                    console.error(`[App] 🔄 Buscou ${apiMessages.length} mensagens da API para ${chatId}`);
+                                    setChats(currentChats => {
+                                        return currentChats.map(c => {
+                                            if (c.id === chatId || normalizeJid(c.id) === normalizeJid(chatId)) {
                                                     // Merge das mensagens da API com as locais
                                                     const allMessages = [...c.messages, ...apiMessages];
                                                     const uniqueMessages = Array.from(
@@ -507,10 +507,18 @@ const App: React.FC = () => {
                                     return updatedChats;
                                 });
                             } else {
-                                console.log('[App] ⚠️ Mensagem WebSocket não foi mapeada:', messageData);
+                                console.error('[App] ⚠️ Mensagem WebSocket não foi mapeada:', {
+                                    messageData,
+                                    hasKey: !!messageData?.key,
+                                    hasRemoteJid: !!messageData?.key?.remoteJid
+                                });
                             }
                         } else {
-                            console.log('[App] ⚠️ Mensagem WebSocket sem estrutura válida:', data);
+                            console.error('[App] ⚠️ Mensagem WebSocket sem estrutura válida:', {
+                                eventType,
+                                hasMessageData: !!messageData,
+                                dataKeys: Object.keys(data || {})
+                            });
                         }
                     } else {
                         console.log('[App] ℹ️ Evento WebSocket não é de mensagem:', eventType || 'sem tipo');
