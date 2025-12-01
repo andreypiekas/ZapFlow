@@ -173,7 +173,8 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
 
     const cleanPhone = phone.replace(/\D/g, '');
     
-    // PAYLOAD SIMPLIFICADO E CORRIGIDO
+    // PAYLOAD SIMPLIFICADO PARA EVITAR ERRO DE VALIDAÇÃO
+    // Evolution v2 prefere estrutura plana para texto
     const payload = {
         number: cleanPhone,
         options: { delay: 1200, presence: "composing" },
@@ -285,69 +286,79 @@ export const logoutInstance = async (config: ApiConfig) => {
 
 // --- UTILS PARA SYNC ---
 
-// Normaliza IDs do WhatsApp removendo sufixos de dispositivo
+// Normaliza IDs do WhatsApp removendo sufixos de dispositivo e padronizando domínio
 const normalizeJid = (jid: string | null | undefined): string => {
     if (!jid) return '';
-    // Remove :11, :12, etc e mantem apenas o user@server
+    
+    // Remove :11, :12, etc (Device IDs)
     const parts = jid.split(':');
     let user = parts[0];
     
-    // Se já tem @, ótimo. Se não, adiciona @s.whatsapp.net se for numérico
+    // Se tem @lid (Hosted Device), mantemos ou tratamos conforme necessário. 
+    // Geralmente queremos o @s.whatsapp.net para mensagens normais.
+    // Mas se vier @lid nos logs, precisamos agrupar corretamente.
+    
     if (user.includes('@')) {
-        return user.split('@')[0] + '@' + user.split('@')[1];
+        return user; 
     }
     return user + '@s.whatsapp.net';
 };
 
-// Parser Recursivo Profundo para encontrar mensagens/chats em qualquer estrutura
-const extractChatsRecursively = (data: any, collected = new Map<string, any>()) => {
+// Parser Recursivo Poderoso para encontrar mensagens em qualquer estrutura
+const extractChatsRecursively = (data: any, collectedChats = new Map<string, any>()) => {
     if (!data || typeof data !== 'object') return;
 
     // Se for array, percorre
     if (Array.isArray(data)) {
-        data.forEach(item => extractChatsRecursively(item, collected));
+        data.forEach(item => extractChatsRecursively(item, collectedChats));
         return;
     }
 
-    // Verifica se o objeto atual parece ser um chat ou mensagem válida
-    // Evolution v2 usa 'id', 'remoteJid', 'key.remoteJid' ou 'jid'
-    let jid = data.id || data.remoteJid || data.key?.remoteJid || data.jid;
-    
-    if (jid && typeof jid === 'string' && jid.includes('@')) {
-        const normalized = normalizeJid(jid);
-        if (!normalized.includes('status@broadcast')) {
-            // Se encontrarmos um objeto com 'messages' ou 'lastMessage', é um chat
-            // Se encontrarmos um objeto com 'key' e 'message', é uma mensagem solta
-            
-            if (!collected.has(normalized)) {
-                // Cria estrutura base se não existir
-                collected.set(normalized, {
-                    id: normalized,
-                    raw: data,
-                    messages: []
-                });
+    // Tenta identificar se é um Objeto de Chat (contém array messages)
+    if (data.id && typeof data.id === 'string' && Array.isArray(data.messages)) {
+        const jid = normalizeJid(data.id);
+        if (jid.includes('@')) {
+            if (!collectedChats.has(jid)) {
+                collectedChats.set(jid, { id: jid, raw: data, messages: [] });
             }
+            const chat = collectedChats.get(jid);
+            // Mescla mensagens
+            if (data.messages.length > 0) {
+                // Verifica se messages contém objetos reais
+                const validMsgs = data.messages.filter((m: any) => m && (m.key || m.message));
+                chat.messages = [...chat.messages, ...validMsgs];
+            }
+            // Atualiza metadados se disponível
+            if (data.pushName) chat.raw.pushName = data.pushName;
+            if (data.name) chat.raw.name = data.name;
+            if (data.unreadCount) chat.raw.unreadCount = data.unreadCount;
+            if (data.profilePictureUrl) chat.raw.profilePictureUrl = data.profilePictureUrl;
+        }
+    }
 
-            const chatEntry = collected.get(normalized);
-
-            // Se o objeto atual for uma mensagem individual (tem key e message)
-            if (data.key && (data.message || data.messageTimestamp)) {
-                chatEntry.messages.push(data);
-            } 
-            // Se o objeto for um chat completo (tem array messages)
-            else if (Array.isArray(data.messages)) {
-                chatEntry.messages = [...chatEntry.messages, ...data.messages];
-                // Atualiza metadados se disponível
-                if (data.pushName) chatEntry.raw.pushName = data.pushName;
-                if (data.name) chatEntry.raw.name = data.name;
-                if (data.unreadCount) chatEntry.raw.unreadCount = data.unreadCount;
-                if (data.profilePictureUrl) chatEntry.raw.profilePictureUrl = data.profilePictureUrl;
+    // Tenta identificar se é um Objeto de Mensagem Solto (contém key.remoteJid)
+    // Evolution v2 às vezes retorna lista plana de mensagens em 'messages'
+    if (data.key && data.key.remoteJid) {
+        const jid = normalizeJid(data.key.remoteJid);
+        // Ignora broadcasts de status
+        if (jid.includes('@') && !jid.includes('status@broadcast')) {
+            if (!collectedChats.has(jid)) {
+                collectedChats.set(jid, { id: jid, raw: {}, messages: [] });
+            }
+            const chat = collectedChats.get(jid);
+            // Evita duplicatas simples pelo ID da mensagem
+            const exists = chat.messages.some((m: any) => m.key?.id === data.key.id);
+            if (!exists) {
+                chat.messages.push(data);
+                
+                // Tenta pescar o nome do remetente se disponível na mensagem
+                if (data.pushName && !chat.raw.pushName) chat.raw.pushName = data.pushName;
             }
         }
     }
 
-    // Continua a recursão em todas as propriedades (para achar aninhados)
-    Object.values(data).forEach(val => extractChatsRecursively(val, collected));
+    // Continua a recursão em todas as propriedades (para achar aninhados em 'data', 'result', etc)
+    Object.values(data).forEach(val => extractChatsRecursively(val, collectedChats));
 };
 
 export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
@@ -367,6 +378,8 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
         const rawData = await response.json();
         
+        console.log('[ZapFlow Raw Data]', rawData); // DEBUG: Veja isso no Console do Navegador
+
         // Mapa para agrupar chats únicos pelo ID normalizado
         const chatsMap = new Map<string, any>();
         
@@ -375,12 +388,12 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         
         const chatsArray = Array.from(chatsMap.values());
 
-        console.log(`[ZapFlow Parser] Encontrados ${chatsArray.length} chats únicos na resposta da API.`);
+        console.log(`[ZapFlow Parser] Encontrados ${chatsArray.length} chats únicos.`);
 
         const mappedChats: Chat[] = chatsArray.map((item: any) => {
-            const remoteJid = item.id; // Já normalizado no extrator
+            const remoteJid = item.id;
             
-            // Processa e mapeia as mensagens encontradas
+            // Mapeia as mensagens encontradas
             let messages: Message[] = [];
             if (item.messages && Array.isArray(item.messages)) {
                 messages = item.messages
@@ -388,18 +401,18 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                     .filter((m: Message | null): m is Message => m !== null);
             }
 
-            // Ordena mensagens por timestamp
+            // Ordena mensagens por timestamp (antigas primeiro)
             messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
             const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
             
-            // Tenta pegar nome e foto do objeto raw ou fallback
+            // Metadados
             const name = item.raw.pushName || item.raw.name || item.raw.verifiedName || remoteJid.split('@')[0];
             const avatarUrl = item.raw.profilePictureUrl || item.raw.ppUrl || item.raw.profilePicUrl;
 
             return {
                 id: remoteJid,
-                contactName: name,
+                contactName: name || 'Desconhecido',
                 contactNumber: remoteJid.split('@')[0],
                 contactAvatar: avatarUrl || `https://ui-avatars.com/api/?background=random&color=fff&name=${name || 'U'}`,
                 departmentId: null,
@@ -423,10 +436,10 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     if (!apiMsg) return null;
 
-    // Normaliza o objeto de mensagem
+    // Normaliza o objeto de mensagem (as vezes vem dentro de 'message', as vezes plano)
     const msgObj = apiMsg.message || apiMsg;
     
-    // Tenta extrair texto de todas as variações possíveis do Baileys
+    // Tenta extrair texto de todas as variações possíveis do Baileys/Evolution
     const content = 
         msgObj.conversation || 
         msgObj.extendedTextMessage?.text || 
@@ -450,11 +463,11 @@ const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     const isFromMe = key.fromMe === true;
     const id = key.id || apiMsg.id || `msg_${Date.now()}_${Math.random()}`;
     
-    // Correção do Timestamp (Segundos -> Milissegundos)
+    // Correção do Timestamp
     let ts = apiMsg.messageTimestamp || apiMsg.timestamp;
     if (!ts) ts = Date.now();
     
-    // Se for string numérica, converte. Se for timestamp em segundos (10 digitos), multiplica por 1000
+    // Converte Timestamp Unix (segundos) para JS (milissegundos)
     const tsNum = Number(ts);
     const timestamp = new Date(tsNum * (String(tsNum).length > 11 ? 1 : 1000));
 
