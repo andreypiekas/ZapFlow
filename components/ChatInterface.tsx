@@ -93,19 +93,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         }
     }
     
-    // ÚLTIMO RECURSO: Se ainda não tiver número válido, tenta usar contactNumber mesmo que curto (mas só se for número)
+    // ÚLTIMO RECURSO: Se ainda não tiver número válido, tenta usar contactNumber mesmo que curto (mas só se for número válido)
     if ((!targetNumber || targetNumber.replace(/\D/g, '').length < 10) && chat.contactNumber) {
         const contactDigits = chat.contactNumber.replace(/\D/g, '').length;
         const contactIsNumber = /^\d+$/.test(chat.contactNumber.replace(/\D/g, ''));
+        const contactIsGenerated = chat.contactNumber.includes('cminhfbw') || chat.contactNumber.startsWith('chat_');
         
-        // Só usa se for um número (não ID gerado) e tiver pelo menos 8 dígitos
-        if (contactIsNumber && contactDigits >= 8) {
+        // Só usa se for um número (não ID gerado) e tiver pelo menos 10 dígitos (número válido)
+        // NÃO usa números com menos de 10 dígitos pois são inválidos
+        if (contactIsNumber && !contactIsGenerated && contactDigits >= 10) {
             targetNumber = chat.contactNumber.replace(/\D/g, '');
-            console.warn(`[NumberWarning] Usando contactNumber curto como último recurso: ${targetNumber} (${contactDigits} dígitos)`);
-            console.warn(`[NumberWarning] Chat ID: ${chat.id}, Mensagens: ${chat.messages.length}, Authors encontrados: ${chat.messages.filter(m => m.author).length}`);
+            console.log(`[NumberFix] Usando contactNumber válido: ${targetNumber} (${contactDigits} dígitos)`);
         } else {
-            console.error(`[NumberError] Não foi possível encontrar número válido! Chat ID: ${chat.id}, contactNumber: ${chat.contactNumber}`);
+            console.error(`[NumberError] Não foi possível encontrar número válido! Chat ID: ${chat.id}, contactNumber: ${chat.contactNumber} (${contactDigits} dígitos, gerado: ${contactIsGenerated})`);
+            console.error(`[NumberError] Mensagens: ${chat.messages.length}, Authors: ${chat.messages.filter(m => m.author).length}`);
+            // Retorna string vazia para indicar erro - não deve tentar enviar
+            return '';
         }
+    }
+    
+    // Validação final: não permite envio com número inválido
+    if (!targetNumber || targetNumber.replace(/\D/g, '').length < 10) {
+        console.error(`[NumberError] Número inválido para envio: ${targetNumber} (${targetNumber.replace(/\D/g, '').length} dígitos)`);
+        return '';
     }
     
     return targetNumber;
@@ -474,6 +484,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     updateChatWithNewMessage(newMessage);
 
     const targetNumber = getValidPhoneNumber(selectedChat);
+    
+    // Valida se tem número válido antes de enviar
+    if (!targetNumber || targetNumber.replace(/\D/g, '').length < 10) {
+        alert('Erro: Não foi possível encontrar um número de telefone válido para este contato. Aguarde a sincronização ou verifique as configurações.');
+        setIsSending(false);
+        return;
+    }
 
     const success = await sendRealMediaMessage(apiConfig, targetNumber, blob, inputText, type, selectedFile?.name);
     
@@ -511,6 +528,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     const targetNumber = getValidPhoneNumber(selectedChat);
     console.log("[NumberDebug] Número final para envio:", targetNumber);
 
+    // Valida se tem número válido antes de enviar
+    if (!targetNumber || targetNumber.replace(/\D/g, '').length < 10) {
+        alert('Erro: Não foi possível encontrar um número de telefone válido para este contato. Aguarde a sincronização ou verifique as configurações.');
+        setIsSending(false);
+        return;
+    }
+
     const success = await sendRealMessage(apiConfig, targetNumber, inputText);
     
     finalizeMessageStatus(newMessage, success);
@@ -537,6 +561,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       updateChatWithNewMessage(newMessage);
       
       const targetNumber = getValidPhoneNumber(selectedChat);
+      
+      // Valida se tem número válido antes de enviar
+      if (!targetNumber || targetNumber.replace(/\D/g, '').length < 10) {
+          alert('Erro: Não foi possível encontrar um número de telefone válido para este contato. Aguarde a sincronização ou verifique as configurações.');
+          setIsSending(false);
+          return;
+      }
 
       // In real API, download blob and send
       await sendRealMessage(apiConfig, targetNumber, "[Sticker Enviado]"); 
@@ -656,7 +687,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     
     if (withSurvey) {
         const targetNumber = getValidPhoneNumber(selectedChat);
-        sendRealMessage(apiConfig, targetNumber, "Por favor, avalie nosso atendimento de 1 a 5 estrelas.");
+        
+        // Valida se tem número válido antes de enviar
+        if (targetNumber && targetNumber.replace(/\D/g, '').length >= 10) {
+            sendRealMessage(apiConfig, targetNumber, "Por favor, avalie nosso atendimento de 1 a 5 estrelas.");
+        } else {
+            console.warn('[NumberWarning] Não foi possível enviar pesquisa: número inválido');
+        }
     }
 
     onUpdateChat(updatedChat);
