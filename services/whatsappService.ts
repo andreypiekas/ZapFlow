@@ -527,33 +527,48 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
         // 4. Mapeia para o formato interno do Frontend
         return chatsArray.map((item: any) => {
+            // PRIMEIRO: Extrai o número completo das mensagens brutas ANTES do mapeamento
+            let bestJid = item.id; // Começa com o ID do chat
+            let bestNumber = item.id.split('@')[0];
+            
+            // Procura nas mensagens brutas pelo remoteJid mais completo
+            if (item.messages && item.messages.length > 0) {
+                for (const rawMsg of item.messages) {
+                    if (rawMsg.key && rawMsg.key.remoteJid) {
+                        const remoteJid = normalizeJid(rawMsg.key.remoteJid);
+                        if (remoteJid.includes('@') && !remoteJid.includes('@g.us')) {
+                            const jidNumber = remoteJid.split('@')[0];
+                            const jidDigits = jidNumber.replace(/\D/g, '').length;
+                            const currentDigits = bestNumber.replace(/\D/g, '').length;
+                            
+                            // Se encontrar um número mais completo, atualiza
+                            if (jidDigits > currentDigits) {
+                                bestJid = remoteJid;
+                                bestNumber = jidNumber;
+                            }
+                        }
+                    }
+                }
+            }
+            
             const messages: Message[] = item.messages
                 .map((m: any) => mapApiMessageToInternal(m))
                 .filter((m: any) => m !== null)
                 .sort((a: any, b: any) => a.timestamp.getTime() - b.timestamp.getTime());
 
             const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
-            const name = item.raw.pushName || item.raw.name || item.id.split('@')[0];
+            const name = item.raw.pushName || item.raw.name || bestNumber;
             
-            // Tratamento de ID para evitar números quebrados
-            // Prioriza extrair o número das mensagens (que têm o JID correto)
-            let contactNumber = item.id.split('@')[0];
-            
-            // Se houver mensagens, tenta extrair o número completo do JID das mensagens
-            if (messages.length > 0) {
-                // Procura o JID mais completo nas mensagens
-                const messageWithJid = messages.find(m => m.author && m.author.includes('@'));
-                if (messageWithJid && messageWithJid.author) {
-                    const realJid = messageWithJid.author.split('@')[0];
-                    // Se o JID da mensagem for mais completo (mais dígitos), usa ele
-                    if (realJid.replace(/\D/g, '').length > contactNumber.replace(/\D/g, '').length) {
-                        contactNumber = realJid;
-                    }
-                }
-            }
+            // Usa o número mais completo encontrado
+            let contactNumber = bestNumber;
             
             // Se for ID de grupo, mantém o ID original
             if (item.id.includes('@g.us')) contactNumber = item.id;
+            
+            // Debug: Log se o número foi corrigido
+            if (item.id.split('@')[0] !== contactNumber && !item.id.includes('@g.us')) {
+                console.log(`[ContactNumberFix] Chat ${item.id.split('@')[0]} -> ${contactNumber} (${contactNumber.replace(/\D/g, '').length} dígitos)`);
+            }
 
             return {
                 id: item.id,
