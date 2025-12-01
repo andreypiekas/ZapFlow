@@ -810,9 +810,17 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
 
     try {
         console.log(`[fetchChatMessages] Buscando instância ativa...`);
-        const active = await findActiveInstance(config);
+        let active;
+        try {
+            active = await findActiveInstance(config);
+            console.log(`[fetchChatMessages] findActiveInstance retornou:`, active ? { instanceName: active.instanceName } : 'null');
+        } catch (err) {
+            console.error(`[fetchChatMessages] Erro ao buscar instância:`, err);
+            active = null;
+        }
+        
         const instanceName = active?.instanceName || config.instanceName;
-        console.log(`[fetchChatMessages] Instância encontrada: ${instanceName}`);
+        console.log(`[fetchChatMessages] Instância encontrada: ${instanceName} (de active: ${active?.instanceName}, de config: ${config.instanceName})`);
         
         if (!instanceName) {
             console.log(`[fetchChatMessages] Retornando vazio: instância não encontrada`);
@@ -959,10 +967,11 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         }
         
         const sortedMessages = messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-        console.log(`[fetchChatMessages] Total de mensagens encontradas para ${chatId}: ${sortedMessages.length}`);
+        console.log(`[fetchChatMessages] ✅ Total de mensagens encontradas para ${chatId}: ${sortedMessages.length}`);
         return sortedMessages;
     } catch (error) {
-        console.error(`[fetchChatMessages] Erro ao buscar mensagens para ${chatId}:`, error);
+        console.error(`[fetchChatMessages] ❌ Erro ao buscar mensagens para ${chatId}:`, error);
+        console.error(`[fetchChatMessages] Stack trace:`, error instanceof Error ? error.stack : 'N/A');
         return [];
     }
 };
