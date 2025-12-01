@@ -449,13 +449,17 @@ const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     else if (msgObj.stickerMessage) type = 'sticker';
     else if (msgObj.documentMessage) type = 'document';
 
+    // Determina o autor real (importante para grupos ou chats com ID errado)
+    const author = key.participant || key.remoteJid;
+
     return {
         id: key.id || `msg_${Math.random()}`,
         content,
         sender: key.fromMe ? 'agent' : 'user',
         timestamp,
         status: mapStatus(apiMsg.status),
-        type
+        type,
+        author: author // Salva o JID real para correção automática
     };
 };
 

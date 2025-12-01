@@ -235,7 +235,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     const updatedChat: Chat = {
         ...selectedChat,
         contactName: editContactName,
-        // contactNumber: editContactNumber, // Não permite edição manual do número, o sistema lida com isso
         clientCode: editClientCode
     };
     onUpdateChat(updatedChat);
@@ -382,10 +381,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
     updateChatWithNewMessage(newMessage);
 
-    // Auto-Correct target number if ID is more reliable
-    const targetNumber = selectedChat.id.includes('@') && selectedChat.id.split('@')[0].length >= 10 
-        ? selectedChat.id.split('@')[0] 
-        : selectedChat.contactNumber;
+    // Auto-Correct target number if ID is more reliable OR from history
+    let targetNumber = selectedChat.id.split('@')[0];
+
+    // Smart logic: If current number is suspiciously short (e.g. "30024481"), 
+    // try to find a real JID from the chat history.
+    if (targetNumber.replace(/\D/g, '').length < 10) {
+        const lastUserMsg = [...selectedChat.messages].reverse().find(m => m.sender === 'user' && m.author);
+        if (lastUserMsg && lastUserMsg.author) {
+             const realJid = lastUserMsg.author;
+             targetNumber = realJid.includes('@') ? realJid.split('@')[0] : realJid;
+             console.log("[SelfHealing] Corrigindo alvo para:", targetNumber);
+        } else {
+            console.warn("[SelfHealing] Número curto e sem histórico válido para correção.");
+        }
+    } else {
+        // Normal behavior
+        if (!selectedChat.id.includes('@')) targetNumber = selectedChat.contactNumber;
+    }
 
     const success = await sendRealMediaMessage(apiConfig, targetNumber, blob, inputText, type, selectedFile?.name);
     
@@ -420,10 +433,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
     updateChatWithNewMessage(newMessage);
 
-    // Auto-Correct target number if ID is more reliable (prevents errors with short numbers stored in contacts)
-    const targetNumber = selectedChat.id.includes('@') && selectedChat.id.split('@')[0].length >= 10 
-        ? selectedChat.id.split('@')[0] 
-        : selectedChat.contactNumber;
+    // Auto-Correct target number if ID is more reliable OR from history
+    let targetNumber = selectedChat.id.split('@')[0];
+
+    // Smart logic: If current number is suspiciously short (e.g. "30024481"), 
+    // try to find a real JID from the chat history.
+    if (targetNumber.replace(/\D/g, '').length < 10) {
+        const lastUserMsg = [...selectedChat.messages].reverse().find(m => m.sender === 'user' && m.author);
+        if (lastUserMsg && lastUserMsg.author) {
+             const realJid = lastUserMsg.author;
+             targetNumber = realJid.includes('@') ? realJid.split('@')[0] : realJid;
+             console.log("[SelfHealing] Corrigindo alvo para:", targetNumber);
+        } else {
+            console.warn("[SelfHealing] Número curto e sem histórico válido para correção.");
+        }
+    } else {
+        // Normal behavior
+        if (!selectedChat.id.includes('@')) targetNumber = selectedChat.contactNumber;
+    }
 
     const success = await sendRealMessage(apiConfig, targetNumber, inputText);
     
@@ -450,9 +477,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
       updateChatWithNewMessage(newMessage);
       
-      const targetNumber = selectedChat.id.includes('@') && selectedChat.id.split('@')[0].length >= 10 
-        ? selectedChat.id.split('@')[0] 
-        : selectedChat.contactNumber;
+      let targetNumber = selectedChat.id.split('@')[0];
+      if (targetNumber.replace(/\D/g, '').length < 10) {
+            const lastUserMsg = [...selectedChat.messages].reverse().find(m => m.sender === 'user' && m.author);
+            if (lastUserMsg && lastUserMsg.author) {
+                targetNumber = lastUserMsg.author.split('@')[0];
+            }
+      }
 
       // In real API, download blob and send
       await sendRealMessage(apiConfig, targetNumber, "[Sticker Enviado]"); 
@@ -571,9 +602,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     };
     
     if (withSurvey) {
-        const targetNumber = selectedChat.id.includes('@') && selectedChat.id.split('@')[0].length >= 10 
-            ? selectedChat.id.split('@')[0] 
-            : selectedChat.contactNumber;
+        let targetNumber = selectedChat.id.split('@')[0];
+        if (targetNumber.replace(/\D/g, '').length < 10) {
+            const lastUserMsg = [...selectedChat.messages].reverse().find(m => m.sender === 'user' && m.author);
+            if (lastUserMsg && lastUserMsg.author) {
+                targetNumber = lastUserMsg.author.split('@')[0];
+            }
+        }
         sendRealMessage(apiConfig, targetNumber, "Por favor, avalie nosso atendimento de 1 a 5 estrelas.");
     }
 

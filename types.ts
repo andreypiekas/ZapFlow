@@ -101,6 +101,7 @@ export interface Message {
   mediaUrl?: string;
   fileName?: string;
   mimeType?: string;
+  author?: string; // Real JID (identificador único) de quem enviou, usado para correções
 }
 
 export interface Chat {
