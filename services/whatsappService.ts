@@ -527,37 +527,39 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             // Se ainda não encontrou nada, tenta formato alternativo
             if (chatsMap.size === 0) {
                 console.log('[fetchChats] Nenhum chat encontrado no scan recursivo, tentando formato alternativo...');
-            // Tenta formato com wrapper: { chats: [...] }
-            else if (rawData.chats && Array.isArray(rawData.chats)) {
-                rawData.chats.forEach((chat: any) => {
-                    const jid = chat.id || chat.remoteJid || chat.jid;
-                    if (jid && typeof jid === 'string' && jid.includes('@')) {
-                        const normalized = normalizeJid(jid);
-                        if (!normalized.includes('status@broadcast')) {
-                            chatsMap.set(normalized, {
-                                id: normalized,
-                                raw: chat,
-                                messages: chat.messages || []
-                            });
+
+                // Tenta formato com wrapper: { chats: [...] }
+                if (rawData.chats && Array.isArray(rawData.chats)) {
+                    rawData.chats.forEach((chat: any) => {
+                        const jid = chat.id || chat.remoteJid || chat.jid;
+                        if (jid && typeof jid === 'string' && jid.includes('@')) {
+                            const normalized = normalizeJid(jid);
+                            if (!normalized.includes('status@broadcast')) {
+                                chatsMap.set(normalized, {
+                                    id: normalized,
+                                    raw: chat,
+                                    messages: chat.messages || []
+                                });
+                            }
                         }
-                    }
-                });
-            }
-            // Tenta formato com data: { data: [...] }
-            else if (rawData.data && Array.isArray(rawData.data)) {
-                rawData.data.forEach((chat: any) => {
-                    const jid = chat.id || chat.remoteJid || chat.jid;
-                    if (jid && typeof jid === 'string' && jid.includes('@')) {
-                        const normalized = normalizeJid(jid);
-                        if (!normalized.includes('status@broadcast')) {
-                            chatsMap.set(normalized, {
-                                id: normalized,
-                                raw: chat,
-                                messages: chat.messages || []
-                            });
+                    });
+                }
+                // Tenta formato com data: { data: [...] }
+                else if (rawData.data && Array.isArray(rawData.data)) {
+                    rawData.data.forEach((chat: any) => {
+                        const jid = chat.id || chat.remoteJid || chat.jid;
+                        if (jid && typeof jid === 'string' && jid.includes('@')) {
+                            const normalized = normalizeJid(jid);
+                            if (!normalized.includes('status@broadcast')) {
+                                chatsMap.set(normalized, {
+                                    id: normalized,
+                                    raw: chat,
+                                    messages: chat.messages || []
+                                });
+                            }
                         }
-                    }
-                });
+                    });
+                }
             }
         }
         
