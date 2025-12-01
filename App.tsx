@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Chat, Department, ViewState, ApiConfig, User, UserRole, QuickReply, Workflow, Contact, ChatbotConfig } from './types';
 import { INITIAL_CHATS, INITIAL_DEPARTMENTS, INITIAL_USERS, INITIAL_QUICK_REPLIES, INITIAL_WORKFLOWS, MOCK_GOOGLE_CONTACTS, INITIAL_CHATBOT_CONFIG } from './constants';
@@ -65,10 +64,13 @@ const App: React.FC = () => {
     if (!currentUser || apiConfig.isDemo || !apiConfig.baseUrl) return;
 
     const syncChats = async () => {
+        // console.log('[App] Iniciando sync de chats...');
         const realChats = await fetchChats(apiConfig);
+        // console.log(`[App] fetchChats retornou ${realChats.length} chats`);
         
         if (realChats.length > 0) {
             setChats(currentChats => {
+                // console.log(`[App] Fazendo merge: ${currentChats.length} chats atuais com ${realChats.length} chats novos`);
                 const mergedChats = realChats.map(realChat => {
                     const existingChat = currentChats.find(c => c.id === realChat.id);
                     
@@ -76,31 +78,38 @@ const App: React.FC = () => {
                         const newMsgCount = realChat.messages.length;
                         const oldMsgCount = existingChat.messages.length;
                         
+                        // console.log(`[App] Chat ${realChat.id}: ${oldMsgCount} -> ${newMsgCount} mensagens`);
+                        
                         if (newMsgCount > oldMsgCount) {
                             const lastMsg = realChat.messages[realChat.messages.length - 1];
                             if (lastMsg.sender === 'user') {
                                 if (existingChat.assignedTo === currentUser.id) {
-                                    // Could play sound here
+                                    // Play sound or notify
                                 }
                             }
                         }
 
                         return {
                             ...realChat,
-                            contactName: existingChat.contactName !== realChat.contactName ? existingChat.contactName : realChat.contactName,
+                            contactName: existingChat.contactName, // Mantém nome editado localmente se houver
                             clientCode: existingChat.clientCode,
                             departmentId: existingChat.departmentId,
                             assignedTo: existingChat.assignedTo,
                             tags: existingChat.tags,
                             status: existingChat.status === 'closed' ? 'closed' : realChat.status,
-                            rating: existingChat.rating
+                            rating: existingChat.rating,
+                            activeWorkflow: existingChat.activeWorkflow
                         };
                     } else {
+                        // console.log(`[App] Novo chat encontrado: ${realChat.id} (${realChat.contactName})`);
                         return realChat;
                     }
                 });
+                // console.log(`[App] Merge concluído: ${mergedChats.length} chats no total`);
                 return mergedChats;
             });
+        } else {
+            // console.log('[App] Nenhum chat retornado da API, mantendo estado atual');
         }
     };
 

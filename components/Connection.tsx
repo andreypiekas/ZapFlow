@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Smartphone, CheckCircle, WifiOff, Loader2, AlertTriangle, Clock, Activity } from 'lucide-react';
 import { ApiConfig } from '../types';
@@ -134,7 +133,7 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
             <div className="flex flex-col lg:flex-row items-center justify-between gap-12">
                 <div className="flex-1 space-y-8 max-w-md">
                     <h3 className="text-lg font-semibold text-slate-800">Instruções:</h3>
-                    {/* Fixed JSX Syntax Error here */}
+                    
                     <div className="flex gap-4"><div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center font-bold text-emerald-700">1</div><p>Abra o WhatsApp no celular</p></div>
                     <div className="flex gap-4"><div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center font-bold text-emerald-700">2</div><p>Menu &gt; Aparelhos Conectados</p></div>
                     <div className="flex gap-4"><div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center font-bold text-emerald-700">3</div><p>Escaneie o QR Code</p></div>

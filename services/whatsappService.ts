@@ -1,4 +1,3 @@
-
 import { ApiConfig, Chat, Message, MessageStatus } from "../types";
 
 // Serviço compatível com Evolution API v1.x/v2.x
@@ -87,6 +86,44 @@ const findActiveInstance = async (config: ApiConfig) => {
         console.error("[AutoDiscovery] Erro crítico ao buscar instâncias:", error);
         return null;
     }
+};
+
+export const getSystemStatus = async (config: ApiConfig) => {
+  if (config.isDemo) return { status: 'connected' };
+  if (!config.baseUrl || !config.apiKey) return null;
+
+  try {
+    // Primeiro tenta descobrir a instância correta
+    const foundInstance = await findActiveInstance(config);
+    const targetInstance = foundInstance?.instanceName || config.instanceName;
+
+    const response = await fetch(`${config.baseUrl}/instance/connectionState/${targetInstance}`, {
+      method: 'GET',
+      headers: { 'apikey': config.apiKey }
+    });
+    
+    // Tolerância a erros 500/502 durante sync
+    if (response.status >= 500) return { status: 'connecting' };
+    
+    if (response.ok) {
+        const data = await response.json();
+        const state = data?.instance?.state || data?.state;
+        if (state === 'open') return { status: 'connected', realName: targetInstance };
+        if (state === 'connecting') return { status: 'connecting', realName: targetInstance };
+        return { status: 'disconnected' };
+    }
+
+    // Fallback se a connectionState falhar mas o AutoDiscovery achou algo
+    if (foundInstance) {
+        if (foundInstance.status === 'open') return { status: 'connected', realName: foundInstance.instanceName };
+        if (foundInstance.status === 'connecting') return { status: 'connecting', realName: foundInstance.instanceName };
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Erro status:", error);
+    return { status: 'connecting' };
+  }
 };
 
 export const getDetailedInstanceStatus = async (config: ApiConfig) => {
