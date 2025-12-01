@@ -382,40 +382,64 @@ const App: React.FC = () => {
                     let data: any;
                     // Tenta parsear como JSON, se falhar trata como string
                     if (typeof event.data === 'string') {
-                        data = JSON.parse(event.data);
+                        try {
+                            data = JSON.parse(event.data);
+                        } catch (e) {
+                            console.log('[App] 📨 Mensagem WebSocket não é JSON:', event.data.substring(0, 100));
+                            data = { raw: event.data };
+                        }
                     } else {
                         data = event.data;
                     }
                     
                     console.log('[App] 📨 Mensagem recebida via WebSocket:', {
                         event: data.event,
+                        type: data.type,
                         hasData: !!data.data,
                         hasKey: !!data.key,
-                        remoteJid: data.key?.remoteJid || data.data?.key?.remoteJid,
-                        fromMe: data.key?.fromMe || data.data?.key?.fromMe
+                        remoteJid: data.key?.remoteJid || data.data?.key?.remoteJid || data.remoteJid,
+                        fromMe: data.key?.fromMe || data.data?.key?.fromMe || data.fromMe,
+                        fullData: data
                     });
                     
                     // Processa mensagens recebidas - múltiplos formatos possíveis
-                    const messageData = data.data || data;
+                    // Formato 1: { event: 'messages.upsert', data: { key: {...}, message: {...} } }
+                    // Formato 2: { key: {...}, message: {...} }
+                    // Formato 3: { type: 'message', data: {...} }
+                    let messageData: any = null;
+                    
+                    if (data.data && data.data.key) {
+                        messageData = data.data;
+                    } else if (data.key) {
+                        messageData = data;
+                    } else if (data.data) {
+                        messageData = data.data;
+                    }
+                    
                     const eventType = data.event || data.type || '';
                     
-                    if (eventType.includes('message') || eventType.includes('upsert') || 
+                    // Processa se for evento de mensagem ou se tiver estrutura de mensagem
+                    if (eventType.includes('message') || eventType.includes('upsert') || eventType.includes('update') ||
                         (messageData && messageData.key && messageData.key.remoteJid)) {
                         
-                        const msgToProcess = messageData.key ? messageData : data;
-                        
-                        if (msgToProcess && msgToProcess.key && msgToProcess.key.remoteJid) {
-                            const remoteJid = normalizeJid(msgToProcess.key.remoteJid);
-                            const mapped = mapApiMessageToInternal(msgToProcess);
+                        if (messageData && messageData.key && messageData.key.remoteJid) {
+                            const remoteJid = normalizeJid(messageData.key.remoteJid);
+                            const mapped = mapApiMessageToInternal(messageData);
                             
-                            console.log('[App] Processando mensagem WebSocket:', {
+                            console.log('[App] 🔄 Processando mensagem WebSocket:', {
                                 remoteJid,
-                                mapped: mapped ? { content: mapped.content.substring(0, 30), sender: mapped.sender } : null
+                                fromMe: messageData.key.fromMe,
+                                mapped: mapped ? { 
+                                    content: mapped.content?.substring(0, 30), 
+                                    sender: mapped.sender,
+                                    id: mapped.id
+                                } : null
                             });
                             
                             if (mapped) {
                                 setChats(currentChats => {
-                                    return currentChats.map(chat => {
+                                    let chatUpdated = false;
+                                    const updatedChats = currentChats.map(chat => {
                                         // Encontra o chat pelo JID
                                         const chatJid = normalizeJid(chat.id);
                                         const messageJid = normalizeJid(remoteJid);
@@ -431,7 +455,8 @@ const App: React.FC = () => {
                                             );
                                             
                                             if (!exists) {
-                                                console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}:`, mapped.content.substring(0, 30));
+                                                chatUpdated = true;
+                                                console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}:`, mapped.content?.substring(0, 30));
                                                 const updatedMessages = [...chat.messages, mapped].sort((a, b) => 
                                                     a.timestamp.getTime() - b.timestamp.getTime()
                                                 );
@@ -440,7 +465,7 @@ const App: React.FC = () => {
                                                 if (mapped.sender === 'user' && currentUser && chat.assignedTo === currentUser.id) {
                                                     addNotification(
                                                         `Nova mensagem de ${chat.contactName}`,
-                                                        mapped.content.length > 50 ? mapped.content.substring(0, 50) + '...' : mapped.content,
+                                                        mapped.content && mapped.content.length > 50 ? mapped.content.substring(0, 50) + '...' : (mapped.content || 'Nova mensagem'),
                                                         'info'
                                                     );
                                                 }
@@ -453,17 +478,29 @@ const App: React.FC = () => {
                                                     unreadCount: mapped.sender === 'user' ? (chat.unreadCount || 0) + 1 : chat.unreadCount
                                                 };
                                             } else {
-                                                console.log(`[App] Mensagem já existe no chat ${chat.contactName}`);
+                                                console.log(`[App] ⚠️ Mensagem já existe no chat ${chat.contactName}`);
                                             }
                                         }
                                         return chat;
                                     });
+                                    
+                                    if (chatUpdated) {
+                                        console.log('[App] ✅ Chats atualizados com nova mensagem via WebSocket');
+                                    }
+                                    
+                                    return updatedChats;
                                 });
+                            } else {
+                                console.log('[App] ⚠️ Mensagem WebSocket não foi mapeada:', messageData);
                             }
+                        } else {
+                            console.log('[App] ⚠️ Mensagem WebSocket sem estrutura válida:', data);
                         }
+                    } else {
+                        console.log('[App] ℹ️ Evento WebSocket não é de mensagem:', eventType || 'sem tipo');
                     }
                 } catch (err) {
-                    console.error('[App] Erro ao processar mensagem WebSocket:', err, event.data);
+                    console.error('[App] ❌ Erro ao processar mensagem WebSocket:', err, event.data);
                 }
             };
             
