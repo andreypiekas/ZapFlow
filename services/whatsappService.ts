@@ -247,9 +247,11 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
   // Formata o número (Adiciona 55 se faltar)
   const cleanPhone = formatPhoneForApi(phone);
 
-  // Validação para evitar 400 Bad Request
-  if (cleanPhone.length < 5) {
-      console.warn(`[sendRealMessage] Número inválido: ${cleanPhone}`);
+  // Validação estrita para evitar 400 Bad Request
+  // O número deve ter pelo menos 10 dígitos (DDD + Número) para ser válido no envio
+  if (cleanPhone.length < 10 && !cleanPhone.includes('@')) {
+      console.warn(`[sendRealMessage] Número inválido ou muito curto (Recusado): ${cleanPhone}`);
+      // Retornar false evita a chamada à API que geraria erro 400
       return false;
   }
 
@@ -272,7 +274,8 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
     });
     
     if (!response.ok) {
-        console.error(`[sendRealMessage] Falha: ${response.status}`, await response.text());
+        const errorText = await response.text();
+        console.error(`[sendRealMessage] Falha API: ${response.status}`, errorText);
         return false;
     }
     
@@ -308,9 +311,9 @@ export const sendRealMediaMessage = async (
   // Formata o número
   const cleanPhone = formatPhoneForApi(phone);
 
-  // Validação para evitar 400 Bad Request
-  if (cleanPhone.length < 5) {
-      console.warn(`[sendRealMediaMessage] Número inválido: ${cleanPhone}`);
+  // Validação estrita para evitar 400 Bad Request
+  if (cleanPhone.length < 10 && !cleanPhone.includes('@')) {
+      console.warn(`[sendRealMediaMessage] Número inválido (Recusado): ${cleanPhone}`);
       return false;
   }
 
@@ -341,7 +344,7 @@ export const sendRealMediaMessage = async (
     });
     
     if (!response.ok) {
-        console.error(`[sendRealMediaMessage] Falha: ${response.status}`, await response.text());
+        console.error(`[sendRealMediaMessage] Falha API: ${response.status}`, await response.text());
         return false;
     }
 
@@ -541,11 +544,16 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
             const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
             const name = item.raw.pushName || item.raw.name || item.id.split('@')[0];
+            
+            // Tratamento de ID para evitar números quebrados
+            let contactNumber = item.id.split('@')[0];
+            // Se for ID de grupo, mantém o ID original
+            if (item.id.includes('@g.us')) contactNumber = item.id;
 
             return {
                 id: item.id,
                 contactName: name,
-                contactNumber: item.id.split('@')[0],
+                contactNumber: contactNumber,
                 contactAvatar: item.raw.profilePictureUrl || `https://ui-avatars.com/api/?name=${name}`,
                 departmentId: null,
                 unreadCount: item.raw.unreadCount || 0,
