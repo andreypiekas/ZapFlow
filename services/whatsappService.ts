@@ -439,15 +439,32 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         let response: Response | null = null;
         
         // Tenta primeiro com POST (método correto para Evolution API v2.2.3)
+        // Tenta incluir mensagens no request
         try {
+            // Primeiro tenta com parâmetros para incluir mensagens
             response = await fetch(`${config.baseUrl}/chat/findChats/${instanceName}`, {
                 method: 'POST',
                 headers: { 
                     'apikey': config.apiKey,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({})
+                body: JSON.stringify({
+                    where: {},
+                    include: ['messages']
+                })
             });
+            
+            if (!response.ok || response.status === 404) {
+                // Se falhar, tenta sem parâmetros (formato original)
+                response = await fetch(`${config.baseUrl}/chat/findChats/${instanceName}`, {
+                    method: 'POST',
+                    headers: { 
+                        'apikey': config.apiKey,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({})
+                });
+            }
 
             if (response.ok) {
                 rawData = await response.json();
@@ -650,32 +667,110 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             for (const chat of mappedChats) {
                 try {
                     // Tenta diferentes endpoints para buscar mensagens
+                    // Na Evolution API v2.2.3, pode ser necessário usar POST com body
                     const endpoints = [
-                        `/message/fetchMessages/${instanceName}/${encodeURIComponent(chat.id)}`,
-                        `/chat/fetchMessages/${instanceName}/${encodeURIComponent(chat.id)}`,
-                        `/message/fetchMessages/${instanceName}?remoteJid=${encodeURIComponent(chat.id)}`,
+                        // Endpoint com POST e body
+                        {
+                            url: `/message/fetchMessages/${instanceName}`,
+                            method: 'POST',
+                            body: { remoteJid: chat.id }
+                        },
+                        // Endpoint com GET e query string
+                        {
+                            url: `/message/fetchMessages/${instanceName}?remoteJid=${encodeURIComponent(chat.id)}`,
+                            method: 'GET',
+                            body: null
+                        },
+                        // Endpoint alternativo com path parameter
+                        {
+                            url: `/message/fetchMessages/${instanceName}/${encodeURIComponent(chat.id)}`,
+                            method: 'GET',
+                            body: null
+                        },
+                        // Endpoint de chat com mensagens
+                        {
+                            url: `/chat/fetchMessages/${instanceName}/${encodeURIComponent(chat.id)}`,
+                            method: 'GET',
+                            body: null
+                        },
+                        // Endpoint de chat com POST
+                        {
+                            url: `/chat/fetchMessages/${instanceName}`,
+                            method: 'POST',
+                            body: { remoteJid: chat.id }
+                        },
+                        // Buscar todas as mensagens e filtrar (último recurso)
+                        {
+                            url: `/message/fetchAllMessages/${instanceName}`,
+                            method: 'GET',
+                            body: null
+                        }
                     ];
                     
                     let messagesData: any = null;
+                    let workingEndpoint: string | null = null;
+                    
                     for (const endpoint of endpoints) {
                         try {
-                            const messagesResponse = await fetch(`${config.baseUrl}${endpoint}`, {
-                                method: 'GET',
-                                headers: { 'apikey': config.apiKey }
-                            });
+                            const headers: Record<string, string> = { 'apikey': config.apiKey };
+                            if (endpoint.body) {
+                                headers['Content-Type'] = 'application/json';
+                            }
+                            
+                            const fetchOptions: RequestInit = {
+                                method: endpoint.method,
+                                headers: headers
+                            };
+                            
+                            if (endpoint.body) {
+                                fetchOptions.body = JSON.stringify(endpoint.body);
+                            }
+                            
+                            const messagesResponse = await fetch(`${config.baseUrl}${endpoint.url}`, fetchOptions);
                             
                             if (messagesResponse.ok) {
-                                messagesData = await messagesResponse.json();
-                                console.log(`[fetchChats] Endpoint ${endpoint} funcionou para ${chat.id}`);
-                                break;
+                                const data = await messagesResponse.json();
+                                
+                                // Se for o endpoint de todas as mensagens, filtra por remoteJid
+                                if (endpoint.url.includes('fetchAllMessages')) {
+                                    let allMessages: any[] = [];
+                                    if (Array.isArray(data)) {
+                                        allMessages = data;
+                                    } else if (data.messages && Array.isArray(data.messages)) {
+                                        allMessages = data.messages;
+                                    } else if (data.data && Array.isArray(data.data)) {
+                                        allMessages = data.data;
+                                    }
+                                    
+                                    // Filtra mensagens do chat específico
+                                    const chatMessages = allMessages.filter((m: any) => {
+                                        const msgJid = normalizeJid(m.remoteJid || m.key?.remoteJid || m.from || '');
+                                        return msgJid === chat.id;
+                                    });
+                                    
+                                    if (chatMessages.length > 0) {
+                                        messagesData = chatMessages;
+                                        workingEndpoint = endpoint.url;
+                                        console.log(`[fetchChats] Endpoint ${endpoint.url} funcionou para ${chat.id} (filtrado de ${allMessages.length} mensagens)`);
+                                        break;
+                                    }
+                                } else {
+                                    messagesData = data;
+                                    workingEndpoint = endpoint.url;
+                                    console.log(`[fetchChats] Endpoint ${endpoint.url} funcionou para ${chat.id}`);
+                                    break;
+                                }
+                            } else {
+                                console.log(`[fetchChats] Endpoint ${endpoint.url} retornou ${messagesResponse.status} para ${chat.id}`);
                             }
                         } catch (e) {
+                            console.log(`[fetchChats] Erro ao tentar endpoint ${endpoint.url}:`, e);
                             // Continua tentando próximo endpoint
                         }
                     }
                     
                     if (messagesData) {
-                        console.log(`[fetchChats] Mensagens encontradas para ${chat.id}:`, messagesData);
+                        console.log(`[fetchChats] Mensagens encontradas para ${chat.id} via ${workingEndpoint}:`, messagesData);
                         
                         // Processa mensagens se encontradas
                         let messagesArray: any[] = [];
@@ -693,7 +788,15 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                                 .filter((m: Message | null): m is Message => m !== null);
                             chat.messages = mappedMessages;
                             chat.messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+                            
+                            // Atualiza última mensagem
+                            const lastMsg = chat.messages[chat.messages.length - 1];
+                            chat.lastMessage = lastMsg ? (lastMsg.type === 'text' ? lastMsg.content : `[${lastMsg.type}]`) : '';
+                            chat.lastMessageTime = lastMsg ? lastMsg.timestamp : chat.lastMessageTime;
+                            
                             console.log(`[fetchChats] ${mappedMessages.length} mensagens adicionadas ao chat ${chat.id}`);
+                        } else {
+                            console.log(`[fetchChats] Endpoint ${workingEndpoint} retornou dados mas nenhuma mensagem válida para ${chat.id}`);
                         }
                     } else {
                         console.log(`[fetchChats] Nenhum endpoint de mensagens funcionou para ${chat.id}`);
