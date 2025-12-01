@@ -19,6 +19,7 @@ const normalizeJid = (jid: string | null | undefined): string => {
 };
 
 // Formata telefone para o padrão internacional (DDI + DDD + Num)
+// Brasil: DDI (2) + DDD (2) + Número (8 fixo ou 9 celular) = 12 ou 13 dígitos
 const formatPhoneForApi = (phone: string): string => {
     let clean = phone.replace(/\D/g, '');
     
@@ -27,6 +28,8 @@ const formatPhoneForApi = (phone: string): string => {
     if (clean.length === 10 || clean.length === 11) {
         clean = '55' + clean;
     }
+    // Se já tiver 12 ou 13 dígitos e começar com 55, já está formatado
+    // Se tiver 12 ou 13 dígitos mas não começar com 55, mantém como está (pode ser outro país)
     
     return clean;
 };
@@ -585,7 +588,8 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                             const jidNum = normalized.split('@')[0];
                             const digits = jidNum.replace(/\D/g, '');
                             
-                            // Se é um número válido (>=10 dígitos, só números)
+                            // Se é um número válido (>=10 dígitos)
+                            // Aceita números com 10+ dígitos (formatPhoneForApi adiciona DDI 55 se necessário)
                             if (/^\d+$/.test(digits) && digits.length >= 10) {
                                 validJid = normalized;
                                 validNumber = jidNum;
@@ -600,6 +604,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             if (!validNumber && !idIsGenerated && !item.id.includes('@g.us')) {
                 const idNum = item.id.split('@')[0];
                 const idDigits = idNum.replace(/\D/g, '');
+                // Aceita números com 10+ dígitos (formatPhoneForApi adiciona DDI 55 se necessário)
                 if (/^\d+$/.test(idDigits) && idDigits.length >= 10) {
                     validJid = item.id;
                     validNumber = idNum;

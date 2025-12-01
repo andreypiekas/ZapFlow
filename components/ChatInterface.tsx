@@ -25,9 +25,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     
     // PRIMEIRO: Tenta extrair do ID do chat se for um JID válido (número completo)
     let targetNumber = '';
-    if (chat.id.includes('@') && !chat.id.includes('@g.us') && !chat.id.startsWith('chat_') && !chat.id.includes('cminhfbw')) {
+    if (chat.id.includes('@') && !chat.id.includes('@g.us') && !chat.id.startsWith('chat_') && !chat.id.includes('cmin')) {
         const jidFromId = chat.id.split('@')[0];
         const jidDigits = jidFromId.replace(/\D/g, '').length;
+        // Aceita números com 10+ dígitos (formatPhoneForApi adiciona DDI 55 se necessário)
         if (jidDigits >= 10) {
             targetNumber = jidFromId.replace(/\D/g, '');
             console.log(`[NumberFix] Número encontrado no ID do chat: ${targetNumber} de ${chat.id}`);
@@ -35,7 +36,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     }
     
     // SEGUNDO: Tenta extrair das mensagens (fonte mais confiável)
-    if (!targetNumber || targetNumber.replace(/\D/g, '').length < 10) {
+    const targetDigits = targetNumber.replace(/\D/g, '').length;
+    if (!targetNumber || targetDigits < 10) {
         const allMessages = chat.messages.filter(m => m.author);
         console.log(`[NumberDebug] Procurando em ${allMessages.length} mensagens com author`);
         
@@ -49,7 +51,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 console.log(`[NumberDebug] Mensagem author: ${msg.author} -> número: ${realNumber} (${realDigits} dígitos)`);
                 
                 // Se encontrar um número válido (>=10 dígitos) e for mais completo que o atual, usa ele
-                if (realDigits >= 10 && realDigits > (targetNumber.replace(/\D/g, '').length || 0)) {
+                if (realDigits >= 10 && realDigits > targetDigits) {
                     targetNumber = realNumber.replace(/\D/g, '');
                     console.log(`[NumberFix] Número encontrado nas mensagens: ${targetNumber} de ${msg.author}`);
                     break;
@@ -59,17 +61,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     }
     
     // TERCEIRO: Se não encontrou nas mensagens, verifica contactNumber (mas ignora IDs gerados)
-    if (!targetNumber || targetNumber.replace(/\D/g, '').length < 10) {
+    const currentTargetDigits = targetNumber.replace(/\D/g, '').length;
+    if (!targetNumber || currentTargetDigits < 10) {
         // Ignora contactNumber se for um ID gerado (contém letras ou é muito curto)
+        const contactDigitsStr = chat.contactNumber?.replace(/\D/g, '') || '';
         const contactIsValid = chat.contactNumber && 
-                               !chat.contactNumber.includes('cminhfbw') && 
+                               !chat.contactNumber.includes('cmin') && 
                                !chat.contactNumber.startsWith('chat_') &&
-                               /^\d+$/.test(chat.contactNumber.replace(/\D/g, '')) &&
-                               chat.contactNumber.replace(/\D/g, '').length >= 10;
+                               /^\d+$/.test(contactDigitsStr) &&
+                               contactDigitsStr.length >= 10;
         
         if (contactIsValid) {
-            const contactDigits = chat.contactNumber.replace(/\D/g, '').length;
-            const currentDigits = targetNumber.replace(/\D/g, '').length || 0;
+            const contactDigits = contactDigitsStr.length;
+            const currentDigits = currentTargetDigits || 0;
             
             // Usa contactNumber se for mais completo
             if (contactDigits > currentDigits) {
@@ -80,11 +84,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     }
     
     // QUARTO: Se ainda não tiver, tenta extrair do ID do chat (se for número puro)
-    if (!targetNumber || targetNumber.replace(/\D/g, '').length < 10) {
+    const finalTargetDigits = targetNumber.replace(/\D/g, '').length;
+    if (!targetNumber || finalTargetDigits < 10) {
         let idFromChatId = chat.id.split('@')[0];
-        const idIsValidNumber = /^\d+$/.test(idFromChatId.replace(/\D/g, '')) && 
-                                idFromChatId.replace(/\D/g, '').length >= 10 &&
-                                !idFromChatId.includes('cminhfbw') &&
+        const idDigits = idFromChatId.replace(/\D/g, '');
+        const idIsValidNumber = /^\d+$/.test(idDigits) && 
+                                idDigits.length >= 10 &&
+                                !idFromChatId.includes('cmin') &&
                                 !idFromChatId.startsWith('chat_');
         
         if (idIsValidNumber) {
@@ -94,13 +100,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     }
     
     // ÚLTIMO RECURSO: Se ainda não tiver número válido, tenta usar contactNumber mesmo que curto (mas só se for número válido)
-    if ((!targetNumber || targetNumber.replace(/\D/g, '').length < 10) && chat.contactNumber) {
+    const lastTargetDigits = targetNumber.replace(/\D/g, '').length;
+    if ((!targetNumber || lastTargetDigits < 10) && chat.contactNumber) {
         const contactDigits = chat.contactNumber.replace(/\D/g, '').length;
         const contactIsNumber = /^\d+$/.test(chat.contactNumber.replace(/\D/g, ''));
-        const contactIsGenerated = chat.contactNumber.includes('cminhfbw') || chat.contactNumber.startsWith('chat_');
+        const contactIsGenerated = chat.contactNumber.includes('cmin') || chat.contactNumber.startsWith('chat_');
         
-        // Só usa se for um número (não ID gerado) e tiver pelo menos 10 dígitos (número válido)
-        // NÃO usa números com menos de 10 dígitos pois são inválidos
+        // Só usa se for um número (não ID gerado) e tiver pelo menos 10 dígitos
         if (contactIsNumber && !contactIsGenerated && contactDigits >= 10) {
             targetNumber = chat.contactNumber.replace(/\D/g, '');
             console.log(`[NumberFix] Usando contactNumber válido: ${targetNumber} (${contactDigits} dígitos)`);
@@ -113,8 +119,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     }
     
     // Validação final: não permite envio com número inválido
-    if (!targetNumber || targetNumber.replace(/\D/g, '').length < 10) {
-        console.error(`[NumberError] Número inválido para envio: ${targetNumber} (${targetNumber.replace(/\D/g, '').length} dígitos)`);
+    // Aceita números com 10+ dígitos (formatPhoneForApi adiciona DDI 55 se necessário)
+    const finalDigits = targetNumber.replace(/\D/g, '').length;
+    if (!targetNumber || finalDigits < 10) {
+        console.error(`[NumberError] Número inválido para envio: ${targetNumber} (${finalDigits} dígitos)`);
         return '';
     }
     
@@ -489,8 +497,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
     const targetNumber = getValidPhoneNumber(selectedChat);
     
-    // Valida se tem número válido antes de enviar
-    if (!targetNumber || targetNumber.replace(/\D/g, '').length < 10) {
+    // Valida se tem número válido antes de enviar (>=10 dígitos, formatPhoneForApi adiciona DDI se necessário)
+    const targetDigits = targetNumber.replace(/\D/g, '').length;
+    if (!targetNumber || targetDigits < 10) {
         alert('Erro: Não foi possível encontrar um número de telefone válido para este contato. Aguarde a sincronização ou verifique as configurações.');
         setIsSending(false);
         return;
@@ -532,8 +541,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     const targetNumber = getValidPhoneNumber(selectedChat);
     console.log("[NumberDebug] Número final para envio:", targetNumber);
 
-    // Valida se tem número válido antes de enviar
-    if (!targetNumber || targetNumber.replace(/\D/g, '').length < 10) {
+    // Valida se tem número válido antes de enviar (>=10 dígitos, formatPhoneForApi adiciona DDI se necessário)
+    const targetDigits = targetNumber.replace(/\D/g, '').length;
+    if (!targetNumber || targetDigits < 10) {
         alert('Erro: Não foi possível encontrar um número de telefone válido para este contato. Aguarde a sincronização ou verifique as configurações.');
         setIsSending(false);
         return;
@@ -566,8 +576,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       
       const targetNumber = getValidPhoneNumber(selectedChat);
       
-      // Valida se tem número válido antes de enviar
-      if (!targetNumber || targetNumber.replace(/\D/g, '').length < 10) {
+      // Valida se tem número válido antes de enviar (>=10 dígitos, formatPhoneForApi adiciona DDI se necessário)
+      const targetDigits = targetNumber.replace(/\D/g, '').length;
+      if (!targetNumber || targetDigits < 10) {
           alert('Erro: Não foi possível encontrar um número de telefone válido para este contato. Aguarde a sincronização ou verifique as configurações.');
           setIsSending(false);
           return;
@@ -692,8 +703,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     if (withSurvey) {
         const targetNumber = getValidPhoneNumber(selectedChat);
         
-        // Valida se tem número válido antes de enviar
-        if (targetNumber && targetNumber.replace(/\D/g, '').length >= 10) {
+        // Valida se tem número válido antes de enviar (>=10 dígitos, formatPhoneForApi adiciona DDI se necessário)
+        const targetDigits = targetNumber.replace(/\D/g, '').length;
+        if (targetNumber && targetDigits >= 10) {
             sendRealMessage(apiConfig, targetNumber, "Por favor, avalie nosso atendimento de 1 a 5 estrelas.");
         } else {
             console.warn('[NumberWarning] Não foi possível enviar pesquisa: número inválido');
