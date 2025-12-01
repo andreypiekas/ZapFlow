@@ -571,13 +571,16 @@ const App: React.FC = () => {
         }
     }, [apiConfig.isDemo, apiConfig.baseUrl]);
 
-    return () => {
-        clearInterval(intervalId);
-        if (ws) {
-            console.log('[App] Fechando WebSocket...');
-            ws.close();
-        }
-    };
+    // Cleanup: fecha interval e WebSocket quando componente desmonta
+    useEffect(() => {
+        return () => {
+            clearInterval(intervalId);
+            if (ws) {
+                console.log('[App] Fechando WebSocket...');
+                ws.close();
+            }
+        };
+    }, []);
   }, [currentUser, apiConfig]);
 
   useEffect(() => {
