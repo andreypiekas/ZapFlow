@@ -848,10 +848,10 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         // Função para processar mensagens recursivamente
         const processMessages = (items: any[]) => {
             if (!Array.isArray(items)) {
-                console.log(`[fetchChatMessages] processMessages recebeu não-array:`, typeof items);
+                console.error(`[fetchChatMessages] processMessages recebeu não-array:`, typeof items);
                 return;
             }
-            console.log(`[fetchChatMessages] processMessages processando ${items.length} itens`);
+            console.error(`[fetchChatMessages] processMessages processando ${items.length} itens`);
             items.forEach((item, index) => {
                 if (item && item.key && item.key.remoteJid) {
                     const normalizedJid = normalizeJid(item.key.remoteJid);
