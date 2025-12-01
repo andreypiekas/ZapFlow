@@ -580,16 +580,14 @@ const App: React.FC = () => {
     };
     
     // Inicializa WebSocket apenas se não estiver em demo
-    useEffect(() => {
-        if (!apiConfig.isDemo && apiConfig.baseUrl) {
-            console.error('[App] ✅✅✅ Inicializando WebSocket...', { isDemo: apiConfig.isDemo, baseUrl: apiConfig.baseUrl });
-            initWebSocket().catch(err => {
-                console.error('[App] ❌ Erro ao inicializar WebSocket:', err);
-            });
-        } else {
-            console.error('[App] ⚠️ WebSocket não inicializado:', { isDemo: apiConfig.isDemo, baseUrl: apiConfig.baseUrl });
-        }
-    }, [apiConfig.isDemo, apiConfig.baseUrl]);
+    if (!apiConfig.isDemo && apiConfig.baseUrl) {
+        console.error('[App] ✅✅✅ Inicializando WebSocket...', { isDemo: apiConfig.isDemo, baseUrl: apiConfig.baseUrl });
+        initWebSocket().catch(err => {
+            console.error('[App] ❌ Erro ao inicializar WebSocket:', err);
+        });
+    } else {
+        console.error('[App] ⚠️ WebSocket não inicializado:', { isDemo: apiConfig.isDemo, baseUrl: apiConfig.baseUrl });
+    }
 
     // Cleanup: fecha interval e WebSocket quando dependências mudam ou componente desmonta
     return () => {
