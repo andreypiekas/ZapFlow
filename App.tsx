@@ -495,11 +495,18 @@ const App: React.FC = () => {
         }
     };
     
-    initWebSocket();
+    // Inicializa WebSocket apenas se não estiver em demo
+    if (!apiConfig.isDemo && apiConfig.baseUrl) {
+        console.log('[App] Inicializando WebSocket...');
+        initWebSocket();
+    } else {
+        console.log('[App] WebSocket não inicializado:', { isDemo: apiConfig.isDemo, baseUrl: apiConfig.baseUrl });
+    }
 
     return () => {
         clearInterval(intervalId);
         if (ws) {
+            console.log('[App] Fechando WebSocket...');
             ws.close();
         }
     };
