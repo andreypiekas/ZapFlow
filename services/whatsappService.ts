@@ -1,5 +1,6 @@
 
 
+
 import { ApiConfig, Chat, Message, MessageStatus } from "../types";
 
 // Serviço compatível com Evolution API v1.x/v2.x
@@ -18,6 +19,19 @@ const normalizeJid = (jid: string | null | undefined): string => {
     
     // Se é apenas números, adiciona sufixo padrão
     return user + '@s.whatsapp.net';
+};
+
+// Formata telefone para o padrão internacional (DDI + DDD + Num)
+const formatPhoneForApi = (phone: string): string => {
+    let clean = phone.replace(/\D/g, '');
+    
+    // Regra específica para Brasil (DDI 55)
+    // Se tiver 10 (Fixo com DDD) ou 11 (Celular com DDD) dígitos, assume BR e adiciona 55
+    if (clean.length === 10 || clean.length === 11) {
+        clean = '55' + clean;
+    }
+    
+    return clean;
 };
 
 // --- CORE SERVICE ---
@@ -232,11 +246,12 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
 
   const active = await findActiveInstance(config);
   const target = active?.instanceName || config.instanceName;
-  const cleanPhone = phone.replace(/\D/g, '');
+  
+  // Formata o número (Adiciona 55 se faltar)
+  const cleanPhone = formatPhoneForApi(phone);
 
   try {
     // Payload simplificado para máxima compatibilidade com v2.x
-    // Removemos 'options' aninhado que pode causar 400 Bad Request em validações estritas
     const payload = {
         number: cleanPhone,
         text: text,
@@ -286,13 +301,15 @@ export const sendRealMediaMessage = async (
 
   const active = await findActiveInstance(config);
   const target = active?.instanceName || config.instanceName;
-  const cleanPhone = phone.replace(/\D/g, '');
+  
+  // Formata o número
+  const cleanPhone = formatPhoneForApi(phone);
+
   const base64 = await blobToBase64(mediaBlob);
     
   let endpoint = 'sendMedia';
   if (mediaType === 'audio') endpoint = 'sendWhatsAppAudio'; 
 
-  // Simplificando o payload para evitar erros de validação
   const body = {
       number: cleanPhone,
       delay: 1200,

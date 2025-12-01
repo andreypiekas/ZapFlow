@@ -1,4 +1,5 @@
 
+
 export enum UserRole {
   ADMIN = 'ADMIN',
   AGENT = 'AGENT'
@@ -7,7 +8,8 @@ export enum UserRole {
 export enum MessageStatus {
   SENT = 'SENT',
   DELIVERED = 'DELIVERED',
-  READ = 'READ'
+  READ = 'READ',
+  ERROR = 'ERROR'
 }
 
 export type MessageType = 'text' | 'image' | 'audio' | 'document' | 'video' | 'sticker';

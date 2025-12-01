@@ -1,6 +1,9 @@
 
+
+
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw, Smile, Tag, Plus, Clock, User as UserIcon } from 'lucide-react';
+import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw, Smile, Tag, Plus, Clock, User as UserIcon, AlertTriangle } from 'lucide-react';
 import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow, Contact } from '../types';
 import { generateSmartReply } from '../services/geminiService';
 import { sendRealMessage, sendRealMediaMessage, blobToBase64 } from '../services/whatsappService';
@@ -495,7 +498,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
   const finalizeMessageStatus = (msg: Message, success: boolean) => {
     if (!selectedChat) return;
-    // Em produção, isso seria via webhook
+    
+    if (!success) {
+        // Find message and set to ERROR
+        const updatedMessages = selectedChat.messages.map(m => 
+            m.id === msg.id ? { ...m, status: MessageStatus.ERROR } : m
+        );
+        
+        const updatedChat = {
+            ...selectedChat,
+            messages: updatedMessages
+        };
+        onUpdateChat(updatedChat);
+    }
   };
 
   const handleTransfer = (deptId: string) => {
@@ -1144,7 +1159,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                           {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                         {msg.sender === 'agent' && (
-                          msg.status === MessageStatus.READ ? <CheckCheck size={14} className="text-blue-500" /> : <Check size={14} className="text-slate-400" />
+                          msg.status === MessageStatus.READ ? <CheckCheck size={14} className="text-blue-500" /> : 
+                          msg.status === MessageStatus.ERROR ? <span title="Falha ao enviar"><AlertTriangle size={14} className="text-red-500" /></span> :
+                          <Check size={14} className="text-slate-400" />
                         )}
                       </div>
                     </div>
