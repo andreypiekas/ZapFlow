@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Chat, Department, ViewState, ApiConfig, User, UserRole, QuickReply, Workflow, Contact, ChatbotConfig } from './types';
 import { INITIAL_CHATS, INITIAL_DEPARTMENTS, INITIAL_USERS, INITIAL_QUICK_REPLIES, INITIAL_WORKFLOWS, MOCK_GOOGLE_CONTACTS, INITIAL_CHATBOT_CONFIG } from './constants';
 import Login from './components/Login';
@@ -90,6 +90,10 @@ const App: React.FC = () => {
       console.error('[App] Erro ao salvar chats no localStorage:', e);
     }
   }, [chats]);
+
+  // Refs para armazenar interval e WebSocket
+  const intervalIdRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     if (!currentUser || apiConfig.isDemo || !apiConfig.baseUrl) return;
@@ -331,10 +335,7 @@ const App: React.FC = () => {
 
     syncChats();
     // Polling a cada 3 segundos para parecer tempo real
-    const intervalId = setInterval(syncChats, 3000);
-
-    // WebSocket para receber mensagens em tempo real
-    let ws: WebSocket | null = null;
+    intervalIdRef.current = setInterval(syncChats, 3000);
     
     // Inicializa WebSocket de forma assíncrona
     const initWebSocket = async () => {
@@ -369,7 +370,8 @@ const App: React.FC = () => {
             const wsUrl = wsUrls[0];
             console.log(`[App] Conectando WebSocket: ${wsUrl}`);
             
-            ws = new WebSocket(wsUrl);
+            wsRef.current = new WebSocket(wsUrl);
+            const ws = wsRef.current;
             
             ws.onopen = () => {
                 console.log('[App] ✅ WebSocket conectado com sucesso!');
@@ -574,10 +576,12 @@ const App: React.FC = () => {
     // Cleanup: fecha interval e WebSocket quando componente desmonta
     useEffect(() => {
         return () => {
-            clearInterval(intervalId);
-            if (ws) {
+            if (intervalIdRef.current) {
+                clearInterval(intervalIdRef.current);
+            }
+            if (wsRef.current) {
                 console.log('[App] Fechando WebSocket...');
-                ws.close();
+                wsRef.current.close();
             }
         };
     }, []);
