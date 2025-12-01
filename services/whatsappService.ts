@@ -456,36 +456,31 @@ const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     // Sempre normaliza o JID para garantir formato correto
     let author: string | undefined = undefined;
     
-    // Debug: Log para entender estrutura da mensagem
-    if (!key.participant && !key.remoteJid && !apiMsg.remoteJid) {
+    // Tenta múltiplas formas de obter o remoteJid
+    const remoteJid = key?.remoteJid || 
+                     key?.participant || 
+                     apiMsg?.remoteJid ||
+                     apiMsg?.key?.remoteJid ||
+                     apiMsg?.jid ||
+                     apiMsg?.chatId;
+    
+    if (remoteJid) {
+        author = normalizeJid(remoteJid);
+        // Log apenas para debug (pode remover depois)
+        if (!author.includes('@')) {
+            console.warn('[MessageAuthor] JID não normalizado corretamente:', remoteJid, '->', author);
+        }
+    } else {
+        // Debug: Log estrutura completa se não encontrar
         console.warn('[MessageAuthor] Mensagem sem remoteJid:', { 
             hasKey: !!key, 
+            keyRemoteJid: key?.remoteJid,
+            keyParticipant: key?.participant,
+            apiMsgRemoteJid: apiMsg?.remoteJid,
+            apiMsgJid: apiMsg?.jid,
             keyKeys: key ? Object.keys(key) : [],
-            apiMsgKeys: Object.keys(apiMsg).slice(0, 10)
+            apiMsgKeys: Object.keys(apiMsg).slice(0, 15)
         });
-    }
-    
-    if (key.participant) {
-        author = normalizeJid(key.participant);
-    } else if (key.remoteJid) {
-        author = normalizeJid(key.remoteJid);
-    }
-    // Se ainda não tem author, tenta pegar do próprio objeto da mensagem
-    if (!author && apiMsg.remoteJid) {
-        author = normalizeJid(apiMsg.remoteJid);
-    }
-    
-    // Último recurso: tenta extrair do ID do chat se disponível
-    // (algumas APIs podem retornar o JID em outros campos)
-    if (!author) {
-        // Tenta encontrar JID em outros campos comuns
-        const possibleJidFields = ['jid', 'chatId', 'chat', 'to', 'from'];
-        for (const field of possibleJidFields) {
-            if (apiMsg[field] && typeof apiMsg[field] === 'string' && apiMsg[field].includes('@')) {
-                author = normalizeJid(apiMsg[field]);
-                break;
-            }
-        }
     }
 
     return {
@@ -617,14 +612,29 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                     const mapped = mapApiMessageToInternal(m);
                     if (!mapped) return null;
                     
-                    // GARANTE author: se não tem, tenta extrair do remoteJid
+                    // GARANTE author: se não tem, tenta extrair do remoteJid de múltiplas formas
                     if (!mapped.author) {
-                        const msgRemoteJid = m?.key?.remoteJid || m?.remoteJid || m?.jid;
+                        // Tenta todas as formas possíveis de obter remoteJid
+                        const msgRemoteJid = m?.key?.remoteJid || 
+                                           m?.key?.participant ||
+                                           m?.remoteJid || 
+                                           m?.jid ||
+                                           m?.chatId ||
+                                           item.id; // Fallback: usa o ID do chat
+                        
                         if (msgRemoteJid) {
                             mapped.author = normalizeJid(msgRemoteJid);
+                            console.log(`[MessageAuthorFix] Author adicionado: ${mapped.author} de ${msgRemoteJid}`);
                         } else if (validJid) {
-                            // Se não tem na mensagem, usa o JID válido encontrado
+                            // Se não tem na mensagem, usa o JID válido encontrado nas mensagens
                             mapped.author = validJid;
+                            console.log(`[MessageAuthorFix] Author adicionado do validJid: ${mapped.author}`);
+                        } else {
+                            // Último recurso: usa o ID do chat se for válido
+                            if (!item.id.includes('cmin') && !item.id.includes('@g.us')) {
+                                mapped.author = item.id;
+                                console.log(`[MessageAuthorFix] Author adicionado do chat ID: ${mapped.author}`);
+                            }
                         }
                     }
                     
