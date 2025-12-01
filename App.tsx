@@ -229,58 +229,61 @@ const App: React.FC = () => {
                                     setChats(currentChats => {
                                         return currentChats.map(c => {
                                             if (c.id === chatId || normalizeJid(c.id) === normalizeJid(chatId)) {
-                                                    // Merge das mensagens da API com as locais
-                                                    const allMessages = [...c.messages, ...apiMessages];
-                                                    const uniqueMessages = Array.from(
-                                                        new Map(allMessages.map(msg => [msg.id || `${msg.timestamp?.getTime()}_${msg.content}`, msg])).values()
-                                                    ).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-                                                    
-                                                    // Detecta se há novas mensagens recebidas
-                                                    const newReceivedMessages = apiMessages.filter(apiMsg => 
-                                                        apiMsg.sender === 'user' && 
-                                                        !c.messages.some(existingMsg => 
-                                                            existingMsg.id === apiMsg.id || 
-                                                            (existingMsg.timestamp && apiMsg.timestamp && 
-                                                             Math.abs(existingMsg.timestamp.getTime() - apiMsg.timestamp.getTime()) < 5000 &&
-                                                             existingMsg.content === apiMsg.content)
-                                                        )
-                                                    );
-                                                    
-                                                    if (newReceivedMessages.length > 0 && currentUser) {
-                                                        const lastNewMsg = newReceivedMessages[newReceivedMessages.length - 1];
-                                                        if (c.assignedTo === currentUser.id) {
-                                                            addNotification(
-                                                                `Nova mensagem de ${c.contactName}`,
-                                                                lastNewMsg.content.length > 50 ? lastNewMsg.content.substring(0, 50) + '...' : lastNewMsg.content,
-                                                                'info'
-                                                            );
-                                                        }
+                                                // Merge das mensagens da API com as locais
+                                                const allMessages = [...c.messages, ...apiMessages];
+                                                const uniqueMessages = Array.from(
+                                                    new Map(allMessages.map(msg => [msg.id || `${msg.timestamp?.getTime()}_${msg.content}`, msg])).values()
+                                                ).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+                                                
+                                                // Detecta se há novas mensagens recebidas
+                                                const newReceivedMessages = apiMessages.filter(apiMsg => 
+                                                    apiMsg.sender === 'user' && 
+                                                    !c.messages.some(existingMsg => 
+                                                        existingMsg.id === apiMsg.id || 
+                                                        (existingMsg.timestamp && apiMsg.timestamp && 
+                                                         Math.abs(existingMsg.timestamp.getTime() - apiMsg.timestamp.getTime()) < 5000 &&
+                                                         existingMsg.content === apiMsg.content)
+                                                    )
+                                                );
+                                                
+                                                if (newReceivedMessages.length > 0 && currentUser) {
+                                                    const lastNewMsg = newReceivedMessages[newReceivedMessages.length - 1];
+                                                    if (c.assignedTo === currentUser.id) {
+                                                        addNotification(
+                                                            `Nova mensagem de ${c.contactName}`,
+                                                            lastNewMsg.content.length > 50 ? lastNewMsg.content.substring(0, 50) + '...' : lastNewMsg.content,
+                                                            'info'
+                                                        );
                                                     }
-                                                    
-                                                    return {
-                                                        ...c,
-                                                        messages: uniqueMessages,
-                                                        lastMessage: uniqueMessages.length > 0 ? 
-                                                            (uniqueMessages[uniqueMessages.length - 1].type === 'text' ? 
-                                                                uniqueMessages[uniqueMessages.length - 1].content : 
-                                                                `📷 ${uniqueMessages[uniqueMessages.length - 1].type}`) : 
-                                                            c.lastMessage,
-                                                        lastMessageTime: uniqueMessages.length > 0 && uniqueMessages[uniqueMessages.length - 1].timestamp ? 
-                                                            uniqueMessages[uniqueMessages.length - 1].timestamp : 
-                                                            c.lastMessageTime,
-                                                        unreadCount: newReceivedMessages.length > 0 ? 
-                                                            (c.unreadCount || 0) + newReceivedMessages.length : 
-                                                            c.unreadCount
-                                                    };
                                                 }
-                                                return c;
-                                            });
+                                                
+                                                if (uniqueMessages.length > c.messages.length) {
+                                                    console.error(`[App] ✅ Adicionadas ${uniqueMessages.length - c.messages.length} novas mensagens ao chat ${c.contactName}`);
+                                                }
+                                                
+                                                return {
+                                                    ...c,
+                                                    messages: uniqueMessages,
+                                                    lastMessage: uniqueMessages.length > 0 ? 
+                                                        (uniqueMessages[uniqueMessages.length - 1].type === 'text' ? 
+                                                            uniqueMessages[uniqueMessages.length - 1].content : 
+                                                            `📷 ${uniqueMessages[uniqueMessages.length - 1].type}`) : 
+                                                        c.lastMessage,
+                                                    lastMessageTime: uniqueMessages.length > 0 && uniqueMessages[uniqueMessages.length - 1].timestamp ? 
+                                                        uniqueMessages[uniqueMessages.length - 1].timestamp : 
+                                                        c.lastMessageTime,
+                                                    unreadCount: newReceivedMessages.length > 0 ? 
+                                                        (c.unreadCount || 0) + newReceivedMessages.length : 
+                                                        c.unreadCount
+                                                };
+                                            }
+                                            return c;
                                         });
-                                    }
-                                }).catch(err => {
-                                    console.error(`[App] Erro ao buscar mensagens do chat ${chatId}:`, err);
-                                });
-                            }
+                                    });
+                                }
+                            }).catch(err => {
+                                console.error(`[App] Erro ao buscar mensagens do chat ${chatId}:`, err);
+                            });
                         }
                         
                         // Converte para array e ordena por timestamp
