@@ -1,4 +1,3 @@
-
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -12,10 +11,8 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-// Error Boundary para capturar falhas na renderização
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Inicialização de estado como propriedade de classe para evitar erro de 'props' no construtor
-  state: ErrorBoundaryState = {
+  public state: ErrorBoundaryState = {
     hasError: false,
     error: null
   };
