@@ -801,15 +801,17 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
 // Busca mensagens de um chat específico
 export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit: number = 100): Promise<Message[]> => {
-    // FORÇA EXECUÇÃO DO CÓDIGO NOVO - Log único para identificar versão do código
+    // ============================================
+    // 🚀🚀🚀 VERSÃO NOVA - FORÇA EXECUÇÃO 🚀🚀🚀
+    // ============================================
     const VERSION_MARKER = `🚀🚀🚀 VERSÃO NOVA ${Date.now()} 🚀🚀🚀`;
     console.error(VERSION_MARKER); // Usa console.error para garantir que aparece
-    console.log(`[fetchChatMessages] 🚀 VERSÃO NOVA - ${new Date().toISOString()}`);
-    console.log(`[fetchChatMessages] ========== INÍCIO ==========`);
-    console.log(`[fetchChatMessages] chatId: ${chatId}`);
-    console.log(`[fetchChatMessages] isDemo: ${config.isDemo}`);
-    console.log(`[fetchChatMessages] baseUrl: ${config.baseUrl}`);
-    console.log(`[fetchChatMessages] apiKey: ${!!config.apiKey}`);
+    console.error(`[fetchChatMessages] 🚀🚀🚀 VERSÃO NOVA - ${new Date().toISOString()} 🚀🚀🚀`);
+    console.error(`[fetchChatMessages] ========== INÍCIO ==========`);
+    console.error(`[fetchChatMessages] chatId: ${chatId}`);
+    console.error(`[fetchChatMessages] isDemo: ${config.isDemo}`);
+    console.error(`[fetchChatMessages] baseUrl: ${config.baseUrl}`);
+    console.error(`[fetchChatMessages] apiKey: ${!!config.apiKey}`);
     
     if (config.isDemo || !config.baseUrl || !config.apiKey) {
         console.log(`[fetchChatMessages] ❌ Retornando vazio: isDemo=${config.isDemo}, baseUrl=${!!config.baseUrl}, apiKey=${!!config.apiKey}`);
@@ -817,29 +819,29 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
     }
 
     try {
-        console.log(`[fetchChatMessages] 🔍 PASSO 1: Buscando instância ativa...`);
+        console.error(`[fetchChatMessages] 🔍 PASSO 1: Buscando instância ativa...`);
         let active;
         try {
             active = await findActiveInstance(config);
-            console.log(`[fetchChatMessages] ✅ findActiveInstance retornou:`, active ? { instanceName: active.instanceName } : 'null');
+            console.error(`[fetchChatMessages] ✅ findActiveInstance retornou:`, active ? { instanceName: active.instanceName } : 'null');
         } catch (err) {
             console.error(`[fetchChatMessages] ❌ Erro ao buscar instância:`, err);
             active = null;
         }
         
         const instanceName = active?.instanceName || config.instanceName;
-        console.log(`[fetchChatMessages] 🔍 PASSO 2: Instância encontrada: ${instanceName}`);
-        console.log(`[fetchChatMessages] - De active: ${active?.instanceName || 'null'}`);
-        console.log(`[fetchChatMessages] - De config: ${config.instanceName || 'null'}`);
+        console.error(`[fetchChatMessages] 🔍 PASSO 2: Instância encontrada: ${instanceName}`);
+        console.error(`[fetchChatMessages] - De active: ${active?.instanceName || 'null'}`);
+        console.error(`[fetchChatMessages] - De config: ${config.instanceName || 'null'}`);
         
         if (!instanceName) {
-            console.log(`[fetchChatMessages] ❌ Retornando vazio: instância não encontrada`);
+            console.error(`[fetchChatMessages] ❌ Retornando vazio: instância não encontrada`);
             return [];
         }
 
         // Extrai o número do JID (remove @s.whatsapp.net)
         const phoneNumber = chatId.split('@')[0];
-        console.log(`[fetchChatMessages] 🔍 PASSO 3: Buscando mensagens para ${chatId} (número: ${phoneNumber})`);
+        console.error(`[fetchChatMessages] 🔍 PASSO 3: Buscando mensagens para ${chatId} (número: ${phoneNumber})`);
         
         const messages: Message[] = [];
         
@@ -913,12 +915,14 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
             }
         ];
         
-        console.log(`[fetchChatMessages] Iniciando loop de ${endpoints.length} endpoints...`);
+        console.error(`[fetchChatMessages] 🔍 PASSO 4: Iniciando loop de ${endpoints.length} endpoints...`);
+        console.error(`[fetchChatMessages] Endpoints configurados:`, endpoints.map(e => ({ url: e.url, method: e.body ? 'POST' : 'GET' })));
         
         for (let i = 0; i < endpoints.length; i++) {
             const endpoint = endpoints[i];
             try {
-                console.log(`[fetchChatMessages] [${i+1}/${endpoints.length}] Tentando endpoint: ${endpoint.url}`, endpoint.body || 'GET');
+                console.error(`[fetchChatMessages] [${i+1}/${endpoints.length}] ⚡ Tentando endpoint: ${endpoint.url}`);
+                console.error(`[fetchChatMessages] [${i+1}/${endpoints.length}] Body:`, endpoint.body || 'GET');
                 const res = await fetch(endpoint.url, {
                     method: endpoint.body ? 'POST' : 'GET',
                     headers: { 

@@ -534,12 +534,12 @@ const App: React.FC = () => {
     
     // Inicializa WebSocket apenas se não estiver em demo
     if (!apiConfig.isDemo && apiConfig.baseUrl) {
-        console.log('[App] ✅ Inicializando WebSocket...', { isDemo: apiConfig.isDemo, baseUrl: apiConfig.baseUrl });
+        console.error('[App] ✅✅✅ Inicializando WebSocket...', { isDemo: apiConfig.isDemo, baseUrl: apiConfig.baseUrl });
         initWebSocket().catch(err => {
             console.error('[App] ❌ Erro ao inicializar WebSocket:', err);
         });
     } else {
-        console.warn('[App] ⚠️ WebSocket não inicializado:', { isDemo: apiConfig.isDemo, baseUrl: apiConfig.baseUrl });
+        console.error('[App] ⚠️ WebSocket não inicializado:', { isDemo: apiConfig.isDemo, baseUrl: apiConfig.baseUrl });
     }
 
     return () => {
