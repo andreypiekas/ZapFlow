@@ -8,9 +8,14 @@ import { ApiConfig, Chat, Message, MessageStatus } from "../types";
 
 const normalizeJid = (jid: string | null | undefined): string => {
     if (!jid) return '';
+    // Remove caracteres inválidos e sufixos de dispositivo (:11, :12)
     const parts = jid.split(':');
     let user = parts[0];
+    
+    // Se já tem domínio, retorna
     if (user.includes('@')) return user; 
+    
+    // Se é apenas números, adiciona sufixo padrão
     return user + '@s.whatsapp.net';
 };
 
@@ -28,15 +33,20 @@ const findActiveInstance = async (config: ApiConfig) => {
         
         const rawData = await response.json();
         
-        // Normalização agressiva da resposta
+        // Normalização agressiva da resposta para garantir que seja um array
         let instances: any[] = [];
         
         if (Array.isArray(rawData)) {
             instances = rawData;
         } else if (rawData && typeof rawData === 'object') {
+            // Suporte a diferentes formatos de retorno (v1/v2)
             if (Array.isArray(rawData.instances)) instances = rawData.instances;
             else if (rawData.instance) instances = [rawData.instance];
             else if (rawData.instanceName) instances = [rawData];
+            else if (Object.keys(rawData).length > 0) {
+                // Tenta converter objeto em array se parecer uma lista de instâncias
+                instances = Object.values(rawData).filter((i: any) => i && (i.instanceName || i.instance?.instanceName));
+            }
         }
         
         if (!instances || instances.length === 0) return null;
@@ -44,7 +54,7 @@ const findActiveInstance = async (config: ApiConfig) => {
         // Helper seguro para evitar crash por undefined
         const getSafeStatus = (item: any) => {
             if (!item) return 'unknown';
-            // V2 structure vs V1 structure
+            // Tenta acessar status com optional chaining para evitar erros
             return item?.instance?.status || item?.status || 'unknown';
         };
         
@@ -53,20 +63,20 @@ const findActiveInstance = async (config: ApiConfig) => {
             return item?.instance?.instanceName || item?.instanceName || item?.name;
         };
 
-        // 1. Prioridade: Instância CONECTADA
-        const connected = instances.find((i: any) => getSafeStatus(i) === 'open');
+        // 1. Prioridade: Instância CONECTADA ('open')
+        const connected = instances.find((i: any) => i && getSafeStatus(i) === 'open');
         if (connected) {
             return { instanceName: getSafeName(connected), status: 'open' };
         }
 
-        // 2. Prioridade: Instância CONECTANDO
-        const connecting = instances.find((i: any) => getSafeStatus(i) === 'connecting');
+        // 2. Prioridade: Instância CONECTANDO ('connecting')
+        const connecting = instances.find((i: any) => i && getSafeStatus(i) === 'connecting');
         if (connecting) {
             return { instanceName: getSafeName(connecting), status: 'connecting' };
         }
 
-        // 3. Fallback: Qualquer instância válida
-        const first = instances.find((i: any) => getSafeName(i));
+        // 3. Fallback: Qualquer instância válida que tenha nome
+        const first = instances.find((i: any) => i && getSafeName(i));
         if (first) {
             return { instanceName: getSafeName(first), status: getSafeStatus(first) };
         }
@@ -98,12 +108,13 @@ export const getDetailedInstanceStatus = async (config: ApiConfig) => {
         return { state: 'not_found' };
 
     } catch (e) {
-        return { state: 'connecting' }; 
+        return { state: 'connecting' }; // Assume connecting on error to avoid red flash
     }
 };
 
 export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null> => {
-  if (config.isDemo || !config.baseUrl || !config.apiKey) return null;
+  if (config.isDemo) return null;
+  if (!config.baseUrl || !config.apiKey) return null;
 
   let targetInstance = config.instanceName;
   
@@ -339,7 +350,8 @@ const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         (typeof msgObj.text === 'string' ? msgObj.text : '') || 
         '';
     
-    if (!content && !msgObj.imageMessage && !msgObj.audioMessage && !msgObj.stickerMessage) return null;
+    // Ignora mensagens de protocolo ou vazias
+    if (!content && !msgObj.imageMessage && !msgObj.audioMessage && !msgObj.stickerMessage && !msgObj.videoMessage && !msgObj.documentMessage) return null;
 
     const key = apiMsg.key || {};
     const ts = apiMsg.messageTimestamp || apiMsg.timestamp || Date.now();
@@ -373,15 +385,15 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         const instanceName = active?.instanceName || config.instanceName;
 
         if (!instanceName) {
-            console.warn('[fetchChats] Instância não encontrada.');
+            console.warn('[fetchChats] Nenhuma instância ativa encontrada.');
             return [];
         }
 
-        // 2. Tenta buscar os chats (POST é o padrão V2)
-        // Tentamos incluir messages. Se falhar, tentamos endpoint de messages direto.
+        // 2. Tenta buscar os dados
         let rawData: any = null;
         
         try {
+            // Tenta POST findChats (V2 padrão)
             const res = await fetch(`${config.baseUrl}/chat/findChats/${instanceName}`, {
                 method: 'POST',
                 headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' },
@@ -391,12 +403,12 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             if (res.ok) {
                 rawData = await res.json();
             } else {
-                // Fallback: Tenta buscar mensagens se chats falhar ou retornar vazio
+                // Fallback: Se findChats falhar, busca mensagens diretamente (V2 fallback)
                 console.log('[fetchChats] findChats falhou, tentando fetchMessages...');
                 const resMsg = await fetch(`${config.baseUrl}/message/fetchMessages/${instanceName}`, {
                     method: 'POST',
                     headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ limit: 100 }) 
+                    body: JSON.stringify({ limit: 50 }) 
                 });
                 if (resMsg.ok) rawData = await resMsg.json();
             }
@@ -409,21 +421,21 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
         console.log('[ZapFlow Parser] Dados brutos recebidos:', Array.isArray(rawData) ? `Array[${rawData.length}]` : typeof rawData);
 
-        // 3. Processa os dados usando o Parser Recursivo
+        // 3. Processa os dados usando o Parser Recursivo Universal
         const chatsMap = new Map<string, any>();
         extractChatsRecursively(rawData, chatsMap);
         
         const chatsArray = Array.from(chatsMap.values());
         console.log(`[ZapFlow Parser] ${chatsArray.length} chats extraídos.`);
 
-        // 4. Mapeia para o formato interno
+        // 4. Mapeia para o formato interno do Frontend
         return chatsArray.map((item: any) => {
             const messages: Message[] = item.messages
                 .map((m: any) => mapApiMessageToInternal(m))
                 .filter((m: any) => m !== null)
                 .sort((a: any, b: any) => a.timestamp.getTime() - b.timestamp.getTime());
 
-            const lastMsg = messages[messages.length - 1];
+            const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
             const name = item.raw.pushName || item.raw.name || item.id.split('@')[0];
 
             return {
@@ -433,7 +445,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                 contactAvatar: item.raw.profilePictureUrl || `https://ui-avatars.com/api/?name=${name}`,
                 departmentId: null,
                 unreadCount: item.raw.unreadCount || 0,
-                lastMessage: lastMsg ? lastMsg.content : '',
+                lastMessage: lastMsg ? (lastMsg.type === 'text' ? lastMsg.content : `[${lastMsg.type}]`) : '',
                 lastMessageTime: lastMsg ? lastMsg.timestamp : new Date(),
                 status: 'open',
                 messages: messages
