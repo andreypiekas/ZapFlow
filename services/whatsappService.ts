@@ -1,4 +1,5 @@
 
+
 import { ApiConfig, Chat, Message, MessageStatus } from "../types";
 
 // Serviço compatível com Evolution API v1.x/v2.x
@@ -234,11 +235,13 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
   const cleanPhone = phone.replace(/\D/g, '');
 
   try {
-    // Payload simplificado para passar na validação estrita da V2
+    // Payload simplificado para máxima compatibilidade com v2.x
+    // Removemos 'options' aninhado que pode causar 400 Bad Request em validações estritas
     const payload = {
         number: cleanPhone,
-        options: { delay: 1200, presence: "composing" },
-        text: text
+        text: text,
+        delay: 1200,
+        linkPreview: false
     };
 
     const response = await fetch(`${config.baseUrl}/message/sendText/${target}`, {
@@ -250,9 +253,14 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
       body: JSON.stringify(payload)
     });
     
-    return response.ok;
+    if (!response.ok) {
+        console.error(`[sendRealMessage] Falha: ${response.status}`, await response.text());
+        return false;
+    }
+    
+    return true;
   } catch (error) {
-    console.error("Erro envio:", error);
+    console.error("[sendRealMessage] Erro de rede:", error);
     return false;
   }
 };
@@ -284,9 +292,10 @@ export const sendRealMediaMessage = async (
   let endpoint = 'sendMedia';
   if (mediaType === 'audio') endpoint = 'sendWhatsAppAudio'; 
 
+  // Simplificando o payload para evitar erros de validação
   const body = {
       number: cleanPhone,
-      options: { delay: 1200, presence: "recording" },
+      delay: 1200,
       mediaMessage: {
         mediatype: mediaType,
         caption: caption,
@@ -304,8 +313,15 @@ export const sendRealMediaMessage = async (
       },
       body: JSON.stringify(body)
     });
+    
+    if (!response.ok) {
+        console.error(`[sendRealMediaMessage] Falha: ${response.status}`, await response.text());
+        return false;
+    }
+
     return response.ok;
   } catch (error) {
+    console.error("[sendRealMediaMessage] Erro de rede:", error);
     return false;
   }
 };
@@ -423,7 +439,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         const instanceName = active?.instanceName || config.instanceName;
 
         if (!instanceName) {
-            console.warn('[fetchChats] Nenhuma instância ativa encontrada.');
+            // Silencioso para não poluir logs se desconectado
             return [];
         }
 
@@ -442,7 +458,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                 rawData = await res.json();
             } else {
                 // Fallback: Se findChats falhar, busca mensagens diretamente via fetchMessages
-                console.log(`[fetchChats] findChats falhou (${res.status}), tentando fetchMessages...`);
+                // console.log(`[fetchChats] findChats falhou (${res.status}), tentando fetchMessages...`);
                 const resMsg = await fetch(`${config.baseUrl}/message/fetchMessages/${instanceName}`, {
                     method: 'POST',
                     headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' },
@@ -467,14 +483,14 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
         if (!rawData) return [];
 
-        console.log('[ZapFlow Parser] Dados recebidos. Processando...');
+        // console.log('[ZapFlow Parser] Dados recebidos. Processando...');
 
         // 3. Processa os dados usando o Parser Recursivo Universal
         const chatsMap = new Map<string, any>();
         extractChatsRecursively(rawData, chatsMap);
         
         const chatsArray = Array.from(chatsMap.values());
-        console.log(`[ZapFlow Parser] ${chatsArray.length} chats extraídos.`);
+        // console.log(`[ZapFlow Parser] ${chatsArray.length} chats extraídos.`);
 
         // 4. Mapeia para o formato interno do Frontend
         return chatsArray.map((item: any) => {
