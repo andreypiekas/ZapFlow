@@ -21,35 +21,58 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   
   // Helper function para extrair número válido do chat
   const getValidPhoneNumber = (chat: Chat): string => {
-    // PRIMEIRO: Tenta extrair das mensagens (fonte mais confiável)
-    let targetNumber = '';
-    const allMessages = chat.messages.filter(m => m.author);
+    console.log(`[NumberDebug] Iniciando busca para chat ID: ${chat.id}, contactNumber: ${chat.contactNumber}, mensagens: ${chat.messages.length}`);
     
-    // Procura em TODAS as mensagens (user e agent) pelo número mais completo
-    for (const msg of allMessages.reverse()) {
-        if (msg.author) {
-            const realJid = msg.author;
-            const realNumber = realJid.includes('@') ? realJid.split('@')[0] : realJid;
-            const realDigits = realNumber.replace(/\D/g, '').length;
-            
-            // Se encontrar um número válido (>=10 dígitos), usa ele
-            if (realDigits >= 10) {
-                targetNumber = realNumber.replace(/\D/g, '');
-                console.log(`[NumberFix] Número encontrado nas mensagens: ${targetNumber} de ${msg.author}`);
-                break;
+    // PRIMEIRO: Tenta extrair do ID do chat se for um JID válido
+    let targetNumber = '';
+    if (chat.id.includes('@') && !chat.id.includes('@g.us')) {
+        const jidFromId = chat.id.split('@')[0];
+        const jidDigits = jidFromId.replace(/\D/g, '').length;
+        if (jidDigits >= 10) {
+            targetNumber = jidFromId.replace(/\D/g, '');
+            console.log(`[NumberFix] Número encontrado no ID do chat: ${targetNumber} de ${chat.id}`);
+        }
+    }
+    
+    // SEGUNDO: Tenta extrair das mensagens (fonte mais confiável)
+    if (!targetNumber || targetNumber.replace(/\D/g, '').length < 10) {
+        const allMessages = chat.messages.filter(m => m.author);
+        console.log(`[NumberDebug] Procurando em ${allMessages.length} mensagens com author`);
+        
+        // Procura em TODAS as mensagens (user e agent) pelo número mais completo
+        for (const msg of allMessages.reverse()) {
+            if (msg.author) {
+                const realJid = msg.author;
+                const realNumber = realJid.includes('@') ? realJid.split('@')[0] : realJid;
+                const realDigits = realNumber.replace(/\D/g, '').length;
+                
+                console.log(`[NumberDebug] Mensagem author: ${msg.author} -> número: ${realNumber} (${realDigits} dígitos)`);
+                
+                // Se encontrar um número válido (>=10 dígitos) e for mais completo que o atual, usa ele
+                if (realDigits >= 10 && realDigits > (targetNumber.replace(/\D/g, '').length || 0)) {
+                    targetNumber = realNumber.replace(/\D/g, '');
+                    console.log(`[NumberFix] Número encontrado nas mensagens: ${targetNumber} de ${msg.author}`);
+                    break;
+                }
             }
         }
     }
     
-    // SEGUNDO: Se não encontrou nas mensagens, verifica contactNumber
+    // TERCEIRO: Se não encontrou nas mensagens, verifica contactNumber
     if (!targetNumber || targetNumber.replace(/\D/g, '').length < 10) {
         if (chat.contactNumber && chat.contactNumber.replace(/\D/g, '').length >= 10) {
-            targetNumber = chat.contactNumber.replace(/\D/g, '');
-            console.log(`[NumberFix] Usando contactNumber: ${targetNumber}`);
+            const contactDigits = chat.contactNumber.replace(/\D/g, '').length;
+            const currentDigits = targetNumber.replace(/\D/g, '').length || 0;
+            
+            // Usa contactNumber se for mais completo
+            if (contactDigits > currentDigits) {
+                targetNumber = chat.contactNumber.replace(/\D/g, '');
+                console.log(`[NumberFix] Usando contactNumber: ${targetNumber}`);
+            }
         }
     }
     
-    // TERCEIRO: Se ainda não tiver, tenta extrair do ID do chat
+    // QUARTO: Se ainda não tiver, tenta extrair do ID do chat (se não for JID)
     if (!targetNumber || targetNumber.replace(/\D/g, '').length < 10) {
         let idFromChatId = chat.id.split('@')[0];
         const idIsValidNumber = /^\d+$/.test(idFromChatId.replace(/\D/g, '')) && idFromChatId.replace(/\D/g, '').length >= 10;
@@ -64,6 +87,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     if ((!targetNumber || targetNumber.replace(/\D/g, '').length < 10) && chat.contactNumber) {
         targetNumber = chat.contactNumber.replace(/\D/g, '');
         console.warn(`[NumberWarning] Usando contactNumber curto como último recurso: ${targetNumber}`);
+        console.warn(`[NumberWarning] Chat ID: ${chat.id}, Mensagens: ${chat.messages.length}, Authors encontrados: ${chat.messages.filter(m => m.author).length}`);
     }
     
     return targetNumber;

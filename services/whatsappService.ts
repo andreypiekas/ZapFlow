@@ -563,17 +563,29 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             let contactNumber = bestNumber;
             
             // Se for ID de grupo, mantém o ID original
-            if (item.id.includes('@g.us')) contactNumber = item.id;
+            if (item.id.includes('@g.us')) {
+                contactNumber = item.id;
+            } else {
+                // Se encontrou um JID mais completo nas mensagens, usa ele para contactNumber
+                const idDigits = item.id.split('@')[0].replace(/\D/g, '').length;
+                const bestDigits = bestNumber.replace(/\D/g, '').length;
+                
+                // Se o bestNumber for mais completo que o ID, garante que contactNumber use ele
+                if (bestDigits > idDigits && bestDigits >= 10) {
+                    contactNumber = bestNumber;
+                    console.log(`[ContactNumberFix] Chat ${item.id.split('@')[0]} -> ${contactNumber} (${contactNumber.replace(/\D/g, '').length} dígitos) de ${bestJid}`);
+                }
+            }
             
             // Debug: Log se o número foi corrigido
             if (item.id.split('@')[0] !== contactNumber && !item.id.includes('@g.us')) {
-                console.log(`[ContactNumberFix] Chat ${item.id.split('@')[0]} -> ${contactNumber} (${contactNumber.replace(/\D/g, '').length} dígitos)`);
+                console.log(`[ContactNumberFix] Chat ID: ${item.id}, contactNumber atualizado: ${contactNumber}`);
             }
 
             return {
-                id: item.id,
+                id: item.id, // Mantém o ID original do chat (pode ser curto, mas contactNumber tem o completo)
                 contactName: name,
-                contactNumber: contactNumber,
+                contactNumber: contactNumber, // Sempre usa o número mais completo encontrado
                 contactAvatar: item.raw.profilePictureUrl || `https://ui-avatars.com/api/?name=${name}`,
                 departmentId: null,
                 unreadCount: item.raw.unreadCount || 0,
