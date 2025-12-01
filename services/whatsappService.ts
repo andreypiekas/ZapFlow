@@ -801,12 +801,23 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
 // Busca mensagens de um chat específico
 export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit: number = 100): Promise<Message[]> => {
-    if (config.isDemo || !config.baseUrl || !config.apiKey) return [];
+    console.log(`[fetchChatMessages] INÍCIO - chatId: ${chatId}, isDemo: ${config.isDemo}, baseUrl: ${config.baseUrl}`);
+    
+    if (config.isDemo || !config.baseUrl || !config.apiKey) {
+        console.log(`[fetchChatMessages] Retornando vazio: isDemo=${config.isDemo}, baseUrl=${!!config.baseUrl}, apiKey=${!!config.apiKey}`);
+        return [];
+    }
 
     try {
+        console.log(`[fetchChatMessages] Buscando instância ativa...`);
         const active = await findActiveInstance(config);
         const instanceName = active?.instanceName || config.instanceName;
-        if (!instanceName) return [];
+        console.log(`[fetchChatMessages] Instância encontrada: ${instanceName}`);
+        
+        if (!instanceName) {
+            console.log(`[fetchChatMessages] Retornando vazio: instância não encontrada`);
+            return [];
+        }
 
         // Extrai o número do JID (remove @s.whatsapp.net)
         const phoneNumber = chatId.split('@')[0];

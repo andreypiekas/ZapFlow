@@ -335,6 +335,8 @@ const App: React.FC = () => {
     
     // Inicializa WebSocket de forma assíncrona
     const initWebSocket = async () => {
+        console.log('[App] initWebSocket chamado', { isDemo: apiConfig.isDemo, baseUrl: apiConfig.baseUrl });
+        
         if (apiConfig.isDemo || !apiConfig.baseUrl) {
             console.log('[App] WebSocket desabilitado: isDemo ou baseUrl vazio');
             return;
