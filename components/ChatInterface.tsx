@@ -52,7 +52,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   // Contact Editing States
   const [isEditingContact, setIsEditingContact] = useState(false);
   const [editContactName, setEditContactName] = useState('');
-  const [editContactNumber, setEditContactNumber] = useState('');
   const [editClientCode, setEditClientCode] = useState('');
   
   // File & Media States
@@ -80,20 +79,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   // Validation Logic
   const isLID = selectedChat?.id?.includes('@lid');
   const isGroup = selectedChat?.id?.includes('@g.us');
-  const rawContactNumber = selectedChat?.contactNumber || '';
-  const cleanedNumber = rawContactNumber.replace(/\D/g, '');
   
-  // Flag as invalid only if:
-  // 1. It is NOT a special ID (LID or Group)
-  // 2. AND it has less than 10 digits (Standard minimal length for Brazil is 10: DDD + 8 digits)
-  // 3. AND it is not empty
-  const isInvalidNumber = selectedChat && !isLID && !isGroup && cleanedNumber.length > 0 && cleanedNumber.length < 10;
-
   // Sync editing state with selected chat
   useEffect(() => {
     if (selectedChat) {
       setEditContactName(selectedChat.contactName);
-      setEditContactNumber(selectedChat.contactNumber);
       setEditClientCode(selectedChat.clientCode || '');
       setIsEditingContact(false); 
       setShowOptionsMenu(false); 
@@ -245,7 +235,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     const updatedChat: Chat = {
         ...selectedChat,
         contactName: editContactName,
-        contactNumber: editContactNumber,
+        // contactNumber: editContactNumber, // Não permite edição manual do número, o sistema lida com isso
         clientCode: editClientCode
     };
     onUpdateChat(updatedChat);
@@ -374,7 +364,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   // --- SENDING LOGIC ---
   const sendMediaMessage = async (blob: Blob | File, type: 'image' | 'audio' | 'document' | 'video') => {
     if (!selectedChat) return;
-    // Removed strict block on isInvalidNumber. User can force send.
     setIsSending(true);
 
     const base64Preview = await blobToBase64(blob);
@@ -393,7 +382,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
     updateChatWithNewMessage(newMessage);
 
-    const success = await sendRealMediaMessage(apiConfig, selectedChat.contactNumber, blob, inputText, type, selectedFile?.name);
+    // Auto-Correct target number if ID is more reliable
+    const targetNumber = selectedChat.id.includes('@') && selectedChat.id.split('@')[0].length >= 10 
+        ? selectedChat.id.split('@')[0] 
+        : selectedChat.contactNumber;
+
+    const success = await sendRealMediaMessage(apiConfig, targetNumber, blob, inputText, type, selectedFile?.name);
     
     finalizeMessageStatus(newMessage, success);
     
@@ -404,11 +398,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
   const handleSendMessage = async () => {
     if (!selectedChat) return;
-    
-    // User warning but not blocking
-    if (isInvalidNumber) {
-        console.warn("Enviando mensagem para número marcado como inválido (possível erro de detecção ou número curto).");
-    }
 
     if (selectedFile) {
         const type = selectedFile.type.startsWith('image/') ? 'image' : 
@@ -431,7 +420,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
     updateChatWithNewMessage(newMessage);
 
-    const success = await sendRealMessage(apiConfig, selectedChat.contactNumber, inputText);
+    // Auto-Correct target number if ID is more reliable (prevents errors with short numbers stored in contacts)
+    const targetNumber = selectedChat.id.includes('@') && selectedChat.id.split('@')[0].length >= 10 
+        ? selectedChat.id.split('@')[0] 
+        : selectedChat.contactNumber;
+
+    const success = await sendRealMessage(apiConfig, targetNumber, inputText);
     
     finalizeMessageStatus(newMessage, success);
     setIsSending(false);
@@ -455,8 +449,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       };
 
       updateChatWithNewMessage(newMessage);
+      
+      const targetNumber = selectedChat.id.includes('@') && selectedChat.id.split('@')[0].length >= 10 
+        ? selectedChat.id.split('@')[0] 
+        : selectedChat.contactNumber;
+
       // In real API, download blob and send
-      await sendRealMessage(apiConfig, selectedChat.contactNumber, "[Sticker Enviado]"); 
+      await sendRealMessage(apiConfig, targetNumber, "[Sticker Enviado]"); 
       
       setIsSending(false);
       setShowEmojiPicker(false);
@@ -572,7 +571,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     };
     
     if (withSurvey) {
-        sendRealMessage(apiConfig, selectedChat.contactNumber, "Por favor, avalie nosso atendimento de 1 a 5 estrelas.");
+        const targetNumber = selectedChat.id.includes('@') && selectedChat.id.split('@')[0].length >= 10 
+            ? selectedChat.id.split('@')[0] 
+            : selectedChat.contactNumber;
+        sendRealMessage(apiConfig, targetNumber, "Por favor, avalie nosso atendimento de 1 a 5 estrelas.");
     }
 
     onUpdateChat(updatedChat);
@@ -953,19 +955,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                                     <input 
                                         value={editContactName}
                                         onChange={(e) => setEditContactName(e.target.value)}
-                                        className="bg-white/10 border border-white/30 text-white rounded px-2 py-1 text-sm outline-none focus:border-white w-full max-w-[150px]"
-                                        placeholder="Nome"
-                                    />
-                                    <input 
-                                        value={editContactNumber}
-                                        onChange={(e) => setEditContactNumber(e.target.value)}
-                                        className="bg-white/10 border border-white/30 text-white rounded px-2 py-1 text-sm outline-none focus:border-white w-32 font-mono"
-                                        placeholder="Número"
+                                        className="bg-white/10 border border-white/30 text-white rounded px-2 py-1 text-sm outline-none focus:border-white w-full max-w-[200px]"
+                                        placeholder="Nome do Contato"
                                     />
                                     <input 
                                         value={editClientCode}
                                         onChange={(e) => setEditClientCode(e.target.value)}
-                                        className="bg-white/10 border border-white/30 text-white rounded px-2 py-1 text-sm outline-none focus:border-white w-20 font-mono"
+                                        className="bg-white/10 border border-white/30 text-white rounded px-2 py-1 text-sm outline-none focus:border-white w-24 font-mono"
                                         placeholder="Código"
                                     />
                                     <button onClick={handleSaveContactInfo} className="p-1 hover:bg-emerald-600 rounded text-emerald-200 hover:text-white" title="Salvar">
@@ -998,16 +994,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                     </div>
 
                     <div className="flex items-center gap-1 md:gap-2 relative">
-                        {isInvalidNumber && !isEditingContact && (
-                             <div 
-                                className="bg-red-500 text-white text-[10px] px-2 py-1 rounded flex items-center gap-1 animate-pulse cursor-pointer hover:bg-red-600 transition-colors" 
-                                title={`Número detectado: "${rawContactNumber}" | Limpo: "${cleanedNumber}" (Dígitos: ${cleanedNumber.length}). Parece faltar o DDD (mínimo 10 dígitos). Clique para corrigir.`}
-                                onClick={() => setIsEditingContact(true)}
-                             >
-                                <AlertTriangle size={12} /> <span className="hidden md:inline">Número Inválido</span>
-                             </div>
-                        )}
-
                          {/* Search Toggle */}
                         <button onClick={() => setShowSearch(!showSearch)} className={`p-2 rounded-full transition-colors ${showSearch ? 'bg-white text-emerald-700' : 'hover:bg-emerald-600'}`}>
                             <Search size={20} />
