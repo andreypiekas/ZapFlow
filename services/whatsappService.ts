@@ -382,6 +382,7 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
             if (!collectedChats.has(jid)) {
                 // Cria chat placeholder se encontrarmos uma mensagem solta
                 collectedChats.set(jid, { id: jid, raw: {}, messages: [] });
+                console.log(`[ExtractChats] Criado chat para JID: ${jid}`);
             }
             const chat = collectedChats.get(jid);
             
@@ -392,6 +393,12 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
                 chat.messages.push(data);
                 // Tenta pescar o nome do contato da mensagem se não tivermos
                 if (data.pushName && !chat.raw.pushName) chat.raw.pushName = data.pushName;
+                console.log(`[ExtractChats] Mensagem adicionada ao chat ${jid}:`, {
+                    msgId: msgId,
+                    remoteJid: data.key.remoteJid,
+                    fromMe: data.key.fromMe,
+                    hasMessage: !!data.message
+                });
             }
         }
     }
@@ -554,15 +561,35 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         extractChatsRecursively(rawData, chatsMap);
         
         const chatsArray = Array.from(chatsMap.values());
-        // console.log(`[ZapFlow Parser] ${chatsArray.length} chats extraídos.`);
+        console.log(`[FetchChats] Total de chats extraídos: ${chatsArray.length}`);
+        chatsArray.forEach((chat: any, idx: number) => {
+            const msgCount = chat.messages?.length || 0;
+            const hasValidId = !chat.id?.includes('cmin') && !chat.id?.includes('cmid');
+            console.log(`[FetchChats] Chat ${idx + 1}: ID=${chat.id}, Messages=${msgCount}, ValidID=${hasValidId}`);
+            if (msgCount > 0) {
+                const firstMsg = chat.messages[0];
+                console.log(`[FetchChats] Primeira mensagem:`, {
+                    hasKey: !!firstMsg?.key,
+                    keyRemoteJid: firstMsg?.key?.remoteJid,
+                    remoteJid: firstMsg?.remoteJid,
+                    jid: firstMsg?.jid,
+                    keys: firstMsg ? Object.keys(firstMsg).slice(0, 10) : []
+                });
+            }
+        });
 
         // 4. Mapeia para o formato interno do Frontend
         return chatsArray.map((item: any) => {
+            console.log(`[MapChat] Processando chat: ID=${item.id}, Messages=${item.messages?.length || 0}`);
+            console.log(`[MapChat] Processando chat: ID=${item.id}, Messages=${item.messages?.length || 0}`);
+            
             // Detecta se o ID é gerado
             const idIsGenerated = item.id.includes('cmin') || 
                                   item.id.includes('cmid') || 
                                   !/^\d+@/.test(item.id) ||
                                   (item.id.split('@')[0].replace(/\D/g, '').length < 10 && !item.id.includes('@g.us'));
+            
+            console.log(`[MapChat] ID gerado: ${idIsGenerated}, ID: ${item.id}`);
             
             // SOLUÇÃO DIRETA: Procura número válido nas mensagens brutas PRIMEIRO
             let validJid: string | null = null;
@@ -570,12 +597,23 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             
             // Procura em TODAS as mensagens brutas pelo remoteJid válido
             if (item.messages && Array.isArray(item.messages)) {
-                for (const rawMsg of item.messages) {
+                console.log(`[MapChat] Procurando número válido em ${item.messages.length} mensagens brutas`);
+                for (let i = 0; i < item.messages.length; i++) {
+                    const rawMsg = item.messages[i];
                     // Tenta múltiplas formas de acessar o remoteJid
                     const remoteJid = rawMsg?.key?.remoteJid || 
                                      rawMsg?.remoteJid || 
                                      rawMsg?.jid ||
                                      rawMsg?.key?.participant;
+                    
+                    console.log(`[MapChat] Mensagem ${i + 1}:`, {
+                        hasKey: !!rawMsg?.key,
+                        keyRemoteJid: rawMsg?.key?.remoteJid,
+                        remoteJid: rawMsg?.remoteJid,
+                        jid: rawMsg?.jid,
+                        participant: rawMsg?.key?.participant,
+                        foundRemoteJid: remoteJid
+                    });
                     
                     if (remoteJid) {
                         const normalized = normalizeJid(remoteJid);
@@ -583,16 +621,23 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                             const jidNum = normalized.split('@')[0];
                             const digits = jidNum.replace(/\D/g, '');
                             
+                            console.log(`[MapChat] JID normalizado: ${normalized}, número: ${jidNum}, dígitos: ${digits.length}`);
+                            
                             // Se é um número válido (>=10 dígitos)
                             // Aceita números com 10+ dígitos (formatPhoneForApi adiciona DDI 55 se necessário)
                             if (/^\d+$/.test(digits) && digits.length >= 10) {
                                 validJid = normalized;
                                 validNumber = jidNum;
+                                console.log(`[MapChat] ✅ Número válido encontrado: ${validNumber} (${validJid})`);
                                 break; // Usa o primeiro número válido encontrado
+                            } else {
+                                console.log(`[MapChat] ⚠️ Número inválido: ${jidNum} (${digits.length} dígitos, só números: ${/^\d+$/.test(digits)})`);
                             }
                         }
                     }
                 }
+            } else {
+                console.log(`[MapChat] ⚠️ Sem mensagens brutas para processar`);
             }
             
             // Se não encontrou nas mensagens, verifica se o ID original é válido
