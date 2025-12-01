@@ -14,7 +14,7 @@ interface ErrorBoundaryState {
 
 // Error Boundary para capturar falhas na renderização
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Use class property to initialize state
+  // Inicialização de estado como propriedade de classe para evitar erro de 'props' no construtor
   state: ErrorBoundaryState = {
     hasError: false,
     error: null

@@ -23,48 +23,44 @@ const findActiveInstance = async (config: ApiConfig) => {
         } else if (data && Array.isArray(data.instances)) {
             instances = data.instances;
         } else if (data && typeof data === 'object') {
-            // Caso retorne um único objeto de instância sem estar em array
-            // Alguns endpoints retornam { instance: { ... } } ou direto { instanceName: ... }
-            if (data.instance || data.instanceName) {
+            // Caso retorne um único objeto de instância
+            // Verifica se tem a propriedade 'instance' ou se é o próprio objeto
+            if (data.instance) {
                 instances = [data];
+            } else if (data.instanceName) {
+                // Formato simplificado
+                instances = [{ instance: data }];
             }
         }
         
         if (!instances || instances.length === 0) return null;
 
-        // Helper seguro para pegar dados, independente da estrutura (v1 vs v2)
+        // Helper seguro para pegar dados
         const getStatus = (item: any) => {
             if (!item) return 'unknown';
-            // Tenta ler status em vários níveis com segurança
-            if (item.instance && item.instance.status) return item.instance.status;
-            if (item.status) return item.status;
-            return 'unknown';
+            return item.instance?.status || item.status || 'unknown';
         };
         
         const getName = (item: any) => {
             if (!item) return null;
-            // Tenta ler nome em vários níveis
-            if (item.instance && item.instance.instanceName) return item.instance.instanceName;
-            if (item.instanceName) return item.instanceName;
-            if (item.name) return item.name;
-            return null;
+            return item.instance?.instanceName || item.instanceName || item.name || null;
         };
 
         // 1. Tenta achar uma CONECTADA ('open')
-        const connected = instances.find((i: any) => i && getStatus(i) === 'open');
+        const connected = instances.find((i: any) => getStatus(i) === 'open');
         if (connected) {
             const name = getName(connected);
             if (name) return { instanceName: name, status: 'open' };
         }
 
         // 2. Tenta achar uma CONECTANDO ('connecting')
-        const connecting = instances.find((i: any) => i && getStatus(i) === 'connecting');
+        const connecting = instances.find((i: any) => getStatus(i) === 'connecting');
         if (connecting) {
             const name = getName(connecting);
             if (name) return { instanceName: name, status: 'connecting' };
         }
 
-        // 3. Retorna a primeira que achar (fallback), se tiver nome
+        // 3. Retorna a primeira que achar (fallback)
         const first = instances[0];
         if (first) {
             const name = getName(first);
@@ -84,7 +80,6 @@ export const getSystemStatus = async (config: ApiConfig) => {
   if (!config.baseUrl || !config.apiKey) return null;
 
   try {
-    // Primeiro tenta descobrir a instância correta
     const foundInstance = await findActiveInstance(config);
     const targetInstance = foundInstance?.instanceName || config.instanceName;
 
@@ -104,7 +99,6 @@ export const getSystemStatus = async (config: ApiConfig) => {
         return { status: 'disconnected' };
     }
 
-    // Fallback se a connectionState falhar mas o AutoDiscovery achou algo
     if (foundInstance) {
         if (foundInstance.status === 'open') return { status: 'connected', realName: foundInstance.instanceName };
         if (foundInstance.status === 'connecting') return { status: 'connecting', realName: foundInstance.instanceName };
@@ -130,12 +124,10 @@ export const getDetailedInstanceStatus = async (config: ApiConfig) => {
         if (!response.ok) return { state: 'error_network' };
         
         const data = await response.json();
-        // Normalização
         let instances: any[] = [];
         if (Array.isArray(data)) instances = data;
         else if (data && Array.isArray(data.instances)) instances = data.instances;
         
-        // Helper
         const getStatus = (item: any) => item?.instance?.status || item?.status || 'unknown';
         const getName = (item: any) => item?.instance?.instanceName || item?.instanceName;
 
@@ -160,7 +152,7 @@ export const getDetailedInstanceStatus = async (config: ApiConfig) => {
         return { state: 'not_found' };
 
     } catch (e) {
-        return { state: 'connecting' }; // Assume connecting on error to avoid red flash
+        return { state: 'connecting' };
     }
 };
 
@@ -170,7 +162,6 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
 
   let targetInstance = config.instanceName;
   const activeInstance = await findActiveInstance(config);
-  // Usa o nome descoberto se for uma string válida (activeInstance agora retorna objeto)
   if (activeInstance && activeInstance.instanceName) targetInstance = activeInstance.instanceName;
 
   try {
@@ -180,7 +171,6 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
     });
 
     if (response.status === 404) {
-        // Auto-create logic
         await fetch(`${config.baseUrl}/instance/create`, {
             method: 'POST',
             headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' },
@@ -229,7 +219,6 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
 
     const cleanPhone = phone.replace(/\D/g, '');
     
-    // PAYLOAD SIMPLIFICADO
     const payload = {
         number: cleanPhone,
         options: { delay: 1200, presence: "composing" },
@@ -245,10 +234,6 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
       body: JSON.stringify(payload)
     });
     
-    if (!response.ok) {
-        console.error("Falha envio:", await response.text());
-    }
-
     return response.ok;
   } catch (error) {
     console.error("Erro envio:", error);
@@ -339,78 +324,58 @@ export const logoutInstance = async (config: ApiConfig) => {
   }
 };
 
-// --- UTILS PARA SYNC ---
+// --- SYNC ENGINE ---
 
 const normalizeJid = (jid: string | null | undefined): string => {
     if (!jid) return '';
-    // Remove :11, :12 etc
     const parts = jid.split(':');
     let user = parts[0];
-    // Garante @s.whatsapp.net
     if (user.includes('@')) {
         return user; 
     }
     return user + '@s.whatsapp.net';
 };
 
-const extractChatsRecursively = (data: any, collectedChats = new Map<string, any>()) => {
+// Deep scan para encontrar qualquer objeto que pareça uma mensagem ou chat
+const extractDataRecursively = (data: any, collectedChats = new Map<string, any>()) => {
     if (!data || typeof data !== 'object') return;
 
     if (Array.isArray(data)) {
-        data.forEach(item => extractChatsRecursively(item, collectedChats));
+        data.forEach(item => extractDataRecursively(item, collectedChats));
         return;
     }
 
-    // Identifica Objeto de Chat (Metadata)
-    if (data.id && typeof data.id === 'string' && (Array.isArray(data.messages) || data.unreadCount !== undefined || data.pushName)) {
-        const jid = normalizeJid(data.id);
-        if (jid.includes('@') && !jid.includes('status@broadcast')) {
-            if (!collectedChats.has(jid)) {
-                collectedChats.set(jid, { id: jid, raw: data, messages: [] });
-            }
-            const chat = collectedChats.get(jid);
-            
-            // Merge metadata
-            if (data.pushName) chat.raw.pushName = data.pushName;
-            if (data.name) chat.raw.name = data.name;
-            if (data.unreadCount !== undefined) chat.raw.unreadCount = data.unreadCount;
-            if (data.profilePictureUrl) chat.raw.profilePictureUrl = data.profilePictureUrl;
-
-            if (data.messages && Array.isArray(data.messages)) {
-                // Se tiver mensagens aninhadas, processa
-                extractChatsRecursively(data.messages, collectedChats);
-            }
+    // 1. Tenta identificar um Chat Completo
+    const possibleJid = data.id || data.remoteJid || data.jid || (data.key ? data.key.remoteJid : null);
+    
+    if (possibleJid && typeof possibleJid === 'string' && possibleJid.includes('@') && !possibleJid.includes('status@broadcast')) {
+        const jid = normalizeJid(possibleJid);
+        
+        if (!collectedChats.has(jid)) {
+            collectedChats.set(jid, { id: jid, messages: [] });
         }
-    }
+        const chat = collectedChats.get(jid);
 
-    // Identifica Mensagem Solta (Message Object)
-    if (data.key && data.key.remoteJid) {
-        const jid = normalizeJid(data.key.remoteJid);
-        if (jid.includes('@') && !jid.includes('status@broadcast')) {
-            if (!collectedChats.has(jid)) {
-                // Cria chat placeholder se não existir
-                collectedChats.set(jid, { id: jid, raw: {}, messages: [] });
-            }
-            const chat = collectedChats.get(jid);
-            
-            // Evita duplicatas pelo ID da mensagem
+        // Se o objeto atual TEM metadata de chat (nome, foto), salva
+        if (data.pushName || data.name || data.unreadCount !== undefined || data.profilePictureUrl) {
+            chat.raw = { ...chat.raw, ...data };
+        }
+
+        // Se o objeto atual É uma mensagem (tem key e timestamp)
+        if (data.key && data.messageTimestamp) {
+            // Evita duplicatas de mensagem
             const msgId = data.key.id;
-            const exists = chat.messages.some((m: any) => (m.key?.id === msgId));
+            const exists = chat.messages.some((m: any) => m.key?.id === msgId);
             if (!exists) {
                 chat.messages.push(data);
-                // Tenta extrair nome do remetente se disponível na mensagem
-                if (data.pushName && !chat.raw.pushName) chat.raw.pushName = data.pushName;
             }
         }
     }
 
-    // Continua descendo na árvore (exceto se já processamos msg ou chat para evitar loop)
+    // Continua descendo, exceto se já extraiu tudo
     Object.keys(data).forEach(key => {
-        // Evita recursão infinita em propriedades que já são conhecidas
-        if (key === 'messages' || key === 'key') return; 
-        
         if (typeof data[key] === 'object' && data[key] !== null) {
-             extractChatsRecursively(data[key], collectedChats);
+             extractDataRecursively(data[key], collectedChats);
         }
     });
 };
@@ -420,74 +385,90 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
     try {
         let instanceName = config.instanceName;
-        // Usa o nome descoberto para garantir que a URL esteja certa
         const active = await findActiveInstance(config);
         if (active && active.instanceName) instanceName = active.instanceName;
 
-        // Se mesmo assim não tiver nome, aborta para evitar 404
-        if (!instanceName) {
-            console.warn('[ZapFlow Sync] Nenhuma instância ativa encontrada.');
-            return [];
-        }
+        if (!instanceName) return [];
 
-        const response = await fetch(`${config.baseUrl}/chat/findChats/${instanceName}`, {
-            method: 'GET',
-            headers: { 'apikey': config.apiKey }
-        });
-
-        if (!response.ok) {
-            console.error(`[ZapFlow Sync] Erro ${response.status} ao buscar chats.`);
-            return [];
-        }
-
-        const rawData = await response.json();
+        let rawData: any = null;
         
-        console.log('[ZapFlow Raw Data]', rawData); 
+        // Estratégia de Endpoints (Fallback)
+        const endpoints = [
+            // 1. Tenta buscar CHATS (com mensagens)
+            { url: `/chat/findChats/${instanceName}`, method: 'POST', body: { where: {}, include: ['messages'] } },
+            { url: `/chat/findChats/${instanceName}`, method: 'GET' },
+            // 2. Tenta buscar MENSAGENS diretas (se chats falhar)
+            { url: `/chat/findMessages/${instanceName}`, method: 'POST', body: { where: {}, limit: 50 } },
+            { url: `/message/fetchMessages/${instanceName}`, method: 'GET' } // query param pode ser necessario
+        ];
 
+        for (const ep of endpoints) {
+            try {
+                const opts: RequestInit = {
+                    method: ep.method,
+                    headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' }
+                };
+                if (ep.body) opts.body = JSON.stringify(ep.body);
+
+                const res = await fetch(`${config.baseUrl}${ep.url}`, opts);
+                if (res.ok) {
+                    rawData = await res.json();
+                    if (rawData) {
+                        console.log(`[ZapFlow Sync] Sucesso via ${ep.url}`);
+                        break; 
+                    }
+                }
+            } catch (e) {
+                console.warn(`[ZapFlow Sync] Falha em ${ep.url}`, e);
+            }
+        }
+
+        if (!rawData) return [];
+
+        // Processamento
         const chatsMap = new Map<string, any>();
-        extractChatsRecursively(rawData, chatsMap);
+        extractDataRecursively(rawData, chatsMap);
+        
         const chatsArray = Array.from(chatsMap.values());
-
-        console.log(`[ZapFlow Parser] Encontrados ${chatsArray.length} chats únicos.`);
-
+        
         const mappedChats: Chat[] = chatsArray.map((item: any) => {
-            const remoteJid = item.id;
+            const normalizedJid = item.id;
             
+            // Mapeia mensagens
             let messages: Message[] = [];
-            // As mensagens já foram agrupadas no `extractChatsRecursively`
             if (item.messages && Array.isArray(item.messages)) {
                 messages = item.messages
                     .map((m: any) => mapApiMessageToInternal(m))
                     .filter((m: Message | null): m is Message => m !== null);
             }
-
-            // Ordena mensagens por timestamp
+            
             messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-
             const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
             
-            const name = item.raw.pushName || item.raw.name || item.raw.verifiedName || remoteJid.split('@')[0];
-            const avatarUrl = item.raw.profilePictureUrl || item.raw.ppUrl || item.raw.profilePicUrl;
+            const raw = item.raw || {};
+            const name = raw.pushName || raw.name || raw.verifiedName || normalizedJid.split('@')[0];
+            const avatarUrl = raw.profilePicUrl || raw.profilePictureUrl || raw.ppUrl;
 
             return {
-                id: remoteJid,
+                id: normalizedJid,
                 contactName: name || 'Desconhecido',
-                contactNumber: remoteJid.split('@')[0],
+                contactNumber: normalizedJid.split('@')[0],
                 contactAvatar: avatarUrl || `https://ui-avatars.com/api/?background=random&color=fff&name=${name || 'U'}`,
                 departmentId: null,
-                unreadCount: item.raw.unreadCount || 0,
+                unreadCount: raw.unreadCount || 0,
                 lastMessage: lastMsg ? (lastMsg.type === 'text' ? lastMsg.content : `[${lastMsg.type}]`) : '',
                 lastMessageTime: lastMsg ? lastMsg.timestamp : new Date(),
                 status: 'open' as const,
                 messages: messages,
                 assignedTo: undefined
             };
-        }).filter((c: Chat | null): c is Chat => c !== null);
+        });
 
+        // Filtra chats vazios se necessário, mas aqui vamos retornar tudo que achou
         return mappedChats;
 
     } catch (error) {
-        console.error("Erro sync chats:", error);
+        console.error("[ZapFlow Sync] Erro fatal:", error);
         return [];
     }
 };
@@ -497,37 +478,25 @@ const mapApiMessageToInternal = (apiMsg: any): Message | null => {
 
     const msgObj = apiMsg.message || apiMsg;
     
-    // Tenta extrair conteúdo de todos os lugares possíveis do Baileys
     const content = 
         msgObj.conversation || 
         msgObj.extendedTextMessage?.text || 
         msgObj.imageMessage?.caption ||
-        msgObj.videoMessage?.caption ||
-        msgObj.documentMessage?.caption ||
         (msgObj.imageMessage ? 'Imagem' : '') ||
-        (msgObj.videoMessage ? 'Vídeo' : '') ||
         (msgObj.audioMessage ? 'Áudio' : '') ||
-        (msgObj.stickerMessage ? 'Sticker' : '') ||
-        (msgObj.documentMessage ? 'Arquivo' : '') ||
         (typeof msgObj.text === 'string' ? msgObj.text : '') || 
         '';
     
-    // Se não tem conteúdo de texto nem mídia conhecida, ignora (ex: protocolMessage)
-    if (!content && !msgObj.imageMessage && !msgObj.stickerMessage && !msgObj.audioMessage && !msgObj.videoMessage && !msgObj.documentMessage) {
-        return null;
+    if (!content && !msgObj.imageMessage && !msgObj.audioMessage && !msgObj.stickerMessage && !msgObj.documentMessage && !msgObj.videoMessage) {
+        return null; 
     }
 
     const key = apiMsg.key || {};
     const isFromMe = key.fromMe === true;
     const id = key.id || apiMsg.id || `msg_${Date.now()}_${Math.random()}`;
     
-    let ts = apiMsg.messageTimestamp || apiMsg.timestamp;
-    if (!ts) ts = Date.now();
-    
-    // Tratamento de timestamp (Seconds vs Milliseconds)
+    let ts = apiMsg.messageTimestamp || apiMsg.timestamp || Date.now();
     const tsNum = Number(ts);
-    // Se for menor que 2030 (em segundos), multiplica por 1000. Se for gigante (ms), usa direto.
-    // 2000000000 segundos é ano 2033.
     const timestamp = new Date(tsNum * (tsNum < 2000000000 ? 1000 : 1));
 
     let type: any = 'text';
