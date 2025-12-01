@@ -143,8 +143,55 @@ const App: React.FC = () => {
                                               !realChat.id.startsWith('chat_');
                         const shouldUpdateId = existingIdIsGenerated && realIdIsValid;
 
+                        // Merge inteligente de mensagens: combina mensagens locais e da API, removendo duplicatas
+                        const mergedMessages: Message[] = [];
+                        const messageMap = new Map<string, Message>();
+                        
+                        // Primeiro, adiciona todas as mensagens da API (histórico real)
+                        realChat.messages.forEach(msg => {
+                            // Usa ID da mensagem ou gera um baseado em timestamp + conteúdo para evitar duplicatas
+                            const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
+                            if (!messageMap.has(msgKey)) {
+                                messageMap.set(msgKey, msg);
+                            }
+                        });
+                        
+                        // Depois, adiciona mensagens locais que não estão na API (mensagens enviadas recentemente)
+                        existingChat.messages.forEach(msg => {
+                            // Verifica se a mensagem já existe na API (pode ter sido sincronizada)
+                            const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
+                            const existsInApi = realChat.messages.some(apiMsg => {
+                                // Compara por ID, ou por timestamp + conteúdo se ID não existir
+                                if (apiMsg.id && msg.id) return apiMsg.id === msg.id;
+                                if (apiMsg.timestamp && msg.timestamp) {
+                                    const timeDiff = Math.abs(apiMsg.timestamp.getTime() - msg.timestamp.getTime());
+                                    return timeDiff < 5000 && apiMsg.content === msg.content; // 5 segundos de tolerância
+                                }
+                                return false;
+                            });
+                            
+                            // Se não existe na API e é uma mensagem recente (últimas 5 minutos) ou tem ID local (m_*), mantém
+                            const isRecent = msg.timestamp && (Date.now() - msg.timestamp.getTime()) < 5 * 60 * 1000;
+                            const isLocalMessage = msg.id?.startsWith('m_');
+                            
+                            if (!existsInApi && (isRecent || isLocalMessage)) {
+                                if (!messageMap.has(msgKey)) {
+                                    messageMap.set(msgKey, msg);
+                                }
+                            }
+                        });
+                        
+                        // Converte para array e ordena por timestamp
+                        mergedMessages.push(...Array.from(messageMap.values()));
+                        mergedMessages.sort((a, b) => {
+                            const timeA = a.timestamp?.getTime() || 0;
+                            const timeB = b.timestamp?.getTime() || 0;
+                            return timeA - timeB;
+                        });
+
                         return {
                             ...realChat,
+                            messages: mergedMessages, // Usa mensagens mescladas
                             id: shouldUpdateId ? realChat.id : existingChat.id, // Atualiza ID se existente for gerado e real for válido
                             contactName: existingChat.contactName, // Mantém nome editado localmente se houver
                             contactNumber: useRealContactNumber ? realChat.contactNumber : existingChat.contactNumber, // Atualiza se número mais completo
@@ -154,7 +201,15 @@ const App: React.FC = () => {
                             tags: existingChat.tags,
                             status: existingChat.status === 'closed' ? 'closed' : realChat.status,
                             rating: existingChat.rating,
-                            activeWorkflow: existingChat.activeWorkflow
+                            activeWorkflow: existingChat.activeWorkflow,
+                            lastMessage: mergedMessages.length > 0 ? 
+                                (mergedMessages[mergedMessages.length - 1].type === 'text' ? 
+                                    mergedMessages[mergedMessages.length - 1].content : 
+                                    `📷 ${mergedMessages[mergedMessages.length - 1].type}`) : 
+                                realChat.lastMessage,
+                            lastMessageTime: mergedMessages.length > 0 && mergedMessages[mergedMessages.length - 1].timestamp ? 
+                                mergedMessages[mergedMessages.length - 1].timestamp : 
+                                realChat.lastMessageTime
                         };
                     } else {
                         // console.log(`[App] Novo chat encontrado: ${realChat.id} (${realChat.contactName})`);
