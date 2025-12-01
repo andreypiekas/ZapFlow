@@ -23,9 +23,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const getValidPhoneNumber = (chat: Chat): string => {
     console.log(`[NumberDebug] Iniciando busca para chat ID: ${chat.id}, contactNumber: ${chat.contactNumber}, mensagens: ${chat.messages.length}`);
     
-    // PRIMEIRO: Tenta extrair do ID do chat se for um JID válido
+    // PRIMEIRO: Tenta extrair do ID do chat se for um JID válido (número completo)
     let targetNumber = '';
-    if (chat.id.includes('@') && !chat.id.includes('@g.us')) {
+    if (chat.id.includes('@') && !chat.id.includes('@g.us') && !chat.id.startsWith('chat_') && !chat.id.includes('cminhfbw')) {
         const jidFromId = chat.id.split('@')[0];
         const jidDigits = jidFromId.replace(/\D/g, '').length;
         if (jidDigits >= 10) {
@@ -58,36 +58,54 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         }
     }
     
-    // TERCEIRO: Se não encontrou nas mensagens, verifica contactNumber
+    // TERCEIRO: Se não encontrou nas mensagens, verifica contactNumber (mas ignora IDs gerados)
     if (!targetNumber || targetNumber.replace(/\D/g, '').length < 10) {
-        if (chat.contactNumber && chat.contactNumber.replace(/\D/g, '').length >= 10) {
+        // Ignora contactNumber se for um ID gerado (contém letras ou é muito curto)
+        const contactIsValid = chat.contactNumber && 
+                               !chat.contactNumber.includes('cminhfbw') && 
+                               !chat.contactNumber.startsWith('chat_') &&
+                               /^\d+$/.test(chat.contactNumber.replace(/\D/g, '')) &&
+                               chat.contactNumber.replace(/\D/g, '').length >= 10;
+        
+        if (contactIsValid) {
             const contactDigits = chat.contactNumber.replace(/\D/g, '').length;
             const currentDigits = targetNumber.replace(/\D/g, '').length || 0;
             
             // Usa contactNumber se for mais completo
             if (contactDigits > currentDigits) {
                 targetNumber = chat.contactNumber.replace(/\D/g, '');
-                console.log(`[NumberFix] Usando contactNumber: ${targetNumber}`);
+                console.log(`[NumberFix] Usando contactNumber válido: ${targetNumber}`);
             }
         }
     }
     
-    // QUARTO: Se ainda não tiver, tenta extrair do ID do chat (se não for JID)
+    // QUARTO: Se ainda não tiver, tenta extrair do ID do chat (se for número puro)
     if (!targetNumber || targetNumber.replace(/\D/g, '').length < 10) {
         let idFromChatId = chat.id.split('@')[0];
-        const idIsValidNumber = /^\d+$/.test(idFromChatId.replace(/\D/g, '')) && idFromChatId.replace(/\D/g, '').length >= 10;
+        const idIsValidNumber = /^\d+$/.test(idFromChatId.replace(/\D/g, '')) && 
+                                idFromChatId.replace(/\D/g, '').length >= 10 &&
+                                !idFromChatId.includes('cminhfbw') &&
+                                !idFromChatId.startsWith('chat_');
         
         if (idIsValidNumber) {
             targetNumber = idFromChatId.replace(/\D/g, '');
-            console.log(`[NumberFix] Usando ID do chat: ${targetNumber}`);
+            console.log(`[NumberFix] Usando ID do chat (número puro): ${targetNumber}`);
         }
     }
     
-    // ÚLTIMO RECURSO: Se ainda não tiver número válido, usa contactNumber mesmo que curto
+    // ÚLTIMO RECURSO: Se ainda não tiver número válido, tenta usar contactNumber mesmo que curto (mas só se for número)
     if ((!targetNumber || targetNumber.replace(/\D/g, '').length < 10) && chat.contactNumber) {
-        targetNumber = chat.contactNumber.replace(/\D/g, '');
-        console.warn(`[NumberWarning] Usando contactNumber curto como último recurso: ${targetNumber}`);
-        console.warn(`[NumberWarning] Chat ID: ${chat.id}, Mensagens: ${chat.messages.length}, Authors encontrados: ${chat.messages.filter(m => m.author).length}`);
+        const contactDigits = chat.contactNumber.replace(/\D/g, '').length;
+        const contactIsNumber = /^\d+$/.test(chat.contactNumber.replace(/\D/g, ''));
+        
+        // Só usa se for um número (não ID gerado) e tiver pelo menos 8 dígitos
+        if (contactIsNumber && contactDigits >= 8) {
+            targetNumber = chat.contactNumber.replace(/\D/g, '');
+            console.warn(`[NumberWarning] Usando contactNumber curto como último recurso: ${targetNumber} (${contactDigits} dígitos)`);
+            console.warn(`[NumberWarning] Chat ID: ${chat.id}, Mensagens: ${chat.messages.length}, Authors encontrados: ${chat.messages.filter(m => m.author).length}`);
+        } else {
+            console.error(`[NumberError] Não foi possível encontrar número válido! Chat ID: ${chat.id}, contactNumber: ${chat.contactNumber}`);
+        }
     }
     
     return targetNumber;

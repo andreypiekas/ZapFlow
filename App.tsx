@@ -72,7 +72,22 @@ const App: React.FC = () => {
             setChats(currentChats => {
                 // console.log(`[App] Fazendo merge: ${currentChats.length} chats atuais com ${realChats.length} chats novos`);
                 const mergedChats = realChats.map(realChat => {
-                    const existingChat = currentChats.find(c => c.id === realChat.id);
+                    // Tenta encontrar chat existente por ID ou por contactNumber
+                    let existingChat = currentChats.find(c => c.id === realChat.id);
+                    
+                    // Se não encontrou por ID, tenta encontrar por contactNumber (para casos de IDs gerados)
+                    if (!existingChat && realChat.contactNumber) {
+                        const realContactDigits = realChat.contactNumber.replace(/\D/g, '').length;
+                        if (realContactDigits >= 10) {
+                            existingChat = currentChats.find(c => {
+                                const existingDigits = c.contactNumber?.replace(/\D/g, '').length || 0;
+                                // Encontra se os últimos dígitos coincidem (para casos onde um tem DDI e outro não)
+                                const realLastDigits = realChat.contactNumber.replace(/\D/g, '').slice(-Math.min(realContactDigits, 11));
+                                const existingLastDigits = c.contactNumber?.replace(/\D/g, '').slice(-Math.min(existingDigits, 11)) || '';
+                                return existingLastDigits === realLastDigits && existingLastDigits.length >= 8;
+                            });
+                        }
+                    }
                     
                     if (existingChat) {
                         const newMsgCount = realChat.messages.length;
@@ -92,10 +107,17 @@ const App: React.FC = () => {
                         // Atualiza contactNumber se o realChat tiver um número mais completo
                         const existingDigits = existingChat.contactNumber?.replace(/\D/g, '').length || 0;
                         const realDigits = realChat.contactNumber?.replace(/\D/g, '').length || 0;
-                        const useRealContactNumber = realDigits > existingDigits && realDigits >= 10;
+                        const existingIsGenerated = existingChat.contactNumber?.includes('cminhfbw') || existingChat.contactNumber?.startsWith('chat_') || !/^\d+$/.test(existingChat.contactNumber?.replace(/\D/g, '') || '');
+                        const useRealContactNumber = (realDigits > existingDigits && realDigits >= 10) || (existingIsGenerated && realDigits >= 10);
+
+                        // Se o chat existente tem ID gerado mas o realChat tem ID válido, atualiza o ID também
+                        const existingIdIsGenerated = existingChat.id.includes('cminhfbw') || existingChat.id.startsWith('chat_');
+                        const realIdIsValid = realChat.id.includes('@') && !realChat.id.includes('@g.us') && !realChat.id.includes('cminhfbw') && !realChat.id.startsWith('chat_');
+                        const shouldUpdateId = existingIdIsGenerated && realIdIsValid;
 
                         return {
                             ...realChat,
+                            id: shouldUpdateId ? realChat.id : existingChat.id, // Atualiza ID se existente for gerado e real for válido
                             contactName: existingChat.contactName, // Mantém nome editado localmente se houver
                             contactNumber: useRealContactNumber ? realChat.contactNumber : existingChat.contactNumber, // Atualiza se número mais completo
                             clientCode: existingChat.clientCode,
