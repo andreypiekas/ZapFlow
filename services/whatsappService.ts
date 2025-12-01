@@ -841,10 +841,15 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         
         // Tenta múltiplos endpoints e formatos de query
         const endpoints = [
-            // Endpoint 1: fetchMessages com where
+            // Endpoint 1: fetchMessages com remoteJid exato
             {
                 url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
                 body: { where: { remoteJid: chatId }, limit: limit }
+            },
+            // Endpoint 1b: fetchMessages com remoteJid sem @s.whatsapp.net
+            {
+                url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
+                body: { where: { remoteJid: phoneNumber }, limit: limit }
             },
             // Endpoint 2: fetchMessages com like
             {
@@ -860,6 +865,11 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
             {
                 url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
                 body: { limit: limit }
+            },
+            // Endpoint 5: Tentar buscar via chat/findChats com include messages
+            {
+                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
+                body: { where: { id: chatId }, include: ['messages'], limit: 1 }
             }
         ];
         
