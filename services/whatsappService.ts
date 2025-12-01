@@ -1,3 +1,4 @@
+
 import { ApiConfig, Chat, Message, MessageStatus } from "../types";
 
 // Serviço compatível com Evolution API v1.x/v2.x
@@ -14,20 +15,38 @@ const findActiveInstance = async (config: ApiConfig) => {
         if (!response.ok) return null;
         
         const data = await response.json();
-        const instances = Array.isArray(data) ? data : (data.instances || []);
+        
+        // Normaliza a resposta da API (pode ser array direto ou objeto com propriedade instances)
+        let instances: any[] = [];
+        if (Array.isArray(data)) {
+            instances = data;
+        } else if (data && Array.isArray(data.instances)) {
+            instances = data.instances;
+        } else if (data && typeof data === 'object') {
+            // Caso retorne um único objeto de instância
+            instances = [data];
+        }
         
         if (instances.length === 0) return null;
 
+        // Helper seguro para pegar dados, independente da estrutura (v1 vs v2)
+        const getStatus = (item: any) => item?.instance?.status || item?.status;
+        const getName = (item: any) => item?.instance?.instanceName || item?.instanceName || item?.name;
+
         // 1. Tenta achar uma CONECTADA ('open')
-        const connected = instances.find((i: any) => i.instance.status === 'open');
-        if (connected) return connected.instance;
+        const connected = instances.find((i: any) => getStatus(i) === 'open');
+        if (connected) return { instanceName: getName(connected), status: 'open' };
 
         // 2. Tenta achar uma CONECTANDO ('connecting')
-        const connecting = instances.find((i: any) => i.instance.status === 'connecting');
-        if (connecting) return connecting.instance;
+        const connecting = instances.find((i: any) => getStatus(i) === 'connecting');
+        if (connecting) return { instanceName: getName(connecting), status: 'connecting' };
 
-        // 3. Retorna a primeira que achar (fallback)
-        return instances[0].instance;
+        // 3. Retorna a primeira que achar (fallback), se tiver nome
+        const first = instances[0];
+        const name = getName(first);
+        if (name) return { instanceName: name, status: getStatus(first) };
+
+        return null;
 
     } catch (error) {
         console.error("[AutoDiscovery] Erro ao buscar instâncias:", error);
@@ -82,22 +101,29 @@ export const getDetailedInstanceStatus = async (config: ApiConfig) => {
         if (!response.ok) return { state: 'error_network' };
         
         const data = await response.json();
-        const instances = Array.isArray(data) ? data : (data.instances || []);
+        // Normalização
+        let instances: any[] = [];
+        if (Array.isArray(data)) instances = data;
+        else if (data && Array.isArray(data.instances)) instances = data.instances;
         
-        const myInstance = instances.find((i: any) => i.instance.instanceName === config.instanceName);
+        // Helper
+        const getStatus = (item: any) => item?.instance?.status || item?.status || 'unknown';
+        const getName = (item: any) => item?.instance?.instanceName || item?.instanceName;
+
+        const myInstance = instances.find((i: any) => getName(i) === config.instanceName);
         
         if (myInstance) {
             return {
-                state: myInstance.instance.status || 'unknown',
-                name: myInstance.instance.instanceName
+                state: getStatus(myInstance),
+                name: getName(myInstance)
             };
         }
 
         if (instances.length > 0) {
-            const other = instances[0].instance;
+            const other = instances[0];
             return {
-                state: other.status || 'unknown',
-                name: other.instanceName,
+                state: getStatus(other),
+                name: getName(other),
                 isMismatch: true
             };
         }
@@ -115,7 +141,8 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
 
   let targetInstance = config.instanceName;
   const activeInstance = await findActiveInstance(config);
-  if (activeInstance) targetInstance = activeInstance.instanceName;
+  // Usa o nome descoberto se for uma string válida (activeInstance agora retorna objeto)
+  if (activeInstance && activeInstance.instanceName) targetInstance = activeInstance.instanceName;
 
   try {
     let response = await fetch(`${config.baseUrl}/instance/connect/${targetInstance}`, {
@@ -169,12 +196,11 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
   try {
     let instanceName = config.instanceName;
     const active = await findActiveInstance(config);
-    if (active) instanceName = active.instanceName;
+    if (active && active.instanceName) instanceName = active.instanceName;
 
     const cleanPhone = phone.replace(/\D/g, '');
     
-    // PAYLOAD SIMPLIFICADO PARA EVITAR ERRO DE VALIDAÇÃO
-    // Evolution v2 prefere estrutura plana para texto
+    // PAYLOAD SIMPLIFICADO
     const payload = {
         number: cleanPhone,
         options: { delay: 1200, presence: "composing" },
@@ -229,7 +255,7 @@ export const sendRealMediaMessage = async (
   try {
     let instanceName = config.instanceName;
     const active = await findActiveInstance(config);
-    if (active) instanceName = active.instanceName;
+    if (active && active.instanceName) instanceName = active.instanceName;
 
     const cleanPhone = phone.replace(/\D/g, '');
     const base64 = await blobToBase64(mediaBlob);
@@ -272,7 +298,7 @@ export const logoutInstance = async (config: ApiConfig) => {
   try {
     let instanceName = config.instanceName;
     const active = await findActiveInstance(config);
-    if (active) instanceName = active.instanceName;
+    if (active && active.instanceName) instanceName = active.instanceName;
 
     const response = await fetch(`${config.baseUrl}/instance/logout/${instanceName}`, {
       method: 'DELETE',
@@ -286,35 +312,25 @@ export const logoutInstance = async (config: ApiConfig) => {
 
 // --- UTILS PARA SYNC ---
 
-// Normaliza IDs do WhatsApp removendo sufixos de dispositivo e padronizando domínio
 const normalizeJid = (jid: string | null | undefined): string => {
     if (!jid) return '';
-    
-    // Remove :11, :12, etc (Device IDs)
     const parts = jid.split(':');
     let user = parts[0];
-    
-    // Se tem @lid (Hosted Device), mantemos ou tratamos conforme necessário. 
-    // Geralmente queremos o @s.whatsapp.net para mensagens normais.
-    // Mas se vier @lid nos logs, precisamos agrupar corretamente.
-    
     if (user.includes('@')) {
         return user; 
     }
     return user + '@s.whatsapp.net';
 };
 
-// Parser Recursivo Poderoso para encontrar mensagens em qualquer estrutura
 const extractChatsRecursively = (data: any, collectedChats = new Map<string, any>()) => {
     if (!data || typeof data !== 'object') return;
 
-    // Se for array, percorre
     if (Array.isArray(data)) {
         data.forEach(item => extractChatsRecursively(item, collectedChats));
         return;
     }
 
-    // Tenta identificar se é um Objeto de Chat (contém array messages)
+    // Identifica Objeto de Chat
     if (data.id && typeof data.id === 'string' && Array.isArray(data.messages)) {
         const jid = normalizeJid(data.id);
         if (jid.includes('@')) {
@@ -322,13 +338,10 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
                 collectedChats.set(jid, { id: jid, raw: data, messages: [] });
             }
             const chat = collectedChats.get(jid);
-            // Mescla mensagens
             if (data.messages.length > 0) {
-                // Verifica se messages contém objetos reais
                 const validMsgs = data.messages.filter((m: any) => m && (m.key || m.message));
                 chat.messages = [...chat.messages, ...validMsgs];
             }
-            // Atualiza metadados se disponível
             if (data.pushName) chat.raw.pushName = data.pushName;
             if (data.name) chat.raw.name = data.name;
             if (data.unreadCount) chat.raw.unreadCount = data.unreadCount;
@@ -336,28 +349,23 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
         }
     }
 
-    // Tenta identificar se é um Objeto de Mensagem Solto (contém key.remoteJid)
-    // Evolution v2 às vezes retorna lista plana de mensagens em 'messages'
+    // Identifica Mensagem Solta
     if (data.key && data.key.remoteJid) {
         const jid = normalizeJid(data.key.remoteJid);
-        // Ignora broadcasts de status
         if (jid.includes('@') && !jid.includes('status@broadcast')) {
             if (!collectedChats.has(jid)) {
                 collectedChats.set(jid, { id: jid, raw: {}, messages: [] });
             }
             const chat = collectedChats.get(jid);
-            // Evita duplicatas simples pelo ID da mensagem
-            const exists = chat.messages.some((m: any) => m.key?.id === data.key.id);
+            // Evita duplicatas
+            const exists = chat.messages.some((m: any) => (m.key?.id === data.key.id));
             if (!exists) {
                 chat.messages.push(data);
-                
-                // Tenta pescar o nome do remetente se disponível na mensagem
                 if (data.pushName && !chat.raw.pushName) chat.raw.pushName = data.pushName;
             }
         }
     }
 
-    // Continua a recursão em todas as propriedades (para achar aninhados em 'data', 'result', etc)
     Object.values(data).forEach(val => extractChatsRecursively(val, collectedChats));
 };
 
@@ -366,8 +374,12 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
     try {
         let instanceName = config.instanceName;
+        // Usa o nome descoberto para garantir que a URL esteja certa
         const active = await findActiveInstance(config);
-        if (active) instanceName = active.instanceName;
+        if (active && active.instanceName) instanceName = active.instanceName;
+
+        // Se mesmo assim não tiver nome, aborta para evitar 404
+        if (!instanceName) return [];
 
         const response = await fetch(`${config.baseUrl}/chat/findChats/${instanceName}`, {
             method: 'GET',
@@ -378,14 +390,10 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
         const rawData = await response.json();
         
-        console.log('[ZapFlow Raw Data]', rawData); // DEBUG: Veja isso no Console do Navegador
+        console.log('[ZapFlow Raw Data]', rawData); 
 
-        // Mapa para agrupar chats únicos pelo ID normalizado
         const chatsMap = new Map<string, any>();
-        
-        // Scan profundo para encontrar tudo que parece chat ou mensagem
         extractChatsRecursively(rawData, chatsMap);
-        
         const chatsArray = Array.from(chatsMap.values());
 
         console.log(`[ZapFlow Parser] Encontrados ${chatsArray.length} chats únicos.`);
@@ -393,7 +401,6 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         const mappedChats: Chat[] = chatsArray.map((item: any) => {
             const remoteJid = item.id;
             
-            // Mapeia as mensagens encontradas
             let messages: Message[] = [];
             if (item.messages && Array.isArray(item.messages)) {
                 messages = item.messages
@@ -401,12 +408,10 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                     .filter((m: Message | null): m is Message => m !== null);
             }
 
-            // Ordena mensagens por timestamp (antigas primeiro)
             messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
             const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
             
-            // Metadados
             const name = item.raw.pushName || item.raw.name || item.raw.verifiedName || remoteJid.split('@')[0];
             const avatarUrl = item.raw.profilePictureUrl || item.raw.ppUrl || item.raw.profilePicUrl;
 
@@ -436,10 +441,8 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     if (!apiMsg) return null;
 
-    // Normaliza o objeto de mensagem (as vezes vem dentro de 'message', as vezes plano)
     const msgObj = apiMsg.message || apiMsg;
     
-    // Tenta extrair texto de todas as variações possíveis do Baileys/Evolution
     const content = 
         msgObj.conversation || 
         msgObj.extendedTextMessage?.text || 
@@ -454,7 +457,6 @@ const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         (typeof msgObj.text === 'string' ? msgObj.text : '') || 
         '';
     
-    // Se não tiver conteúdo textual nem mídia conhecida, ignora
     if (!content && !msgObj.imageMessage && !msgObj.stickerMessage && !msgObj.audioMessage) {
         return null;
     }
@@ -463,11 +465,9 @@ const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     const isFromMe = key.fromMe === true;
     const id = key.id || apiMsg.id || `msg_${Date.now()}_${Math.random()}`;
     
-    // Correção do Timestamp
     let ts = apiMsg.messageTimestamp || apiMsg.timestamp;
     if (!ts) ts = Date.now();
     
-    // Converte Timestamp Unix (segundos) para JS (milissegundos)
     const tsNum = Number(ts);
     const timestamp = new Date(tsNum * (String(tsNum).length > 11 ? 1 : 1000));
 
