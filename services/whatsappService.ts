@@ -498,31 +498,35 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         }
 
         console.log(`[fetchChats] Resposta bruta da API (primeiros 1000 chars):`, JSON.stringify(rawData).substring(0, 1000));
-        console.log(`[fetchChats] Tipo da resposta:`, Array.isArray(rawData) ? 'Array' : typeof rawData); 
+        console.log(`[fetchChats] Tipo da resposta:`, Array.isArray(rawData) ? 'Array' : typeof rawData);
 
         const chatsMap = new Map<string, any>();
-        extractChatsRecursively(rawData, chatsMap);
         
-        // Se não encontrou nada, tenta formato alternativo (Evolution API v2 pode retornar diferente)
-        if (chatsMap.size === 0) {
-            console.log('[fetchChats] Nenhum chat encontrado no scan recursivo, tentando formato alternativo...');
-            
-            // Tenta formato direto: array de chats
-            if (Array.isArray(rawData)) {
-                rawData.forEach((chat: any) => {
-                    const jid = chat.id || chat.remoteJid || chat.jid;
-                    if (jid && typeof jid === 'string' && jid.includes('@')) {
-                        const normalized = normalizeJid(jid);
-                        if (!normalized.includes('status@broadcast')) {
-                            chatsMap.set(normalized, {
-                                id: normalized,
-                                raw: chat,
-                                messages: chat.messages || []
-                            });
-                        }
+        // CORREÇÃO: Processa diretamente o array retornado pela Evolution API v2.2.3
+        // A API retorna array de objetos com { id, remoteJid, pushName, profilePicUrl, ... }
+        if (Array.isArray(rawData)) {
+            console.log(`[fetchChats] Processando ${rawData.length} chats do formato direto da API`);
+            rawData.forEach((chat: any) => {
+                // CORREÇÃO: Usa remoteJid ao invés do ID interno do banco
+                const jid = chat.remoteJid;
+                if (jid && typeof jid === 'string' && jid.includes('@')) {
+                    const normalized = normalizeJid(jid);
+                    if (!normalized.includes('status@broadcast')) {
+                        chatsMap.set(normalized, {
+                            id: normalized,
+                            raw: chat,
+                            messages: [] // Mensagens serão buscadas separadamente
+                        });
                     }
-                });
-            }
+                }
+            });
+        } else {
+            // Se não for array, tenta o parser recursivo
+            extractChatsRecursively(rawData, chatsMap);
+            
+            // Se ainda não encontrou nada, tenta formato alternativo
+            if (chatsMap.size === 0) {
+                console.log('[fetchChats] Nenhum chat encontrado no scan recursivo, tentando formato alternativo...');
             // Tenta formato com wrapper: { chats: [...] }
             else if (rawData.chats && Array.isArray(rawData.chats)) {
                 rawData.chats.forEach((chat: any) => {
@@ -562,18 +566,44 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         console.log(`[ZapFlow Parser] Encontrados ${chatsArray.length} chats únicos na resposta da API.`);
 
         const mappedChats: Chat[] = chatsArray.map((item: any) => {
-            const remoteJid = item.id;
+            // CORREÇÃO: Usa remoteJid do objeto raw (que vem da API) ao invés do ID interno
+            const remoteJid = item.raw?.remoteJid || item.id;
+            // Se o ID ainda for o interno do banco, tenta extrair do raw
+            if (remoteJid && !remoteJid.includes('@')) {
+                // Procura no rawData original pelo ID e pega o remoteJid
+                const originalChat = Array.isArray(rawData) 
+                    ? rawData.find((c: any) => c.id === remoteJid || c.remoteJid === remoteJid)
+                    : null;
+                if (originalChat && originalChat.remoteJid) {
+                    const normalizedJid = normalizeJid(originalChat.remoteJid);
+                    return {
+                        id: normalizedJid,
+                        contactName: originalChat.pushName || originalChat.name || normalizedJid.split('@')[0],
+                        contactNumber: normalizedJid.split('@')[0],
+                        contactAvatar: originalChat.profilePicUrl || `https://ui-avatars.com/api/?background=random&color=fff&name=${originalChat.pushName || 'U'}`,
+                        departmentId: null,
+                        unreadCount: 0,
+                        lastMessage: '',
+                        lastMessageTime: originalChat.updatedAt ? new Date(originalChat.updatedAt) : new Date(),
+                        status: 'open' as const,
+                        messages: [],
+                        assignedTo: undefined
+                    };
+                }
+            }
+            
+            const normalizedJid = normalizeJid(remoteJid);
             
             let messages: Message[] = [];
             // As mensagens já foram agrupadas no `extractChatsRecursively`
             if (item.messages && Array.isArray(item.messages)) {
-                console.log(`[fetchChats] Chat ${remoteJid}: ${item.messages.length} mensagens brutas encontradas`);
+                console.log(`[fetchChats] Chat ${normalizedJid}: ${item.messages.length} mensagens brutas encontradas`);
                 messages = item.messages
                     .map((m: any) => mapApiMessageToInternal(m))
                     .filter((m: Message | null): m is Message => m !== null);
-                console.log(`[fetchChats] Chat ${remoteJid}: ${messages.length} mensagens mapeadas com sucesso`);
+                console.log(`[fetchChats] Chat ${normalizedJid}: ${messages.length} mensagens mapeadas com sucesso`);
             } else {
-                console.log(`[fetchChats] Chat ${remoteJid}: Nenhuma mensagem encontrada (item.messages não é array ou está vazio)`);
+                console.log(`[fetchChats] Chat ${normalizedJid}: Nenhuma mensagem encontrada (item.messages não é array ou está vazio)`);
             }
 
             // Ordena mensagens por timestamp
@@ -581,18 +611,26 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
             const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
             
-            const name = item.raw.pushName || item.raw.name || item.raw.verifiedName || remoteJid.split('@')[0];
-            const avatarUrl = item.raw.profilePictureUrl || item.raw.ppUrl || item.raw.profilePicUrl;
+            // Busca dados do chat original na resposta da API
+            const originalChat = Array.isArray(rawData) 
+                ? rawData.find((c: any) => {
+                    const cJid = normalizeJid(c.remoteJid || c.id);
+                    return cJid === normalizedJid || c.id === item.id;
+                })
+                : null;
+            
+            const name = originalChat?.pushName || item.raw?.pushName || item.raw?.name || item.raw?.verifiedName || normalizedJid.split('@')[0];
+            const avatarUrl = originalChat?.profilePicUrl || item.raw?.profilePictureUrl || item.raw?.ppUrl || item.raw?.profilePicUrl;
 
             return {
-                id: remoteJid,
+                id: normalizedJid,
                 contactName: name || 'Desconhecido',
-                contactNumber: remoteJid.split('@')[0],
+                contactNumber: normalizedJid.split('@')[0],
                 contactAvatar: avatarUrl || `https://ui-avatars.com/api/?background=random&color=fff&name=${name || 'U'}`,
                 departmentId: null,
-                unreadCount: item.raw.unreadCount || 0,
+                unreadCount: originalChat?.unreadCount || item.raw?.unreadCount || 0,
                 lastMessage: lastMsg ? (lastMsg.type === 'text' ? lastMsg.content : `[${lastMsg.type}]`) : '',
-                lastMessageTime: lastMsg ? lastMsg.timestamp : new Date(),
+                lastMessageTime: lastMsg ? lastMsg.timestamp : (originalChat?.updatedAt ? new Date(originalChat.updatedAt) : new Date()),
                 status: 'open' as const,
                 messages: messages,
                 assignedTo: undefined
@@ -609,24 +647,54 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             console.log('[fetchChats] Nenhum chat tem mensagens, tentando buscar mensagens individualmente...');
             for (const chat of mappedChats) {
                 try {
-                    const messagesResponse = await fetch(`${config.baseUrl}/chat/fetchMessages/${instanceName}/${encodeURIComponent(chat.id)}`, {
-                        method: 'GET',
-                        headers: { 'apikey': config.apiKey }
-                    });
+                    // Tenta diferentes endpoints para buscar mensagens
+                    const endpoints = [
+                        `/message/fetchMessages/${instanceName}/${encodeURIComponent(chat.id)}`,
+                        `/chat/fetchMessages/${instanceName}/${encodeURIComponent(chat.id)}`,
+                        `/message/fetchMessages/${instanceName}?remoteJid=${encodeURIComponent(chat.id)}`,
+                    ];
                     
-                    if (messagesResponse.ok) {
-                        const messagesData = await messagesResponse.json();
+                    let messagesData: any = null;
+                    for (const endpoint of endpoints) {
+                        try {
+                            const messagesResponse = await fetch(`${config.baseUrl}${endpoint}`, {
+                                method: 'GET',
+                                headers: { 'apikey': config.apiKey }
+                            });
+                            
+                            if (messagesResponse.ok) {
+                                messagesData = await messagesResponse.json();
+                                console.log(`[fetchChats] Endpoint ${endpoint} funcionou para ${chat.id}`);
+                                break;
+                            }
+                        } catch (e) {
+                            // Continua tentando próximo endpoint
+                        }
+                    }
+                    
+                    if (messagesData) {
                         console.log(`[fetchChats] Mensagens encontradas para ${chat.id}:`, messagesData);
                         
                         // Processa mensagens se encontradas
-                        if (messagesData && Array.isArray(messagesData)) {
-                            const mappedMessages = messagesData
+                        let messagesArray: any[] = [];
+                        if (Array.isArray(messagesData)) {
+                            messagesArray = messagesData;
+                        } else if (messagesData.messages && Array.isArray(messagesData.messages)) {
+                            messagesArray = messagesData.messages;
+                        } else if (messagesData.data && Array.isArray(messagesData.data)) {
+                            messagesArray = messagesData.data;
+                        }
+                        
+                        if (messagesArray.length > 0) {
+                            const mappedMessages = messagesArray
                                 .map((m: any) => mapApiMessageToInternal(m))
                                 .filter((m: Message | null): m is Message => m !== null);
                             chat.messages = mappedMessages;
                             chat.messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
                             console.log(`[fetchChats] ${mappedMessages.length} mensagens adicionadas ao chat ${chat.id}`);
                         }
+                    } else {
+                        console.log(`[fetchChats] Nenhum endpoint de mensagens funcionou para ${chat.id}`);
                     }
                 } catch (err) {
                     console.warn(`[fetchChats] Erro ao buscar mensagens do chat ${chat.id}:`, err);
