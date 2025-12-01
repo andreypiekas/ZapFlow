@@ -89,9 +89,15 @@ const App: React.FC = () => {
                             }
                         }
 
+                        // Atualiza contactNumber se o realChat tiver um número mais completo
+                        const existingDigits = existingChat.contactNumber?.replace(/\D/g, '').length || 0;
+                        const realDigits = realChat.contactNumber?.replace(/\D/g, '').length || 0;
+                        const useRealContactNumber = realDigits > existingDigits && realDigits >= 10;
+
                         return {
                             ...realChat,
                             contactName: existingChat.contactName, // Mantém nome editado localmente se houver
+                            contactNumber: useRealContactNumber ? realChat.contactNumber : existingChat.contactNumber, // Atualiza se número mais completo
                             clientCode: existingChat.clientCode,
                             departmentId: existingChat.departmentId,
                             assignedTo: existingChat.assignedTo,
