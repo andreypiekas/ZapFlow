@@ -560,104 +560,102 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
         // 4. Mapeia para o formato interno do Frontend
         return chatsArray.map((item: any) => {
-            // Detecta se o ID é gerado (contém letras não numéricas ou padrões conhecidos)
+            // Detecta se o ID é gerado
             const idIsGenerated = item.id.includes('cmin') || 
                                   item.id.includes('cmid') || 
                                   !/^\d+@/.test(item.id) ||
                                   (item.id.split('@')[0].replace(/\D/g, '').length < 10 && !item.id.includes('@g.us'));
             
-            // PRIMEIRO: Extrai o número completo das mensagens brutas ANTES do mapeamento
-            let bestJid: string | null = null; // Só será preenchido se encontrar número válido
-            let bestNumber: string | null = null; // Só será preenchido se encontrar número válido
+            // SOLUÇÃO DIRETA: Procura número válido nas mensagens brutas PRIMEIRO
+            let validJid: string | null = null;
+            let validNumber: string | null = null;
             
-            // Se o ID não é gerado e é um número válido, usa ele como base
-            if (!idIsGenerated && !item.id.includes('@g.us')) {
-                const idNumber = item.id.split('@')[0];
-                const idDigits = idNumber.replace(/\D/g, '').length;
-                if (idDigits >= 10 && /^\d+$/.test(idNumber.replace(/\D/g, ''))) {
-                    bestJid = item.id;
-                    bestNumber = idNumber;
-                }
-            }
-            
-            // Procura nas mensagens brutas pelo remoteJid mais completo
-            if (item.messages && item.messages.length > 0) {
+            // Procura em TODAS as mensagens brutas pelo remoteJid válido
+            if (item.messages && Array.isArray(item.messages)) {
                 for (const rawMsg of item.messages) {
-                    if (rawMsg.key && rawMsg.key.remoteJid) {
-                        const remoteJid = normalizeJid(rawMsg.key.remoteJid);
-                        if (remoteJid.includes('@') && !remoteJid.includes('@g.us') && !remoteJid.includes('@lid')) {
-                            const jidNumber = remoteJid.split('@')[0];
-                            const jidDigits = jidNumber.replace(/\D/g, '').length;
+                    // Tenta múltiplas formas de acessar o remoteJid
+                    const remoteJid = rawMsg?.key?.remoteJid || 
+                                     rawMsg?.remoteJid || 
+                                     rawMsg?.jid ||
+                                     rawMsg?.key?.participant;
+                    
+                    if (remoteJid) {
+                        const normalized = normalizeJid(remoteJid);
+                        if (normalized.includes('@') && !normalized.includes('@g.us') && !normalized.includes('@lid')) {
+                            const jidNum = normalized.split('@')[0];
+                            const digits = jidNum.replace(/\D/g, '');
                             
-                            // Verifica se é um número válido (só dígitos e >=10)
-                            const isValidNumber = /^\d+$/.test(jidNumber.replace(/\D/g, '')) && jidDigits >= 10;
-                            
-                            if (isValidNumber) {
-                                // Se ainda não tem bestNumber ou encontrou um mais completo, atualiza
-                                if (!bestNumber || jidDigits > (bestNumber.replace(/\D/g, '').length || 0)) {
-                                    bestJid = remoteJid;
-                                    bestNumber = jidNumber;
-                                }
+                            // Se é um número válido (>=10 dígitos, só números)
+                            if (/^\d+$/.test(digits) && digits.length >= 10) {
+                                validJid = normalized;
+                                validNumber = jidNum;
+                                break; // Usa o primeiro número válido encontrado
                             }
                         }
                     }
                 }
             }
             
+            // Se não encontrou nas mensagens, verifica se o ID original é válido
+            if (!validNumber && !idIsGenerated && !item.id.includes('@g.us')) {
+                const idNum = item.id.split('@')[0];
+                const idDigits = idNum.replace(/\D/g, '');
+                if (/^\d+$/.test(idDigits) && idDigits.length >= 10) {
+                    validJid = item.id;
+                    validNumber = idNum;
+                }
+            }
+            
+            // Mapeia mensagens garantindo que author seja sempre preenchido
             const messages: Message[] = item.messages
                 .map((m: any) => {
                     const mapped = mapApiMessageToInternal(m);
-                    // Debug: Log se mensagem não tem author após mapeamento
-                    if (mapped && !mapped.author && m.key && m.key.remoteJid) {
-                        console.warn('[MessageAuthor] Mensagem mapeada sem author, mas tem remoteJid:', {
-                            msgId: mapped.id,
-                            remoteJid: m.key.remoteJid,
-                            key: m.key
-                        });
-                        // Tenta corrigir: adiciona author diretamente se tiver remoteJid
-                        if (m.key.remoteJid) {
-                            mapped.author = normalizeJid(m.key.remoteJid);
+                    if (!mapped) return null;
+                    
+                    // GARANTE author: se não tem, tenta extrair do remoteJid
+                    if (!mapped.author) {
+                        const msgRemoteJid = m?.key?.remoteJid || m?.remoteJid || m?.jid;
+                        if (msgRemoteJid) {
+                            mapped.author = normalizeJid(msgRemoteJid);
+                        } else if (validJid) {
+                            // Se não tem na mensagem, usa o JID válido encontrado
+                            mapped.author = validJid;
                         }
                     }
+                    
                     return mapped;
                 })
                 .filter((m: any) => m !== null)
                 .sort((a: any, b: any) => a.timestamp.getTime() - b.timestamp.getTime());
 
             const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
-            const name = item.raw.pushName || item.raw.name || (bestNumber || item.id.split('@')[0]);
+            const name = item.raw.pushName || item.raw.name || (validNumber || item.id.split('@')[0]);
             
-            // Usa o número mais completo encontrado
+            // Define ID e contactNumber: SEMPRE usa número válido se encontrou
+            let chatId: string;
             let contactNumber: string;
-            let chatId = item.id; // ID do chat (mantém original se não encontrar número válido)
             
-            // Se for ID de grupo, mantém o ID original
             if (item.id.includes('@g.us')) {
+                // Grupo: mantém ID original
+                chatId = item.id;
                 contactNumber = item.id;
-            } else if (bestNumber && bestNumber.replace(/\D/g, '').length >= 10) {
-                // Se encontrou um número válido nas mensagens, usa ele
-                contactNumber = bestNumber;
-                
-                // Se o ID original é gerado e encontramos um número válido, atualiza o ID também
-                if (idIsGenerated && bestJid) {
-                    chatId = bestJid; // Usa o JID completo como ID do chat
-                    console.log(`[ChatIdFix] Chat ID atualizado de ${item.id} para ${chatId} (número: ${bestNumber})`);
+            } else if (validNumber && validJid) {
+                // Encontrou número válido: USA ELE para ID e contactNumber
+                chatId = validJid;
+                contactNumber = validNumber;
+                if (idIsGenerated) {
+                    console.log(`[ChatFix] Chat corrigido: ${item.id} -> ${chatId} (número: ${validNumber})`);
                 }
             } else {
-                // Se não encontrou número válido, usa o ID original (mesmo que gerado)
+                // Não encontrou número válido: mantém original (mesmo que gerado)
+                chatId = item.id;
                 contactNumber = item.id.split('@')[0];
-                // Não atualiza o ID se não encontrou número válido
-            }
-            
-            // Debug: Log se o número foi corrigido
-            if (item.id.split('@')[0] !== contactNumber && !item.id.includes('@g.us') && bestNumber) {
-                console.log(`[ContactNumberFix] Chat ID: ${item.id} -> ${chatId}, contactNumber: ${contactNumber}`);
             }
 
             return {
-                id: chatId, // Usa o ID corrigido se encontrou número válido, senão mantém original
+                id: chatId,
                 contactName: name,
-                contactNumber: contactNumber, // Sempre usa o número mais completo encontrado (ou ID se não encontrou)
+                contactNumber: contactNumber,
                 contactAvatar: item.raw.profilePictureUrl || `https://ui-avatars.com/api/?name=${name}`,
                 departmentId: null,
                 unreadCount: item.raw.unreadCount || 0,
