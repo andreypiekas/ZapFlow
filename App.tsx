@@ -370,14 +370,19 @@ const App: React.FC = () => {
             const wsUrl = wsUrls[0];
             console.log(`[App] Conectando WebSocket: ${wsUrl}`);
             
+            // Fecha WebSocket anterior se existir
+            if (wsRef.current) {
+                wsRef.current.close();
+            }
+            
             wsRef.current = new WebSocket(wsUrl);
             const ws = wsRef.current;
             
             ws.onopen = () => {
                 console.log('[App] ✅ WebSocket conectado com sucesso!');
                 // Envia autenticação se necessário
-                if (apiConfig.apiKey) {
-                    ws?.send(JSON.stringify({ apikey: apiConfig.apiKey }));
+                if (apiConfig.apiKey && wsRef.current) {
+                    wsRef.current.send(JSON.stringify({ apikey: apiConfig.apiKey }));
                     console.log('[App] Autenticação enviada ao WebSocket');
                 }
             };
