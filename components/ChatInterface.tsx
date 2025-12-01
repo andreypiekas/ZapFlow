@@ -84,9 +84,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   
   // Flag as invalid only if:
   // 1. It is NOT a special ID (LID or Group)
-  // 2. AND it has less than 8 digits (Absolute minimum for local numbers)
+  // 2. AND it has less than 10 digits (Standard minimal length for Brazil is 10: DDD + 8 digits)
   // 3. AND it is not empty
-  const isInvalidNumber = selectedChat && !isLID && !isGroup && cleanedNumber.length > 0 && cleanedNumber.length < 8;
+  const isInvalidNumber = selectedChat && !isLID && !isGroup && cleanedNumber.length > 0 && cleanedNumber.length < 10;
 
   // Sync editing state with selected chat
   useEffect(() => {
@@ -193,7 +193,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       } else {
           // Input manual
           const cleaned = newChatInput.replace(/\D/g, '');
-          if (cleaned.length < 8) {
+          if (cleaned.length < 10) {
               alert('Número inválido. Digite DDD + Número (ex: 11999999999).');
               return;
           }
@@ -992,7 +992,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         {isInvalidNumber && (
                              <div 
                                 className="bg-red-500 text-white text-[10px] px-2 py-1 rounded flex items-center gap-1 animate-pulse cursor-pointer hover:bg-red-600 transition-colors" 
-                                title={`Número detectado: "${rawContactNumber}" | Limpo: "${cleanedNumber}" (Dígitos: ${cleanedNumber.length}). Clique para corrigir.`}
+                                title={`Número detectado: "${rawContactNumber}" | Limpo: "${cleanedNumber}" (Dígitos: ${cleanedNumber.length}). Parece faltar o DDD (mínimo 10 dígitos). Clique para corrigir.`}
                                 onClick={() => setIsEditingContact(true)}
                              >
                                 <AlertTriangle size={12} /> <span className="hidden md:inline">Número Inválido</span>

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Contact } from '../types';
 import { RefreshCw, Search, Mail, User as UserIcon, Check, Loader2, AlertTriangle } from 'lucide-react';
@@ -173,7 +172,11 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, clientId })
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredContacts.map(contact => (
+              {filteredContacts.map(contact => {
+                const cleaned = contact.phone.replace(/\D/g, '');
+                const isShort = cleaned.length > 0 && cleaned.length < 10;
+                
+                return (
                 <tr key={contact.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -187,7 +190,12 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, clientId })
                       <span className="font-medium text-slate-800">{contact.name}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-slate-600 font-mono text-sm">{contact.phone}</td>
+                  <td className="px-6 py-4 text-slate-600 font-mono text-sm flex items-center gap-2">
+                      {contact.phone}
+                      {isShort && (
+                          <span title="Número parece incompleto (sem DDD?)" className="text-amber-500 cursor-help"><AlertTriangle size={14}/></span>
+                      )}
+                  </td>
                   <td className="px-6 py-4 text-slate-600 text-sm">
                       {contact.email ? (
                           <span className="flex items-center gap-1"><Mail size={14} className="text-slate-400"/> {contact.email}</span>
@@ -208,7 +216,7 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, clientId })
                       {contact.lastSync ? new Date(contact.lastSync).toLocaleString() : '-'}
                   </td>
                 </tr>
-              ))}
+              )})}
               {filteredContacts.length === 0 && (
                   <tr>
                       <td colSpan={5} className="text-center py-8 text-slate-400">
