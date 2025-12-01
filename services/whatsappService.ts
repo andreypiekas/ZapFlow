@@ -347,11 +347,26 @@ export const sendRealMediaMessage = async (
 // --- CHAT SYNC & PARSING ---
 
 // Função recursiva para encontrar mensagens onde quer que elas estejam aninhadas
-const extractChatsRecursively = (data: any, collectedChats = new Map<string, any>()) => {
+const extractChatsRecursively = (data: any, collectedChats = new Map<string, any>(), depth = 0) => {
     if (!data || typeof data !== 'object') return;
+    
+    // Limita profundidade para evitar loops infinitos
+    if (depth > 10) return;
 
     if (Array.isArray(data)) {
-        data.forEach(item => extractChatsRecursively(item, collectedChats));
+        if (depth === 0) {
+            console.log(`[ExtractChats] Array recebido com ${data.length} itens`);
+            if (data.length > 0) {
+                console.log(`[ExtractChats] Primeiro item:`, {
+                    keys: Object.keys(data[0]).slice(0, 15),
+                    hasKey: !!data[0].key,
+                    keyRemoteJid: data[0].key?.remoteJid,
+                    hasId: !!data[0].id,
+                    id: data[0].id
+                });
+            }
+        }
+        data.forEach(item => extractChatsRecursively(item, collectedChats, depth + 1));
         return;
     }
 
@@ -361,6 +376,7 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
         if (jid.includes('@') && !jid.includes('status@broadcast')) {
             if (!collectedChats.has(jid)) {
                 collectedChats.set(jid, { id: jid, raw: data, messages: [] });
+                console.log(`[ExtractChats] Chat criado: ${jid}, messages no raw: ${data.messages?.length || 0}`);
             }
             const chat = collectedChats.get(jid);
             // Atualiza metadata
@@ -370,7 +386,8 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
             
             // Se tiver mensagens dentro do chat
             if (data.messages && Array.isArray(data.messages)) {
-                extractChatsRecursively(data.messages, collectedChats);
+                console.log(`[ExtractChats] Processando ${data.messages.length} mensagens do chat ${jid}`);
+                extractChatsRecursively(data.messages, collectedChats, depth + 1);
             }
         }
     }
@@ -554,11 +571,24 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
         if (!rawData) return [];
 
-        // console.log('[ZapFlow Parser] Dados recebidos. Processando...');
+        // Debug: Log estrutura dos dados recebidos
+        console.log('[FetchChats] Dados brutos recebidos:', {
+            isArray: Array.isArray(rawData),
+            type: typeof rawData,
+            keys: rawData && typeof rawData === 'object' ? Object.keys(rawData).slice(0, 20) : [],
+            firstLevel: Array.isArray(rawData) && rawData.length > 0 ? {
+                firstItemKeys: Object.keys(rawData[0]).slice(0, 10),
+                firstItemType: typeof rawData[0]
+            } : rawData && typeof rawData === 'object' ? {
+                sampleKeys: Object.keys(rawData).slice(0, 10)
+            } : null
+        });
 
         // 3. Processa os dados usando o Parser Recursivo Universal
         const chatsMap = new Map<string, any>();
         extractChatsRecursively(rawData, chatsMap);
+        
+        console.log(`[ExtractChats] Total de chats após extração: ${chatsMap.size}`);
         
         const chatsArray = Array.from(chatsMap.values());
         console.log(`[FetchChats] Total de chats extraídos: ${chatsArray.length}`);
