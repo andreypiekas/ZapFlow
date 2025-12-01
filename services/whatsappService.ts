@@ -371,23 +371,37 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
     }
 
     // Caso 1: Objeto de Chat (Metadata)
-    if (data.id && typeof data.id === 'string' && (data.unreadCount !== undefined || data.pushName)) {
+    // Ajusta condição: aceita qualquer objeto com id (não só com unreadCount ou pushName)
+    if (data.id && typeof data.id === 'string') {
         const jid = normalizeJid(data.id);
         if (jid.includes('@') && !jid.includes('status@broadcast')) {
             if (!collectedChats.has(jid)) {
                 collectedChats.set(jid, { id: jid, raw: data, messages: [] });
-                console.log(`[ExtractChats] Chat criado: ${jid}, messages no raw: ${data.messages?.length || 0}`);
+                console.log(`[ExtractChats] Chat criado: ${jid}, messages no raw: ${data.messages?.length || 0}, keys: ${Object.keys(data).join(', ')}`);
             }
             const chat = collectedChats.get(jid);
             // Atualiza metadata
             if (data.pushName) chat.raw.pushName = data.pushName;
             if (data.profilePictureUrl) chat.raw.profilePictureUrl = data.profilePictureUrl;
-            if (data.unreadCount) chat.raw.unreadCount = data.unreadCount;
+            if (data.unreadCount !== undefined) chat.raw.unreadCount = data.unreadCount;
             
             // Se tiver mensagens dentro do chat
             if (data.messages && Array.isArray(data.messages)) {
                 console.log(`[ExtractChats] Processando ${data.messages.length} mensagens do chat ${jid}`);
                 extractChatsRecursively(data.messages, collectedChats, depth + 1);
+            }
+            
+            // TAMBÉM procura mensagens em outros campos possíveis
+            const possibleMessageFields = ['message', 'lastMessage', 'messages', 'conversation'];
+            for (const field of possibleMessageFields) {
+                if (data[field] && Array.isArray(data[field]) && data[field].length > 0) {
+                    console.log(`[ExtractChats] Encontrado campo ${field} com ${data[field].length} itens no chat ${jid}`);
+                    extractChatsRecursively(data[field], collectedChats, depth + 1);
+                } else if (data[field] && typeof data[field] === 'object' && !Array.isArray(data[field])) {
+                    // Pode ser uma única mensagem
+                    console.log(`[ExtractChats] Encontrado campo ${field} como objeto único no chat ${jid}`);
+                    extractChatsRecursively(data[field], collectedChats, depth + 1);
+                }
             }
         }
     }
@@ -577,8 +591,9 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             type: typeof rawData,
             keys: rawData && typeof rawData === 'object' ? Object.keys(rawData).slice(0, 20) : [],
             firstLevel: Array.isArray(rawData) && rawData.length > 0 ? {
-                firstItemKeys: Object.keys(rawData[0]).slice(0, 10),
-                firstItemType: typeof rawData[0]
+                firstItemKeys: Object.keys(rawData[0]),
+                firstItemType: typeof rawData[0],
+                firstItem: rawData[0] // Log completo do primeiro item
             } : rawData && typeof rawData === 'object' ? {
                 sampleKeys: Object.keys(rawData).slice(0, 10)
             } : null
