@@ -801,35 +801,41 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
 // Busca mensagens de um chat específico
 export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit: number = 100): Promise<Message[]> => {
-    console.log(`[fetchChatMessages] INÍCIO - chatId: ${chatId}, isDemo: ${config.isDemo}, baseUrl: ${config.baseUrl}`);
+    console.log(`[fetchChatMessages] ========== INÍCIO ==========`);
+    console.log(`[fetchChatMessages] chatId: ${chatId}`);
+    console.log(`[fetchChatMessages] isDemo: ${config.isDemo}`);
+    console.log(`[fetchChatMessages] baseUrl: ${config.baseUrl}`);
+    console.log(`[fetchChatMessages] apiKey: ${!!config.apiKey}`);
     
     if (config.isDemo || !config.baseUrl || !config.apiKey) {
-        console.log(`[fetchChatMessages] Retornando vazio: isDemo=${config.isDemo}, baseUrl=${!!config.baseUrl}, apiKey=${!!config.apiKey}`);
+        console.log(`[fetchChatMessages] ❌ Retornando vazio: isDemo=${config.isDemo}, baseUrl=${!!config.baseUrl}, apiKey=${!!config.apiKey}`);
         return [];
     }
 
     try {
-        console.log(`[fetchChatMessages] Buscando instância ativa...`);
+        console.log(`[fetchChatMessages] 🔍 PASSO 1: Buscando instância ativa...`);
         let active;
         try {
             active = await findActiveInstance(config);
-            console.log(`[fetchChatMessages] findActiveInstance retornou:`, active ? { instanceName: active.instanceName } : 'null');
+            console.log(`[fetchChatMessages] ✅ findActiveInstance retornou:`, active ? { instanceName: active.instanceName } : 'null');
         } catch (err) {
-            console.error(`[fetchChatMessages] Erro ao buscar instância:`, err);
+            console.error(`[fetchChatMessages] ❌ Erro ao buscar instância:`, err);
             active = null;
         }
         
         const instanceName = active?.instanceName || config.instanceName;
-        console.log(`[fetchChatMessages] Instância encontrada: ${instanceName} (de active: ${active?.instanceName}, de config: ${config.instanceName})`);
+        console.log(`[fetchChatMessages] 🔍 PASSO 2: Instância encontrada: ${instanceName}`);
+        console.log(`[fetchChatMessages] - De active: ${active?.instanceName || 'null'}`);
+        console.log(`[fetchChatMessages] - De config: ${config.instanceName || 'null'}`);
         
         if (!instanceName) {
-            console.log(`[fetchChatMessages] Retornando vazio: instância não encontrada`);
+            console.log(`[fetchChatMessages] ❌ Retornando vazio: instância não encontrada`);
             return [];
         }
 
         // Extrai o número do JID (remove @s.whatsapp.net)
         const phoneNumber = chatId.split('@')[0];
-        console.log(`[fetchChatMessages] Buscando mensagens para ${chatId} (número: ${phoneNumber})`);
+        console.log(`[fetchChatMessages] 🔍 PASSO 3: Buscando mensagens para ${chatId} (número: ${phoneNumber})`);
         
         const messages: Message[] = [];
         
