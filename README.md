@@ -66,7 +66,13 @@ graph TD
 
 Este repositório contém guias específicos para diferentes cenários de infraestrutura. Escolha o adequado para você:
 
-### 1. Instalação Padrão (Ubuntu/Debian)
+### 🚀 0. Instalação Automática (Recomendado)
+Use o script mágico para instalar tudo (Docker, Node, API, App) em 5 minutos em uma VPS limpa.
+1. Crie o arquivo: `nano autoinstall.sh`
+2. Cole o conteúdo de **[autoinstall.txt](./autoinstall.txt)**
+3. Execute: `bash autoinstall.sh`
+
+### 1. Instalação Manual (Ubuntu/Debian)
 Para servidores VPS limpos (DigitalOcean, AWS, Vultr, Local VM).
 📄 **[manual_instalacao_completo.txt](./manual_instalacao_completo.txt)**
 

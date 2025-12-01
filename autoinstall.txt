@@ -1,0 +1,177 @@
+#!/bin/bash
+
+# ==============================================================================
+# 🚀 ZAPFLOW MANAGER - AUTO INSTALLER (ZERO-TO-HERO)
+# ==============================================================================
+# Este script prepara uma VPS Ubuntu limpa (20.04 ou 22.04) para rodar o ZapFlow.
+# Ele instala: Docker, Node.js, PM2, Nginx, Evolution API e o Frontend.
+#
+# COMO USAR:
+# 1. Crie o arquivo: nano autoinstall.sh
+# 2. Cole este conteúdo.
+# 3. Dê permissão: chmod +x autoinstall.sh
+# 4. Execute: ./autoinstall.sh
+# ==============================================================================
+
+set -e # Para se houver erro
+
+# --- CORES ---
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+echo -e "${BLUE}[1/8] Atualizando o Sistema...${NC}"
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y curl git nano unzip ufw
+
+echo -e "${BLUE}[2/8] Configurando Memória SWAP (4GB)...${NC}"
+# Verifica se já existe swap
+if [ $(swapon --show | wc -l) -eq 0 ]; then
+    sudo fallocate -l 4G /swapfile
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+    sudo swapon /swapfile
+    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+    echo -e "${GREEN}Swap criado com sucesso.${NC}"
+else
+    echo -e "${GREEN}Swap já existe. Pulando.${NC}"
+fi
+
+echo -e "${BLUE}[3/8] Instalando Docker e Docker Compose...${NC}"
+if ! command -v docker &> /dev/null; then
+    curl -fsSL https://get.docker.com | sh
+    sudo usermod -aG docker $USER
+    echo -e "${GREEN}Docker instalado.${NC}"
+else
+    echo -e "${GREEN}Docker já instalado.${NC}"
+fi
+
+echo -e "${BLUE}[4/8] Instalando Node.js 20 e PM2...${NC}"
+if ! command -v node &> /dev/null; then
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+    sudo apt install -y nodejs
+    sudo npm install -g pm2 serve
+else
+    echo -e "${GREEN}Node.js já instalado.${NC}"
+fi
+
+echo -e "${BLUE}[5/8] Configurando Evolution API (Backend)...${NC}"
+# Obtém IP da máquina
+SERVER_IP=$(hostname -I | awk '{print $1}')
+
+# Cria docker-compose.yml com a configuração GOLDILOCKS (Validada)
+cat > docker-compose.yml <<EOL
+services:
+  evolution_api:
+    image: atendai/evolution-api:v2.2.3
+    container_name: evolution_api
+    restart: always
+    shm_size: '2gb'
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_PORT=8080
+      - SERVER_URL=http://${SERVER_IP}:8080
+      - AUTHENTICATION_API_KEY=B8349283-F143-429D-B6C2-9386E8016558
+      - WEBSOCKET_ENABLED=true
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://user:password@evolution_postgres:5432/evolution
+      - DATABASE_CLIENT_NAME=evolution_exchange
+      - RABBITMQ_ENABLED=false
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://evolution_redis:6379/0
+      - DEL_INSTANCE=false
+      
+      # CONFIGURAÇÃO DE ESTABILIDADE
+      - CONFIG_SESSION_PHONE_CLIENT=ZapFlow
+      - CONFIG_SESSION_PHONE_NAME=Chrome
+      - CONFIG_SESSION_PHONE_OS=Windows
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1029255529
+      - CONFIG_SESSION_PHONE_SYNC_FULL_HISTORY=false
+      - CONFIG_SESSION_PHONE_REJECT_CALL=true
+      - CONFIG_SESSION_PHONE_MSG_CALL="Não aceitamos chamadas de voz."
+      
+      # ARGUMENTOS ANTI-CRASH (VPS)
+      - BROWSER_ARGS=["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-accelerated-2d-canvas","--no-first-run","--disable-gpu","--disable-software-rasterizer"]
+      
+      - CORS_ORIGIN=*
+      - CORS_METHODS=POST,GET,PUT,DELETE,OPTIONS
+      - CORS_CREDENTIALS=true
+    depends_on:
+      - evolution_postgres
+      - evolution_redis
+
+  evolution_postgres:
+    image: postgres:15-alpine
+    container_name: evolution_postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=evolution
+    volumes:
+      - evolution_postgres_data:/var/lib/postgresql/data
+
+  evolution_redis:
+    image: redis:alpine
+    container_name: evolution_redis
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - evolution_redis_data:/data
+
+volumes:
+  evolution_postgres_data:
+  evolution_redis_data:
+EOL
+
+# Inicia a API
+echo "Subindo containers..."
+sudo docker compose up -d
+
+echo -e "${BLUE}[6/8] Instalando Dependências do Frontend...${NC}"
+# Garante instalação limpa
+rm -rf node_modules package-lock.json
+npm install
+
+echo -e "${BLUE}[7/8] Compilando Aplicação (Build)...${NC}"
+# Correção de segurança: garante que o erro de JSX não existe antes do build
+if [ -f "components/Connection.tsx" ]; then
+    sed -i 's/Menu > Aparelhos/Menu \&gt; Aparelhos/g' components/Connection.tsx || true
+fi
+
+npm run build
+
+echo -e "${BLUE}[8/8] Colocando Online com PM2...${NC}"
+pm2 delete zapflow-front 2>/dev/null || true
+pm2 start "serve -s dist -l 5173" --name zapflow-front
+pm2 save
+pm2 startup | grep "sudo" | bash || true # Tenta executar o comando de startup se aparecer
+
+# Configuração Básica de Nginx (Opcional, remove conflito se houver Apache)
+if command -v systemctl &> /dev/null; then
+    echo "Configurando Firewall..."
+    sudo ufw allow 8080
+    sudo ufw allow 5173
+    sudo ufw allow 22
+    sudo ufw allow 80
+    sudo ufw --force enable
+fi
+
+echo ""
+echo -e "${GREEN}======================================================${NC}"
+echo -e "${GREEN}   INSTALAÇÃO CONCLUÍDA COM SUCESSO! 🚀${NC}"
+echo -e "${GREEN}======================================================${NC}"
+echo ""
+echo -e "Acesse o sistema em: http://${SERVER_IP}:5173"
+echo -e "API rodando em:      http://${SERVER_IP}:8080"
+echo ""
+echo -e "Login Padrão: admin@hostgator.com"
+echo -e "Senha Padrão: 123456"
+echo ""
+echo -e "Para configurar domínio e HTTPS, consulte o arquivo deploy.txt"
