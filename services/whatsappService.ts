@@ -5,7 +5,7 @@ import { ApiConfig, Chat, Message, MessageStatus } from "../types";
 
 // --- UTILS ---
 
-const normalizeJid = (jid: string | null | undefined): string => {
+export const normalizeJid = (jid: string | null | undefined): string => {
     if (!jid) return '';
     // Remove caracteres inválidos e sufixos de dispositivo (:11, :12)
     const parts = jid.split(':');
@@ -37,7 +37,7 @@ const formatPhoneForApi = (phone: string): string => {
 // --- CORE SERVICE ---
 
 // Helper interno para encontrar instância ativa de forma blindada
-const findActiveInstance = async (config: ApiConfig) => {
+export const findActiveInstance = async (config: ApiConfig) => {
     try {
         const response = await fetch(`${config.baseUrl}/instance/fetchInstances`, {
             method: 'GET',
@@ -457,7 +457,7 @@ const mapStatus = (status: any): MessageStatus => {
     return MessageStatus.SENT; // Default
 };
 
-const mapApiMessageToInternal = (apiMsg: any): Message | null => {
+export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     if (!apiMsg) return null;
     const msgObj = apiMsg.message || apiMsg;
     

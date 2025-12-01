@@ -13,7 +13,7 @@ import ReportsDashboard from './components/ReportsDashboard';
 import Contacts from './components/Contacts';
 import ChatbotSettings from './components/ChatbotSettings';
 import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot, ChevronLeft, ChevronRight } from 'lucide-react';
-import { fetchChats, fetchChatMessages } from './services/whatsappService'; 
+import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance } from './services/whatsappService'; 
 
 const loadConfig = (): ApiConfig => {
   const saved = localStorage.getItem('zapflow_config');
@@ -330,7 +330,122 @@ const App: React.FC = () => {
     // Polling a cada 3 segundos para parecer tempo real
     const intervalId = setInterval(syncChats, 3000);
 
-    return () => clearInterval(intervalId);
+    // WebSocket para receber mensagens em tempo real
+    let ws: WebSocket | null = null;
+    
+    // Inicializa WebSocket de forma assíncrona
+    const initWebSocket = async () => {
+        if (apiConfig.isDemo || !apiConfig.baseUrl) return;
+        
+        try {
+            const active = await findActiveInstance(apiConfig);
+            const instanceName = active?.instanceName || apiConfig.instanceName;
+            
+            if (!instanceName) return;
+            
+            // Converte http:// para ws:// ou https:// para wss://
+            const wsUrl = apiConfig.baseUrl.replace(/^http/, 'ws') + `/chat/${instanceName}`;
+            console.log(`[App] Conectando WebSocket: ${wsUrl}`);
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                console.log('[App] WebSocket conectado');
+                // Envia autenticação se necessário
+                if (apiConfig.apiKey) {
+                    ws?.send(JSON.stringify({ apikey: apiConfig.apiKey }));
+                }
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('[App] Mensagem recebida via WebSocket:', data);
+                    
+                    // Processa mensagens recebidas
+                    if (data.event === 'messages.upsert' || data.event === 'messages.update' || data.event === 'message') {
+                        const messageData = data.data || data;
+                        if (messageData && messageData.key && messageData.key.remoteJid) {
+                            const remoteJid = normalizeJid(messageData.key.remoteJid);
+                            const mapped = mapApiMessageToInternal(messageData);
+                            
+                            if (mapped) {
+                                setChats(currentChats => {
+                                    return currentChats.map(chat => {
+                                        // Encontra o chat pelo JID
+                                        const chatJid = normalizeJid(chat.id);
+                                        const messageJid = normalizeJid(remoteJid);
+                                        
+                                        if (chatJid === messageJid || 
+                                            (chat.contactNumber && messageJid.includes(chat.contactNumber.replace(/\D/g, '')))) {
+                                            // Verifica se a mensagem já existe
+                                            const exists = chat.messages.some(m => 
+                                                m.id === mapped.id || 
+                                                (m.timestamp && mapped.timestamp && 
+                                                 Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 2000 &&
+                                                 m.content === mapped.content)
+                                            );
+                                            
+                                            if (!exists) {
+                                                const updatedMessages = [...chat.messages, mapped].sort((a, b) => 
+                                                    a.timestamp.getTime() - b.timestamp.getTime()
+                                                );
+                                                
+                                                // Notifica se for mensagem recebida
+                                                if (mapped.sender === 'user' && currentUser && chat.assignedTo === currentUser.id) {
+                                                    addNotification(
+                                                        `Nova mensagem de ${chat.contactName}`,
+                                                        mapped.content.length > 50 ? mapped.content.substring(0, 50) + '...' : mapped.content,
+                                                        'info'
+                                                    );
+                                                }
+                                                
+                                                return {
+                                                    ...chat,
+                                                    messages: updatedMessages,
+                                                    lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
+                                                    lastMessageTime: mapped.timestamp,
+                                                    unreadCount: mapped.sender === 'user' ? (chat.unreadCount || 0) + 1 : chat.unreadCount
+                                                };
+                                            }
+                                        }
+                                        return chat;
+                                    });
+                                });
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error('[App] Erro ao processar mensagem WebSocket:', err, event.data);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('[App] Erro no WebSocket:', error);
+            };
+            
+            ws.onclose = () => {
+                console.log('[App] WebSocket desconectado, tentando reconectar em 5s...');
+                setTimeout(() => {
+                    // Reconecta após 5 segundos
+                    if (currentUser && apiConfig.baseUrl && !apiConfig.isDemo) {
+                        initWebSocket();
+                    }
+                }, 5000);
+            };
+        } catch (err) {
+            console.error('[App] Erro ao criar WebSocket:', err);
+        }
+    };
+    
+    initWebSocket();
+
+    return () => {
+        clearInterval(intervalId);
+        if (ws) {
+            ws.close();
+        }
+    };
   }, [currentUser, apiConfig]);
 
   useEffect(() => {
