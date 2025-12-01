@@ -536,7 +536,22 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             const name = item.raw.pushName || item.raw.name || item.id.split('@')[0];
             
             // Tratamento de ID para evitar números quebrados
+            // Prioriza extrair o número das mensagens (que têm o JID correto)
             let contactNumber = item.id.split('@')[0];
+            
+            // Se houver mensagens, tenta extrair o número completo do JID das mensagens
+            if (messages.length > 0) {
+                // Procura o JID mais completo nas mensagens
+                const messageWithJid = messages.find(m => m.author && m.author.includes('@'));
+                if (messageWithJid && messageWithJid.author) {
+                    const realJid = messageWithJid.author.split('@')[0];
+                    // Se o JID da mensagem for mais completo (mais dígitos), usa ele
+                    if (realJid.replace(/\D/g, '').length > contactNumber.replace(/\D/g, '').length) {
+                        contactNumber = realJid;
+                    }
+                }
+            }
+            
             // Se for ID de grupo, mantém o ID original
             if (item.id.includes('@g.us')) contactNumber = item.id;
 

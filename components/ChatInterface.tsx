@@ -381,23 +381,37 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
     updateChatWithNewMessage(newMessage);
 
-    // Auto-Correct target number if ID is more reliable OR from history
+    // Auto-Correct target number - prioriza contactNumber quando disponível
     let targetNumber = selectedChat.id.split('@')[0];
+    
+    // Prioriza usar contactNumber se ele for mais completo que o ID extraído
+    if (selectedChat.contactNumber) {
+        const idDigits = targetNumber.replace(/\D/g, '').length;
+        const contactDigits = selectedChat.contactNumber.replace(/\D/g, '').length;
+        
+        // Se contactNumber tiver mais dígitos, usa ele (número mais completo)
+        if (contactDigits > idDigits) {
+            targetNumber = selectedChat.contactNumber.replace(/\D/g, '');
+            console.log("[NumberFix] Usando contactNumber completo:", targetNumber);
+        } else if (contactDigits === idDigits && contactDigits >= 10) {
+            // Se tiverem o mesmo tamanho mas contactNumber for válido, usa ele
+            targetNumber = selectedChat.contactNumber.replace(/\D/g, '');
+        }
+    }
 
-    // Smart logic: If current number is suspiciously short (e.g. "30024481"), 
-    // try to find a real JID from the chat history.
+    // Fallback: Se ainda estiver curto, tenta extrair das mensagens
     if (targetNumber.replace(/\D/g, '').length < 10) {
         const lastUserMsg = [...selectedChat.messages].reverse().find(m => m.sender === 'user' && m.author);
         if (lastUserMsg && lastUserMsg.author) {
              const realJid = lastUserMsg.author;
-             targetNumber = realJid.includes('@') ? realJid.split('@')[0] : realJid;
-             console.log("[SelfHealing] Corrigindo alvo para:", targetNumber);
+             const realNumber = realJid.includes('@') ? realJid.split('@')[0] : realJid;
+             if (realNumber.replace(/\D/g, '').length > targetNumber.replace(/\D/g, '').length) {
+                 targetNumber = realNumber;
+                 console.log("[SelfHealing] Corrigindo alvo para:", targetNumber);
+             }
         } else {
             console.warn("[SelfHealing] Número curto e sem histórico válido para correção.");
         }
-    } else {
-        // Normal behavior
-        if (!selectedChat.id.includes('@')) targetNumber = selectedChat.contactNumber;
     }
 
     const success = await sendRealMediaMessage(apiConfig, targetNumber, blob, inputText, type, selectedFile?.name);
@@ -433,23 +447,37 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
     updateChatWithNewMessage(newMessage);
 
-    // Auto-Correct target number if ID is more reliable OR from history
+    // Auto-Correct target number - prioriza contactNumber quando disponível
     let targetNumber = selectedChat.id.split('@')[0];
+    
+    // Prioriza usar contactNumber se ele for mais completo que o ID extraído
+    if (selectedChat.contactNumber) {
+        const idDigits = targetNumber.replace(/\D/g, '').length;
+        const contactDigits = selectedChat.contactNumber.replace(/\D/g, '').length;
+        
+        // Se contactNumber tiver mais dígitos, usa ele (número mais completo)
+        if (contactDigits > idDigits) {
+            targetNumber = selectedChat.contactNumber.replace(/\D/g, '');
+            console.log("[NumberFix] Usando contactNumber completo:", targetNumber);
+        } else if (contactDigits === idDigits && contactDigits >= 10) {
+            // Se tiverem o mesmo tamanho mas contactNumber for válido, usa ele
+            targetNumber = selectedChat.contactNumber.replace(/\D/g, '');
+        }
+    }
 
-    // Smart logic: If current number is suspiciously short (e.g. "30024481"), 
-    // try to find a real JID from the chat history.
+    // Fallback: Se ainda estiver curto, tenta extrair das mensagens
     if (targetNumber.replace(/\D/g, '').length < 10) {
         const lastUserMsg = [...selectedChat.messages].reverse().find(m => m.sender === 'user' && m.author);
         if (lastUserMsg && lastUserMsg.author) {
              const realJid = lastUserMsg.author;
-             targetNumber = realJid.includes('@') ? realJid.split('@')[0] : realJid;
-             console.log("[SelfHealing] Corrigindo alvo para:", targetNumber);
+             const realNumber = realJid.includes('@') ? realJid.split('@')[0] : realJid;
+             if (realNumber.replace(/\D/g, '').length > targetNumber.replace(/\D/g, '').length) {
+                 targetNumber = realNumber;
+                 console.log("[SelfHealing] Corrigindo alvo para:", targetNumber);
+             }
         } else {
             console.warn("[SelfHealing] Número curto e sem histórico válido para correção.");
         }
-    } else {
-        // Normal behavior
-        if (!selectedChat.id.includes('@')) targetNumber = selectedChat.contactNumber;
     }
 
     const success = await sendRealMessage(apiConfig, targetNumber, inputText);
@@ -477,11 +505,32 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
       updateChatWithNewMessage(newMessage);
       
+      // Auto-Correct target number - prioriza contactNumber quando disponível
       let targetNumber = selectedChat.id.split('@')[0];
+      
+      // Prioriza usar contactNumber se ele for mais completo que o ID extraído
+      if (selectedChat.contactNumber) {
+          const idDigits = targetNumber.replace(/\D/g, '').length;
+          const contactDigits = selectedChat.contactNumber.replace(/\D/g, '').length;
+          
+          // Se contactNumber tiver mais dígitos, usa ele (número mais completo)
+          if (contactDigits > idDigits) {
+              targetNumber = selectedChat.contactNumber.replace(/\D/g, '');
+          } else if (contactDigits === idDigits && contactDigits >= 10) {
+              // Se tiverem o mesmo tamanho mas contactNumber for válido, usa ele
+              targetNumber = selectedChat.contactNumber.replace(/\D/g, '');
+          }
+      }
+
+      // Fallback: Se ainda estiver curto, tenta extrair das mensagens
       if (targetNumber.replace(/\D/g, '').length < 10) {
             const lastUserMsg = [...selectedChat.messages].reverse().find(m => m.sender === 'user' && m.author);
             if (lastUserMsg && lastUserMsg.author) {
-                targetNumber = lastUserMsg.author.split('@')[0];
+                const realJid = lastUserMsg.author;
+                const realNumber = realJid.includes('@') ? realJid.split('@')[0] : realJid;
+                if (realNumber.replace(/\D/g, '').length > targetNumber.replace(/\D/g, '').length) {
+                    targetNumber = realNumber;
+                }
             }
       }
 
@@ -602,11 +651,32 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     };
     
     if (withSurvey) {
+        // Auto-Correct target number - prioriza contactNumber quando disponível
         let targetNumber = selectedChat.id.split('@')[0];
+        
+        // Prioriza usar contactNumber se ele for mais completo que o ID extraído
+        if (selectedChat.contactNumber) {
+            const idDigits = targetNumber.replace(/\D/g, '').length;
+            const contactDigits = selectedChat.contactNumber.replace(/\D/g, '').length;
+            
+            // Se contactNumber tiver mais dígitos, usa ele (número mais completo)
+            if (contactDigits > idDigits) {
+                targetNumber = selectedChat.contactNumber.replace(/\D/g, '');
+            } else if (contactDigits === idDigits && contactDigits >= 10) {
+                // Se tiverem o mesmo tamanho mas contactNumber for válido, usa ele
+                targetNumber = selectedChat.contactNumber.replace(/\D/g, '');
+            }
+        }
+
+        // Fallback: Se ainda estiver curto, tenta extrair das mensagens
         if (targetNumber.replace(/\D/g, '').length < 10) {
             const lastUserMsg = [...selectedChat.messages].reverse().find(m => m.sender === 'user' && m.author);
             if (lastUserMsg && lastUserMsg.author) {
-                targetNumber = lastUserMsg.author.split('@')[0];
+                const realJid = lastUserMsg.author;
+                const realNumber = realJid.includes('@') ? realJid.split('@')[0] : realJid;
+                if (realNumber.replace(/\D/g, '').length > targetNumber.replace(/\D/g, '').length) {
+                    targetNumber = realNumber;
+                }
             }
         }
         sendRealMessage(apiConfig, targetNumber, "Por favor, avalie nosso atendimento de 1 a 5 estrelas.");
