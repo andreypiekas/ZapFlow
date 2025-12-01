@@ -801,6 +801,8 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
 // Busca mensagens de um chat específico
 export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit: number = 100): Promise<Message[]> => {
+    // Log único para identificar versão do código
+    console.log(`[fetchChatMessages] 🚀 VERSÃO NOVA - ${new Date().toISOString()}`);
     console.log(`[fetchChatMessages] ========== INÍCIO ==========`);
     console.log(`[fetchChatMessages] chatId: ${chatId}`);
     console.log(`[fetchChatMessages] isDemo: ${config.isDemo}`);
