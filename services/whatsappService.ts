@@ -856,20 +856,20 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                 if (item && item.key && item.key.remoteJid) {
                     const normalizedJid = normalizeJid(item.key.remoteJid);
                     // Aceita mensagens que correspondem ao JID completo ou contém o número
-                    if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
-                        const mapped = mapApiMessageToInternal(item);
-                        if (mapped) {
-                            messages.push(mapped);
-                            console.log(`[fetchChatMessages] ✅ Mensagem encontrada [${index}]: ${mapped.content?.substring(0, 30)} (${mapped.sender})`);
+                        if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
+                            const mapped = mapApiMessageToInternal(item);
+                            if (mapped) {
+                                messages.push(mapped);
+                                console.error(`[fetchChatMessages] ✅ Mensagem encontrada [${index}]: ${mapped.content?.substring(0, 30)} (${mapped.sender})`);
+                            } else {
+                                console.error(`[fetchChatMessages] ⚠️ Mensagem não mapeada [${index}]:`, item.key?.remoteJid);
+                            }
                         } else {
-                            console.log(`[fetchChatMessages] ⚠️ Mensagem não mapeada [${index}]:`, item.key?.remoteJid);
+                            console.error(`[fetchChatMessages] Mensagem ignorada [${index}]: JID ${normalizedJid} não corresponde a ${chatId}`);
                         }
                     } else {
-                        console.log(`[fetchChatMessages] Mensagem ignorada [${index}]: JID ${normalizedJid} não corresponde a ${chatId}`);
+                        console.error(`[fetchChatMessages] Item [${index}] sem key.remoteJid:`, item ? Object.keys(item).slice(0, 5) : 'null');
                     }
-                } else {
-                    console.log(`[fetchChatMessages] Item [${index}] sem key.remoteJid:`, item ? Object.keys(item).slice(0, 5) : 'null');
-                }
                 // Recursão em arrays aninhados
                 if (Array.isArray(item)) {
                     processMessages(item);
@@ -932,11 +932,11 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                     body: endpoint.body ? JSON.stringify(endpoint.body) : undefined
                 });
                 
-                console.log(`[fetchChatMessages] [${i+1}/${endpoints.length}] Resposta de ${endpoint.url}: status=${res.status}, ok=${res.ok}`);
+                console.error(`[fetchChatMessages] [${i+1}/${endpoints.length}] ⏱️ Resposta de ${endpoint.url}: status=${res.status}, ok=${res.ok}`);
                 
                 if (res.ok) {
                     const data = await res.json();
-                    console.log(`[fetchChatMessages] [${i+1}/${endpoints.length}] 📦 Resposta do ${endpoint.url}:`, {
+                    console.error(`[fetchChatMessages] [${i+1}/${endpoints.length}] 📦 Resposta do ${endpoint.url}:`, {
                         isArray: Array.isArray(data),
                         keys: data && typeof data === 'object' ? Object.keys(data).slice(0, 10) : [],
                         length: Array.isArray(data) ? data.length : (data?.messages?.length || 0),
@@ -950,17 +950,17 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                     });
                     
                     if (Array.isArray(data)) {
-                        console.log(`[fetchChatMessages] Processando array com ${data.length} itens`);
+                        console.error(`[fetchChatMessages] Processando array com ${data.length} itens`);
                         processMessages(data);
                     } else if (data.messages && Array.isArray(data.messages)) {
-                        console.log(`[fetchChatMessages] Processando data.messages com ${data.messages.length} itens`);
+                        console.error(`[fetchChatMessages] Processando data.messages com ${data.messages.length} itens`);
                         processMessages(data.messages);
                     } else if (data && typeof data === 'object') {
-                        console.log(`[fetchChatMessages] Processando objeto, procurando arrays em valores`);
+                        console.error(`[fetchChatMessages] Processando objeto, procurando arrays em valores`);
                         // Tenta encontrar mensagens em qualquer campo do objeto
                         Object.values(data).forEach(val => {
                             if (Array.isArray(val)) {
-                                console.log(`[fetchChatMessages] Encontrado array com ${val.length} itens`);
+                                console.error(`[fetchChatMessages] Encontrado array com ${val.length} itens`);
                                 processMessages(val);
                             }
                         });
@@ -968,14 +968,14 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                     
                     // Se encontrou mensagens, para de tentar outros endpoints
                     if (messages.length > 0) {
-                        console.log(`[fetchChatMessages] ✅ Encontradas ${messages.length} mensagens via ${endpoint.url}`);
+                        console.error(`[fetchChatMessages] ✅ Encontradas ${messages.length} mensagens via ${endpoint.url}`);
                         break;
                     } else {
-                        console.log(`[fetchChatMessages] ⚠️ Nenhuma mensagem encontrada em ${endpoint.url}`);
+                        console.error(`[fetchChatMessages] ⚠️ Nenhuma mensagem encontrada em ${endpoint.url}`);
                     }
                 } else {
                     const errorText = await res.text().catch(() => '');
-                    console.log(`[fetchChatMessages] Endpoint ${endpoint.url} retornou ${res.status}:`, errorText.substring(0, 200));
+                    console.error(`[fetchChatMessages] Endpoint ${endpoint.url} retornou ${res.status}:`, errorText.substring(0, 200));
                 }
             } catch (err) {
                 console.error(`[fetchChatMessages] Erro ao tentar ${endpoint.url}:`, err);
@@ -983,7 +983,7 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         }
         
         const sortedMessages = messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-        console.log(`[fetchChatMessages] ✅ Total de mensagens encontradas para ${chatId}: ${sortedMessages.length}`);
+        console.error(`[fetchChatMessages] ✅ Total de mensagens encontradas para ${chatId}: ${sortedMessages.length}`);
         return sortedMessages;
     } catch (error) {
         console.error(`[fetchChatMessages] ❌ Erro ao buscar mensagens para ${chatId}:`, error);
