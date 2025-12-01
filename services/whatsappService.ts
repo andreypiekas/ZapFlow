@@ -636,12 +636,30 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             
             console.log(`[MapChat] ID gerado: ${idIsGenerated}, ID: ${item.id}`);
             
-            // SOLUÇÃO DIRETA: Procura número válido nas mensagens brutas PRIMEIRO
+            // SOLUÇÃO DIRETA: Procura número válido PRIMEIRO no remoteJid do objeto raw
             let validJid: string | null = null;
             let validNumber: string | null = null;
             
-            // Procura em TODAS as mensagens brutas pelo remoteJid válido
-            if (item.messages && Array.isArray(item.messages)) {
+            // PRIMEIRO: Tenta usar o remoteJid diretamente do objeto raw (se disponível)
+            if (item.raw?.remoteJid) {
+                const rawRemoteJid = normalizeJid(item.raw.remoteJid);
+                if (rawRemoteJid.includes('@') && !rawRemoteJid.includes('@g.us') && !rawRemoteJid.includes('@lid')) {
+                    const jidNum = rawRemoteJid.split('@')[0];
+                    const digits = jidNum.replace(/\D/g, '');
+                    
+                    console.log(`[MapChat] remoteJid do raw: ${rawRemoteJid}, número: ${jidNum}, dígitos: ${digits.length}`);
+                    
+                    // Se é um número válido (>=10 dígitos)
+                    if (/^\d+$/.test(digits) && digits.length >= 10) {
+                        validJid = rawRemoteJid;
+                        validNumber = jidNum;
+                        console.log(`[MapChat] ✅ Número válido encontrado no remoteJid do raw: ${validNumber} (${validJid})`);
+                    }
+                }
+            }
+            
+            // SEGUNDO: Procura em TODAS as mensagens brutas pelo remoteJid válido
+            if (!validNumber && item.messages && Array.isArray(item.messages)) {
                 console.log(`[MapChat] Procurando número válido em ${item.messages.length} mensagens brutas`);
                 for (let i = 0; i < item.messages.length; i++) {
                     const rawMsg = item.messages[i];
