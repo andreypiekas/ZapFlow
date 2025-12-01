@@ -96,7 +96,18 @@ const App: React.FC = () => {
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    if (!currentUser || apiConfig.isDemo || !apiConfig.baseUrl) return;
+    if (!currentUser || apiConfig.isDemo || !apiConfig.baseUrl) {
+      // Limpa interval e WebSocket se não há usuário ou está em demo
+      if (intervalIdRef.current) {
+        clearInterval(intervalIdRef.current);
+        intervalIdRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      return;
+    }
 
     const syncChats = async () => {
         // console.log('[App] Iniciando sync de chats...');
@@ -333,7 +344,9 @@ const App: React.FC = () => {
         }
     };
 
+    // Primeira sincronização
     syncChats();
+    
     // Polling a cada 3 segundos para parecer tempo real
     intervalIdRef.current = setInterval(syncChats, 3000);
     
@@ -578,18 +591,18 @@ const App: React.FC = () => {
         }
     }, [apiConfig.isDemo, apiConfig.baseUrl]);
 
-    // Cleanup: fecha interval e WebSocket quando componente desmonta
-    useEffect(() => {
-        return () => {
-            if (intervalIdRef.current) {
-                clearInterval(intervalIdRef.current);
-            }
-            if (wsRef.current) {
-                console.log('[App] Fechando WebSocket...');
-                wsRef.current.close();
-            }
-        };
-    }, []);
+    // Cleanup: fecha interval e WebSocket quando dependências mudam ou componente desmonta
+    return () => {
+      if (intervalIdRef.current) {
+        clearInterval(intervalIdRef.current);
+        intervalIdRef.current = null;
+      }
+      if (wsRef.current) {
+        console.log('[App] Fechando WebSocket...');
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
   }, [currentUser, apiConfig]);
 
   useEffect(() => {
