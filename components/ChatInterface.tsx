@@ -757,6 +757,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       return `${greeting}, sou ${firstName} e darei sequência no seu atendimento.`;
   };
 
+  // Verifica se a saudação já foi enviada pelo agente atual
+  const hasGreetingBeenSent = () => {
+      if (!selectedChat) return false;
+      
+      const firstName = currentUser.name.split(' ')[0];
+      // Padrão da saudação: contém "sou [nome]" e "darei sequência"
+      const greetingPattern = new RegExp(`sou\\s+${firstName}\\s+e\\s+darei\\s+sequência`, 'i');
+      
+      // Verifica se há alguma mensagem do agente que corresponde ao padrão da saudação
+      return selectedChat.messages.some(msg => 
+          msg.sender === 'agent' && 
+          msg.type === 'text' &&
+          greetingPattern.test(msg.content)
+      );
+  };
+
   const handleInsertGreeting = () => {
       setInputText(getSmartGreeting());
   };
@@ -1336,8 +1352,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 ) : (
                     <div className="bg-slate-100 p-2 md:p-3 relative z-20">
                     
-                        {/* Greeting Shortcut - Shows if assigned to me and no text yet */}
-                        {isAssignedToMe && !inputText && (
+                        {/* Greeting Shortcut - Shows if assigned to me, no text yet, and greeting hasn't been sent */}
+                        {isAssignedToMe && !inputText && !hasGreetingBeenSent() && (
                             <div className="absolute bottom-full left-0 w-full flex justify-center pb-2 pointer-events-none">
                                 <button 
                                     onClick={handleInsertGreeting}
