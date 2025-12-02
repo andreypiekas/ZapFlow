@@ -593,9 +593,13 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
             }
             
             // Determina o sender da mensagem original
-            // Se participant existe, provavelmente foi enviada pelo agente (fromMe: true)
-            // Se não tem participant, pode ter sido enviada pelo cliente
-            const quotedFromMe = contextInfo.participant ? true : false;
+            // Se a mensagem atual é do cliente (fromMe: false) e tem participant no contextInfo,
+            // significa que está respondendo a uma mensagem do agente (participant é o número do agente)
+            // Se não tem participant, pode ser que esteja respondendo a outra mensagem do cliente
+            // Mas geralmente: se tem participant, foi enviada pelo agente
+            const hasParticipant = !!contextInfo.participant;
+            // Se a mensagem atual é do cliente e tem participant, a original foi do agente
+            const quotedFromMe = hasParticipant && !key.fromMe;
             const quotedSender: 'user' | 'agent' | 'system' = quotedFromMe ? 'agent' : 'user';
             
             replyTo = {
@@ -605,7 +609,7 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
                 whatsappMessageId: quotedMessageId
             };
             
-            console.log(`[mapApiMessageToInternal] Mensagem detectada como resposta: ${quotedMessageId}, conteúdo original: ${quotedContent.substring(0, 50)}`);
+            console.log(`[mapApiMessageToInternal] ✅ Mensagem detectada como resposta: ID=${quotedMessageId}, conteúdo="${quotedContent.substring(0, 50)}", sender original=${quotedSender}`);
         }
     }
 
