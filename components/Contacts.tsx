@@ -134,16 +134,39 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, onImportCSV
       const firstLine = lines[0];
       const separator = firstLine.includes(';') ? ';' : ',';
       
-      // Parse do cabeçalho
-      const headers = lines[0].split(separator).map(h => h.trim().toLowerCase());
+      // Parse do cabeçalho (case-insensitive)
+      const headers = lines[0].split(separator).map(h => h.trim());
+      const headersLower = headers.map(h => h.toLowerCase());
       
-      // Encontra índices das colunas (flexível para diferentes formatos)
-      const nameIndex = headers.findIndex(h => h.includes('nome') || h.includes('name'));
-      const phoneIndex = headers.findIndex(h => h.includes('telefone') || h.includes('phone') || h.includes('celular') || h.includes('whatsapp'));
-      const emailIndex = headers.findIndex(h => h.includes('email') || h.includes('e-mail'));
+      // Encontra índices das colunas (suporta formato Google Contacts e outros)
+      // Nome: First Name, Last Name, Name, Nome, etc.
+      const firstNameIndex = headersLower.findIndex(h => h === 'first name' || h === 'nome');
+      const lastNameIndex = headersLower.findIndex(h => h === 'last name' || h === 'sobrenome');
+      const middleNameIndex = headersLower.findIndex(h => h === 'middle name' || h === 'nome do meio');
+      const nameIndex = headersLower.findIndex(h => 
+        (h.includes('nome') || h.includes('name')) && 
+        !h.includes('first') && !h.includes('last') && !h.includes('middle') &&
+        !h.includes('phonetic') && !h.includes('prefix') && !h.includes('suffix')
+      );
       
-      if (nameIndex === -1 || phoneIndex === -1) {
-        setError('O CSV deve conter colunas "Nome" e "Telefone" (ou equivalentes).');
+      // Telefone: Phone 1, Phone 2, Phone, Telefone, etc.
+      const phoneIndices: number[] = [];
+      headersLower.forEach((h, idx) => {
+        if ((h.includes('phone') || h.includes('telefone') || h.includes('celular') || h.includes('whatsapp')) &&
+            !h.includes('label') && !h.includes('etiqueta')) {
+          phoneIndices.push(idx);
+        }
+      });
+      
+      // Email
+      const emailIndex = headersLower.findIndex(h => h.includes('email') || h.includes('e-mail'));
+      
+      // Valida se encontrou pelo menos nome e telefone
+      const hasName = firstNameIndex !== -1 || lastNameIndex !== -1 || nameIndex !== -1;
+      const hasPhone = phoneIndices.length > 0;
+      
+      if (!hasName || !hasPhone) {
+        setError('O CSV deve conter colunas de Nome e Telefone. Formato Google Contacts suportado.');
         setIsImporting(false);
         return;
       }
@@ -152,26 +175,60 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, onImportCSV
       
       // Processa cada linha (pula o cabeçalho)
       for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(separator).map(v => v.trim());
+        // Parse mais robusto que lida com vírgulas dentro de campos entre aspas
+        const values: string[] = [];
+        let currentValue = '';
+        let insideQuotes = false;
         
-        const name = values[nameIndex] || '';
-        const phone = values[phoneIndex] || '';
-        const email = emailIndex >= 0 ? values[emailIndex] : undefined;
+        for (let j = 0; j < lines[i].length; j++) {
+          const char = lines[i][j];
+          if (char === '"') {
+            insideQuotes = !insideQuotes;
+          } else if ((char === separator || char === '\r') && !insideQuotes) {
+            values.push(currentValue.trim());
+            currentValue = '';
+          } else {
+            currentValue += char;
+          }
+        }
+        values.push(currentValue.trim()); // Último valor
+        
+        // Monta o nome completo
+        let fullName = '';
+        if (firstNameIndex !== -1 || lastNameIndex !== -1) {
+          const firstName = firstNameIndex !== -1 ? (values[firstNameIndex] || '') : '';
+          const middleName = middleNameIndex !== -1 ? (values[middleNameIndex] || '') : '';
+          const lastName = lastNameIndex !== -1 ? (values[lastNameIndex] || '') : '';
+          fullName = [firstName, middleName, lastName].filter(n => n).join(' ').trim();
+        } else if (nameIndex !== -1) {
+          fullName = values[nameIndex] || '';
+        }
+        
+        // Tenta encontrar um telefone válido (prioriza Phone 1, depois Phone 2, etc.)
+        let phone = '';
+        for (const phoneIdx of phoneIndices) {
+          const phoneValue = values[phoneIdx] || '';
+          // Remove espaços, hífens, parênteses, mas mantém o + se presente
+          const cleanPhone = phoneValue.replace(/[\s\-\(\)]/g, '').replace(/^\+/, '');
+          // Verifica se tem pelo menos 8 dígitos (sem contar o +)
+          if (cleanPhone.length >= 8) {
+            phone = phoneValue.trim();
+            break; // Usa o primeiro telefone válido encontrado
+          }
+        }
+        
+        const email = emailIndex >= 0 ? (values[emailIndex] || undefined) : undefined;
         
         // Valida se tem nome e telefone
-        if (name && phone) {
-          // Remove caracteres não numéricos do telefone para normalização
-          const cleanPhone = phone.replace(/\D/g, '');
-          if (cleanPhone.length >= 8) { // Mínimo 8 dígitos
-            importedContacts.push({
-              id: `csv_${Date.now()}_${i}_${Math.random()}`,
-              name: name.trim(),
-              phone: phone.trim(),
-              email: email?.trim(),
-              source: 'csv',
-              lastSync: new Date()
-            });
-          }
+        if (fullName && phone) {
+          importedContacts.push({
+            id: `csv_${Date.now()}_${i}_${Math.random()}`,
+            name: fullName,
+            phone: phone,
+            email: email?.trim(),
+            source: 'csv',
+            lastSync: new Date()
+          });
         }
       }
 
