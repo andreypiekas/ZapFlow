@@ -28,10 +28,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     if (chat.id.includes('@') && !chat.id.includes('@g.us') && !chat.id.includes('@lid') && !chat.id.startsWith('chat_') && !chat.id.includes('cmin')) {
         const jidFromId = chat.id.split('@')[0];
         const jidDigits = jidFromId.replace(/\D/g, '').length;
-        // Aceita números com 10+ dígitos (formatPhoneForApi adiciona DDI 55 se necessário)
-        if (jidDigits >= 10) {
+        // Aceita números com 10-14 dígitos (números muito longos podem ser IDs de lista de difusão)
+        // Números de telefone válidos: 10-13 dígitos (com DDI), máximo 14 para casos especiais
+        if (jidDigits >= 10 && jidDigits <= 14) {
             targetNumber = jidFromId.replace(/\D/g, '');
             console.log(`[NumberFix] Número encontrado no ID do chat: ${targetNumber} de ${chat.id}`);
+        } else if (jidDigits > 14) {
+            console.log(`[NumberFix] Ignorando número muito longo (provavelmente ID de lista): ${jidFromId} (${jidDigits} dígitos)`);
         }
     }
     
@@ -55,11 +58,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 
                 console.log(`[NumberDebug] Mensagem author: ${msg.author} -> número: ${realNumber} (${realDigits} dígitos)`);
                 
-                // Se encontrar um número válido (>=10 dígitos) e for mais completo que o atual, usa ele
-                if (realDigits >= 10 && realDigits > targetDigits) {
+                // Se encontrar um número válido (10-14 dígitos) e for mais completo que o atual, usa ele
+                // Números muito longos (>14 dígitos) podem ser IDs de lista de difusão
+                if (realDigits >= 10 && realDigits <= 14 && realDigits > targetDigits) {
                     targetNumber = realNumber.replace(/\D/g, '');
                     console.log(`[NumberFix] Número encontrado nas mensagens: ${targetNumber} de ${msg.author}`);
                     break;
+                } else if (realDigits > 14) {
+                    console.log(`[NumberDebug] Ignorando número muito longo nas mensagens: ${realNumber} (${realDigits} dígitos)`);
                 }
             }
         }
@@ -97,12 +103,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             const idDigits = idFromChatId.replace(/\D/g, '');
             const idIsValidNumber = /^\d+$/.test(idDigits) && 
                                     idDigits.length >= 10 &&
+                                    idDigits.length <= 14 && // Números muito longos podem ser IDs de lista
                                     !idFromChatId.includes('cmin') &&
                                     !idFromChatId.startsWith('chat_');
             
             if (idIsValidNumber) {
                 targetNumber = idFromChatId.replace(/\D/g, '');
                 console.log(`[NumberFix] Usando ID do chat (número puro): ${targetNumber}`);
+            } else if (idDigits > 14) {
+                console.log(`[NumberFix] Ignorando ID do chat muito longo (provavelmente ID de lista): ${idFromChatId} (${idDigits} dígitos)`);
             }
         }
     }
@@ -127,10 +136,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     }
     
     // Validação final: não permite envio com número inválido
-    // Aceita números com 10+ dígitos (formatPhoneForApi adiciona DDI 55 se necessário)
+    // Aceita números com 10-14 dígitos (formatPhoneForApi adiciona DDI 55 se necessário)
+    // Números muito longos (>14 dígitos) são provavelmente IDs de lista de difusão
     const finalDigits = targetNumber.replace(/\D/g, '').length;
-    if (!targetNumber || finalDigits < 10) {
-        console.error(`[NumberError] Número inválido para envio: ${targetNumber} (${finalDigits} dígitos)`);
+    if (!targetNumber || finalDigits < 10 || finalDigits > 14) {
+        console.error(`[NumberError] Número inválido para envio: ${targetNumber} (${finalDigits} dígitos). Números válidos têm 10-14 dígitos.`);
         return '';
     }
     

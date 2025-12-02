@@ -559,12 +559,21 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     let author: string | undefined = undefined;
     
     // Tenta múltiplas formas de obter o remoteJid
-    const remoteJid = key?.remoteJid || 
-                     key?.participant || 
-                     apiMsg?.remoteJid ||
-                     apiMsg?.key?.remoteJid ||
-                     apiMsg?.jid ||
-                     apiMsg?.chatId;
+    let remoteJid = key?.remoteJid || 
+                   key?.participant || 
+                   apiMsg?.remoteJid ||
+                   apiMsg?.key?.remoteJid ||
+                   apiMsg?.jid ||
+                   apiMsg?.chatId;
+    
+    // Se o remoteJid é @lid, tenta usar remoteJidAlt (número real do contato)
+    if (remoteJid && remoteJid.includes('@lid')) {
+        const remoteJidAlt = key?.remoteJidAlt || apiMsg?.remoteJidAlt;
+        if (remoteJidAlt) {
+            console.log(`[MessageAuthor] Usando remoteJidAlt para @lid: ${remoteJidAlt} (original: ${remoteJid})`);
+            remoteJid = remoteJidAlt;
+        }
+    }
     
     if (remoteJid) {
         author = normalizeJid(remoteJid);
@@ -785,14 +794,24 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                 for (let i = 0; i < item.messages.length; i++) {
                     const rawMsg = item.messages[i];
                     // Tenta múltiplas formas de acessar o remoteJid
-                    const remoteJid = rawMsg?.key?.remoteJid || 
-                                     rawMsg?.remoteJid || 
-                                     rawMsg?.jid ||
-                                     rawMsg?.key?.participant;
+                    let remoteJid = rawMsg?.key?.remoteJid || 
+                                   rawMsg?.remoteJid || 
+                                   rawMsg?.jid ||
+                                   rawMsg?.key?.participant;
+                    
+                    // Se o remoteJid é @lid, tenta usar remoteJidAlt (número real do contato)
+                    if (remoteJid && remoteJid.includes('@lid')) {
+                        const remoteJidAlt = rawMsg?.key?.remoteJidAlt || rawMsg?.remoteJidAlt;
+                        if (remoteJidAlt) {
+                            console.log(`[MapChat] Encontrado remoteJidAlt para @lid: ${remoteJidAlt} (original: ${remoteJid})`);
+                            remoteJid = remoteJidAlt;
+                        }
+                    }
                     
                     console.log(`[MapChat] Mensagem ${i + 1}:`, {
                         hasKey: !!rawMsg?.key,
                         keyRemoteJid: rawMsg?.key?.remoteJid,
+                        remoteJidAlt: rawMsg?.key?.remoteJidAlt,
                         remoteJid: rawMsg?.remoteJid,
                         jid: rawMsg?.jid,
                         participant: rawMsg?.key?.participant,
@@ -807,13 +826,16 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                             
                             console.log(`[MapChat] JID normalizado: ${normalized}, número: ${jidNum}, dígitos: ${digits.length}`);
                             
-                            // Se é um número válido (>=10 dígitos)
-                            // Aceita números com 10+ dígitos (formatPhoneForApi adiciona DDI 55 se necessário)
-                            if (/^\d+$/.test(digits) && digits.length >= 10) {
+                            // Se é um número válido (10-14 dígitos)
+                            // Aceita números com 10-14 dígitos (formatPhoneForApi adiciona DDI 55 se necessário)
+                            // Números muito longos (>14 dígitos) podem ser IDs de lista de difusão
+                            if (/^\d+$/.test(digits) && digits.length >= 10 && digits.length <= 14) {
                                 validJid = normalized;
                                 validNumber = jidNum;
                                 console.log(`[MapChat] ✅ Número válido encontrado: ${validNumber} (${validJid})`);
                                 break; // Usa o primeiro número válido encontrado
+                            } else if (digits.length > 14) {
+                                console.log(`[MapChat] ⚠️ Número muito longo (provavelmente ID de lista): ${jidNum} (${digits.length} dígitos)`);
                             } else {
                                 console.log(`[MapChat] ⚠️ Número inválido: ${jidNum} (${digits.length} dígitos, só números: ${/^\d+$/.test(digits)})`);
                             }
@@ -827,16 +849,29 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             // TERCEIRO: Tenta extrair do lastMessage se não encontrou nas mensagens do array
             if (!validNumber && item.raw?.lastMessage) {
                 const lastMsg = item.raw.lastMessage;
-                const lastMsgRemoteJid = lastMsg?.key?.remoteJid || lastMsg?.remoteJid || lastMsg?.jid;
+                let lastMsgRemoteJid = lastMsg?.key?.remoteJid || lastMsg?.remoteJid || lastMsg?.jid;
+                
+                // Se o remoteJid é @lid, tenta usar remoteJidAlt
+                if (lastMsgRemoteJid && lastMsgRemoteJid.includes('@lid')) {
+                    const remoteJidAlt = lastMsg?.key?.remoteJidAlt || lastMsg?.remoteJidAlt;
+                    if (remoteJidAlt) {
+                        console.log(`[MapChat] Encontrado remoteJidAlt no lastMessage: ${remoteJidAlt} (original: ${lastMsgRemoteJid})`);
+                        lastMsgRemoteJid = remoteJidAlt;
+                    }
+                }
+                
                 if (lastMsgRemoteJid) {
                     const normalized = normalizeJid(lastMsgRemoteJid);
                     if (normalized.includes('@') && !normalized.includes('@g.us') && !normalized.includes('@lid')) {
                         const jidNum = normalized.split('@')[0];
                         const digits = jidNum.replace(/\D/g, '');
-                        if (/^\d+$/.test(digits) && digits.length >= 10) {
+                        // Valida comprimento: 10-14 dígitos (números muito longos podem ser IDs de lista)
+                        if (/^\d+$/.test(digits) && digits.length >= 10 && digits.length <= 14) {
                             validJid = normalized;
                             validNumber = jidNum;
                             console.log(`[MapChat] ✅ Número válido encontrado no lastMessage: ${validNumber} (${validJid})`);
+                        } else if (digits.length > 14) {
+                            console.log(`[MapChat] ⚠️ Número muito longo no lastMessage (provavelmente ID de lista): ${jidNum} (${digits.length} dígitos)`);
                         }
                     }
                 }
@@ -845,29 +880,47 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             // QUARTO: Tenta extrair do campo message (objeto único) se disponível
             if (!validNumber && item.raw?.message) {
                 const msg = item.raw.message;
-                const msgRemoteJid = msg?.key?.remoteJid || msg?.remoteJid || msg?.jid;
+                let msgRemoteJid = msg?.key?.remoteJid || msg?.remoteJid || msg?.jid;
+                
+                // Se o remoteJid é @lid, tenta usar remoteJidAlt
+                if (msgRemoteJid && msgRemoteJid.includes('@lid')) {
+                    const remoteJidAlt = msg?.key?.remoteJidAlt || msg?.remoteJidAlt;
+                    if (remoteJidAlt) {
+                        console.log(`[MapChat] Encontrado remoteJidAlt no campo message: ${remoteJidAlt} (original: ${msgRemoteJid})`);
+                        msgRemoteJid = remoteJidAlt;
+                    }
+                }
+                
                 if (msgRemoteJid) {
                     const normalized = normalizeJid(msgRemoteJid);
                     if (normalized.includes('@') && !normalized.includes('@g.us') && !normalized.includes('@lid')) {
                         const jidNum = normalized.split('@')[0];
                         const digits = jidNum.replace(/\D/g, '');
-                        if (/^\d+$/.test(digits) && digits.length >= 10) {
+                        // Valida comprimento: 10-14 dígitos (números muito longos podem ser IDs de lista)
+                        if (/^\d+$/.test(digits) && digits.length >= 10 && digits.length <= 14) {
                             validJid = normalized;
                             validNumber = jidNum;
                             console.log(`[MapChat] ✅ Número válido encontrado no campo message: ${validNumber} (${validJid})`);
+                        } else if (digits.length > 14) {
+                            console.log(`[MapChat] ⚠️ Número muito longo no campo message (provavelmente ID de lista): ${jidNum} (${digits.length} dígitos)`);
                         }
                     }
                 }
             }
             
             // Se não encontrou nas mensagens, verifica se o ID original é válido
-            if (!validNumber && !idIsGenerated && !item.id.includes('@g.us')) {
+            // IMPORTANTE: Não tenta extrair de @lid (já verificado acima)
+            if (!validNumber && !idIsGenerated && !item.id.includes('@g.us') && !item.id.includes('@lid')) {
                 const idNum = item.id.split('@')[0];
                 const idDigits = idNum.replace(/\D/g, '');
-                // Aceita números com 10+ dígitos (formatPhoneForApi adiciona DDI 55 se necessário)
-                if (/^\d+$/.test(idDigits) && idDigits.length >= 10) {
+                // Aceita números com 10-14 dígitos (formatPhoneForApi adiciona DDI 55 se necessário)
+                // Números muito longos (>14 dígitos) podem ser IDs de lista de difusão
+                if (/^\d+$/.test(idDigits) && idDigits.length >= 10 && idDigits.length <= 14) {
                     validJid = item.id;
                     validNumber = idNum;
+                    console.log(`[MapChat] ✅ Número válido encontrado no ID original: ${validNumber} (${validJid})`);
+                } else if (idDigits.length > 14) {
+                    console.log(`[MapChat] ⚠️ ID original muito longo (provavelmente ID de lista): ${idNum} (${idDigits.length} dígitos)`);
                 }
             }
             
