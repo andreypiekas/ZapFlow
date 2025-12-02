@@ -300,6 +300,19 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
     if (!response.ok) {
         const errorText = await response.text();
         console.error(`[sendRealMessage] Falha API: ${response.status} para ${cleanPhone}`, errorText);
+        
+        // Tenta parsear o erro para verificar se é "exists: false"
+        try {
+            const errorJson = JSON.parse(errorText);
+            if (errorJson.response?.message?.[0]?.exists === false) {
+                console.error(`[sendRealMessage] Número não existe no WhatsApp: ${cleanPhone}`);
+                // Lança um erro específico para que o componente possa mostrar uma mensagem adequada
+                throw new Error(`O número ${cleanPhone} não existe no WhatsApp ou não está registrado.`);
+            }
+        } catch (parseError) {
+            // Se não conseguir parsear, continua com o tratamento normal
+        }
+        
         // Se quotedMessageId não funcionar, tenta sem ele
         if (replyToMessageId && response.status === 400) {
             console.log(`[sendRealMessage] Tentando enviar sem quotedMessageId...`);

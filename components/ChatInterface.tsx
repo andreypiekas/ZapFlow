@@ -25,7 +25,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     
     // PRIMEIRO: Tenta extrair do ID do chat se for um JID válido (número completo)
     let targetNumber = '';
-    if (chat.id.includes('@') && !chat.id.includes('@g.us') && !chat.id.startsWith('chat_') && !chat.id.includes('cmin')) {
+    if (chat.id.includes('@') && !chat.id.includes('@g.us') && !chat.id.includes('@lid') && !chat.id.startsWith('chat_') && !chat.id.includes('cmin')) {
         const jidFromId = chat.id.split('@')[0];
         const jidDigits = jidFromId.replace(/\D/g, '').length;
         // Aceita números com 10+ dígitos (formatPhoneForApi adiciona DDI 55 se necessário)
@@ -45,6 +45,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         for (const msg of allMessages.reverse()) {
             if (msg.author) {
                 const realJid = msg.author;
+                // Ignora JIDs de listas de difusão (@lid) e grupos (@g.us)
+                if (realJid.includes('@lid') || realJid.includes('@g.us')) {
+                    console.log(`[NumberDebug] Ignorando JID de lista/grupo: ${realJid}`);
+                    continue;
+                }
                 const realNumber = realJid.includes('@') ? realJid.split('@')[0] : realJid;
                 const realDigits = realNumber.replace(/\D/g, '').length;
                 
@@ -86,16 +91,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     // QUARTO: Se ainda não tiver, tenta extrair do ID do chat (se for número puro)
     const finalTargetDigits = targetNumber.replace(/\D/g, '').length;
     if (!targetNumber || finalTargetDigits < 10) {
-        let idFromChatId = chat.id.split('@')[0];
-        const idDigits = idFromChatId.replace(/\D/g, '');
-        const idIsValidNumber = /^\d+$/.test(idDigits) && 
-                                idDigits.length >= 10 &&
-                                !idFromChatId.includes('cmin') &&
-                                !idFromChatId.startsWith('chat_');
-        
-        if (idIsValidNumber) {
-            targetNumber = idFromChatId.replace(/\D/g, '');
-            console.log(`[NumberFix] Usando ID do chat (número puro): ${targetNumber}`);
+        // Ignora JIDs de listas de difusão (@lid) e grupos (@g.us)
+        if (!chat.id.includes('@lid') && !chat.id.includes('@g.us')) {
+            let idFromChatId = chat.id.split('@')[0];
+            const idDigits = idFromChatId.replace(/\D/g, '');
+            const idIsValidNumber = /^\d+$/.test(idDigits) && 
+                                    idDigits.length >= 10 &&
+                                    !idFromChatId.includes('cmin') &&
+                                    !idFromChatId.startsWith('chat_');
+            
+            if (idIsValidNumber) {
+                targetNumber = idFromChatId.replace(/\D/g, '');
+                console.log(`[NumberFix] Usando ID do chat (número puro): ${targetNumber}`);
+            }
         }
     }
     
@@ -587,14 +595,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     const replyToId = replyingTo?.whatsappMessageId || replyingTo?.id;
     const replyToRaw = replyingTo?.rawMessage;
     console.log(`[handleSendMessage] Respondendo à mensagem: ${replyToId} (whatsappId: ${replyingTo?.whatsappMessageId}, id: ${replyingTo?.id}, hasRaw: ${!!replyToRaw})`);
-    const success = await sendRealMessage(apiConfig, targetNumber, inputText, replyToId, replyToRaw);
     
-    finalizeMessageStatus(newMessage, success);
-    setIsSending(false);
-    setInputText('');
-    setReplyingTo(null); // Limpa a resposta após enviar
-    setShowQuickReplies(false);
-    setShowEmojiPicker(false);
+    try {
+        const success = await sendRealMessage(apiConfig, targetNumber, inputText, replyToId, replyToRaw);
+        
+        if (!success) {
+            // Se retornou false mas não lançou erro, mostra mensagem genérica
+            alert('Erro ao enviar mensagem. Verifique a conexão e tente novamente.');
+        }
+        
+        finalizeMessageStatus(newMessage, success);
+    } catch (error: any) {
+        console.error('[handleSendMessage] Erro ao enviar:', error);
+        // Mostra mensagem específica se disponível, senão mostra genérica
+        const errorMessage = error?.message || 'Erro ao enviar mensagem. Verifique a conexão e tente novamente.';
+        alert(errorMessage);
+        finalizeMessageStatus(newMessage, false);
+    } finally {
+        setIsSending(false);
+        setInputText('');
+        setReplyingTo(null); // Limpa a resposta após enviar
+        setShowQuickReplies(false);
+        setShowEmojiPicker(false);
+    }
   };
 
   const handleReplyToMessage = (message: Message) => {
