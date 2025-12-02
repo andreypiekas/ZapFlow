@@ -327,7 +327,12 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
 export const blobToBase64 = (blob: Blob): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      // Remove o prefixo "data:image/jpeg;base64," ou similar, deixando apenas o base64 puro
+      const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+      resolve(base64);
+    };
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
