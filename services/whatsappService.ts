@@ -708,7 +708,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         console.log(`[FetchChats] Total de chats extraídos: ${chatsArray.length}`);
         chatsArray.forEach((chat: any, idx: number) => {
             const msgCount = chat.messages?.length || 0;
-            const hasValidId = !chat.id?.includes('cmin') && !chat.id?.includes('cmid');
+            const hasValidId = !chat.id?.includes('cmin') && !chat.id?.includes('cmid') && !chat.id?.includes('cmio');
             console.log(`[FetchChats] Chat ${idx + 1}: ID=${chat.id}, Messages=${msgCount}, ValidID=${hasValidId}`);
             if (msgCount > 0) {
                 const firstMsg = chat.messages[0];
@@ -730,6 +730,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             // Detecta se o ID é gerado
             const idIsGenerated = item.id.includes('cmin') || 
                                   item.id.includes('cmid') || 
+                                  item.id.includes('cmio') || 
                                   !/^\d+@/.test(item.id) ||
                                   (item.id.split('@')[0].replace(/\D/g, '').length < 10 && !item.id.includes('@g.us'));
             
@@ -874,7 +875,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                             console.log(`[MessageAuthorFix] Author adicionado do validJid: ${mapped.author}`);
                         } else {
                             // Último recurso: usa o ID do chat se for válido
-                            if (!item.id.includes('cmin') && !item.id.includes('@g.us')) {
+                            if (!item.id.includes('cmin') && !item.id.includes('cmid') && !item.id.includes('cmio') && !item.id.includes('@g.us')) {
                                 mapped.author = item.id;
                                 console.log(`[MessageAuthorFix] Author adicionado do chat ID: ${mapped.author}`);
                             }
