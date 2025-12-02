@@ -853,23 +853,46 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
             }
             console.error(`[fetchChatMessages] processMessages processando ${items.length} itens`);
             items.forEach((item, index) => {
+                // Caso 1: Objeto de mensagem com key.remoteJid (formato padrão de mensagem)
                 if (item && item.key && item.key.remoteJid) {
                     const normalizedJid = normalizeJid(item.key.remoteJid);
                     // Aceita mensagens que correspondem ao JID completo ou contém o número
-                        if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
-                            const mapped = mapApiMessageToInternal(item);
-                            if (mapped) {
-                                messages.push(mapped);
-                                console.error(`[fetchChatMessages] ✅ Mensagem encontrada [${index}]: ${mapped.content?.substring(0, 30)} (${mapped.sender})`);
-                            } else {
-                                console.error(`[fetchChatMessages] ⚠️ Mensagem não mapeada [${index}]:`, item.key?.remoteJid);
-                            }
+                    if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
+                        const mapped = mapApiMessageToInternal(item);
+                        if (mapped) {
+                            messages.push(mapped);
+                            console.error(`[fetchChatMessages] ✅ Mensagem encontrada [${index}]: ${mapped.content?.substring(0, 30)} (${mapped.sender})`);
                         } else {
-                            console.error(`[fetchChatMessages] Mensagem ignorada [${index}]: JID ${normalizedJid} não corresponde a ${chatId}`);
+                            console.error(`[fetchChatMessages] ⚠️ Mensagem não mapeada [${index}]:`, item.key?.remoteJid);
                         }
                     } else {
-                        console.error(`[fetchChatMessages] Item [${index}] sem key.remoteJid:`, item ? Object.keys(item).slice(0, 5) : 'null');
+                        console.error(`[fetchChatMessages] Mensagem ignorada [${index}]: JID ${normalizedJid} não corresponde a ${chatId}`);
                     }
+                }
+                // Caso 2: Objeto de chat do findChats (tem remoteJid direto e messages dentro)
+                else if (item && item.remoteJid && typeof item.remoteJid === 'string') {
+                    const normalizedJid = normalizeJid(item.remoteJid);
+                    // Verifica se é o chat correto
+                    if (normalizedJid === chatId || normalizedJid.includes(phoneNumber) || item.id === chatId) {
+                        console.error(`[fetchChatMessages] ✅ Chat encontrado [${index}]: ${item.remoteJid}, messages: ${item.messages?.length || 0}`);
+                        // Se o chat tem mensagens, processa elas
+                        if (item.messages && Array.isArray(item.messages)) {
+                            console.error(`[fetchChatMessages] Processando ${item.messages.length} mensagens do chat ${item.remoteJid}`);
+                            processMessages(item.messages);
+                        }
+                    }
+                }
+                // Caso 3: Mensagem com remoteJid direto (sem key)
+                else if (item && item.remoteJid && typeof item.remoteJid === 'string' && item.key) {
+                    const normalizedJid = normalizeJid(item.remoteJid);
+                    if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
+                        const mapped = mapApiMessageToInternal(item);
+                        if (mapped) {
+                            messages.push(mapped);
+                            console.error(`[fetchChatMessages] ✅ Mensagem encontrada [${index}] (sem key.remoteJid): ${mapped.content?.substring(0, 30)}`);
+                        }
+                    }
+                }
                 // Recursão em arrays aninhados
                 if (Array.isArray(item)) {
                     processMessages(item);
@@ -882,36 +905,43 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         };
         
         // Tenta múltiplos endpoints e formatos de query
+        // PRIORIDADE: findChats primeiro (sabemos que funciona)
         const endpoints = [
-            // Endpoint 1: fetchMessages com remoteJid exato
-            {
-                url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
-                body: { where: { remoteJid: chatId }, limit: limit }
-            },
-            // Endpoint 1b: fetchMessages com remoteJid sem @s.whatsapp.net
-            {
-                url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
-                body: { where: { remoteJid: phoneNumber }, limit: limit }
-            },
-            // Endpoint 2: fetchMessages com like
-            {
-                url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
-                body: { where: { remoteJid: { $like: `%${phoneNumber}%` } }, limit: limit }
-            },
-            // Endpoint 3: fetchAllMessages (sem filtro, busca todas e filtra depois)
-            {
-                url: `${config.baseUrl}/message/fetchAllMessages/${instanceName}`,
-                body: null
-            },
-            // Endpoint 4: fetchMessages sem where (busca recentes)
-            {
-                url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
-                body: { limit: limit }
-            },
-            // Endpoint 5: Tentar buscar via chat/findChats com include messages
+            // Endpoint 1: findChats com remoteJid (prioridade - sabemos que funciona)
             {
                 url: `${config.baseUrl}/chat/findChats/${instanceName}`,
-                body: { where: { id: chatId }, include: ['messages'], limit: 1 }
+                body: { where: { remoteJid: chatId }, include: ['messages'], limit: 1 },
+                isFindChats: true
+            },
+            // Endpoint 2: findChats com remoteJid sem @s.whatsapp.net
+            {
+                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
+                body: { where: { remoteJid: phoneNumber }, include: ['messages'], limit: 1 },
+                isFindChats: true
+            },
+            // Endpoint 3: findChats com id (para IDs gerados)
+            {
+                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
+                body: { where: { id: chatId }, include: ['messages'], limit: 1 },
+                isFindChats: true
+            },
+            // Endpoint 4: findChats sem filtro (busca todos e filtra depois)
+            {
+                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
+                body: { where: {}, include: ['messages'], limit: 100 },
+                isFindChats: true
+            },
+            // Endpoint 5: fetchMessages com remoteJid exato (pode retornar 404)
+            {
+                url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
+                body: { where: { remoteJid: chatId }, limit: limit },
+                isFindChats: false
+            },
+            // Endpoint 6: fetchMessages com remoteJid sem @s.whatsapp.net (pode retornar 404)
+            {
+                url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
+                body: { where: { remoteJid: phoneNumber }, limit: limit },
+                isFindChats: false
             }
         ];
         
@@ -944,13 +974,62 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                             keys: Object.keys(data[0]).slice(0, 10),
                             hasKey: !!data[0].key,
                             keyRemoteJid: data[0].key?.remoteJid,
+                            hasRemoteJid: !!data[0].remoteJid,
+                            remoteJid: data[0].remoteJid,
+                            hasMessages: !!data[0].messages,
+                            messagesCount: data[0].messages?.length || 0,
                             sample: JSON.stringify(data[0]).substring(0, 200)
                         } : undefined,
                         fullResponse: JSON.stringify(data).substring(0, 500)
                     });
                     
-                    if (Array.isArray(data)) {
-                        console.error(`[fetchChatMessages] Processando array com ${data.length} itens`);
+                    // Detecta se é resposta de findChats (objetos de chat com remoteJid)
+                    // Usa a flag do endpoint ou detecta pela estrutura dos dados
+                    const isFindChatsResponse = endpoint.isFindChats || 
+                                                (Array.isArray(data) && data.length > 0 && 
+                                                 data[0].remoteJid && 
+                                                 !data[0].key?.remoteJid);
+                    
+                    if (isFindChatsResponse) {
+                        console.error(`[fetchChatMessages] 🔍 Detectado formato findChats: array de chats`);
+                        // Procura o chat correto pelo remoteJid ou id
+                        const matchingChat = data.find((chat: any) => {
+                            if (!chat) return false;
+                            const chatRemoteJid = normalizeJid(chat.remoteJid || '');
+                            const chatIdValue = chat.id || '';
+                            const normalizedChatId = normalizeJid(chatId);
+                            
+                            // Compara remoteJid normalizado
+                            if (chatRemoteJid === normalizedChatId) return true;
+                            if (chatRemoteJid.includes(phoneNumber) && phoneNumber.length >= 10) return true;
+                            
+                            // Compara id
+                            if (chatIdValue === chatId) return true;
+                            if (chatIdValue.includes(phoneNumber) && phoneNumber.length >= 10) return true;
+                            
+                            // Compara número extraído do id
+                            const chatIdNumber = chatIdValue.split('@')[0];
+                            if (chatIdNumber === phoneNumber && phoneNumber.length >= 10) return true;
+                            
+                            return false;
+                        });
+                        
+                        if (matchingChat) {
+                            console.error(`[fetchChatMessages] ✅ Chat correspondente encontrado: ${matchingChat.remoteJid || matchingChat.id}`);
+                            // Se o chat tem mensagens, processa elas
+                            if (matchingChat.messages && Array.isArray(matchingChat.messages)) {
+                                console.error(`[fetchChatMessages] Processando ${matchingChat.messages.length} mensagens do chat`);
+                                processMessages(matchingChat.messages);
+                            } else {
+                                console.error(`[fetchChatMessages] ⚠️ Chat encontrado mas sem mensagens no campo messages`);
+                            }
+                        } else {
+                            console.error(`[fetchChatMessages] ⚠️ Nenhum chat correspondente encontrado para ${chatId}`);
+                            // Tenta processar todos os chats de qualquer forma (fallback)
+                            processMessages(data);
+                        }
+                    } else if (Array.isArray(data)) {
+                        console.error(`[fetchChatMessages] Processando array com ${data.length} itens (formato mensagens)`);
                         processMessages(data);
                     } else if (data.messages && Array.isArray(data.messages)) {
                         console.error(`[fetchChatMessages] Processando data.messages com ${data.messages.length} itens`);
@@ -975,7 +1054,15 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                     }
                 } else {
                     const errorText = await res.text().catch(() => '');
-                    console.error(`[fetchChatMessages] Endpoint ${endpoint.url} retornou ${res.status}:`, errorText.substring(0, 200));
+                    let errorJson: any = { message: errorText || 'No error text' };
+                    try {
+                        if (errorText) {
+                            errorJson = JSON.parse(errorText);
+                        }
+                    } catch {
+                        errorJson = { message: errorText || 'No error text' };
+                    }
+                    console.error(`[fetchChatMessages] Endpoint ${endpoint.url} retornou ${res.status}:`, errorJson);
                 }
             } catch (err) {
                 console.error(`[fetchChatMessages] Erro ao tentar ${endpoint.url}:`, err);
