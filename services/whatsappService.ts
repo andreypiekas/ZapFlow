@@ -628,7 +628,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         });
 
         // 4. Mapeia para o formato interno do Frontend
-        return chatsArray.map((item: any) => {
+        const mappedChats = chatsArray.map((item: any) => {
             console.log(`[MapChat] Processando chat: ID=${item.id}, Messages=${item.messages?.length || 0}`);
             console.log(`[MapChat] Processando chat: ID=${item.id}, Messages=${item.messages?.length || 0}`);
             
@@ -792,6 +792,62 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                 messages: messages
             } as Chat;
         });
+
+        // 5. Consolida chats duplicados (mesmo número = mesmo chat)
+        const consolidatedChatsMap = new Map<string, Chat>();
+        
+        mappedChats.forEach((chat: Chat) => {
+            // Usa o número normalizado como chave (remove caracteres não numéricos)
+            const normalizedNumber = chat.contactNumber.replace(/\D/g, '');
+            const chatKey = normalizedNumber.length >= 10 ? normalizedNumber : chat.id;
+            
+            if (consolidatedChatsMap.has(chatKey)) {
+                // Chat já existe: faz merge
+                const existingChat = consolidatedChatsMap.get(chatKey)!;
+                
+                // Merge de mensagens (remove duplicatas por ID)
+                const allMessages = [...existingChat.messages, ...chat.messages];
+                const uniqueMessages = new Map<string, Message>();
+                allMessages.forEach(msg => {
+                    if (!uniqueMessages.has(msg.id)) {
+                        uniqueMessages.set(msg.id, msg);
+                    }
+                });
+                existingChat.messages = Array.from(uniqueMessages.values())
+                    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+                
+                // Atualiza metadados com os mais recentes/completos
+                if (chat.contactName && (!existingChat.contactName || existingChat.contactName === existingChat.contactNumber)) {
+                    existingChat.contactName = chat.contactName;
+                }
+                if (chat.contactAvatar && chat.contactAvatar !== `https://ui-avatars.com/api/?name=${chat.contactName}`) {
+                    existingChat.contactAvatar = chat.contactAvatar;
+                }
+                existingChat.unreadCount = Math.max(existingChat.unreadCount, chat.unreadCount);
+                
+                // Atualiza última mensagem se a nova for mais recente
+                if (chat.lastMessageTime > existingChat.lastMessageTime) {
+                    existingChat.lastMessage = chat.lastMessage;
+                    existingChat.lastMessageTime = chat.lastMessageTime;
+                }
+                
+                // Garante que o ID seja o mais correto (prefere número válido sobre ID gerado)
+                if (chat.id.includes('@') && !chat.id.includes('cmin') && !chat.id.includes('cmid') && 
+                    (existingChat.id.includes('cmin') || existingChat.id.includes('cmid'))) {
+                    existingChat.id = chat.id;
+                }
+                
+                console.log(`[ChatMerge] Chats consolidados: ${chat.id} + ${existingChat.id} -> ${existingChat.id}`);
+            } else {
+                // Primeira ocorrência: adiciona ao mapa
+                consolidatedChatsMap.set(chatKey, { ...chat });
+            }
+        });
+        
+        const consolidatedChats = Array.from(consolidatedChatsMap.values());
+        console.log(`[ChatMerge] Total de chats: ${mappedChats.length} -> ${consolidatedChats.length} (após consolidação)`);
+        
+        return consolidatedChats;
 
     } catch (error) {
         console.error("[fetchChats] Erro fatal:", error);
