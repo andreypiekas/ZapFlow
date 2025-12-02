@@ -348,18 +348,22 @@ const App: React.FC = () => {
                             return timeA - timeB;
                         });
 
-                        // Preserva status reaberto se o chat foi reaberto localmente (não sobrescreve com 'closed' da API)
-                        // Se o chat foi reaberto (status 'open' localmente), mantém 'open' mesmo se a API retornar 'closed'
-                        // Isso permite que chats reabertos permaneçam abertos
+                        // Preserva status local (closed ou open) - a API sempre retorna 'open', então precisamos preservar o status local
+                        // Se o chat foi finalizado localmente (closed), mantém closed a menos que tenha sido reaberto
+                        // Se o chat foi reaberto localmente (open), mantém open
                         let finalStatus = existingChat.status;
-                        if (existingChat.status === 'open' && realChat.status === 'closed') {
-                            // Chat foi reaberto localmente - mantém aberto
+                        
+                        // Se o chat está finalizado localmente, SEMPRE mantém como closed
+                        // (a API sempre retorna 'open', então não podemos confiar nela para status closed)
+                        if (existingChat.status === 'closed') {
+                            finalStatus = 'closed';
+                        } 
+                        // Se o chat foi reaberto localmente (open), mantém open mesmo se API retornar closed
+                        else if (existingChat.status === 'open' && realChat.status === 'closed') {
                             finalStatus = 'open';
-                        } else if (existingChat.status === 'closed' && realChat.status === 'open') {
-                            // API indica que chat está aberto - atualiza
-                            finalStatus = 'open';
-                        } else {
-                            // Mantém status existente ou usa o da API
+                        }
+                        // Caso padrão: usa o status existente (que já é 'open' ou 'pending')
+                        else {
                             finalStatus = existingChat.status || realChat.status;
                         }
                         
