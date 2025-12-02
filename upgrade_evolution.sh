@@ -19,7 +19,7 @@ NC='\033[0m' # No Color
 # Configurações
 OLD_VERSION="v2.2.3"
 NEW_VERSION="latest"
-NEW_IMAGE="atendai/evolution-api:${NEW_VERSION}"
+NEW_IMAGE="evoapicloud/evolution-api:${NEW_VERSION}"
 
 API_CONTAINER="evolution_api"
 POSTGRES_CONTAINER="evolution_postgres"
@@ -181,7 +181,7 @@ update_docker_compose() {
         cat > docker-compose.yml <<EOL
 services:
   evolution_api:
-    image: ${NEW_IMAGE}
+    image: evoapicloud/evolution-api:latest
     container_name: ${API_CONTAINER}
     restart: always
     shm_size: '2gb'

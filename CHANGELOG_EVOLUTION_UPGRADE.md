@@ -7,10 +7,10 @@
 ## 📦 Arquivos Atualizados
 
 ### Arquivos de Configuração Docker
-- ✅ `setup_evolution.txt` - Imagem atualizada para `atendai/evolution-api:latest`
-- ✅ `autoinstall.txt` - Imagem atualizada para `atendai/evolution-api:latest`
-- ✅ `manual_instalacao.txt` - Imagem atualizada para `atendai/evolution-api:latest`
-- ✅ `manual_instalacao_completo.txt` - Imagem atualizada para `atendai/evolution-api:latest`
+- ✅ `setup_evolution.txt` - Imagem atualizada para `evoapicloud/evolution-api:latest`
+- ✅ `autoinstall.txt` - Imagem atualizada para `evoapicloud/evolution-api:latest`
+- ✅ `manual_instalacao.txt` - Imagem atualizada para `evoapicloud/evolution-api:latest`
+- ✅ `manual_instalacao_completo.txt` - Imagem atualizada para `evoapicloud/evolution-api:latest`
 
 ### Documentação
 - ✅ `README.md` - Referências atualizadas para latest
@@ -32,7 +32,7 @@ Para aplicar a atualização no servidor:
 docker-compose down
 
 # Atualizar imagem (sempre pega a versão mais recente)
-docker pull atendai/evolution-api:latest
+docker pull evoapicloud/evolution-api:latest
 
 # Recriar containers
 docker-compose up -d
@@ -67,5 +67,5 @@ Após atualizar, verificar:
 ## 📚 Referências
 
 - Documentação Evolution API: https://doc.evolution-api.com/
-- Docker Hub: https://hub.docker.com/r/atendai/evolution-api
+- Docker Hub: https://hub.docker.com/r/evoapicloud/evolution-api
 

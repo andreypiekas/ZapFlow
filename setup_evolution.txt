@@ -10,7 +10,7 @@ set -e
 # -------------------------------
 # Configurações principais
 # -------------------------------
-API_IMAGE="atendai/evolution-api:latest"
+API_IMAGE="evoapicloud/evolution-api:latest"
 POSTGRES_IMAGE="postgres:15-alpine"
 REDIS_IMAGE="redis:alpine"
 

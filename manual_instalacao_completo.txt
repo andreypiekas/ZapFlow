@@ -16,7 +16,7 @@ Edite seu arquivo `nano docker-compose.yml` e substitua TUDO por isto:
 
 services:
   evolution_api:
-    image: atendai/evolution-api:latest
+    image: evoapicloud/evolution-api:latest
     container_name: evolution_api
     restart: always
     shm_size: '2gb'  # Memória compartilhada para o Chrome

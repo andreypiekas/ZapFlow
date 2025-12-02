@@ -92,7 +92,7 @@ sudo usermod -aG docker $USER
 
 ### Erro: "Falha ao baixar imagem"
 - Verifique conexão com internet
-- Verifique se a imagem existe: `docker pull atendai/evolution-api:latest`
+- Verifique se a imagem existe: `docker pull evoapicloud/evolution-api:latest`
 
 ### API não responde após upgrade
 ```bash

@@ -58,12 +58,12 @@ vi docker-compose.yml
 
 Altere a linha:
 ```yaml
-image: atendai/evolution-api:v2.2.3
+image: evoapicloud/evolution-api:latest
 ```
 
 Para:
 ```yaml
-image: atendai/evolution-api:latest
+image: evoapicloud/evolution-api:latest
 ```
 
 **OU** se você estiver usando os scripts de instalação (`setup_evolution.txt`, `autoinstall.txt`, etc.), eles já foram atualizados no repositório.
@@ -72,7 +72,7 @@ image: atendai/evolution-api:latest
 
 ```bash
 # Baixar a nova versão da imagem
-docker pull atendai/evolution-api:latest
+docker pull evoapicloud/evolution-api:latest
 
 # Verificar se a imagem foi baixada
 docker images | grep evolution-api
@@ -108,7 +108,7 @@ docker run -d \
   -e CACHE_REDIS_ENABLED=true \
   -e CACHE_REDIS_URI=redis://evolution_redis:6379/0 \
   --network bridge \
-  atendai/evolution-api:v2.3.6
+  evoapicloud/evolution-api:latest
 ```
 
 ### 9. Verificar se os Containers Estão Rodando
@@ -197,7 +197,7 @@ docker inspect evolution_postgres | grep NetworkMode
 docker-compose down
 
 # Voltar para versão anterior
-docker pull atendai/evolution-api:v2.2.3
+docker pull evoapicloud/evolution-api:latest
 
 # Editar docker-compose.yml para usar v2.2.3
 # E recriar containers
@@ -211,7 +211,7 @@ docker-compose up -d
 cd /caminho/para/seu/projeto
 docker exec evolution_postgres pg_dump -U user evolution > backup_evolution_$(date +%Y%m%d_%H%M%S).sql
 docker-compose down
-docker pull atendai/evolution-api:latest
+docker pull evoapicloud/evolution-api:latest
 docker-compose up -d
 docker logs evolution_api -f
 ```
