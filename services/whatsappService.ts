@@ -916,16 +916,16 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                 body: { where: { remoteJid: phoneNumber }, include: ['messages'], limit: 100 },
                 isFindChats: true
             },
-            // Endpoint 3: fetchMessages direto (alternativa quando findChats não retorna mensagens)
+            // Endpoint 3: fetchMessages direto (formato correto: where.remoteJid)
             {
                 url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
-                body: { remoteJid: chatId, limit: limit },
+                body: { where: { remoteJid: chatId }, limit: limit },
                 isFindChats: false
             },
             // Endpoint 4: fetchMessages com número apenas
             {
                 url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
-                body: { remoteJid: phoneNumber, limit: limit },
+                body: { where: { remoteJid: phoneNumber }, limit: limit },
                 isFindChats: false
             },
             // Endpoint 5: findChats sem filtro (busca todos e filtra depois) - último recurso
@@ -1011,22 +1011,23 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                     
                     // Se encontrou mensagens, para de tentar outros endpoints
                     if (messages.length > 0) {
-                        console.log(`[fetchChatMessages] ✅ Encontradas ${messages.length} mensagens via ${endpoint.url}`);
+                        console.log(`[fetchChatMessages] ✅ ${messages.length} mensagens encontradas`);
                         break;
-                    } else {
-                        console.log(`[fetchChatMessages] ⚠️ Nenhuma mensagem encontrada em ${endpoint.url}`);
                     }
                 } else {
-                    const errorText = await res.text().catch(() => '');
-                    let errorJson: any = { message: errorText || 'No error text' };
-                    try {
-                        if (errorText) {
-                            errorJson = JSON.parse(errorText);
+                    // Só loga erros 404 se não for fetchMessages (endpoint pode não existir em algumas versões)
+                    if (res.status !== 404 || !endpoint.url.includes('/message/fetchMessages/')) {
+                        const errorText = await res.text().catch(() => '');
+                        let errorJson: any = { message: errorText || 'No error text' };
+                        try {
+                            if (errorText) {
+                                errorJson = JSON.parse(errorText);
+                            }
+                        } catch {
+                            errorJson = { message: errorText || 'No error text' };
                         }
-                    } catch {
-                        errorJson = { message: errorText || 'No error text' };
+                        console.warn(`[fetchChatMessages] Endpoint ${endpoint.url} retornou ${res.status}`);
                     }
-                    console.error(`[fetchChatMessages] Endpoint ${endpoint.url} retornou ${res.status}:`, errorJson);
                 }
             } catch (err) {
                 console.error(`[fetchChatMessages] Erro ao tentar ${endpoint.url}:`, err);
@@ -1034,9 +1035,8 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         }
         
         const sortedMessages = messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-        if (sortedMessages.length > 0) {
-            console.log(`[fetchChatMessages] ✅ ${sortedMessages.length} mensagens encontradas para ${chatId}`);
-        } else {
+        // Log apenas se não encontrou mensagens (para não poluir quando funciona)
+        if (sortedMessages.length === 0) {
             console.warn(`[fetchChatMessages] ⚠️ Nenhuma mensagem encontrada para ${chatId}`);
         }
         return sortedMessages;

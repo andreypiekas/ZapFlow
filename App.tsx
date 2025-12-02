@@ -387,8 +387,8 @@ const App: React.FC = () => {
                 return;
             }
             
-            // Se instância não está conectada, não tenta WebSocket
-            if (active && active.status !== 'open') {
+            // Se instância não está conectada, não tenta WebSocket (mas permite "unknown" para tentar conectar)
+            if (active && active.status && active.status !== 'open' && active.status !== 'unknown') {
                 if (!isReconnect) {
                     console.log(`[App] WebSocket desabilitado: instância ${instanceName} não está conectada (status: ${active.status})`);
                 }
