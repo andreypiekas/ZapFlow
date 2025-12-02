@@ -242,12 +242,12 @@ cdn.tailwindcss.com should not be used in production. To use Tailwind CSS in pro
 - ❌ WebSocket não conecta (code 1006)
 
 **Possíveis Causas:**
-1. Versão da Evolution API (v2.3.6) pode não suportar `include: ['messages']` no `findChats`
+1. Versão da Evolution API (latest) pode não suportar `include: ['messages']` no `findChats`
 2. Configuração do servidor pode estar desabilitando retorno de mensagens
 3. Mensagens podem estar em outro formato/estrutura
 
 **Solução Recomendada:**
-- Verificar documentação da Evolution API v2.3.6
+- Verificar documentação da Evolution API latest
 - Verificar configuração do servidor Evolution API
 - Depender do WebSocket para mensagens em tempo real (quando funcionar)
 - Considerar atualizar Evolution API para versão mais recente se disponível

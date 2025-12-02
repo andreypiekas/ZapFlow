@@ -2,19 +2,19 @@
 
 **Data:** 2025-12-02  
 **Versão Anterior:** v2.2.3  
-**Nova Versão:** v2.3.6
+**Nova Versão:** latest (sempre a versão mais recente disponível)
 
 ## 📦 Arquivos Atualizados
 
 ### Arquivos de Configuração Docker
-- ✅ `setup_evolution.txt` - Imagem atualizada para `atendai/evolution-api:v2.3.6`
-- ✅ `autoinstall.txt` - Imagem atualizada para `atendai/evolution-api:v2.3.6`
-- ✅ `manual_instalacao.txt` - Imagem atualizada para `atendai/evolution-api:v2.3.6`
-- ✅ `manual_instalacao_completo.txt` - Imagem atualizada para `atendai/evolution-api:v2.3.6`
+- ✅ `setup_evolution.txt` - Imagem atualizada para `atendai/evolution-api:latest`
+- ✅ `autoinstall.txt` - Imagem atualizada para `atendai/evolution-api:latest`
+- ✅ `manual_instalacao.txt` - Imagem atualizada para `atendai/evolution-api:latest`
+- ✅ `manual_instalacao_completo.txt` - Imagem atualizada para `atendai/evolution-api:latest`
 
 ### Documentação
-- ✅ `README.md` - Referências atualizadas para v2.3.6
-- ✅ `ANALISE_ERROS.md` - Referências atualizadas para v2.3.6
+- ✅ `README.md` - Referências atualizadas para latest
+- ✅ `ANALISE_ERROS.md` - Referências atualizadas para latest
 - ✅ `services/whatsappService.ts` - Comentário atualizado
 
 ## 💾 Backup
@@ -31,8 +31,8 @@ Para aplicar a atualização no servidor:
 # Parar containers
 docker-compose down
 
-# Atualizar imagem
-docker pull atendai/evolution-api:v2.3.6
+# Atualizar imagem (sempre pega a versão mais recente)
+docker pull atendai/evolution-api:latest
 
 # Recriar containers
 docker-compose up -d
@@ -40,7 +40,7 @@ docker-compose up -d
 
 ### 2. Verificar Compatibilidade
 
-A versão 2.3.6 inclui:
+A versão latest (mais recente disponível) inclui:
 - ✅ **Correções no Baileys:** Implementações e correções no Baileys, Chatwoot e OnWhatsapp Cache
 - ✅ **Cache melhorado:** Correção do cache para números PN, LID e g.us para envio correto
 - ✅ **Envio de mídia:** Correção no envio de áudio e documentos via Chatwoot no canal Baileys
