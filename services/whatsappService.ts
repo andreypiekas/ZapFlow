@@ -907,41 +907,23 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         // Tenta múltiplos endpoints e formatos de query
         // PRIORIDADE: findChats primeiro (sabemos que funciona)
         const endpoints = [
-            // Endpoint 1: findChats com remoteJid (prioridade - sabemos que funciona)
-            {
-                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
-                body: { where: { remoteJid: chatId }, include: ['messages'], limit: 1 },
-                isFindChats: true
-            },
-            // Endpoint 2: findChats com remoteJid sem @s.whatsapp.net
-            {
-                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
-                body: { where: { remoteJid: phoneNumber }, include: ['messages'], limit: 1 },
-                isFindChats: true
-            },
-            // Endpoint 3: findChats com id (para IDs gerados)
-            {
-                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
-                body: { where: { id: chatId }, include: ['messages'], limit: 1 },
-                isFindChats: true
-            },
-            // Endpoint 4: findChats sem filtro (busca todos e filtra depois)
+            // Endpoint 1: findChats sem filtro (busca todos e filtra depois) - mais confiável
             {
                 url: `${config.baseUrl}/chat/findChats/${instanceName}`,
                 body: { where: {}, include: ['messages'], limit: 100 },
                 isFindChats: true
             },
-            // Endpoint 5: fetchMessages com remoteJid exato (pode retornar 404)
+            // Endpoint 2: findChats com remoteJid
             {
-                url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
-                body: { where: { remoteJid: chatId }, limit: limit },
-                isFindChats: false
+                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
+                body: { where: { remoteJid: chatId }, include: ['messages'], limit: 1 },
+                isFindChats: true
             },
-            // Endpoint 6: fetchMessages com remoteJid sem @s.whatsapp.net (pode retornar 404)
+            // Endpoint 3: findChats com remoteJid sem @s.whatsapp.net
             {
-                url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
-                body: { where: { remoteJid: phoneNumber }, limit: limit },
-                isFindChats: false
+                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
+                body: { where: { remoteJid: phoneNumber }, include: ['messages'], limit: 1 },
+                isFindChats: true
             }
         ];
         
@@ -1016,17 +998,42 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                         
                         if (matchingChat) {
                             console.error(`[fetchChatMessages] ✅ Chat correspondente encontrado: ${matchingChat.remoteJid || matchingChat.id}`);
+                            console.error(`[fetchChatMessages] Estrutura do chat:`, {
+                                hasMessages: !!matchingChat.messages,
+                                messagesType: typeof matchingChat.messages,
+                                messagesIsArray: Array.isArray(matchingChat.messages),
+                                messagesLength: matchingChat.messages?.length || 0,
+                                chatKeys: Object.keys(matchingChat).slice(0, 10)
+                            });
+                            
                             // Se o chat tem mensagens, processa elas
-                            if (matchingChat.messages && Array.isArray(matchingChat.messages)) {
+                            if (matchingChat.messages && Array.isArray(matchingChat.messages) && matchingChat.messages.length > 0) {
                                 console.error(`[fetchChatMessages] Processando ${matchingChat.messages.length} mensagens do chat`);
                                 processMessages(matchingChat.messages);
                             } else {
                                 console.error(`[fetchChatMessages] ⚠️ Chat encontrado mas sem mensagens no campo messages`);
+                                // Tenta buscar mensagens em outros campos possíveis
+                                const possibleMessageFields = ['message', 'lastMessage', 'conversation', 'data'];
+                                for (const field of possibleMessageFields) {
+                                    if (matchingChat[field] && Array.isArray(matchingChat[field])) {
+                                        console.error(`[fetchChatMessages] Encontrado campo ${field} com ${matchingChat[field].length} mensagens`);
+                                        processMessages(matchingChat[field]);
+                                        break;
+                                    }
+                                }
                             }
                         } else {
                             console.error(`[fetchChatMessages] ⚠️ Nenhum chat correspondente encontrado para ${chatId}`);
                             // Tenta processar todos os chats de qualquer forma (fallback)
-                            processMessages(data);
+                            // Mas primeiro verifica se algum item é uma mensagem direta
+                            if (Array.isArray(data)) {
+                                data.forEach((item: any) => {
+                                    // Se algum item tem key.remoteJid, pode ser uma mensagem
+                                    if (item && item.key && item.key.remoteJid) {
+                                        processMessages([item]);
+                                    }
+                                });
+                            }
                         }
                     } else if (Array.isArray(data)) {
                         console.error(`[fetchChatMessages] Processando array com ${data.length} itens (formato mensagens)`);
