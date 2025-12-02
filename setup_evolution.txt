@@ -59,7 +59,7 @@ services:
       - CONFIG_SESSION_PHONE_OS=Windows
       
       # Versão Validada (Corrige erro de geração de QR Code)
-      - CONFIG_SESSION_PHONE_VERSION=2.3000.1029255529
+      # - CONFIG_SESSION_PHONE_VERSION=2.3000.1029255529
       
       # Proteções de Performance
       - CONFIG_SESSION_PHONE_SYNC_FULL_HISTORY=false
