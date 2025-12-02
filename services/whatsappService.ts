@@ -354,16 +354,19 @@ export const sendRealMediaMessage = async (
   let endpoint = 'sendMedia';
   if (mediaType === 'audio') endpoint = 'sendWhatsAppAudio'; 
 
-  const body = {
+  // Evolution API v2.3.6 espera mediatype no nível raiz, não dentro de mediaMessage
+  const body: any = {
       number: cleanPhone,
       delay: 1200,
-      mediaMessage: {
-        mediatype: mediaType,
-        caption: caption,
-        media: base64, 
-        fileName: fileName
-      }
+      mediatype: mediaType, // Propriedade no nível raiz (requerido pela API)
+      media: base64,
+      fileName: fileName
   };
+
+  // Adiciona caption apenas se fornecido (não é obrigatório)
+  if (caption && caption.trim()) {
+      body.caption = caption;
+  }
 
   try {
     const response = await fetch(`${config.baseUrl}/message/${endpoint}/${target}`, {
