@@ -28,14 +28,16 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
 
   const openModal = (user?: User) => {
     if (user) {
-      setEditingUser(user);
-      setName(user.name);
-      setEmail(user.email);
-      setPassword(user.password || '');
-      setRole(user.role);
-      setDepartmentId(user.departmentId || '');
-      setAvatar(user.avatar);
-      setAllowGeneralConnection(user.allowGeneralConnection || false);
+      // Busca o usuário mais recente do array para garantir que está atualizado
+      const currentUser = users.find(u => u.id === user.id) || user;
+      setEditingUser(currentUser);
+      setName(currentUser.name);
+      setEmail(currentUser.email);
+      setPassword(currentUser.password || '');
+      setRole(currentUser.role);
+      setDepartmentId(currentUser.departmentId || '');
+      setAvatar(currentUser.avatar);
+      setAllowGeneralConnection(currentUser.allowGeneralConnection || false);
     } else {
       setEditingUser(null);
       setName('');

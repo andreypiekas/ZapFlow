@@ -67,9 +67,23 @@ const App: React.FC = () => {
     return INITIAL_CHATS;
   };
 
+  // Carrega usuários do localStorage se existir, senão usa INITIAL_USERS
+  const loadUsersFromStorage = (): User[] => {
+    try {
+      const saved = localStorage.getItem('zapflow_users');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed;
+      }
+    } catch (e) {
+      console.error('[App] Erro ao carregar usuários do localStorage:', e);
+    }
+    return INITIAL_USERS;
+  };
+
   const [chats, setChats] = useState<Chat[]>(loadChatsFromStorage());
   const [departments, setDepartments] = useState<Department[]>(INITIAL_DEPARTMENTS);
-  const [users, setUsers] = useState<User[]>(INITIAL_USERS);
+  const [users, setUsers] = useState<User[]>(loadUsersFromStorage());
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>(INITIAL_QUICK_REPLIES);
   const [workflows, setWorkflows] = useState<Workflow[]>(INITIAL_WORKFLOWS);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -90,6 +104,15 @@ const App: React.FC = () => {
       console.error('[App] Erro ao salvar chats no localStorage:', e);
     }
   }, [chats]);
+
+  // Persiste usuários no localStorage sempre que mudarem
+  useEffect(() => {
+    try {
+      localStorage.setItem('zapflow_users', JSON.stringify(users));
+    } catch (e) {
+      console.error('[App] Erro ao salvar usuários no localStorage:', e);
+    }
+  }, [users]);
 
   // Refs para armazenar interval e WebSocket
   const intervalIdRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -879,9 +902,9 @@ const App: React.FC = () => {
 
   const handleSaveConfig = (newConfig: ApiConfig) => setApiConfig(newConfig);
 
-  const handleAddUser = (user: User) => setUsers([...users, user]);
-  const handleUpdateUser = (updatedUser: User) => setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u));
-  const handleDeleteUser = (id: string) => setUsers(users.filter(u => u.id !== id));
+  const handleAddUser = (user: User) => setUsers(prevUsers => [...prevUsers, user]);
+  const handleUpdateUser = (updatedUser: User) => setUsers(prevUsers => prevUsers.map(u => u.id === updatedUser.id ? updatedUser : u));
+  const handleDeleteUser = (id: string) => setUsers(prevUsers => prevUsers.filter(u => u.id !== id));
 
   const handleAddQuickReply = (qr: QuickReply) => setQuickReplies([...quickReplies, qr]);
   const handleUpdateQuickReply = (updatedQr: QuickReply) => setQuickReplies(quickReplies.map(q => q.id === updatedQr.id ? updatedQr : q));
