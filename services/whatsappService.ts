@@ -987,47 +987,43 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                         // Processa todos os chats correspondentes
                         if (matchingChats.length > 0) {
                             matchingChats.forEach((matchingChat: any) => {
-                        
-                        if (matchingChat) {
-                            // Tenta múltiplos formatos de mensagens
-                            if (matchingChat.messages && Array.isArray(matchingChat.messages) && matchingChat.messages.length > 0) {
-                                processMessages(matchingChat.messages);
-                            } else if (matchingChat.message && typeof matchingChat.message === 'object') {
-                                // Mensagem como objeto único (não array)
-                                if (matchingChat.message.key && matchingChat.message.key.remoteJid) {
-                                    const normalizedJid = normalizeJid(matchingChat.message.key.remoteJid);
-                                    if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
+                                // Tenta múltiplos formatos de mensagens
+                                if (matchingChat.messages && Array.isArray(matchingChat.messages) && matchingChat.messages.length > 0) {
+                                    processMessages(matchingChat.messages);
+                                } else if (matchingChat.message && typeof matchingChat.message === 'object') {
+                                    // Mensagem como objeto único (não array) - formato novo da API
+                                    if (matchingChat.message.key && matchingChat.message.key.remoteJid) {
+                                        const normalizedJid = normalizeJid(matchingChat.message.key.remoteJid);
+                                        if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
+                                            const mapped = mapApiMessageToInternal(matchingChat.message);
+                                            if (mapped) messages.push(mapped);
+                                        }
+                                    } else {
+                                        // Tenta processar como mensagem direta (sem key)
                                         const mapped = mapApiMessageToInternal(matchingChat.message);
                                         if (mapped) messages.push(mapped);
                                     }
-                                } else {
-                                    // Tenta processar como mensagem direta
-                                    const mapped = mapApiMessageToInternal(matchingChat.message);
-                                    if (mapped) messages.push(mapped);
-                                }
-                            } else if (matchingChat.lastMessage && typeof matchingChat.lastMessage === 'object') {
-                                // lastMessage como objeto único
-                                if (matchingChat.lastMessage.key && matchingChat.lastMessage.key.remoteJid) {
-                                    const normalizedJid = normalizeJid(matchingChat.lastMessage.key.remoteJid);
-                                    if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
+                                } else if (matchingChat.lastMessage && typeof matchingChat.lastMessage === 'object') {
+                                    // lastMessage como objeto único
+                                    if (matchingChat.lastMessage.key && matchingChat.lastMessage.key.remoteJid) {
+                                        const normalizedJid = normalizeJid(matchingChat.lastMessage.key.remoteJid);
+                                        if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
+                                            const mapped = mapApiMessageToInternal(matchingChat.lastMessage);
+                                            if (mapped) messages.push(mapped);
+                                        }
+                                    } else {
                                         const mapped = mapApiMessageToInternal(matchingChat.lastMessage);
                                         if (mapped) messages.push(mapped);
                                     }
-                                } else {
-                                    const mapped = mapApiMessageToInternal(matchingChat.lastMessage);
-                                    if (mapped) messages.push(mapped);
+                                } else if (matchingChat.key && matchingChat.key.remoteJid) {
+                                    // O próprio chat pode ser uma mensagem
+                                    const normalizedJid = normalizeJid(matchingChat.key.remoteJid);
+                                    if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
+                                        const mapped = mapApiMessageToInternal(matchingChat);
+                                        if (mapped) messages.push(mapped);
+                                    }
                                 }
-                            } else if (matchingChat.key && matchingChat.key.remoteJid) {
-                                // O próprio chat pode ser uma mensagem
-                                const normalizedJid = normalizeJid(matchingChat.key.remoteJid);
-                                if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
-                                    const mapped = mapApiMessageToInternal(matchingChat);
-                                    if (mapped) messages.push(mapped);
-                                }
-                            } else {
-                                // Fallback: tenta processar o array completo da resposta
-                                processMessages(data);
-                            }
+                            });
                         } else {
                             // Se nenhum chat correspondente foi encontrado, tenta processar todos os itens da resposta
                             processMessages(data);
