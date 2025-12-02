@@ -558,9 +558,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
     // Envia com referência à mensagem original se for uma resposta
     // Prioriza o ID real do WhatsApp, senão usa o ID interno
+    // Passa também o objeto raw completo (necessário para Evolution API)
     const replyToId = replyingTo?.whatsappMessageId || replyingTo?.id;
-    console.log(`[handleSendMessage] Respondendo à mensagem: ${replyToId} (whatsappId: ${replyingTo?.whatsappMessageId}, id: ${replyingTo?.id})`);
-    const success = await sendRealMessage(apiConfig, targetNumber, inputText, replyToId);
+    const replyToRaw = replyingTo?.rawMessage;
+    console.log(`[handleSendMessage] Respondendo à mensagem: ${replyToId} (whatsappId: ${replyingTo?.whatsappMessageId}, id: ${replyingTo?.id}, hasRaw: ${!!replyToRaw})`);
+    const success = await sendRealMessage(apiConfig, targetNumber, inputText, replyToId, replyToRaw);
     
     finalizeMessageStatus(newMessage, success);
     setIsSending(false);

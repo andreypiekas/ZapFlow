@@ -238,7 +238,7 @@ export const logoutInstance = async (config: ApiConfig) => {
 
 // --- MESSAGING ---
 
-export const sendRealMessage = async (config: ApiConfig, phone: string, text: string, replyToMessageId?: string) => {
+export const sendRealMessage = async (config: ApiConfig, phone: string, text: string, replyToMessageId?: string, replyToRawMessage?: any) => {
   if (config.isDemo) {
     await new Promise(resolve => setTimeout(resolve, 800));
     return true;
@@ -260,13 +260,23 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
     };
 
     // Adiciona referência à mensagem original se for uma resposta
-    // Evolution API pode usar diferentes formatos, tentamos múltiplos para compatibilidade
+    // Evolution API precisa do objeto completo da mensagem, não apenas o ID
     if (replyToMessageId) {
-        // Formato 1: quotedMessageId (mais comum na Evolution API)
-        payload.quotedMessageId = replyToMessageId;
-        // Formato 2: quoted (alternativo)
-        payload.quoted = replyToMessageId;
-        console.log(`[sendRealMessage] Enviando resposta com quotedMessageId: ${replyToMessageId}`);
+        if (replyToRawMessage && replyToRawMessage.key) {
+            // Formato correto: objeto quoted com key completo
+            payload.quoted = {
+                key: {
+                    remoteJid: replyToRawMessage.key.remoteJid || cleanPhone + '@s.whatsapp.net',
+                    fromMe: replyToRawMessage.key.fromMe || false,
+                    id: replyToRawMessage.key.id || replyToMessageId
+                }
+            };
+            console.log(`[sendRealMessage] Enviando resposta com objeto quoted completo:`, payload.quoted);
+        } else {
+            // Fallback: tenta apenas com ID (pode não funcionar)
+            payload.quotedMessageId = replyToMessageId;
+            console.log(`[sendRealMessage] Enviando resposta com quotedMessageId (fallback): ${replyToMessageId}`);
+        }
     }
 
     const response = await fetch(`${config.baseUrl}/message/sendText/${target}`, {
@@ -553,7 +563,8 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         status: mapStatus(apiMsg.status),
         type,
         author: author, // Salva o JID real para correção automática (sempre normalizado)
-        whatsappMessageId: key.id // Salva o ID real do WhatsApp para respostas
+        whatsappMessageId: key.id, // Salva o ID real do WhatsApp para respostas
+        rawMessage: apiMsg // Salva o objeto completo para respostas (Evolution API precisa do objeto completo)
     };
 };
 
