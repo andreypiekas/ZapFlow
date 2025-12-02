@@ -78,8 +78,10 @@ services:
       - CORS_METHODS=POST,GET,PUT,DELETE,OPTIONS
       - CORS_CREDENTIALS=true
     depends_on:
-      - evolution_postgres
-      - evolution_redis
+      evolution_postgres:
+        condition: service_healthy
+      evolution_redis:
+        condition: service_started
 
   evolution_postgres:
     image: postgres:15-alpine

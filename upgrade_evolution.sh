@@ -215,8 +215,10 @@ services:
       - CORS_METHODS=POST,GET,PUT,DELETE,OPTIONS
       - CORS_CREDENTIALS=true
     depends_on:
-      - ${POSTGRES_CONTAINER}
-      - ${REDIS_CONTAINER}
+      ${POSTGRES_CONTAINER}:
+        condition: service_healthy
+      ${REDIS_CONTAINER}:
+        condition: service_started
 
   ${POSTGRES_CONTAINER}:
     image: postgres:15-alpine
