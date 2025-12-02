@@ -94,6 +94,10 @@ const App: React.FC = () => {
   // Refs para armazenar interval e WebSocket
   const intervalIdRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const wsReconnectAttemptsRef = useRef<number>(0);
+  const wsReconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const MAX_RECONNECT_ATTEMPTS = 5;
+  const INITIAL_RECONNECT_DELAY = 5000; // 5 segundos
 
   useEffect(() => {
     if (!currentUser || apiConfig.isDemo || !apiConfig.baseUrl) {
@@ -351,20 +355,43 @@ const App: React.FC = () => {
     intervalIdRef.current = setInterval(syncChats, 3000);
     
     // Inicializa WebSocket de forma assíncrona
-    const initWebSocket = async () => {
-        console.log('[App] initWebSocket chamado', { isDemo: apiConfig.isDemo, baseUrl: apiConfig.baseUrl });
+    const initWebSocket = async (isReconnect: boolean = false) => {
+        // Limpa timeout anterior se existir
+        if (wsReconnectTimeoutRef.current) {
+            clearTimeout(wsReconnectTimeoutRef.current);
+            wsReconnectTimeoutRef.current = null;
+        }
         
         if (apiConfig.isDemo || !apiConfig.baseUrl) {
-            console.log('[App] WebSocket desabilitado: isDemo ou baseUrl vazio');
+            if (!isReconnect) {
+                console.log('[App] WebSocket desabilitado: isDemo ou baseUrl vazio');
+            }
+            return;
+        }
+        
+        // Verifica limite de tentativas
+        if (isReconnect && wsReconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+            console.warn(`[App] ⚠️ Limite de ${MAX_RECONNECT_ATTEMPTS} tentativas de reconexão WebSocket atingido. Parando tentativas.`);
             return;
         }
         
         try {
+            // Verifica se instância está ativa antes de tentar conectar
             const active = await findActiveInstance(apiConfig);
             const instanceName = active?.instanceName || apiConfig.instanceName;
             
             if (!instanceName) {
-                console.log('[App] WebSocket desabilitado: instância não encontrada');
+                if (!isReconnect) {
+                    console.log('[App] WebSocket desabilitado: instância não encontrada');
+                }
+                return;
+            }
+            
+            // Se instância não está conectada, não tenta WebSocket
+            if (active && active.status !== 'open') {
+                if (!isReconnect) {
+                    console.log(`[App] WebSocket desabilitado: instância ${instanceName} não está conectada (status: ${active.status})`);
+                }
                 return;
             }
             
@@ -393,6 +420,8 @@ const App: React.FC = () => {
             
             ws.onopen = () => {
                 console.log('[App] ✅ WebSocket conectado com sucesso!');
+                // Reset contador de tentativas ao conectar com sucesso
+                wsReconnectAttemptsRef.current = 0;
                 // Envia autenticação se necessário
                 if (apiConfig.apiKey && wsRef.current) {
                     wsRef.current.send(JSON.stringify({ apikey: apiConfig.apiKey }));
@@ -415,15 +444,7 @@ const App: React.FC = () => {
                         data = event.data;
                     }
                     
-                    console.error('[App] 📨📨📨 MENSAGEM RECEBIDA VIA WEBSOCKET:', {
-                        event: data.event,
-                        type: data.type,
-                        hasData: !!data.data,
-                        hasKey: !!data.key,
-                        remoteJid: data.key?.remoteJid || data.data?.key?.remoteJid || data.remoteJid,
-                        fromMe: data.key?.fromMe || data.data?.key?.fromMe || data.fromMe,
-                        fullData: JSON.stringify(data).substring(0, 500)
-                    });
+                    // Log reduzido de mensagens WebSocket
                     
                     // Processa mensagens recebidas - múltiplos formatos possíveis
                     // Formato 1: { event: 'messages.upsert', data: { key: {...}, message: {...} } }
@@ -448,18 +469,6 @@ const App: React.FC = () => {
                         if (messageData && messageData.key && messageData.key.remoteJid) {
                             const remoteJid = normalizeJid(messageData.key.remoteJid);
                             const mapped = mapApiMessageToInternal(messageData);
-                            
-                            console.error('[App] 🔄 Processando mensagem WebSocket:', {
-                                remoteJid,
-                                fromMe: messageData.key.fromMe,
-                                mapped: mapped ? { 
-                                    content: mapped.content?.substring(0, 30), 
-                                    sender: mapped.sender,
-                                    id: mapped.id,
-                                    timestamp: mapped.timestamp
-                                } : null,
-                                chatJids: currentChats.map(c => normalizeJid(c.id))
-                            });
                             
                             if (mapped) {
                                 setChats(currentChats => {
@@ -489,13 +498,7 @@ const App: React.FC = () => {
                                             
                                             if (!exists) {
                                                 chatUpdated = true;
-                                                console.error(`[App] ✅✅✅ NOVA MENSAGEM ADICIONADA AO CHAT ${chat.contactName}:`, {
-                                                    content: mapped.content?.substring(0, 30),
-                                                    sender: mapped.sender,
-                                                    id: mapped.id,
-                                                    chatJid,
-                                                    messageJid
-                                                });
+                                                console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}`);
                                                 const updatedMessages = [...chat.messages, mapped].sort((a, b) => 
                                                     a.timestamp.getTime() - b.timestamp.getTime()
                                                 );
@@ -529,19 +532,7 @@ const App: React.FC = () => {
                                     
                                     return updatedChats;
                                 });
-                            } else {
-                                console.error('[App] ⚠️ Mensagem WebSocket não foi mapeada:', {
-                                    messageData,
-                                    hasKey: !!messageData?.key,
-                                    hasRemoteJid: !!messageData?.key?.remoteJid
-                                });
                             }
-                        } else {
-                            console.error('[App] ⚠️ Mensagem WebSocket sem estrutura válida:', {
-                                eventType,
-                                hasMessageData: !!messageData,
-                                dataKeys: Object.keys(data || {})
-                            });
                         }
                     } else {
                         console.log('[App] ℹ️ Evento WebSocket não é de mensagem:', eventType || 'sem tipo');
@@ -553,25 +544,37 @@ const App: React.FC = () => {
             
             ws.onerror = (error) => {
                 console.error('[App] ❌ Erro no WebSocket:', error);
-                // Tenta reconectar após erro
-                setTimeout(() => {
-                    if (currentUser && apiConfig.baseUrl && !apiConfig.isDemo) {
-                        console.log('[App] Tentando reconectar WebSocket após erro...');
-                        initWebSocket();
-                    }
-                }, 5000);
+                // Não tenta reconectar imediatamente, deixa o onclose tratar
             };
             
             ws.onclose = (event) => {
-                console.log(`[App] WebSocket desconectado (code: ${event.code}, reason: ${event.reason})`);
+                console.log(`[App] WebSocket desconectado (code: ${event.code}, reason: ${event.reason || 'sem motivo'})`);
+                
                 // Só reconecta se não foi fechado intencionalmente (code 1000)
                 if (event.code !== 1000) {
-                    setTimeout(() => {
-                        if (currentUser && apiConfig.baseUrl && !apiConfig.isDemo) {
-                            console.log('[App] Tentando reconectar WebSocket em 5s...');
-                            initWebSocket();
-                        }
-                    }, 5000);
+                    // Incrementa contador de tentativas
+                    wsReconnectAttemptsRef.current += 1;
+                    
+                    // Calcula delay com backoff exponencial (5s, 10s, 20s, 40s, 80s)
+                    const delay = Math.min(
+                        INITIAL_RECONNECT_DELAY * Math.pow(2, wsReconnectAttemptsRef.current - 1),
+                        80000 // Máximo de 80 segundos
+                    );
+                    
+                    if (wsReconnectAttemptsRef.current <= MAX_RECONNECT_ATTEMPTS) {
+                        console.log(`[App] Tentando reconectar WebSocket em ${delay/1000}s... (tentativa ${wsReconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`);
+                        
+                        wsReconnectTimeoutRef.current = setTimeout(() => {
+                            if (currentUser && apiConfig.baseUrl && !apiConfig.isDemo) {
+                                initWebSocket(true);
+                            }
+                        }, delay);
+                    } else {
+                        console.warn(`[App] ⚠️ Limite de ${MAX_RECONNECT_ATTEMPTS} tentativas de reconexão atingido. WebSocket não será reconectado automaticamente.`);
+                    }
+                } else {
+                    // Reset contador se foi fechado intencionalmente
+                    wsReconnectAttemptsRef.current = 0;
                 }
             };
         } catch (err) {
@@ -581,12 +584,10 @@ const App: React.FC = () => {
     
     // Inicializa WebSocket apenas se não estiver em demo
     if (!apiConfig.isDemo && apiConfig.baseUrl) {
-        console.error('[App] ✅✅✅ Inicializando WebSocket...', { isDemo: apiConfig.isDemo, baseUrl: apiConfig.baseUrl });
+        console.log('[App] Inicializando WebSocket...');
         initWebSocket().catch(err => {
             console.error('[App] ❌ Erro ao inicializar WebSocket:', err);
         });
-    } else {
-        console.error('[App] ⚠️ WebSocket não inicializado:', { isDemo: apiConfig.isDemo, baseUrl: apiConfig.baseUrl });
     }
 
     // Cleanup: fecha interval e WebSocket quando dependências mudam ou componente desmonta
@@ -595,8 +596,14 @@ const App: React.FC = () => {
         clearInterval(intervalIdRef.current);
         intervalIdRef.current = null;
       }
+      if (wsReconnectTimeoutRef.current) {
+        clearTimeout(wsReconnectTimeoutRef.current);
+        wsReconnectTimeoutRef.current = null;
+      }
       if (wsRef.current) {
         console.log('[App] Fechando WebSocket...');
+        // Reset contador ao fechar intencionalmente
+        wsReconnectAttemptsRef.current = 0;
         wsRef.current.close();
         wsRef.current = null;
       }

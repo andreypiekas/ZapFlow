@@ -801,17 +801,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
 // Busca mensagens de um chat específico
 export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit: number = 100): Promise<Message[]> => {
-    // ============================================
-    // 🚀🚀🚀 VERSÃO NOVA - FORÇA EXECUÇÃO 🚀🚀🚀
-    // ============================================
-    const VERSION_MARKER = `🚀🚀🚀 VERSÃO NOVA ${Date.now()} 🚀🚀🚀`;
-    console.error(VERSION_MARKER); // Usa console.error para garantir que aparece
-    console.error(`[fetchChatMessages] 🚀🚀🚀 VERSÃO NOVA - ${new Date().toISOString()} 🚀🚀🚀`);
-    console.error(`[fetchChatMessages] ========== INÍCIO ==========`);
-    console.error(`[fetchChatMessages] chatId: ${chatId}`);
-    console.error(`[fetchChatMessages] isDemo: ${config.isDemo}`);
-    console.error(`[fetchChatMessages] baseUrl: ${config.baseUrl}`);
-    console.error(`[fetchChatMessages] apiKey: ${!!config.apiKey}`);
+    // Logs de debug reduzidos
     
     if (config.isDemo || !config.baseUrl || !config.apiKey) {
         console.log(`[fetchChatMessages] ❌ Retornando vazio: isDemo=${config.isDemo}, baseUrl=${!!config.baseUrl}, apiKey=${!!config.apiKey}`);
@@ -819,20 +809,15 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
     }
 
     try {
-        console.error(`[fetchChatMessages] 🔍 PASSO 1: Buscando instância ativa...`);
         let active;
         try {
             active = await findActiveInstance(config);
-            console.error(`[fetchChatMessages] ✅ findActiveInstance retornou:`, active ? { instanceName: active.instanceName } : 'null');
         } catch (err) {
             console.error(`[fetchChatMessages] ❌ Erro ao buscar instância:`, err);
             active = null;
         }
         
         const instanceName = active?.instanceName || config.instanceName;
-        console.error(`[fetchChatMessages] 🔍 PASSO 2: Instância encontrada: ${instanceName}`);
-        console.error(`[fetchChatMessages] - De active: ${active?.instanceName || 'null'}`);
-        console.error(`[fetchChatMessages] - De config: ${config.instanceName || 'null'}`);
         
         if (!instanceName) {
             console.error(`[fetchChatMessages] ❌ Retornando vazio: instância não encontrada`);
@@ -841,17 +826,14 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
 
         // Extrai o número do JID (remove @s.whatsapp.net)
         const phoneNumber = chatId.split('@')[0];
-        console.error(`[fetchChatMessages] 🔍 PASSO 3: Buscando mensagens para ${chatId} (número: ${phoneNumber})`);
         
         const messages: Message[] = [];
         
         // Função para processar mensagens recursivamente
         const processMessages = (items: any[]) => {
             if (!Array.isArray(items)) {
-                console.error(`[fetchChatMessages] processMessages recebeu não-array:`, typeof items);
                 return;
             }
-            console.error(`[fetchChatMessages] processMessages processando ${items.length} itens`);
             items.forEach((item, index) => {
                 if (!item || typeof item !== 'object') {
                     return;
@@ -865,12 +847,7 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                         const mapped = mapApiMessageToInternal(item);
                         if (mapped) {
                             messages.push(mapped);
-                            console.error(`[fetchChatMessages] ✅ Mensagem encontrada [${index}]: ${mapped.content?.substring(0, 30)} (${mapped.sender})`);
-                        } else {
-                            console.error(`[fetchChatMessages] ⚠️ Mensagem não mapeada [${index}]:`, item.key?.remoteJid);
                         }
-                    } else {
-                        console.error(`[fetchChatMessages] Mensagem ignorada [${index}]: JID ${normalizedJid} não corresponde a ${chatId}`);
                     }
                     return; // Processou como mensagem, não precisa continuar
                 }
@@ -888,13 +865,9 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                                           (itemIdNumber === phoneNumber && phoneNumber.length >= 10);
                     
                     if (isMatchingChat) {
-                        console.error(`[fetchChatMessages] ✅ Chat encontrado [${index}]: ${item.remoteJid}, messages: ${item.messages?.length || 0}`);
                         // Se o chat tem mensagens, processa elas
                         if (item.messages && Array.isArray(item.messages) && item.messages.length > 0) {
-                            console.error(`[fetchChatMessages] Processando ${item.messages.length} mensagens do chat ${item.remoteJid}`);
                             processMessages(item.messages);
-                        } else {
-                            console.error(`[fetchChatMessages] Chat ${item.remoteJid} encontrado mas sem mensagens no campo messages`);
                         }
                     }
                     return; // Processou como chat, não precisa continuar
@@ -907,7 +880,6 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                         const mapped = mapApiMessageToInternal(item);
                         if (mapped) {
                             messages.push(mapped);
-                            console.error(`[fetchChatMessages] ✅ Mensagem encontrada [${index}] (formato alternativo): ${mapped.content?.substring(0, 30)}`);
                         }
                     }
                     return; // Processou como mensagem alternativa, não precisa continuar
@@ -926,10 +898,6 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                 }
             });
             
-            // Log final se não encontrou mensagens
-            if (messages.length === 0 && items.length > 0) {
-                console.error(`[fetchChatMessages] Item [0] sem key.remoteJid:`, Array.isArray(items[0]) ? `Array(${items[0].length})` : typeof items[0]);
-            }
         };
         
         // Tenta múltiplos endpoints e formatos de query
@@ -948,7 +916,19 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                 body: { where: { remoteJid: phoneNumber }, include: ['messages'], limit: 100 },
                 isFindChats: true
             },
-            // Endpoint 3: findChats sem filtro (busca todos e filtra depois)
+            // Endpoint 3: fetchMessages direto (alternativa quando findChats não retorna mensagens)
+            {
+                url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
+                body: { remoteJid: chatId, limit: limit },
+                isFindChats: false
+            },
+            // Endpoint 4: fetchMessages com número apenas
+            {
+                url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
+                body: { remoteJid: phoneNumber, limit: limit },
+                isFindChats: false
+            },
+            // Endpoint 5: findChats sem filtro (busca todos e filtra depois) - último recurso
             {
                 url: `${config.baseUrl}/chat/findChats/${instanceName}`,
                 body: { where: {}, include: ['messages'], limit: 100 },
@@ -956,14 +936,9 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
             }
         ];
         
-        console.error(`[fetchChatMessages] 🔍 PASSO 4: Iniciando loop de ${endpoints.length} endpoints...`);
-        console.error(`[fetchChatMessages] Endpoints configurados:`, endpoints.map(e => ({ url: e.url, method: e.body ? 'POST' : 'GET' })));
-        
         for (let i = 0; i < endpoints.length; i++) {
             const endpoint = endpoints[i];
             try {
-                console.error(`[fetchChatMessages] [${i+1}/${endpoints.length}] ⚡ Tentando endpoint: ${endpoint.url}`);
-                console.error(`[fetchChatMessages] [${i+1}/${endpoints.length}] Body:`, endpoint.body || 'GET');
                 const res = await fetch(endpoint.url, {
                     method: endpoint.body ? 'POST' : 'GET',
                     headers: { 
@@ -973,26 +948,8 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                     body: endpoint.body ? JSON.stringify(endpoint.body) : undefined
                 });
                 
-                console.error(`[fetchChatMessages] [${i+1}/${endpoints.length}] ⏱️ Resposta de ${endpoint.url}: status=${res.status}, ok=${res.ok}`);
-                
                 if (res.ok) {
                     const data = await res.json();
-                    console.error(`[fetchChatMessages] [${i+1}/${endpoints.length}] 📦 Resposta do ${endpoint.url}:`, {
-                        isArray: Array.isArray(data),
-                        keys: data && typeof data === 'object' ? Object.keys(data).slice(0, 10) : [],
-                        length: Array.isArray(data) ? data.length : (data?.messages?.length || 0),
-                        firstItem: Array.isArray(data) && data.length > 0 ? {
-                            keys: Object.keys(data[0]).slice(0, 10),
-                            hasKey: !!data[0].key,
-                            keyRemoteJid: data[0].key?.remoteJid,
-                            hasRemoteJid: !!data[0].remoteJid,
-                            remoteJid: data[0].remoteJid,
-                            hasMessages: !!data[0].messages,
-                            messagesCount: data[0].messages?.length || 0,
-                            sample: JSON.stringify(data[0]).substring(0, 200)
-                        } : undefined,
-                        fullResponse: JSON.stringify(data).substring(0, 500)
-                    });
                     
                     // Detecta se é resposta de findChats (objetos de chat com remoteJid)
                     // Usa a flag do endpoint ou detecta pela estrutura dos dados
@@ -1002,7 +959,6 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                                                  !data[0].key?.remoteJid);
                     
                     if (isFindChatsResponse) {
-                        console.error(`[fetchChatMessages] 🔍 Detectado formato findChats: array de chats`);
                         const normalizedChatId = normalizeJid(chatId);
                         const matchingChat = data.find((chat: any) => {
                             if (!chat) return false;
@@ -1027,41 +983,27 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                         });
                         
                         if (matchingChat) {
-                            console.error(`[fetchChatMessages] ✅ Chat correspondente encontrado: ${matchingChat.remoteJid || matchingChat.id}`);
-                            console.error(`[fetchChatMessages] Estrutura do chat:`, {
-                                hasMessages: !!matchingChat.messages,
-                                messagesType: typeof matchingChat.messages,
-                                messagesIsArray: Array.isArray(matchingChat.messages),
-                                messagesLength: matchingChat.messages?.length || 0,
-                                chatKeys: Object.keys(matchingChat).slice(0, 8)
-                            });
-                            
                             if (matchingChat.messages && Array.isArray(matchingChat.messages) && matchingChat.messages.length > 0) {
-                                console.error(`[fetchChatMessages] Processando ${matchingChat.messages.length} mensagens do chat`);
                                 processMessages(matchingChat.messages);
                             } else {
-                                console.error(`[fetchChatMessages] ⚠️ Chat encontrado mas sem mensagens no campo messages. Tentando processar o array completo da resposta como fallback.`);
                                 // Fallback: se o chat foi encontrado mas sem mensagens no campo 'messages',
                                 // tenta processar o array completo da resposta, caso as mensagens estejam em outro nível.
                                 processMessages(data);
                             }
                         } else {
-                            console.error(`[fetchChatMessages] ⚠️ Nenhum chat correspondente encontrado para ${chatId}. Tentando processar o array completo da resposta como fallback.`);
                             // Se nenhum chat correspondente foi encontrado, tenta processar todos os itens da resposta
                             processMessages(data);
                         }
                     } else if (Array.isArray(data)) {
-                        console.error(`[fetchChatMessages] Processando array com ${data.length} itens (formato mensagens)`);
+                        // Resposta direta é um array de mensagens
                         processMessages(data);
                     } else if (data.messages && Array.isArray(data.messages)) {
-                        console.error(`[fetchChatMessages] Processando data.messages com ${data.messages.length} itens`);
+                        // Resposta tem campo messages
                         processMessages(data.messages);
                     } else if (data && typeof data === 'object') {
-                        console.error(`[fetchChatMessages] Processando objeto, procurando arrays em valores`);
                         // Tenta encontrar mensagens em qualquer campo do objeto
                         Object.values(data).forEach(val => {
                             if (Array.isArray(val)) {
-                                console.error(`[fetchChatMessages] Encontrado array com ${val.length} itens`);
                                 processMessages(val);
                             }
                         });
@@ -1069,10 +1011,10 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                     
                     // Se encontrou mensagens, para de tentar outros endpoints
                     if (messages.length > 0) {
-                        console.error(`[fetchChatMessages] ✅ Encontradas ${messages.length} mensagens via ${endpoint.url}`);
+                        console.log(`[fetchChatMessages] ✅ Encontradas ${messages.length} mensagens via ${endpoint.url}`);
                         break;
                     } else {
-                        console.error(`[fetchChatMessages] ⚠️ Nenhuma mensagem encontrada em ${endpoint.url}`);
+                        console.log(`[fetchChatMessages] ⚠️ Nenhuma mensagem encontrada em ${endpoint.url}`);
                     }
                 } else {
                     const errorText = await res.text().catch(() => '');
@@ -1092,7 +1034,11 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         }
         
         const sortedMessages = messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-        console.error(`[fetchChatMessages] ✅ Total de mensagens encontradas para ${chatId}: ${sortedMessages.length}`);
+        if (sortedMessages.length > 0) {
+            console.log(`[fetchChatMessages] ✅ ${sortedMessages.length} mensagens encontradas para ${chatId}`);
+        } else {
+            console.warn(`[fetchChatMessages] ⚠️ Nenhuma mensagem encontrada para ${chatId}`);
+        }
         return sortedMessages;
     } catch (error) {
         console.error(`[fetchChatMessages] ❌ Erro ao buscar mensagens para ${chatId}:`, error);
