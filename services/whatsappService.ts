@@ -853,8 +853,12 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
             }
             console.error(`[fetchChatMessages] processMessages processando ${items.length} itens`);
             items.forEach((item, index) => {
+                if (!item || typeof item !== 'object') {
+                    return;
+                }
+                
                 // Caso 1: Objeto de mensagem com key.remoteJid (formato padrão de mensagem)
-                if (item && item.key && item.key.remoteJid) {
+                if (item.key && item.key.remoteJid) {
                     const normalizedJid = normalizeJid(item.key.remoteJid);
                     // Aceita mensagens que correspondem ao JID completo ou contém o número
                     if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
@@ -868,61 +872,86 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                     } else {
                         console.error(`[fetchChatMessages] Mensagem ignorada [${index}]: JID ${normalizedJid} não corresponde a ${chatId}`);
                     }
+                    return; // Processou como mensagem, não precisa continuar
                 }
+                
                 // Caso 2: Objeto de chat do findChats (tem remoteJid direto e messages dentro)
-                else if (item && item.remoteJid && typeof item.remoteJid === 'string') {
+                if (item.remoteJid && typeof item.remoteJid === 'string') {
                     const normalizedJid = normalizeJid(item.remoteJid);
+                    const normalizedChatId = normalizeJid(chatId);
+                    const itemIdNumber = normalizedJid.split('@')[0];
+                    
                     // Verifica se é o chat correto
-                    if (normalizedJid === chatId || normalizedJid.includes(phoneNumber) || item.id === chatId) {
+                    const isMatchingChat = normalizedJid === normalizedChatId || 
+                                          normalizedJid.includes(phoneNumber) || 
+                                          item.id === chatId ||
+                                          (itemIdNumber === phoneNumber && phoneNumber.length >= 10);
+                    
+                    if (isMatchingChat) {
                         console.error(`[fetchChatMessages] ✅ Chat encontrado [${index}]: ${item.remoteJid}, messages: ${item.messages?.length || 0}`);
                         // Se o chat tem mensagens, processa elas
-                        if (item.messages && Array.isArray(item.messages)) {
+                        if (item.messages && Array.isArray(item.messages) && item.messages.length > 0) {
                             console.error(`[fetchChatMessages] Processando ${item.messages.length} mensagens do chat ${item.remoteJid}`);
                             processMessages(item.messages);
+                        } else {
+                            console.error(`[fetchChatMessages] Chat ${item.remoteJid} encontrado mas sem mensagens no campo messages`);
                         }
                     }
+                    return; // Processou como chat, não precisa continuar
                 }
-                // Caso 3: Mensagem com remoteJid direto (sem key)
-                else if (item && item.remoteJid && typeof item.remoteJid === 'string' && item.key) {
+                
+                // Caso 3: Mensagem com remoteJid direto (sem key, mas tem estrutura de mensagem)
+                if (item.remoteJid && item.message) {
                     const normalizedJid = normalizeJid(item.remoteJid);
                     if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
                         const mapped = mapApiMessageToInternal(item);
                         if (mapped) {
                             messages.push(mapped);
-                            console.error(`[fetchChatMessages] ✅ Mensagem encontrada [${index}] (sem key.remoteJid): ${mapped.content?.substring(0, 30)}`);
+                            console.error(`[fetchChatMessages] ✅ Mensagem encontrada [${index}] (formato alternativo): ${mapped.content?.substring(0, 30)}`);
                         }
                     }
+                    return; // Processou como mensagem alternativa, não precisa continuar
                 }
-                // Recursão em arrays aninhados
+                
+                // Recursão em arrays aninhados e objetos
                 if (Array.isArray(item)) {
                     processMessages(item);
-                } else if (item && typeof item === 'object') {
+                } else if (typeof item === 'object') {
+                    // Procura arrays dentro do objeto que possam conter mensagens
                     Object.values(item).forEach(val => {
-                        if (Array.isArray(val)) processMessages(val);
+                        if (Array.isArray(val)) {
+                            processMessages(val);
+                        }
                     });
                 }
             });
+            
+            // Log final se não encontrou mensagens
+            if (messages.length === 0 && items.length > 0) {
+                console.error(`[fetchChatMessages] Item [0] sem key.remoteJid:`, Array.isArray(items[0]) ? `Array(${items[0].length})` : typeof items[0]);
+            }
         };
         
         // Tenta múltiplos endpoints e formatos de query
-        // PRIORIDADE: findChats primeiro (sabemos que funciona)
+        // NOTA: A Evolution API pode não retornar mensagens no findChats mesmo com include: ['messages']
+        // Isso pode ser uma limitação da versão da API ou configuração do servidor
         const endpoints = [
-            // Endpoint 1: findChats sem filtro (busca todos e filtra depois) - mais confiável
+            // Endpoint 1: findChats com remoteJid (prioridade - sabemos que funciona)
+            {
+                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
+                body: { where: { remoteJid: chatId }, include: ['messages'], limit: 100 },
+                isFindChats: true
+            },
+            // Endpoint 2: findChats com remoteJid sem @s.whatsapp.net
+            {
+                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
+                body: { where: { remoteJid: phoneNumber }, include: ['messages'], limit: 100 },
+                isFindChats: true
+            },
+            // Endpoint 3: findChats sem filtro (busca todos e filtra depois)
             {
                 url: `${config.baseUrl}/chat/findChats/${instanceName}`,
                 body: { where: {}, include: ['messages'], limit: 100 },
-                isFindChats: true
-            },
-            // Endpoint 2: findChats com remoteJid
-            {
-                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
-                body: { where: { remoteJid: chatId }, include: ['messages'], limit: 1 },
-                isFindChats: true
-            },
-            // Endpoint 3: findChats com remoteJid sem @s.whatsapp.net
-            {
-                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
-                body: { where: { remoteJid: phoneNumber }, include: ['messages'], limit: 1 },
                 isFindChats: true
             }
         ];
@@ -974,22 +1003,23 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                     
                     if (isFindChatsResponse) {
                         console.error(`[fetchChatMessages] 🔍 Detectado formato findChats: array de chats`);
-                        // Procura o chat correto pelo remoteJid ou id
+                        const normalizedChatId = normalizeJid(chatId);
                         const matchingChat = data.find((chat: any) => {
                             if (!chat) return false;
                             const chatRemoteJid = normalizeJid(chat.remoteJid || '');
                             const chatIdValue = chat.id || '';
-                            const normalizedChatId = normalizeJid(chatId);
                             
-                            // Compara remoteJid normalizado
+                            // Prioriza correspondência exata do remoteJid
                             if (chatRemoteJid === normalizedChatId) return true;
-                            if (chatRemoteJid.includes(phoneNumber) && phoneNumber.length >= 10) return true;
                             
-                            // Compara id
+                            // Tenta correspondência parcial do número (se o chatRemoteJid for um número)
+                            const chatRemoteJidNumber = chatRemoteJid.split('@')[0];
+                            if (chatRemoteJidNumber === phoneNumber && phoneNumber.length >= 10) return true;
+                            
+                            // Tenta correspondência exata do ID (para IDs gerados)
                             if (chatIdValue === chatId) return true;
-                            if (chatIdValue.includes(phoneNumber) && phoneNumber.length >= 10) return true;
                             
-                            // Compara número extraído do id
+                            // Tenta correspondência do número no ID do chat (para IDs gerados que contêm o número)
                             const chatIdNumber = chatIdValue.split('@')[0];
                             if (chatIdNumber === phoneNumber && phoneNumber.length >= 10) return true;
                             
@@ -1003,37 +1033,22 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                                 messagesType: typeof matchingChat.messages,
                                 messagesIsArray: Array.isArray(matchingChat.messages),
                                 messagesLength: matchingChat.messages?.length || 0,
-                                chatKeys: Object.keys(matchingChat).slice(0, 10)
+                                chatKeys: Object.keys(matchingChat).slice(0, 8)
                             });
                             
-                            // Se o chat tem mensagens, processa elas
                             if (matchingChat.messages && Array.isArray(matchingChat.messages) && matchingChat.messages.length > 0) {
                                 console.error(`[fetchChatMessages] Processando ${matchingChat.messages.length} mensagens do chat`);
                                 processMessages(matchingChat.messages);
                             } else {
-                                console.error(`[fetchChatMessages] ⚠️ Chat encontrado mas sem mensagens no campo messages`);
-                                // Tenta buscar mensagens em outros campos possíveis
-                                const possibleMessageFields = ['message', 'lastMessage', 'conversation', 'data'];
-                                for (const field of possibleMessageFields) {
-                                    if (matchingChat[field] && Array.isArray(matchingChat[field])) {
-                                        console.error(`[fetchChatMessages] Encontrado campo ${field} com ${matchingChat[field].length} mensagens`);
-                                        processMessages(matchingChat[field]);
-                                        break;
-                                    }
-                                }
+                                console.error(`[fetchChatMessages] ⚠️ Chat encontrado mas sem mensagens no campo messages. Tentando processar o array completo da resposta como fallback.`);
+                                // Fallback: se o chat foi encontrado mas sem mensagens no campo 'messages',
+                                // tenta processar o array completo da resposta, caso as mensagens estejam em outro nível.
+                                processMessages(data);
                             }
                         } else {
-                            console.error(`[fetchChatMessages] ⚠️ Nenhum chat correspondente encontrado para ${chatId}`);
-                            // Tenta processar todos os chats de qualquer forma (fallback)
-                            // Mas primeiro verifica se algum item é uma mensagem direta
-                            if (Array.isArray(data)) {
-                                data.forEach((item: any) => {
-                                    // Se algum item tem key.remoteJid, pode ser uma mensagem
-                                    if (item && item.key && item.key.remoteJid) {
-                                        processMessages([item]);
-                                    }
-                                });
-                            }
+                            console.error(`[fetchChatMessages] ⚠️ Nenhum chat correspondente encontrado para ${chatId}. Tentando processar o array completo da resposta como fallback.`);
+                            // Se nenhum chat correspondente foi encontrado, tenta processar todos os itens da resposta
+                            processMessages(data);
                         }
                     } else if (Array.isArray(data)) {
                         console.error(`[fetchChatMessages] Processando array com ${data.length} itens (formato mensagens)`);
