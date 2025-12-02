@@ -200,6 +200,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       setShowOptionsMenu(false); 
       setMessageSearchTerm('');
       setShowSearch(false);
+      
+      // Zera a contagem de mensagens não lidas quando o chat é selecionado/visualizado
+      if (selectedChat.unreadCount > 0) {
+        const updatedChat = {
+          ...selectedChat,
+          unreadCount: 0
+        };
+        onUpdateChat(updatedChat);
+        console.log(`[ChatInterface] ✅ Contagem de mensagens não lidas zerada para chat ${selectedChat.contactName}`);
+      }
     }
   }, [selectedChatId, selectedChat]);
 
