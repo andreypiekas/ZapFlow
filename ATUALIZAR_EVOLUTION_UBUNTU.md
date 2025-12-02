@@ -1,7 +1,7 @@
 # Guia de Atualização Evolution API - Ubuntu 22.04
 
 **Versão Anterior:** v2.2.3  
-**Nova Versão:** v2.3.6  
+**Nova Versão:** v2.3.4 (v2.3.6 não disponível no Docker Hub)  
 **Sistema:** Ubuntu 22.04
 
 ## 📋 Pré-requisitos

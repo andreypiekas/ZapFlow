@@ -18,7 +18,7 @@ NC='\033[0m' # No Color
 
 # Configurações
 OLD_VERSION="v2.2.3"
-NEW_VERSION="v2.3.6"
+NEW_VERSION="v2.3.4"
 NEW_IMAGE="atendai/evolution-api:${NEW_VERSION}"
 
 API_CONTAINER="evolution_api"

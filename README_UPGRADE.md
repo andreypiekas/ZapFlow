@@ -70,7 +70,7 @@ Após o upgrade, verifique:
 # Ver logs
 docker logs evolution_api -f
 
-# Verificar versão
+# Verificar versão (deve mostrar v2.3.4)
 docker inspect evolution_api --format='{{.Config.Image}}'
 
 # Testar API
