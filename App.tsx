@@ -787,7 +787,7 @@ const App: React.FC = () => {
                 <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
                 <div className="flex items-center gap-4 mb-4">
                     <div className="p-3 bg-orange-100 text-orange-600 rounded-lg"><Users /></div>
-                    <div><p className="text-slate-500 text-sm">Aguardando Triagem</p><h3 className="text-2xl font-bold text-slate-800">{chats.filter(c => !c.departmentId).length}</h3></div>
+                    <div><p className="text-slate-500 text-sm">Aguardando Triagem</p><h3 className="text-2xl font-bold text-slate-800">{chats.filter(c => !c.departmentId && c.status !== 'closed').length}</h3></div>
                 </div>
                 </div>
                 <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">

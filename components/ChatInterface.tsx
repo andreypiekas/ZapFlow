@@ -727,6 +727,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       ]
     };
     
+    // Atualiza o chat
+    onUpdateChat(updatedChat);
+    
+    // Muda automaticamente para a aba "Finalizados" quando um chat é finalizado
+    // Isso garante que o chat saia da aba atual (todo/waiting) e apareça em "Finalizados"
+    setActiveTab('closed');
+    
     if (withSurvey) {
         const targetNumber = getValidPhoneNumber(selectedChat);
         
@@ -739,9 +746,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         }
     }
 
-    onUpdateChat(updatedChat);
     setIsFinishingModalOpen(false);
-    setSelectedChatId(null);
+    // Mantém o chat selecionado para que o usuário veja que foi finalizado
+    // setSelectedChatId(null); // Comentado para manter o chat visível na aba Finalizados
   };
 
   const handleGenerateAI = async () => {
