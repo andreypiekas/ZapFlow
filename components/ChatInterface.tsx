@@ -250,14 +250,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         // Apenas chats abertos ou pendentes aparecem nas outras abas
         if (chat.status === 'open' || chat.status === 'pending') {
             if (activeTab === 'waiting') {
-                // "Aguardando Triagem": Chats sem departamento E sem atribuição
-                // OU chats aguardando resposta do cliente (agente respondeu e não há mensagens não lidas)
-                return isAwaitingTriage || (isWaitingForCustomer && chat.unreadCount === 0 && !isAssigned);
+                // "Aguardando Triagem": Chats sem departamento E sem atribuição E sem mensagens não lidas
+                // OU chats aguardando resposta do cliente (agente respondeu, sem mensagens não lidas e não atribuído)
+                return (isAwaitingTriage && chat.unreadCount === 0) || (isWaitingForCustomer && chat.unreadCount === 0 && !isAssigned);
             }
             if (activeTab === 'todo') {
-                // "A Fazer": Chats atribuídos (com departamento ou assignedTo) 
-                // OU com mensagens não lidas do usuário (cliente respondeu)
-                return isAssigned || (!isWaitingForCustomer || chat.unreadCount > 0);
+                // "A Fazer": Chats atribuídos (com departamento ou assignedTo)
+                // OU chats com mensagens não lidas (cliente respondeu) que NÃO estão aguardando triagem
+                // OU chats onde o cliente respondeu mas não está aguardando resposta
+                return isAssigned || (chat.unreadCount > 0 && !isAwaitingTriage) || (!isWaitingForCustomer && !isAwaitingTriage && chat.unreadCount > 0);
             }
         }
         
