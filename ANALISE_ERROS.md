@@ -210,3 +210,49 @@ cdn.tailwindcss.com should not be used in production. To use Tailwind CSS in pro
 **Data da Análise:** 2025-12-02
 **Versão do Código:** Baseado em logs de runtime (build minificado)
 
+---
+
+## ✅ Correções Implementadas
+
+### 1. **Endpoints Removidos (404)**
+- ✅ Removidos endpoints `/message/fetchMessages` que retornavam 404
+- ✅ Mantidos apenas endpoints `findChats` que funcionam
+
+### 2. **WebSocket Melhorado**
+- ✅ Limite de tentativas: máximo 5 tentativas
+- ✅ Backoff exponencial: 5s → 10s → 20s → 40s → 80s
+- ✅ Verificação de status antes de conectar
+- ✅ Reset de contador ao conectar com sucesso
+
+### 3. **Logs Reduzidos**
+- ✅ Logs de debug reduzidos
+- ✅ Erros 404 suprimidos para endpoints inexistentes
+- ✅ Logs apenas quando necessário
+
+---
+
+## ⚠️ Problema Remanescente
+
+### **Evolution API não retorna mensagens no findChats**
+
+**Situação Atual:**
+- ✅ Chats são encontrados corretamente (5 chats)
+- ❌ Mensagens não são retornadas mesmo com `include: ['messages']`
+- ✅ Logs da Evolution API mostram que mensagens existem no servidor
+- ❌ WebSocket não conecta (code 1006)
+
+**Possíveis Causas:**
+1. Versão da Evolution API (v2.2.3) pode não suportar `include: ['messages']` no `findChats`
+2. Configuração do servidor pode estar desabilitando retorno de mensagens
+3. Mensagens podem estar em outro formato/estrutura
+
+**Solução Recomendada:**
+- Verificar documentação da Evolution API v2.2.3
+- Verificar configuração do servidor Evolution API
+- Depender do WebSocket para mensagens em tempo real (quando funcionar)
+- Considerar atualizar Evolution API para versão mais recente se disponível
+
+---
+
+**Última Atualização:** 2025-12-02 (após correções)
+
