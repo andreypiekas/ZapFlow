@@ -237,10 +237,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         // Chats atribuídos ao usuário atual ou com departamento atribuído
         const isAssigned = chat.assignedTo === currentUser.id || (chat.departmentId !== null && chat.departmentId !== undefined);
 
+        // Aba "Finalizados": apenas chats com status 'closed'
         if (activeTab === 'closed') {
             return isClosed;
         }
 
+        // Chats fechados NÃO devem aparecer em outras abas
+        if (isClosed) {
+            return false;
+        }
+
+        // Apenas chats abertos ou pendentes aparecem nas outras abas
         if (chat.status === 'open' || chat.status === 'pending') {
             if (activeTab === 'waiting') {
                 // "Aguardando Triagem": Chats sem departamento E sem atribuição
