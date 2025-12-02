@@ -280,20 +280,53 @@ const App: React.FC = () => {
                                                     console.error(`[App] ✅ Adicionadas ${uniqueMessages.length - c.messages.length} novas mensagens ao chat ${c.contactName}`);
                                                 }
                                                 
+                                                // Lógica para processar mensagens de clientes finalizados
+                                                let updatedChat = { ...c };
+                                                
+                                                // Verifica se há novas mensagens do cliente em chat finalizado
+                                                if (c.status === 'closed' && newReceivedMessages.length > 0) {
+                                                    const lastNewMessage = newReceivedMessages[newReceivedMessages.length - 1];
+                                                    const messageContent = lastNewMessage.content.trim();
+                                                    const isRatingResponse = /^[1-5]$/.test(messageContent);
+                                                    
+                                                    if (isRatingResponse && c.awaitingRating) {
+                                                        // Cliente respondeu com avaliação (1-5)
+                                                        const rating = parseInt(messageContent);
+                                                        updatedChat = {
+                                                            ...c,
+                                                            rating: rating,
+                                                            awaitingRating: false, // Não está mais aguardando
+                                                            status: 'closed' // Mantém finalizado
+                                                        };
+                                                        console.log(`[App] ✅ Avaliação recebida: ${rating} estrelas para chat ${c.contactName}`);
+                                                    } else if (!isRatingResponse) {
+                                                        // Cliente enviou nova mensagem (não é avaliação) - reabre o chat
+                                                        updatedChat = {
+                                                            ...c,
+                                                            status: 'open',
+                                                            awaitingRating: false, // Cancela aguardo de avaliação
+                                                            departmentId: null, // Remove do departamento para ir para triagem
+                                                            assignedTo: undefined, // Remove atribuição
+                                                            endedAt: undefined // Remove data de finalização
+                                                        };
+                                                        console.log(`[App] 🔄 Chat ${c.contactName} reaberto - cliente enviou nova mensagem`);
+                                                    }
+                                                }
+                                                
                                                 return {
-                                                    ...c,
+                                                    ...updatedChat,
                                                     messages: uniqueMessages,
                                                     lastMessage: uniqueMessages.length > 0 ? 
                                                         (uniqueMessages[uniqueMessages.length - 1].type === 'text' ? 
                                                             uniqueMessages[uniqueMessages.length - 1].content : 
                                                             `📷 ${uniqueMessages[uniqueMessages.length - 1].type}`) : 
-                                                        c.lastMessage,
+                                                        updatedChat.lastMessage,
                                                     lastMessageTime: uniqueMessages.length > 0 && uniqueMessages[uniqueMessages.length - 1].timestamp ? 
                                                         uniqueMessages[uniqueMessages.length - 1].timestamp : 
-                                                        c.lastMessageTime,
+                                                        updatedChat.lastMessageTime,
                                                     unreadCount: newReceivedMessages.length > 0 ? 
-                                                        (c.unreadCount || 0) + newReceivedMessages.length : 
-                                                        c.unreadCount
+                                                        (updatedChat.unreadCount || 0) + newReceivedMessages.length : 
+                                                        updatedChat.unreadCount
                                                 };
                                             }
                                             return c;
@@ -325,6 +358,7 @@ const App: React.FC = () => {
                             tags: existingChat.tags,
                             status: existingChat.status === 'closed' ? 'closed' : realChat.status,
                             rating: existingChat.rating,
+                            awaitingRating: existingChat.awaitingRating,
                             activeWorkflow: existingChat.activeWorkflow,
                             lastMessage: mergedMessages.length > 0 ? 
                                 (mergedMessages[mergedMessages.length - 1].type === 'text' ? 
@@ -503,21 +537,53 @@ const App: React.FC = () => {
                                                     a.timestamp.getTime() - b.timestamp.getTime()
                                                 );
                                                 
+                                                // Lógica para processar mensagens de clientes finalizados
+                                                let updatedChat = { ...chat };
+                                                
+                                                // Se o chat está finalizado e recebeu mensagem do cliente
+                                                if (chat.status === 'closed' && mapped.sender === 'user') {
+                                                    const messageContent = mapped.content.trim();
+                                                    const isRatingResponse = /^[1-5]$/.test(messageContent);
+                                                    
+                                                    if (isRatingResponse && chat.awaitingRating) {
+                                                        // Cliente respondeu com avaliação (1-5)
+                                                        const rating = parseInt(messageContent);
+                                                        updatedChat = {
+                                                            ...chat,
+                                                            rating: rating,
+                                                            awaitingRating: false, // Não está mais aguardando
+                                                            status: 'closed' // Mantém finalizado
+                                                        };
+                                                        console.log(`[App] ✅ Avaliação recebida: ${rating} estrelas para chat ${chat.contactName}`);
+                                                    } else if (!isRatingResponse) {
+                                                        // Cliente enviou nova mensagem (não é avaliação) - reabre o chat
+                                                        updatedChat = {
+                                                            ...chat,
+                                                            status: 'open',
+                                                            awaitingRating: false, // Cancela aguardo de avaliação
+                                                            departmentId: null, // Remove do departamento para ir para triagem
+                                                            assignedTo: undefined, // Remove atribuição
+                                                            endedAt: undefined // Remove data de finalização
+                                                        };
+                                                        console.log(`[App] 🔄 Chat ${chat.contactName} reaberto - cliente enviou nova mensagem`);
+                                                    }
+                                                }
+                                                
                                                 // Notifica se for mensagem recebida
-                                                if (mapped.sender === 'user' && currentUser && chat.assignedTo === currentUser.id) {
+                                                if (mapped.sender === 'user' && currentUser && updatedChat.assignedTo === currentUser.id) {
                                                     addNotification(
-                                                        `Nova mensagem de ${chat.contactName}`,
+                                                        `Nova mensagem de ${updatedChat.contactName}`,
                                                         mapped.content && mapped.content.length > 50 ? mapped.content.substring(0, 50) + '...' : (mapped.content || 'Nova mensagem'),
                                                         'info'
                                                     );
                                                 }
                                                 
                                                 return {
-                                                    ...chat,
+                                                    ...updatedChat,
                                                     messages: updatedMessages,
                                                     lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
                                                     lastMessageTime: mapped.timestamp,
-                                                    unreadCount: mapped.sender === 'user' ? (chat.unreadCount || 0) + 1 : chat.unreadCount
+                                                    unreadCount: mapped.sender === 'user' ? (updatedChat.unreadCount || 0) + 1 : updatedChat.unreadCount
                                                 };
                                             } else {
                                                 console.log(`[App] ⚠️ Mensagem já existe no chat ${chat.contactName}`);

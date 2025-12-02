@@ -129,6 +129,7 @@ export interface Chat {
   rating?: number; // 1 to 5 stars
   endedAt?: Date;
   activeWorkflow?: ActiveWorkflow; // Fluxo ativo neste chat
+  awaitingRating?: boolean; // Indica se está aguardando resposta de avaliação (1-5)
 }
 
 export interface ApiConfig {

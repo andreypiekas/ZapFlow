@@ -711,17 +711,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       ? 'Atendimento finalizado. Enviamos uma pesquisa de satisfação para o cliente.' 
       : 'Atendimento finalizado pelo agente.';
 
-    // Simulação da Pesquisa
-    let rating: number | undefined = undefined;
-    if (withSurvey) {
-        rating = Math.floor(Math.random() * 2) + 4; // Random 4 or 5
-    }
-
     const updatedChat: Chat = {
       ...selectedChat,
       status: 'closed',
       endedAt: new Date(),
-      rating: rating,
+      rating: undefined, // Será preenchido quando o cliente responder
+      awaitingRating: withSurvey ? true : false, // Marca como aguardando avaliação se pesquisa foi enviada
       assignedTo: undefined, // Clear assignment on close
       activeWorkflow: undefined, // Clear workflow on finish
       messages: [
