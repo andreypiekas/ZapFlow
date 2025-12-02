@@ -564,6 +564,51 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         });
     }
 
+    // Detecta se esta mensagem é uma resposta a outra mensagem
+    // A Evolution API envia contextInfo.quotedMessage ou contextInfo.stanzaId quando é resposta
+    let replyTo: { id: string; content: string; sender: 'user' | 'agent' | 'system'; whatsappMessageId?: string } | undefined = undefined;
+    
+    // Tenta múltiplas formas de detectar se é uma resposta
+    const contextInfo = apiMsg.contextInfo || msgObj.contextInfo || msgObj.extendedTextMessage?.contextInfo;
+    if (contextInfo) {
+        // Formato 1: stanzaId (ID da mensagem original)
+        const quotedMessageId = contextInfo.stanzaId || contextInfo.quotedMessageId;
+        
+        // Formato 2: quotedMessage (objeto com a mensagem original)
+        const quotedMessage = contextInfo.quotedMessage;
+        
+        if (quotedMessageId || quotedMessage) {
+            // Extrai conteúdo da mensagem original
+            let quotedContent = '';
+            if (quotedMessage) {
+                quotedContent = quotedMessage.conversation || 
+                               quotedMessage.extendedTextMessage?.text || 
+                               quotedMessage.imageMessage?.caption ||
+                               quotedMessage.videoMessage?.caption ||
+                               quotedMessage.documentMessage?.caption ||
+                               (quotedMessage.imageMessage ? 'Imagem' : '') ||
+                               (quotedMessage.audioMessage ? 'Áudio' : '') ||
+                               (quotedMessage.stickerMessage ? 'Sticker' : '') ||
+                               '';
+            }
+            
+            // Determina o sender da mensagem original
+            // Se participant existe, provavelmente foi enviada pelo agente (fromMe: true)
+            // Se não tem participant, pode ter sido enviada pelo cliente
+            const quotedFromMe = contextInfo.participant ? true : false;
+            const quotedSender: 'user' | 'agent' | 'system' = quotedFromMe ? 'agent' : 'user';
+            
+            replyTo = {
+                id: quotedMessageId || `quoted_${Date.now()}`,
+                content: quotedContent || 'Mensagem original',
+                sender: quotedSender,
+                whatsappMessageId: quotedMessageId
+            };
+            
+            console.log(`[mapApiMessageToInternal] Mensagem detectada como resposta: ${quotedMessageId}, conteúdo original: ${quotedContent.substring(0, 50)}`);
+        }
+    }
+
     return {
         id: key.id || `msg_${Math.random()}`,
         content,
@@ -573,7 +618,8 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         type,
         author: author, // Salva o JID real para correção automática (sempre normalizado)
         whatsappMessageId: key.id, // Salva o ID real do WhatsApp para respostas
-        rawMessage: apiMsg // Salva o objeto completo para respostas (Evolution API precisa do objeto completo)
+        rawMessage: apiMsg, // Salva o objeto completo para respostas (Evolution API precisa do objeto completo)
+        replyTo: replyTo // Informação sobre a mensagem que está sendo respondida
     };
 };
 
