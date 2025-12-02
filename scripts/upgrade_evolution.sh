@@ -174,7 +174,7 @@ update_docker_compose() {
     
     if [ ! -f "docker-compose.yml" ]; then
         print_error "docker-compose.yml não encontrado!"
-        print_warning "Criando novo docker-compose.yml baseado em setup_evolution.txt"
+        print_warning "Criando novo docker-compose.yml baseado em install/setup_evolution.txt"
         
         # Detectar IP do servidor
         SERVER_IP=$(hostname -I | awk '{print $1}')
@@ -182,7 +182,7 @@ update_docker_compose() {
             SERVER_IP="localhost"
         fi
         
-        # Criar docker-compose.yml baseado no setup_evolution.txt
+        # Criar docker-compose.yml baseado no install/setup_evolution.txt
         cat > docker-compose.yml <<EOL
 services:
   evolution_api:

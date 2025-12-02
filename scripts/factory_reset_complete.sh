@@ -262,9 +262,9 @@ echo "  ✓ Arquivos de configuração"
 echo ""
 
 echo "Para reinstalar do zero, execute:"
-echo "  ./setup_evolution.txt"
+echo "  ./install/setup_evolution.txt"
 echo "  ou"
-echo "  ./autoinstall.txt"
+echo "  ./install/autoinstall.txt"
 echo ""
 
 print_success "Sistema pronto para instalação limpa!"
