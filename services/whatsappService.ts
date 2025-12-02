@@ -263,15 +263,24 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
     // Evolution API precisa do objeto completo da mensagem, não apenas o ID
     if (replyToMessageId) {
         if (replyToRawMessage && replyToRawMessage.key) {
-            // Formato correto: objeto quoted com key completo
+            // Formato correto: objeto quoted com estrutura completa
+            // A Evolution API espera o objeto completo com key e message
             payload.quoted = {
                 key: {
                     remoteJid: replyToRawMessage.key.remoteJid || cleanPhone + '@s.whatsapp.net',
-                    fromMe: replyToRawMessage.key.fromMe || false,
-                    id: replyToRawMessage.key.id || replyToMessageId
-                }
+                    fromMe: replyToRawMessage.key.fromMe !== undefined ? replyToRawMessage.key.fromMe : false,
+                    id: replyToRawMessage.key.id || replyToMessageId,
+                    participant: replyToRawMessage.key.participant || undefined
+                },
+                message: replyToRawMessage.message || replyToRawMessage.messageTimestamp ? {
+                    conversation: replyToRawMessage.message?.conversation || replyToRawMessage.content || ''
+                } : undefined
             };
-            console.log(`[sendRealMessage] Enviando resposta com objeto quoted completo:`, payload.quoted);
+            console.log(`[sendRealMessage] Enviando resposta com objeto quoted completo:`, {
+                remoteJid: payload.quoted.key.remoteJid,
+                fromMe: payload.quoted.key.fromMe,
+                id: payload.quoted.key.id
+            });
         } else {
             // Fallback: tenta apenas com ID (pode não funcionar)
             payload.quotedMessageId = replyToMessageId;
