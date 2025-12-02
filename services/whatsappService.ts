@@ -903,6 +903,7 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         // Tenta múltiplos endpoints e formatos de query
         // NOTA: A Evolution API pode não retornar mensagens no findChats mesmo com include: ['messages']
         // Isso pode ser uma limitação da versão da API ou configuração do servidor
+        // Endpoint /message/fetchMessages não existe nesta versão (retorna 404)
         const endpoints = [
             // Endpoint 1: findChats com remoteJid (prioridade - sabemos que funciona)
             {
@@ -916,19 +917,7 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                 body: { where: { remoteJid: phoneNumber }, include: ['messages'], limit: 100 },
                 isFindChats: true
             },
-            // Endpoint 3: fetchMessages direto (formato correto: where.remoteJid)
-            {
-                url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
-                body: { where: { remoteJid: chatId }, limit: limit },
-                isFindChats: false
-            },
-            // Endpoint 4: fetchMessages com número apenas
-            {
-                url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
-                body: { where: { remoteJid: phoneNumber }, limit: limit },
-                isFindChats: false
-            },
-            // Endpoint 5: findChats sem filtro (busca todos e filtra depois) - último recurso
+            // Endpoint 3: findChats sem filtro (busca todos e filtra depois) - último recurso
             {
                 url: `${config.baseUrl}/chat/findChats/${instanceName}`,
                 body: { where: {}, include: ['messages'], limit: 100 },
