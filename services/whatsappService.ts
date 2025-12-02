@@ -1127,7 +1127,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                     existingChat.contactNumber = chat.contactNumber;
                 }
                 
-                console.log(`[ChatMerge] Chats consolidados: ${chat.id} + ${existingChat.id} -> ${existingChat.id} (chave: ${chatKey})`);
+                // console.log(`[ChatMerge] Chats consolidados: ${chat.id} + ${existingChat.id} -> ${existingChat.id} (chave: ${chatKey})`); // Comentado para deixar console F12 mais limpo
             } else {
                 // Primeira ocorrência: adiciona ao mapa
                 // Se encontrou número válido, atualiza o ID e contactNumber
