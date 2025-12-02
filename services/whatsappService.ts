@@ -707,6 +707,42 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                 console.log(`[MapChat] ⚠️ Sem mensagens brutas para processar`);
             }
             
+            // TERCEIRO: Tenta extrair do lastMessage se não encontrou nas mensagens do array
+            if (!validNumber && item.raw?.lastMessage) {
+                const lastMsg = item.raw.lastMessage;
+                const lastMsgRemoteJid = lastMsg?.key?.remoteJid || lastMsg?.remoteJid || lastMsg?.jid;
+                if (lastMsgRemoteJid) {
+                    const normalized = normalizeJid(lastMsgRemoteJid);
+                    if (normalized.includes('@') && !normalized.includes('@g.us') && !normalized.includes('@lid')) {
+                        const jidNum = normalized.split('@')[0];
+                        const digits = jidNum.replace(/\D/g, '');
+                        if (/^\d+$/.test(digits) && digits.length >= 10) {
+                            validJid = normalized;
+                            validNumber = jidNum;
+                            console.log(`[MapChat] ✅ Número válido encontrado no lastMessage: ${validNumber} (${validJid})`);
+                        }
+                    }
+                }
+            }
+            
+            // QUARTO: Tenta extrair do campo message (objeto único) se disponível
+            if (!validNumber && item.raw?.message) {
+                const msg = item.raw.message;
+                const msgRemoteJid = msg?.key?.remoteJid || msg?.remoteJid || msg?.jid;
+                if (msgRemoteJid) {
+                    const normalized = normalizeJid(msgRemoteJid);
+                    if (normalized.includes('@') && !normalized.includes('@g.us') && !normalized.includes('@lid')) {
+                        const jidNum = normalized.split('@')[0];
+                        const digits = jidNum.replace(/\D/g, '');
+                        if (/^\d+$/.test(digits) && digits.length >= 10) {
+                            validJid = normalized;
+                            validNumber = jidNum;
+                            console.log(`[MapChat] ✅ Número válido encontrado no campo message: ${validNumber} (${validJid})`);
+                        }
+                    }
+                }
+            }
+            
             // Se não encontrou nas mensagens, verifica se o ID original é válido
             if (!validNumber && !idIsGenerated && !item.id.includes('@g.us')) {
                 const idNum = item.id.split('@')[0];
@@ -796,10 +832,71 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         // 5. Consolida chats duplicados (mesmo número = mesmo chat)
         const consolidatedChatsMap = new Map<string, Chat>();
         
+        // Primeiro, tenta encontrar números válidos em todos os chats (incluindo LIDs)
+        const chatNumberMap = new Map<string, string>(); // Mapeia chat.id -> número válido
+        
         mappedChats.forEach((chat: Chat) => {
-            // Usa o número normalizado como chave (remove caracteres não numéricos)
-            const normalizedNumber = chat.contactNumber.replace(/\D/g, '');
-            const chatKey = normalizedNumber.length >= 10 ? normalizedNumber : chat.id;
+            // Extrai número do ID do chat se for válido
+            const chatIdNumber = chat.id.split('@')[0].replace(/\D/g, '');
+            if (chatIdNumber.length >= 10 && /^\d+$/.test(chatIdNumber)) {
+                chatNumberMap.set(chat.id, chatIdNumber);
+            }
+            
+            // Extrai número do contactNumber
+            const contactNumber = chat.contactNumber.replace(/\D/g, '');
+            if (contactNumber.length >= 10 && /^\d+$/.test(contactNumber)) {
+                chatNumberMap.set(chat.id, contactNumber);
+            }
+            
+            // Para LIDs, tenta encontrar correspondência em outros chats
+            if (chat.id.includes('@lid')) {
+                // Procura em outros chats por mensagens que referenciem este LID
+                mappedChats.forEach((otherChat: Chat) => {
+                    if (otherChat.id !== chat.id && otherChat.messages) {
+                        for (const msg of otherChat.messages) {
+                            // Verifica se a mensagem tem remoteJidAlt ou referência ao LID
+                            const msgAuthor = msg.author || '';
+                            if (msgAuthor.includes(chat.id.split('@')[0])) {
+                                // Encontrou correspondência - usa o número do outro chat
+                                const otherNumber = otherChat.contactNumber.replace(/\D/g, '');
+                                if (otherNumber.length >= 10 && /^\d+$/.test(otherNumber)) {
+                                    chatNumberMap.set(chat.id, otherNumber);
+                                    console.log(`[ChatMerge] LID ${chat.id} mapeado para número ${otherNumber} via mensagem`);
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        });
+        
+        mappedChats.forEach((chat: Chat) => {
+            // Determina a chave de consolidação
+            let chatKey: string;
+            
+            // Prioridade 1: Número válido do contactNumber
+            const contactNumber = chat.contactNumber.replace(/\D/g, '');
+            if (contactNumber.length >= 10 && /^\d+$/.test(contactNumber)) {
+                chatKey = contactNumber;
+            }
+            // Prioridade 2: Número encontrado no mapeamento (para LIDs e IDs gerados)
+            else if (chatNumberMap.has(chat.id)) {
+                chatKey = chatNumberMap.get(chat.id)!;
+                console.log(`[ChatMerge] Usando número mapeado para ${chat.id}: ${chatKey}`);
+            }
+            // Prioridade 3: Número do ID do chat se for válido
+            else if (chat.id.includes('@') && !chat.id.includes('@g.us') && !chat.id.includes('@lid')) {
+                const idNumber = chat.id.split('@')[0].replace(/\D/g, '');
+                if (idNumber.length >= 10 && /^\d+$/.test(idNumber)) {
+                    chatKey = idNumber;
+                } else {
+                    chatKey = chat.id; // Fallback: usa ID completo
+                }
+            }
+            // Fallback: usa ID completo
+            else {
+                chatKey = chat.id;
+            }
             
             if (consolidatedChatsMap.has(chatKey)) {
                 // Chat já existe: faz merge
@@ -831,23 +928,58 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                     existingChat.lastMessageTime = chat.lastMessageTime;
                 }
                 
-                // Garante que o ID seja o mais correto (prefere número válido sobre ID gerado)
-                if (chat.id.includes('@') && !chat.id.includes('cmin') && !chat.id.includes('cmid') && 
-                    (existingChat.id.includes('cmin') || existingChat.id.includes('cmid'))) {
+                // Garante que o ID seja o mais correto (prefere número válido sobre ID gerado ou LID)
+                const chatHasValidId = chat.id.includes('@') && 
+                                      !chat.id.includes('cmin') && 
+                                      !chat.id.includes('cmid') && 
+                                      !chat.id.includes('@lid') &&
+                                      !chat.id.includes('@g.us');
+                const existingHasInvalidId = existingChat.id.includes('cmin') || 
+                                             existingChat.id.includes('cmid') || 
+                                             existingChat.id.includes('@lid');
+                
+                if (chatHasValidId && existingHasInvalidId) {
                     existingChat.id = chat.id;
+                    existingChat.contactNumber = chat.contactNumber;
                 }
                 
-                console.log(`[ChatMerge] Chats consolidados: ${chat.id} + ${existingChat.id} -> ${existingChat.id}`);
+                console.log(`[ChatMerge] Chats consolidados: ${chat.id} + ${existingChat.id} -> ${existingChat.id} (chave: ${chatKey})`);
             } else {
                 // Primeira ocorrência: adiciona ao mapa
+                // Se encontrou número válido, atualiza o ID e contactNumber
+                if (chatNumberMap.has(chat.id) && chatKey !== chat.id) {
+                    const mappedNumber = chatNumberMap.get(chat.id)!;
+                    const mappedJid = `${mappedNumber}@s.whatsapp.net`;
+                    chat.id = mappedJid;
+                    chat.contactNumber = mappedNumber;
+                    console.log(`[ChatMerge] Chat ${chat.id} atualizado para número ${mappedNumber}`);
+                }
                 consolidatedChatsMap.set(chatKey, { ...chat });
             }
         });
         
-        const consolidatedChats = Array.from(consolidatedChatsMap.values());
-        console.log(`[ChatMerge] Total de chats: ${mappedChats.length} -> ${consolidatedChats.length} (após consolidação)`);
+        // Remove chats que são apenas IDs gerados sem número válido e sem mensagens
+        const finalChats = Array.from(consolidatedChatsMap.values()).filter((chat: Chat) => {
+            // Mantém chats com mensagens, número válido, ou grupos
+            const hasMessages = chat.messages && chat.messages.length > 0;
+            const hasValidNumber = chat.contactNumber.replace(/\D/g, '').length >= 10;
+            const isGroup = chat.id.includes('@g.us');
+            const isLid = chat.id.includes('@lid');
+            
+            // Remove apenas IDs gerados sem mensagens e sem número válido
+            if (!hasMessages && !hasValidNumber && !isGroup && !isLid) {
+                const isGenerated = chat.id.includes('cmin') || chat.id.includes('cmid');
+                if (isGenerated) {
+                    console.log(`[ChatMerge] Removendo chat sem número válido e sem mensagens: ${chat.id}`);
+                    return false;
+                }
+            }
+            return true;
+        });
         
-        return consolidatedChats;
+        console.log(`[ChatMerge] Total de chats: ${mappedChats.length} -> ${finalChats.length} (após consolidação e filtragem)`);
+        
+        return finalChats;
 
     } catch (error) {
         console.error("[fetchChats] Erro fatal:", error);
