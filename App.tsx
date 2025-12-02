@@ -81,12 +81,30 @@ const App: React.FC = () => {
     return INITIAL_USERS;
   };
 
+  // Carrega contatos do localStorage se existir, senão usa array vazio
+  const loadContactsFromStorage = (): Contact[] => {
+    try {
+      const saved = localStorage.getItem('zapflow_contacts');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Converte lastSync de string para Date se existir
+        return parsed.map((contact: Contact) => ({
+          ...contact,
+          lastSync: contact.lastSync ? new Date(contact.lastSync) : undefined
+        }));
+      }
+    } catch (e) {
+      console.error('[App] Erro ao carregar contatos do localStorage:', e);
+    }
+    return [];
+  };
+
   const [chats, setChats] = useState<Chat[]>(loadChatsFromStorage());
   const [departments, setDepartments] = useState<Department[]>(INITIAL_DEPARTMENTS);
   const [users, setUsers] = useState<User[]>(loadUsersFromStorage());
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>(INITIAL_QUICK_REPLIES);
   const [workflows, setWorkflows] = useState<Workflow[]>(INITIAL_WORKFLOWS);
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>(loadContactsFromStorage());
   const [chatbotConfig, setChatbotConfig] = useState<ChatbotConfig>(INITIAL_CHATBOT_CONFIG);
   const [apiConfig, setApiConfig] = useState<ApiConfig>(loadConfig());
 
@@ -113,6 +131,15 @@ const App: React.FC = () => {
       console.error('[App] Erro ao salvar usuários no localStorage:', e);
     }
   }, [users]);
+
+  // Persiste contatos no localStorage sempre que mudarem
+  useEffect(() => {
+    try {
+      localStorage.setItem('zapflow_contacts', JSON.stringify(contacts));
+    } catch (e) {
+      console.error('[App] Erro ao salvar contatos no localStorage:', e);
+    }
+  }, [contacts]);
 
   // Refs para armazenar interval e WebSocket
   const intervalIdRef = useRef<ReturnType<typeof setInterval> | null>(null);
