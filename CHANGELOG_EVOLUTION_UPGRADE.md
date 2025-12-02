@@ -40,10 +40,14 @@ docker-compose up -d
 
 ### 2. Verificar Compatibilidade
 
-A versão 2.3.6 pode ter:
-- ✅ Melhor suporte para `include: ['messages']` no `findChats`
-- ✅ Correções no WebSocket
-- ✅ Melhorias na estabilidade
+A versão 2.3.6 inclui:
+- ✅ **Correções no Baileys:** Implementações e correções no Baileys, Chatwoot e OnWhatsapp Cache
+- ✅ **Cache melhorado:** Correção do cache para números PN, LID e g.us para envio correto
+- ✅ **Envio de mídia:** Correção no envio de áudio e documentos via Chatwoot no canal Baileys
+- ✅ **Integração Chatwoot:** Múltiplas correções na integração com o Chatwoot
+- ✅ **Leads:** Correção de mensagens ignoradas ao receber leads
+- ✅ **Banco de dados:** Correção no armazenamento de buffer no banco de dados para o Baileys
+- ✅ **Baileys atualizado:** Dependência do Baileys atualizada para 7.0.0-rc.6
 
 ### 3. Testar Funcionalidades
 
