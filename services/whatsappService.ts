@@ -1139,7 +1139,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                     const mappedJid = `${mappedNumber}@s.whatsapp.net`;
                     chat.id = mappedJid;
                     chat.contactNumber = mappedNumber;
-                    console.log(`[ChatMerge] Chat ${chat.id} atualizado para número ${mappedNumber}`);
+                    // console.log(`[ChatMerge] Chat ${chat.id} atualizado para número ${mappedNumber}`); // Comentado para deixar console F12 mais limpo
                 }
                 consolidatedChatsMap.set(chatKey, { ...chat });
             }
