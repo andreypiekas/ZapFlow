@@ -407,6 +407,9 @@ const App: React.FC = () => {
                             finalStatus = existingChat.status || realChat.status;
                         }
                         
+                        // Se o chat foi reaberto (mudou de closed para open), limpa departamento e atribuição
+                        const wasReopened = existingChat.status === 'closed' && finalStatus === 'open';
+                        
                         return {
                             ...realChat,
                             messages: mergedMessages, // Usa mensagens mescladas
@@ -414,15 +417,15 @@ const App: React.FC = () => {
                             contactName: existingChat.contactName, // Mantém nome editado localmente se houver
                             contactNumber: useRealContactNumber ? realChat.contactNumber : existingChat.contactNumber, // Atualiza se número mais completo
                             clientCode: existingChat.clientCode,
-                            // Se chat foi reaberto, remove departamento e atribuição
-                            departmentId: existingChat.status === 'open' && finalStatus === 'open' && existingChat.departmentId === null ? null : existingChat.departmentId,
-                            assignedTo: existingChat.status === 'open' && finalStatus === 'open' && existingChat.assignedTo === undefined ? undefined : existingChat.assignedTo,
+                            // Se chat foi reaberto, remove departamento e atribuição para voltar à triagem
+                            departmentId: wasReopened ? null : existingChat.departmentId,
+                            assignedTo: wasReopened ? undefined : existingChat.assignedTo,
                             tags: existingChat.tags,
                             status: finalStatus,
                             rating: existingChat.rating,
-                            awaitingRating: existingChat.awaitingRating,
+                            awaitingRating: wasReopened ? false : existingChat.awaitingRating, // Cancela aguardo de avaliação se reaberto
                             activeWorkflow: existingChat.activeWorkflow,
-                            endedAt: existingChat.status === 'open' && finalStatus === 'open' ? undefined : existingChat.endedAt, // Remove endedAt se reaberto
+                            endedAt: wasReopened ? undefined : existingChat.endedAt, // Remove endedAt se reaberto
                             lastMessage: mergedMessages.length > 0 ? 
                                 (mergedMessages[mergedMessages.length - 1].type === 'text' ? 
                                     mergedMessages[mergedMessages.length - 1].content : 
