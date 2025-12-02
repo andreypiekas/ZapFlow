@@ -259,9 +259,14 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
         linkPreview: false
     };
 
-    // Adiciona contextInfo se for uma resposta
+    // Adiciona referência à mensagem original se for uma resposta
+    // Evolution API pode usar diferentes formatos, tentamos múltiplos para compatibilidade
     if (replyToMessageId) {
+        // Formato 1: quotedMessageId (mais comum na Evolution API)
         payload.quotedMessageId = replyToMessageId;
+        // Formato 2: quoted (alternativo)
+        payload.quoted = replyToMessageId;
+        console.log(`[sendRealMessage] Enviando resposta com quotedMessageId: ${replyToMessageId}`);
     }
 
     const response = await fetch(`${config.baseUrl}/message/sendText/${target}`, {
@@ -276,6 +281,20 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
     if (!response.ok) {
         const errorText = await response.text();
         console.error(`[sendRealMessage] Falha API: ${response.status} para ${cleanPhone}`, errorText);
+        // Se quotedMessageId não funcionar, tenta sem ele
+        if (replyToMessageId && response.status === 400) {
+            console.log(`[sendRealMessage] Tentando enviar sem quotedMessageId...`);
+            delete payload.quotedMessageId;
+            const retryResponse = await fetch(`${config.baseUrl}/message/sendText/${target}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': config.apiKey
+                },
+                body: JSON.stringify(payload)
+            });
+            if (retryResponse.ok) return true;
+        }
         return false;
     }
     
@@ -533,7 +552,8 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         timestamp,
         status: mapStatus(apiMsg.status),
         type,
-        author: author // Salva o JID real para correção automática (sempre normalizado)
+        author: author, // Salva o JID real para correção automática (sempre normalizado)
+        whatsappMessageId: key.id // Salva o ID real do WhatsApp para respostas
     };
 };
 

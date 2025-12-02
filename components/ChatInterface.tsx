@@ -538,7 +538,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       replyTo: replyingTo ? {
         id: replyingTo.id,
         content: replyingTo.content,
-        sender: replyingTo.sender
+        sender: replyingTo.sender,
+        whatsappMessageId: replyingTo.whatsappMessageId
       } : undefined
     };
 
@@ -556,7 +557,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     }
 
     // Envia com referência à mensagem original se for uma resposta
-    const replyToId = replyingTo?.id;
+    // Prioriza o ID real do WhatsApp, senão usa o ID interno
+    const replyToId = replyingTo?.whatsappMessageId || replyingTo?.id;
+    console.log(`[handleSendMessage] Respondendo à mensagem: ${replyToId} (whatsappId: ${replyingTo?.whatsappMessageId}, id: ${replyingTo?.id})`);
     const success = await sendRealMessage(apiConfig, targetNumber, inputText, replyToId);
     
     finalizeMessageStatus(newMessage, success);

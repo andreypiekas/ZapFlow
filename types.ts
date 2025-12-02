@@ -102,10 +102,12 @@ export interface Message {
   fileName?: string;
   mimeType?: string;
   author?: string; // Real JID (identificador único) de quem enviou, usado para correções
+  whatsappMessageId?: string; // ID real da mensagem no WhatsApp (key.id)
   replyTo?: {
     id: string;
     content: string;
     sender: 'user' | 'agent' | 'system';
+    whatsappMessageId?: string; // ID real do WhatsApp da mensagem original
   }; // Referência à mensagem que está sendo respondida
 }
 
