@@ -1027,10 +1027,12 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                 const chatHasValidId = chat.id.includes('@') && 
                                       !chat.id.includes('cmin') && 
                                       !chat.id.includes('cmid') && 
+                                      !chat.id.includes('cmio') &&
                                       !chat.id.includes('@lid') &&
                                       !chat.id.includes('@g.us');
                 const existingHasInvalidId = existingChat.id.includes('cmin') || 
                                              existingChat.id.includes('cmid') || 
+                                             existingChat.id.includes('cmio') ||
                                              existingChat.id.includes('@lid');
                 
                 if (chatHasValidId && existingHasInvalidId) {
@@ -1063,7 +1065,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             
             // Remove apenas IDs gerados sem mensagens e sem número válido
             if (!hasMessages && !hasValidNumber && !isGroup && !isLid) {
-                const isGenerated = chat.id.includes('cmin') || chat.id.includes('cmid');
+                const isGenerated = chat.id.includes('cmin') || chat.id.includes('cmid') || chat.id.includes('cmio');
                 if (isGenerated) {
                     console.log(`[ChatMerge] Removendo chat sem número válido e sem mensagens: ${chat.id}`);
                     return false;

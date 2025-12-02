@@ -181,15 +181,17 @@ const App: React.FC = () => {
                         const useRealContactNumber = (realDigits > existingDigits && realDigits >= 10) || (existingIsGenerated && realDigits >= 10);
 
                         // Se o chat existente tem ID gerado mas o realChat tem ID válido, atualiza o ID também
-                        // Detecta qualquer ID gerado (cmin*, cmid*, chat_*)
+                        // Detecta qualquer ID gerado (cmin*, cmid*, cmio*, chat_*)
                         const existingIdIsGenerated = existingChat.id.includes('cmin') || 
                                                        existingChat.id.includes('cmid') || 
+                                                       existingChat.id.includes('cmio') ||
                                                        existingChat.id.startsWith('chat_');
                         // ID válido: tem @, não é grupo, não é gerado
                         const realIdIsValid = realChat.id.includes('@') && 
                                               !realChat.id.includes('@g.us') && 
                                               !realChat.id.includes('cmin') && 
                                               !realChat.id.includes('cmid') && 
+                                              !realChat.id.includes('cmio') &&
                                               !realChat.id.startsWith('chat_');
                         const shouldUpdateId = existingIdIsGenerated && realIdIsValid;
 
@@ -346,6 +348,21 @@ const App: React.FC = () => {
                             return timeA - timeB;
                         });
 
+                        // Preserva status reaberto se o chat foi reaberto localmente (não sobrescreve com 'closed' da API)
+                        // Se o chat foi reaberto (status 'open' localmente), mantém 'open' mesmo se a API retornar 'closed'
+                        // Isso permite que chats reabertos permaneçam abertos
+                        let finalStatus = existingChat.status;
+                        if (existingChat.status === 'open' && realChat.status === 'closed') {
+                            // Chat foi reaberto localmente - mantém aberto
+                            finalStatus = 'open';
+                        } else if (existingChat.status === 'closed' && realChat.status === 'open') {
+                            // API indica que chat está aberto - atualiza
+                            finalStatus = 'open';
+                        } else {
+                            // Mantém status existente ou usa o da API
+                            finalStatus = existingChat.status || realChat.status;
+                        }
+                        
                         return {
                             ...realChat,
                             messages: mergedMessages, // Usa mensagens mescladas
@@ -353,13 +370,15 @@ const App: React.FC = () => {
                             contactName: existingChat.contactName, // Mantém nome editado localmente se houver
                             contactNumber: useRealContactNumber ? realChat.contactNumber : existingChat.contactNumber, // Atualiza se número mais completo
                             clientCode: existingChat.clientCode,
-                            departmentId: existingChat.departmentId,
-                            assignedTo: existingChat.assignedTo,
+                            // Se chat foi reaberto, remove departamento e atribuição
+                            departmentId: existingChat.status === 'open' && finalStatus === 'open' && existingChat.departmentId === null ? null : existingChat.departmentId,
+                            assignedTo: existingChat.status === 'open' && finalStatus === 'open' && existingChat.assignedTo === undefined ? undefined : existingChat.assignedTo,
                             tags: existingChat.tags,
-                            status: existingChat.status === 'closed' ? 'closed' : realChat.status,
+                            status: finalStatus,
                             rating: existingChat.rating,
                             awaitingRating: existingChat.awaitingRating,
                             activeWorkflow: existingChat.activeWorkflow,
+                            endedAt: existingChat.status === 'open' && finalStatus === 'open' ? undefined : existingChat.endedAt, // Remove endedAt se reaberto
                             lastMessage: mergedMessages.length > 0 ? 
                                 (mergedMessages[mergedMessages.length - 1].type === 'text' ? 
                                     mergedMessages[mergedMessages.length - 1].content : 
