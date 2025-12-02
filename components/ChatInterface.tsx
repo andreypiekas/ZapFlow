@@ -210,11 +210,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const isGroup = selectedChat?.id?.includes('@g.us');
   
   // Sync editing state with selected chat
+  // Usa apenas selectedChatId como dependência para evitar resetar o modo de edição
+  // quando o objeto chat é atualizado (ex: após salvar alterações)
   useEffect(() => {
     if (selectedChat) {
+      // Reseta o modo de edição apenas quando um chat diferente é selecionado
+      setIsEditingContact(false);
+      
+      // Atualiza os valores de edição com os dados do chat selecionado
       setEditContactName(selectedChat.contactName);
       setEditClientCode(selectedChat.clientCode || '');
-      setIsEditingContact(false); 
+      
       setShowOptionsMenu(false); 
       setMessageSearchTerm('');
       setShowSearch(false);
@@ -229,7 +235,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         console.log(`[ChatInterface] ✅ Contagem de mensagens não lidas zerada para chat ${selectedChat.contactName}`);
       }
     }
-  }, [selectedChatId, selectedChat]);
+  }, [selectedChatId]); // Usa apenas selectedChatId para evitar resetar quando o objeto chat é atualizado
 
   // Logic: Filter by Tab AND Search + SORTING
   const filteredChats = chats
