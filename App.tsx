@@ -349,15 +349,55 @@ const App: React.FC = () => {
                         });
 
                         // Preserva status local (closed ou open) - a API sempre retorna 'open', então precisamos preservar o status local
-                        // Se o chat foi finalizado localmente (closed), mantém closed a menos que tenha sido reaberto
+                        // Se o chat foi finalizado localmente (closed), mantém closed a menos que tenha nova mensagem do cliente
                         // Se o chat foi reaberto localmente (open), mantém open
                         let finalStatus = existingChat.status;
                         
-                        // Se o chat está finalizado localmente, SEMPRE mantém como closed
-                        // (a API sempre retorna 'open', então não podemos confiar nela para status closed)
-                        if (existingChat.status === 'closed') {
+                        // Verifica se há novas mensagens do cliente nas mensagens mescladas
+                        // Se houver, pode ser que o chat precise ser reaberto
+                        const hasNewUserMessages = mergedMessages.length > existingChat.messages.length && 
+                                                  mergedMessages.some(msg => {
+                                                      const isNew = !existingChat.messages.some(existingMsg => 
+                                                          existingMsg.id === msg.id || 
+                                                          (existingMsg.timestamp && msg.timestamp && 
+                                                           Math.abs(existingMsg.timestamp.getTime() - msg.timestamp.getTime()) < 5000 &&
+                                                           existingMsg.content === msg.content)
+                                                      );
+                                                      return isNew && msg.sender === 'user';
+                                                  });
+                        
+                        // Se o chat está finalizado mas há nova mensagem do cliente, verifica se deve reabrir
+                        if (existingChat.status === 'closed' && hasNewUserMessages) {
+                            const lastNewUserMessage = mergedMessages
+                                .filter(msg => msg.sender === 'user')
+                                .find(msg => !existingChat.messages.some(existingMsg => 
+                                    existingMsg.id === msg.id || 
+                                    (existingMsg.timestamp && msg.timestamp && 
+                                     Math.abs(existingMsg.timestamp.getTime() - msg.timestamp.getTime()) < 5000 &&
+                                     existingMsg.content === msg.content)
+                                ));
+                            
+                            if (lastNewUserMessage) {
+                                const messageContent = lastNewUserMessage.content.trim();
+                                const isRatingResponse = /^[1-5]$/.test(messageContent);
+                                
+                                // Se não é avaliação, reabre o chat
+                                if (!isRatingResponse || !existingChat.awaitingRating) {
+                                    finalStatus = 'open';
+                                    console.log(`[App] 🔄 Chat ${existingChat.contactName} reaberto via sync - cliente enviou nova mensagem`);
+                                } else {
+                                    // É avaliação, mantém fechado
+                                    finalStatus = 'closed';
+                                }
+                            } else {
+                                // Não encontrou mensagem nova, mantém fechado
+                                finalStatus = 'closed';
+                            }
+                        }
+                        // Se o chat está finalizado e não há novas mensagens, mantém fechado
+                        else if (existingChat.status === 'closed' && !hasNewUserMessages) {
                             finalStatus = 'closed';
-                        } 
+                        }
                         // Se o chat foi reaberto localmente (open), mantém open mesmo se API retornar closed
                         else if (existingChat.status === 'open' && realChat.status === 'closed') {
                             finalStatus = 'open';
