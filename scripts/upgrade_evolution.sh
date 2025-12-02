@@ -9,6 +9,11 @@
 
 set -e
 
+# Muda para o diretório raiz do projeto (onde está o README.md)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
+
 # Cores para output
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -72,7 +77,7 @@ check_docker() {
 check_containers() {
     if ! docker ps -a --format '{{.Names}}' | grep -q "^${API_CONTAINER}$"; then
         print_error "Container ${API_CONTAINER} não encontrado!"
-        print_warning "Execute o script de instalação primeiro (setup_evolution.txt)"
+        print_warning "Execute o script de instalação primeiro (install/setup_evolution.txt)"
         exit 1
     fi
     print_success "Containers encontrados"

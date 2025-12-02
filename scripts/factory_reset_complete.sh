@@ -9,6 +9,11 @@
 
 set -e
 
+# Muda para o diretório raiz do projeto (onde está o README.md)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
+
 # Cores
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -74,7 +79,7 @@ if [[ $REPLY =~ ^[Ss]$ ]]; then
     fi
     
     # Backup de arquivos de configuração
-    cp -r *.txt *.sh *.md "${BACKUP_DIR}/" 2>/dev/null || true
+    cp -r install/*.txt scripts/*.sh docs/*.md "${BACKUP_DIR}/" 2>/dev/null || true
     
     print_success "Backup completo salvo em: ${BACKUP_DIR}/"
     echo ""

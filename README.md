@@ -69,35 +69,40 @@ Este repositório contém guias específicos para diferentes cenários de infrae
 ### 🚀 0. Instalação Automática (Recomendado)
 Use o script mágico para instalar tudo (Docker, Node, API, App) em 5 minutos em uma VPS limpa.
 1. Crie o arquivo: `nano autoinstall.sh`
-2. Cole o conteúdo de **[autoinstall.txt](./autoinstall.txt)**
+2. Cole o conteúdo de **[install/autoinstall.txt](./install/autoinstall.txt)**
 3. Execute: `bash autoinstall.sh`
 
 ### 1. Instalação Manual (Ubuntu/Debian)
 Para servidores VPS limpos (DigitalOcean, AWS, Vultr, Local VM).
-📄 **[manual_instalacao_completo.txt](./manual_instalacao_completo.txt)**
+📄 **[install/manual_instalacao_completo.txt](./install/manual_instalacao_completo.txt)**
 
 ### 2. Instalação HostGator VPS
 Instruções específicas para lidar com as particularidades da HostGator (Firewall, Apache pré-instalado).
-📄 **[deploy_hostgator.txt](./deploy_hostgator.txt)**
+📄 **[install/deploy_hostgator.txt](./install/deploy_hostgator.txt)**
 
 ### 3. Deploy em Produção (Domínio & HTTPS)
 Como configurar Nginx, Domínio `.com.br` e Certificado SSL Gratuito (Let's Encrypt).
-📄 **[deploy.txt](./deploy.txt)**
+📄 **[install/deploy.txt](./install/deploy.txt)**
 
 ### 4. Segurança Avançada
 Como blindar seu servidor contra ataques DDoS e invasões.
-📄 **[security_hostgator.txt](./security_hostgator.txt)**
+📄 **[install/security_hostgator.txt](./install/security_hostgator.txt)**
 
 ---
 
 ## 🛠️ Scripts de Automação e Correção
 
-Os scripts abaixo (formato .txt) devem ser criados no servidor como .sh para execução. Consulte o **[manual_instalacao_completo.txt](./manual_instalacao_completo.txt)** para instruções detalhadas de como criar e rodar.
+Os scripts abaixo podem ser executados diretamente ou criados no servidor a partir dos arquivos .txt. Consulte o **[install/manual_instalacao_completo.txt](./install/manual_instalacao_completo.txt)** para instruções detalhadas.
 
-*   `setup_evolution.txt`: Instala Docker, Banco de Dados e API do zero.
-*   `factory_reset.txt`: **Cuidado!** Apaga tudo e reinicia a instalação (Factory Reset).
-*   `debug.txt`: Diagnóstico de rede e conexão.
-*   `fix_evolution_network.txt`: Corrige problemas de firewall do Docker (Erro de QR Code não gerado).
+### Scripts Shell (.sh)
+*   **[scripts/upgrade_evolution.sh](./scripts/upgrade_evolution.sh)**: Atualiza Evolution API para a versão mais recente.
+*   **[scripts/factory_reset_complete.sh](./scripts/factory_reset_complete.sh)**: **Cuidado!** Apaga tudo e reinicia a instalação (Factory Reset completo).
+
+### Scripts de Instalação (.txt - criar como .sh no servidor)
+*   **[install/setup_evolution.txt](./install/setup_evolution.txt)**: Instala Docker, Banco de Dados e API do zero.
+*   **[install/factory_reset.txt](./install/factory_reset.txt)**: **Cuidado!** Apaga tudo e reinicia a instalação (Factory Reset).
+*   **[install/debug.txt](./install/debug.txt)**: Diagnóstico de rede e conexão.
+*   **[install/fix_evolution_network.txt](./install/fix_evolution_network.txt)**: Corrige problemas de firewall do Docker (Erro de QR Code não gerado).
 
 ---
 
