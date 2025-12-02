@@ -20,7 +20,7 @@ chmod +x upgrade_evolution.sh
    - Banco de dados PostgreSQL
    - Arquivo docker-compose.yml
 4. ✅ **Para containers** (apenas Evolution API, mantém Postgres/Redis)
-5. ✅ **Atualiza docker-compose.yml** para v2.3.4
+5. ✅ **Atualiza docker-compose.yml** para v2.3.6
 6. ✅ **Baixa nova imagem** do Docker Hub
 7. ✅ **Recria e inicia containers**
 8. ✅ **Aguarda serviços ficarem prontos**
@@ -92,7 +92,7 @@ sudo usermod -aG docker $USER
 
 ### Erro: "Falha ao baixar imagem"
 - Verifique conexão com internet
-- Verifique se a versão existe: `docker pull atendai/evolution-api:v2.3.4`
+- Verifique se a versão existe: `docker pull atendai/evolution-api:v2.3.6`
 
 ### API não responde após upgrade
 ```bash

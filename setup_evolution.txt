@@ -10,7 +10,7 @@ set -e
 # -------------------------------
 # Configurações principais
 # -------------------------------
-API_IMAGE="atendai/evolution-api:v2.3.4"
+API_IMAGE="atendai/evolution-api:v2.3.6"
 POSTGRES_IMAGE="postgres:15-alpine"
 REDIS_IMAGE="redis:alpine"
 
@@ -66,7 +66,7 @@ services:
       - CONFIG_SESSION_PHONE_REJECT_CALL=true
       - CONFIG_SESSION_PHONE_MSG_CALL="Não aceitamos chamadas por aqui. Por favor, envie texto."
       
-      # Argumentos OTIMIZADOS para VPS (Sem single-process para evitar crash loop em v2.3.4)
+      # Argumentos OTIMIZADOS para VPS (Sem single-process para evitar crash loop em v2.3.6)
       - BROWSER_ARGS=["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-accelerated-2d-canvas","--no-first-run","--disable-gpu","--disable-software-rasterizer"]
       
       - CORS_ORIGIN=*
