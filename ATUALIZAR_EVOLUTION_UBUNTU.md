@@ -63,7 +63,7 @@ image: atendai/evolution-api:v2.2.3
 
 Para:
 ```yaml
-image: atendai/evolution-api:v2.3.6
+image: atendai/evolution-api:v2.3.4
 ```
 
 **OU** se você estiver usando os scripts de instalação (`setup_evolution.txt`, `autoinstall.txt`, etc.), eles já foram atualizados no repositório.
@@ -72,7 +72,7 @@ image: atendai/evolution-api:v2.3.6
 
 ```bash
 # Baixar a nova versão da imagem
-docker pull atendai/evolution-api:v2.3.6
+docker pull atendai/evolution-api:v2.3.4
 
 # Verificar se a imagem foi baixada
 docker images | grep evolution-api
@@ -125,7 +125,7 @@ docker logs evolution_api --tail 50 -f
 
 ```bash
 # Verificar logs para confirmar a versão
-docker logs evolution_api | grep -i "version\|v2.3.6"
+docker logs evolution_api | grep -i "version\|v2.3.4"
 
 # OU fazer uma requisição à API
 curl http://localhost:8080/instance/fetchInstances \
@@ -211,7 +211,7 @@ docker-compose up -d
 cd /caminho/para/seu/projeto
 docker exec evolution_postgres pg_dump -U user evolution > backup_evolution_$(date +%Y%m%d_%H%M%S).sql
 docker-compose down
-docker pull atendai/evolution-api:v2.3.6
+docker pull atendai/evolution-api:v2.3.4
 docker-compose up -d
 docker logs evolution_api -f
 ```

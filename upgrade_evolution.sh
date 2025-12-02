@@ -3,7 +3,7 @@
 # ==============================================================================
 # 🔄 SCRIPT DE UPGRADE - EVOLUTION API
 # ==============================================================================
-# Atualiza Evolution API de v2.2.3 (ou qualquer versão) para v2.3.6
+# Atualiza Evolution API de v2.2.3 (ou qualquer versão) para v2.3.4
 # Mantém dados do banco de dados e configurações existentes
 # ==============================================================================
 

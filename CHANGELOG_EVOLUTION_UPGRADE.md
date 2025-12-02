@@ -1,4 +1,4 @@
-# Atualização Evolution API: v2.2.3 → v2.3.6
+# Atualização Evolution API: v2.2.3 → v2.3.4
 
 **Data:** 2025-12-02  
 **Versão Anterior:** v2.2.3  
