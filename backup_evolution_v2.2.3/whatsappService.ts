@@ -1,6 +1,6 @@
 import { ApiConfig, Chat, Message, MessageStatus } from "../types";
 
-// Serviço compatível com Evolution API v1.x/v2.x (atualizado para v2.3.6)
+// Serviço compatível com Evolution API v1.x/v2.x
 // Documentação base: https://doc.evolution-api.com/
 
 // --- UTILS ---

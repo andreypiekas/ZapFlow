@@ -41,7 +41,7 @@ O sistema utiliza uma arquitetura moderna baseada em microsserviços containeriz
 graph TD
     User[Cliente/Navegador] -->|HTTPS/WSS| Nginx[Proxy Reverso Nginx]
     Nginx -->|Porta 5173| Frontend[ZapFlow React App]
-    Nginx -->|Porta 8080| Backend[Evolution API v2.3.6]
+    Nginx -->|Porta 8080| Backend[Evolution API v2]
     
     subgraph "Docker Containers"
         Backend -->|Persistência| Postgres[PostgreSQL DB]
@@ -56,7 +56,7 @@ graph TD
 
 ### Stack Tecnológica
 *   **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, Lucide Icons.
-*   **Backend (Core):** Evolution API v2.3.6 (Node.js/Baileys).
+*   **Backend (Core):** Evolution API v2.2.3 (Node.js/Baileys).
 *   **Infraestrutura:** Docker, Docker Compose, PM2, Nginx.
 *   **Banco de Dados:** PostgreSQL 15, Redis.
 
