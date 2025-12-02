@@ -949,7 +949,8 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                     
                     if (isFindChatsResponse) {
                         const normalizedChatId = normalizeJid(chatId);
-                        const matchingChat = data.find((chat: any) => {
+                        // Busca todos os chats que podem corresponder (não só o primeiro)
+                        const matchingChats = data.filter((chat: any) => {
                             if (!chat) return false;
                             const chatRemoteJid = normalizeJid(chat.remoteJid || '');
                             const chatIdValue = chat.id || '';
@@ -968,15 +969,63 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                             const chatIdNumber = chatIdValue.split('@')[0];
                             if (chatIdNumber === phoneNumber && phoneNumber.length >= 10) return true;
                             
+                            // Verifica se tem mensagem com remoteJid correspondente
+                            if (chat.message && chat.message.key && chat.message.key.remoteJid) {
+                                const msgJid = normalizeJid(chat.message.key.remoteJid);
+                                if (msgJid === normalizedChatId || msgJid.includes(phoneNumber)) return true;
+                            }
+                            
+                            // Verifica se tem lastMessage com remoteJid correspondente
+                            if (chat.lastMessage && chat.lastMessage.key && chat.lastMessage.key.remoteJid) {
+                                const msgJid = normalizeJid(chat.lastMessage.key.remoteJid);
+                                if (msgJid === normalizedChatId || msgJid.includes(phoneNumber)) return true;
+                            }
+                            
                             return false;
                         });
                         
+                        // Processa todos os chats correspondentes
+                        if (matchingChats.length > 0) {
+                            matchingChats.forEach((matchingChat: any) => {
+                        
                         if (matchingChat) {
+                            // Tenta múltiplos formatos de mensagens
                             if (matchingChat.messages && Array.isArray(matchingChat.messages) && matchingChat.messages.length > 0) {
                                 processMessages(matchingChat.messages);
+                            } else if (matchingChat.message && typeof matchingChat.message === 'object') {
+                                // Mensagem como objeto único (não array)
+                                if (matchingChat.message.key && matchingChat.message.key.remoteJid) {
+                                    const normalizedJid = normalizeJid(matchingChat.message.key.remoteJid);
+                                    if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
+                                        const mapped = mapApiMessageToInternal(matchingChat.message);
+                                        if (mapped) messages.push(mapped);
+                                    }
+                                } else {
+                                    // Tenta processar como mensagem direta
+                                    const mapped = mapApiMessageToInternal(matchingChat.message);
+                                    if (mapped) messages.push(mapped);
+                                }
+                            } else if (matchingChat.lastMessage && typeof matchingChat.lastMessage === 'object') {
+                                // lastMessage como objeto único
+                                if (matchingChat.lastMessage.key && matchingChat.lastMessage.key.remoteJid) {
+                                    const normalizedJid = normalizeJid(matchingChat.lastMessage.key.remoteJid);
+                                    if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
+                                        const mapped = mapApiMessageToInternal(matchingChat.lastMessage);
+                                        if (mapped) messages.push(mapped);
+                                    }
+                                } else {
+                                    const mapped = mapApiMessageToInternal(matchingChat.lastMessage);
+                                    if (mapped) messages.push(mapped);
+                                }
+                            } else if (matchingChat.key && matchingChat.key.remoteJid) {
+                                // O próprio chat pode ser uma mensagem
+                                const normalizedJid = normalizeJid(matchingChat.key.remoteJid);
+                                if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
+                                    const mapped = mapApiMessageToInternal(matchingChat);
+                                    if (mapped) messages.push(mapped);
+                                }
                             } else {
-                                // Fallback: se o chat foi encontrado mas sem mensagens no campo 'messages',
-                                // tenta processar o array completo da resposta, caso as mensagens estejam em outro nível.
+                                // Fallback: tenta processar o array completo da resposta
                                 processMessages(data);
                             }
                         } else {
