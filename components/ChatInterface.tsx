@@ -129,6 +129,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     return targetNumber;
   };
   const [inputText, setInputText] = useState('');
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null); // Mensagem que está sendo respondida
   const [filterText, setFilterText] = useState('');
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
@@ -533,7 +534,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       sender: 'agent',
       timestamp: new Date(),
       status: MessageStatus.SENT,
-      type: 'text'
+      type: 'text',
+      replyTo: replyingTo ? {
+        id: replyingTo.id,
+        content: replyingTo.content,
+        sender: replyingTo.sender
+      } : undefined
     };
 
     updateChatWithNewMessage(newMessage);
@@ -549,13 +555,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         return;
     }
 
-    const success = await sendRealMessage(apiConfig, targetNumber, inputText);
+    // Envia com referência à mensagem original se for uma resposta
+    const replyToId = replyingTo?.id;
+    const success = await sendRealMessage(apiConfig, targetNumber, inputText, replyToId);
     
     finalizeMessageStatus(newMessage, success);
     setIsSending(false);
     setInputText('');
+    setReplyingTo(null); // Limpa a resposta após enviar
     setShowQuickReplies(false);
     setShowEmojiPicker(false);
+  };
+
+  const handleReplyToMessage = (message: Message) => {
+    setReplyingTo(message);
+    // Foca no input (se houver referência)
+    const inputElement = document.querySelector('textarea[placeholder*="Digite"]') as HTMLTextAreaElement;
+    if (inputElement) {
+      setTimeout(() => inputElement.focus(), 100);
+    }
+  };
+
+  const handleCancelReply = () => {
+    setReplyingTo(null);
   };
 
   const handleSendSticker = async (url: string) => {
@@ -1303,23 +1325,49 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         {msg.content}
                      </div>
                   ) : (
-                    <div className={`max-w-[85%] md:max-w-[70%] rounded-lg px-2 py-2 shadow-sm relative ${
-                      msg.sender === 'user' ? 'bg-white rounded-tl-none' : 'bg-emerald-100 rounded-tr-none'
-                    }`}>
+                    <div 
+                      className={`max-w-[85%] md:max-w-[70%] rounded-lg px-2 py-2 shadow-sm relative group ${
+                        msg.sender === 'user' ? 'bg-white rounded-tl-none' : 'bg-emerald-100 rounded-tr-none'
+                      }`}
+                      onDoubleClick={() => msg.sender !== 'system' && handleReplyToMessage(msg)}
+                    >
+                      {/* Mensagem citada (se for uma resposta) */}
+                      {msg.replyTo && (
+                        <div className={`mb-1 px-2 py-1 border-l-3 ${
+                          msg.replyTo.sender === 'user' ? 'border-blue-400 bg-blue-50' : 'border-emerald-400 bg-emerald-50'
+                        } rounded text-xs`}>
+                          <div className="font-medium text-slate-600">
+                            {msg.replyTo.sender === 'user' ? selectedChat?.contactName : currentUser.name}
+                          </div>
+                          <div className="text-slate-500 truncate">
+                            {msg.replyTo.content.length > 50 ? msg.replyTo.content.substring(0, 50) + '...' : msg.replyTo.content}
+                          </div>
+                        </div>
+                      )}
+                      
                       <div className="px-2 pt-1">
                         {renderMessageContent(msg)}
                       </div>
 
-                      <div className="flex justify-end items-center gap-1 mt-1 pr-2 pb-1">
-                        <span className="text-[10px] text-slate-500">
-                          {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        {msg.sender === 'agent' && (
-                          msg.status === MessageStatus.READ ? <CheckCheck size={14} className="text-blue-500" /> : 
-                          msg.status === MessageStatus.DELIVERED ? <CheckCheck size={14} className="text-slate-400" /> :
-                          msg.status === MessageStatus.ERROR ? <span title="Falha ao enviar"><AlertTriangle size={14} className="text-red-500" /></span> :
-                          <Check size={14} className="text-slate-400" />
-                        )}
+                      <div className="flex justify-between items-center gap-1 mt-1 pr-2 pb-1">
+                        <button
+                          onClick={() => handleReplyToMessage(msg)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-black/5 rounded"
+                          title="Responder"
+                        >
+                          <ArrowRightLeft size={12} className="text-slate-500" />
+                        </button>
+                        <div className="flex items-center gap-1 ml-auto">
+                          <span className="text-[10px] text-slate-500">
+                            {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          {msg.sender === 'agent' && (
+                            msg.status === MessageStatus.READ ? <CheckCheck size={14} className="text-blue-500" /> : 
+                            msg.status === MessageStatus.DELIVERED ? <CheckCheck size={14} className="text-slate-400" /> :
+                            msg.status === MessageStatus.ERROR ? <span title="Falha ao enviar"><AlertTriangle size={14} className="text-red-500" /></span> :
+                            <Check size={14} className="text-slate-400" />
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1446,6 +1494,32 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                             </div>
                         )}
 
+                        {/* Reply Preview Area */}
+                        {replyingTo && (
+                            <div className="bg-slate-200 p-3 rounded-t-lg border-b border-slate-300 flex items-center justify-between animate-in slide-in-from-bottom-2">
+                                <div className="flex items-center gap-3 overflow-hidden flex-1">
+                                    <div className={`w-0.5 h-10 rounded ${
+                                        replyingTo.sender === 'user' ? 'bg-blue-400' : 'bg-emerald-400'
+                                    }`} />
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-xs font-semibold text-slate-700">
+                                            {replyingTo.sender === 'user' ? selectedChat?.contactName : currentUser.name}
+                                        </div>
+                                        <div className="text-xs text-slate-500 truncate">
+                                            {replyingTo.content.length > 60 ? replyingTo.content.substring(0, 60) + '...' : replyingTo.content}
+                                        </div>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={handleCancelReply} 
+                                    className="p-1 hover:bg-slate-300 rounded-full text-slate-500 flex-shrink-0"
+                                    title="Cancelar resposta"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+                        )}
+
                         {/* Attachment Preview Area */}
                         {selectedFile && (
                             <div className="bg-slate-200 p-3 rounded-t-lg border-b border-slate-300 flex items-center justify-between animate-in slide-in-from-bottom-2">
@@ -1542,9 +1616,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                                         value={inputText}
                                         onChange={(e) => setInputText(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                                        placeholder={selectedFile ? "Legenda..." : "Mensagem"}
+                                        placeholder={selectedFile ? "Legenda..." : replyingTo ? "Digite sua resposta..." : "Mensagem"}
                                         disabled={isSending}
-                                        className={`w-full px-4 py-3 rounded-lg border-none focus:ring-0 outline-none bg-white shadow-sm pr-10 text-sm ${selectedFile ? 'rounded-tl-none rounded-tr-none' : ''}`}
+                                        className={`w-full px-4 py-3 rounded-lg border-none focus:ring-0 outline-none bg-white shadow-sm pr-10 text-sm ${selectedFile || replyingTo ? 'rounded-tl-none rounded-tr-none' : ''}`}
                                         />
                                         {!inputText && !selectedFile && (
                                             <button 

@@ -102,6 +102,11 @@ export interface Message {
   fileName?: string;
   mimeType?: string;
   author?: string; // Real JID (identificador único) de quem enviou, usado para correções
+  replyTo?: {
+    id: string;
+    content: string;
+    sender: 'user' | 'agent' | 'system';
+  }; // Referência à mensagem que está sendo respondida
 }
 
 export interface Chat {

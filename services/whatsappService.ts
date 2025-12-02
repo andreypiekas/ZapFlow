@@ -238,7 +238,7 @@ export const logoutInstance = async (config: ApiConfig) => {
 
 // --- MESSAGING ---
 
-export const sendRealMessage = async (config: ApiConfig, phone: string, text: string) => {
+export const sendRealMessage = async (config: ApiConfig, phone: string, text: string, replyToMessageId?: string) => {
   if (config.isDemo) {
     await new Promise(resolve => setTimeout(resolve, 800));
     return true;
@@ -252,12 +252,17 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
 
   try {
     // Payload simplificado para máxima compatibilidade com v2.x
-    const payload = {
+    const payload: any = {
         number: cleanPhone,
         text: text,
         delay: 1200,
         linkPreview: false
     };
+
+    // Adiciona contextInfo se for uma resposta
+    if (replyToMessageId) {
+        payload.quotedMessageId = replyToMessageId;
+    }
 
     const response = await fetch(`${config.baseUrl}/message/sendText/${target}`, {
       method: 'POST',
