@@ -65,7 +65,7 @@ export interface Contact {
   phone: string;
   email?: string;
   avatar?: string;
-  source: 'manual' | 'google';
+  source: 'manual' | 'google' | 'csv';
   lastSync?: Date;
 }
 

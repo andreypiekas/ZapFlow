@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Contact } from '../types';
-import { RefreshCw, Search, Mail, User as UserIcon, Check, Loader2, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Search, Mail, User as UserIcon, Check, Loader2, AlertTriangle, Upload, FileText } from 'lucide-react';
 
 // Declare Google Global
 declare const google: any;
@@ -8,13 +8,16 @@ declare const google: any;
 interface ContactsProps {
   contacts: Contact[];
   onSyncGoogle: (contacts?: Contact[]) => Promise<void>;
+  onImportCSV: (contacts: Contact[]) => Promise<void>;
   clientId?: string;
 }
 
-const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, clientId }) => {
+const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, onImportCSV, clientId }) => {
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSync = async () => {
     setError(null);
@@ -105,6 +108,94 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, clientId })
       }
   };
 
+  const handleImportCSV = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.csv')) {
+      setError('Por favor, selecione um arquivo CSV válido.');
+      return;
+    }
+
+    setIsImporting(true);
+    setError(null);
+
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        setError('O arquivo CSV deve ter pelo menos um cabeçalho e uma linha de dados.');
+        setIsImporting(false);
+        return;
+      }
+
+      // Detecta o separador (vírgula ou ponto e vírgula)
+      const firstLine = lines[0];
+      const separator = firstLine.includes(';') ? ';' : ',';
+      
+      // Parse do cabeçalho
+      const headers = lines[0].split(separator).map(h => h.trim().toLowerCase());
+      
+      // Encontra índices das colunas (flexível para diferentes formatos)
+      const nameIndex = headers.findIndex(h => h.includes('nome') || h.includes('name'));
+      const phoneIndex = headers.findIndex(h => h.includes('telefone') || h.includes('phone') || h.includes('celular') || h.includes('whatsapp'));
+      const emailIndex = headers.findIndex(h => h.includes('email') || h.includes('e-mail'));
+      
+      if (nameIndex === -1 || phoneIndex === -1) {
+        setError('O CSV deve conter colunas "Nome" e "Telefone" (ou equivalentes).');
+        setIsImporting(false);
+        return;
+      }
+
+      const importedContacts: Contact[] = [];
+      
+      // Processa cada linha (pula o cabeçalho)
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(separator).map(v => v.trim());
+        
+        const name = values[nameIndex] || '';
+        const phone = values[phoneIndex] || '';
+        const email = emailIndex >= 0 ? values[emailIndex] : undefined;
+        
+        // Valida se tem nome e telefone
+        if (name && phone) {
+          // Remove caracteres não numéricos do telefone para normalização
+          const cleanPhone = phone.replace(/\D/g, '');
+          if (cleanPhone.length >= 8) { // Mínimo 8 dígitos
+            importedContacts.push({
+              id: `csv_${Date.now()}_${i}_${Math.random()}`,
+              name: name.trim(),
+              phone: phone.trim(),
+              email: email?.trim(),
+              source: 'csv',
+              lastSync: new Date()
+            });
+          }
+        }
+      }
+
+      if (importedContacts.length === 0) {
+        setError('Nenhum contato válido encontrado no CSV. Verifique se os dados estão corretos.');
+        setIsImporting(false);
+        return;
+      }
+
+      await onImportCSV(importedContacts);
+      
+      // Limpa o input para permitir importar o mesmo arquivo novamente
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      
+    } catch (err) {
+      console.error('Erro ao importar CSV:', err);
+      setError('Erro ao processar o arquivo CSV. Verifique se o formato está correto.');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const filteredContacts = contacts.filter(c => 
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     c.phone.includes(searchTerm) ||
@@ -122,14 +213,31 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, clientId })
         </div>
         
         <div className="flex flex-col items-end gap-2">
-            <button 
-            onClick={handleSync}
-            disabled={isSyncing}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 transition-colors shadow-sm font-medium disabled:opacity-70"
-            >
-            {isSyncing ? <Loader2 className="animate-spin" size={20} /> : <RefreshCw size={20} />}
-            {isSyncing ? 'Sincronizando...' : 'Sincronizar Google Contacts'}
-            </button>
+            <div className="flex gap-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleImportCSV}
+                  accept=".csv"
+                  className="hidden"
+                  id="csv-import-input"
+                />
+                <label
+                  htmlFor="csv-import-input"
+                  className={`bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 transition-colors shadow-sm font-medium cursor-pointer disabled:opacity-70 ${isImporting ? 'opacity-70 cursor-not-allowed' : ''}`}
+                >
+                  {isImporting ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}
+                  {isImporting ? 'Importando...' : 'Importar CSV'}
+                </label>
+                <button 
+                onClick={handleSync}
+                disabled={isSyncing}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 transition-colors shadow-sm font-medium disabled:opacity-70"
+                >
+                {isSyncing ? <Loader2 className="animate-spin" size={20} /> : <RefreshCw size={20} />}
+                {isSyncing ? 'Sincronizando...' : 'Sincronizar Google Contacts'}
+                </button>
+            </div>
             {!clientId && (
                 <span className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded border border-red-100 flex items-center gap-1">
                     <AlertTriangle size={10} /> Configure o Client ID nas Configurações
@@ -205,6 +313,10 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, clientId })
                     {contact.source === 'google' ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">
                              Google
+                        </span>
+                    ) : contact.source === 'csv' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200">
+                            <FileText size={12} /> CSV
                         </span>
                     ) : (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">

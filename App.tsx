@@ -742,11 +742,64 @@ const App: React.FC = () => {
     };
   }, [currentUser, apiConfig]);
 
+  // Função utilitária para normalizar números de telefone para comparação
+  const normalizePhoneForMatch = (phone: string): string => {
+    // Remove tudo que não é dígito
+    let cleaned = phone.replace(/\D/g, '');
+    // Remove código do país (55) se estiver no início e o número tiver mais de 10 dígitos
+    if (cleaned.length > 10 && cleaned.startsWith('55')) {
+      cleaned = cleaned.slice(2);
+    }
+    // Retorna os últimos 9-11 dígitos (DDD + número)
+    return cleaned.length > 11 ? cleaned.slice(-11) : cleaned;
+  };
+
   useEffect(() => {
     if (currentUser && currentUser.role === UserRole.AGENT && currentView === 'dashboard') {
         setCurrentView('chat');
     }
   }, []);
+
+  // Vincula contatos automaticamente aos chats quando há correspondência
+  // Preserva clientCode e outras informações editadas pelo operador
+  useEffect(() => {
+    if (contacts.length === 0) return; // Não faz nada se não há contatos
+    
+    setChats(currentChats => {
+      let hasUpdates = false;
+      const updatedChats = currentChats.map(chat => {
+        const chatPhone = normalizePhoneForMatch(chat.contactNumber);
+        const match = contacts.find(c => {
+          const cPhone = normalizePhoneForMatch(c.phone);
+          return cPhone === chatPhone || 
+                 (cPhone.length >= 8 && chatPhone.length >= 8 && 
+                  (cPhone.slice(-8) === chatPhone.slice(-8) || cPhone.slice(-9) === chatPhone.slice(-9)));
+        });
+        
+        if (match) {
+          // Só atualiza se o nome ou avatar do contato for diferente e mais completo
+          const shouldUpdateName = match.name && match.name.trim() && 
+                                   (chat.contactName === chat.contactNumber || 
+                                    chat.contactName.length < match.name.length ||
+                                    chat.contactName === match.name);
+          const shouldUpdateAvatar = match.avatar && match.avatar !== chat.contactAvatar;
+          
+          if (shouldUpdateName || shouldUpdateAvatar) {
+            hasUpdates = true;
+            return {
+              ...chat,
+              contactName: shouldUpdateName ? match.name : chat.contactName,
+              contactAvatar: shouldUpdateAvatar ? match.avatar : chat.contactAvatar,
+              // clientCode é preservado automaticamente (não é sobrescrito)
+            };
+          }
+        }
+        return chat;
+      });
+      
+      return hasUpdates ? updatedChats : currentChats;
+    });
+  }, [contacts]); // Executa quando contatos mudam
 
   const addNotification = (title: string, message: string, type: 'info' | 'warning' | 'success' = 'info') => {
     const id = Date.now().toString();
@@ -838,6 +891,33 @@ const App: React.FC = () => {
   const handleUpdateWorkflow = (updatedWf: Workflow) => setWorkflows(workflows.map(w => w.id === updatedWf.id ? updatedWf : w));
   const handleDeleteWorkflow = (id: string) => setWorkflows(workflows.filter(w => w.id !== id));
 
+  // Função para atualizar chats com informações de contatos (preservando clientCode)
+  const updateChatsWithContacts = (contactList: Contact[]) => {
+    setChats(currentChats => {
+      return currentChats.map(chat => {
+        const chatPhone = normalizePhoneForMatch(chat.contactNumber);
+        const match = contactList.find(c => {
+          const cPhone = normalizePhoneForMatch(c.phone);
+          // Match exato ou match pelos últimos 8-9 dígitos
+          return cPhone === chatPhone || 
+                 (cPhone.length >= 8 && chatPhone.length >= 8 && 
+                  (cPhone.slice(-8) === chatPhone.slice(-8) || cPhone.slice(-9) === chatPhone.slice(-9)));
+        });
+        
+        if (match) {
+          // Atualiza informações do contato, mas preserva clientCode e outras informações editadas
+          return { 
+            ...chat, 
+            contactName: match.name, 
+            contactAvatar: match.avatar || chat.contactAvatar,
+            // clientCode é preservado automaticamente (não é sobrescrito)
+          };
+        }
+        return chat;
+      });
+    });
+  };
+
   const handleSyncGoogleContacts = async (importedContacts?: Contact[]) => {
     return new Promise<void>((resolve) => {
         setTimeout(() => {
@@ -849,23 +929,75 @@ const App: React.FC = () => {
                    newContacts = MOCK_GOOGLE_CONTACTS.map(c => ({...c, lastSync: new Date()}));
                 }
             }
-            setContacts(newContacts);
-            const updatedChats = chats.map(chat => {
-                const chatPhone = chat.contactNumber.replace(/\D/g, '');
-                const match = newContacts.find(c => {
-                    const cPhone = c.phone.replace(/\D/g, '');
-                    return cPhone === chatPhone || (cPhone.length > 8 && chatPhone.endsWith(cPhone.slice(-8)));
-                });
-                if (match) {
-                    return { ...chat, contactName: match.name, contactAvatar: match.avatar || chat.contactAvatar };
+            
+            // Mescla com contatos existentes (CSV e manual)
+            setContacts(currentContacts => {
+              const merged = [...currentContacts];
+              newContacts.forEach(newContact => {
+                const existingIndex = merged.findIndex(c => 
+                  normalizePhoneForMatch(c.phone) === normalizePhoneForMatch(newContact.phone)
+                );
+                if (existingIndex >= 0) {
+                  // Atualiza contato existente, mas preserva source se for CSV ou manual
+                  merged[existingIndex] = {
+                    ...newContact,
+                    source: merged[existingIndex].source === 'csv' || merged[existingIndex].source === 'manual' 
+                      ? merged[existingIndex].source 
+                      : newContact.source
+                  };
+                } else {
+                  merged.push(newContact);
                 }
-                return chat;
+              });
+              return merged;
             });
-            setChats(updatedChats);
+            
+            // Atualiza chats com novos contatos
+            updateChatsWithContacts(newContacts);
+            
             if (newContacts.length > 0) {
                addNotification('Sincronização Concluída', `${newContacts.length} contatos atualizados do Google.`, 'success');
             } else {
                addNotification('Sincronização', `Nenhum contato encontrado.`, 'info');
+            }
+            resolve();
+        }, 500);
+    });
+  };
+
+  const handleImportCSVContacts = async (importedContacts: Contact[]) => {
+    return new Promise<void>((resolve) => {
+        setTimeout(() => {
+            // Mescla com contatos existentes
+            setContacts(currentContacts => {
+              const merged = [...currentContacts];
+              importedContacts.forEach(newContact => {
+                const existingIndex = merged.findIndex(c => 
+                  normalizePhoneForMatch(c.phone) === normalizePhoneForMatch(newContact.phone)
+                );
+                if (existingIndex >= 0) {
+                  // Atualiza contato existente, preservando source se for CSV
+                  merged[existingIndex] = {
+                    ...newContact,
+                    source: 'csv',
+                    lastSync: new Date()
+                  };
+                } else {
+                  merged.push({
+                    ...newContact,
+                    source: 'csv',
+                    lastSync: new Date()
+                  });
+                }
+              });
+              return merged;
+            });
+            
+            // Atualiza chats com novos contatos
+            updateChatsWithContacts(importedContacts);
+            
+            if (importedContacts.length > 0) {
+               addNotification('Importação Concluída', `${importedContacts.length} contatos importados do CSV.`, 'success');
             }
             resolve();
         }, 500);
@@ -942,7 +1074,7 @@ const App: React.FC = () => {
       case 'chat':
         return <div className="h-full md:p-4"><ChatInterface chats={filteredChats} departments={departments} currentUser={currentUser} onUpdateChat={handleUpdateChat} apiConfig={apiConfig} quickReplies={quickReplies} workflows={workflows} contacts={contacts} /></div>;
       case 'reports': return <ReportsDashboard chats={chats} departments={departments} />;
-      case 'contacts': return <Contacts contacts={contacts} onSyncGoogle={handleSyncGoogleContacts} clientId={apiConfig.googleClientId} />;
+      case 'contacts': return <Contacts contacts={contacts} onSyncGoogle={handleSyncGoogleContacts} onImportCSV={handleImportCSVContacts} clientId={apiConfig.googleClientId} />;
       case 'chatbot': return <ChatbotSettings config={chatbotConfig} onSave={handleUpdateChatbotConfig} />;
       case 'connections': return <Connection config={apiConfig} onNavigateToSettings={() => setCurrentView('settings')} onUpdateConfig={handleSaveConfig} />;
       case 'departments': return <DepartmentSettings departments={departments} onAdd={handleAddDepartment} onUpdate={handleUpdateDepartment} onDelete={handleDeleteDepartment} />;
