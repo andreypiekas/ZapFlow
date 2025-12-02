@@ -472,14 +472,25 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
 
     // Caso 2: Objeto de Mensagem (Message Key)
     if (data.key && data.key.remoteJid) {
-        const jid = normalizeJid(data.key.remoteJid);
-        if (jid.includes('@') && !jid.includes('status@broadcast')) {
-            if (!collectedChats.has(jid)) {
-                // Cria chat placeholder se encontrarmos uma mensagem solta
-                collectedChats.set(jid, { id: jid, raw: {}, messages: [] });
-                console.log(`[ExtractChats] Criado chat para JID: ${jid}`);
+        let jid = normalizeJid(data.key.remoteJid);
+        let actualJid = jid;
+        
+        // Se o JID é @lid, tenta usar remoteJidAlt (número real do contato)
+        if (jid.includes('@lid') && data.key.remoteJidAlt) {
+            const altJid = normalizeJid(data.key.remoteJidAlt);
+            if (altJid.includes('@s.whatsapp.net')) {
+                console.log(`[ExtractChats] Usando remoteJidAlt para @lid: ${altJid} (original: ${jid})`);
+                actualJid = altJid;
             }
-            const chat = collectedChats.get(jid);
+        }
+        
+        if (actualJid.includes('@') && !actualJid.includes('status@broadcast')) {
+            if (!collectedChats.has(actualJid)) {
+                // Cria chat placeholder se encontrarmos uma mensagem solta
+                collectedChats.set(actualJid, { id: actualJid, raw: {}, messages: [] });
+                console.log(`[ExtractChats] Criado chat para JID: ${actualJid}${jid !== actualJid ? ` (substituiu ${jid})` : ''}`);
+            }
+            const chat = collectedChats.get(actualJid);
             
             // Verifica duplicidade
             const msgId = data.key.id;
@@ -488,9 +499,10 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
                 chat.messages.push(data);
                 // Tenta pescar o nome do contato da mensagem se não tivermos
                 if (data.pushName && !chat.raw.pushName) chat.raw.pushName = data.pushName;
-                console.log(`[ExtractChats] Mensagem adicionada ao chat ${jid}:`, {
+                console.log(`[ExtractChats] Mensagem adicionada ao chat ${actualJid}:`, {
                     msgId: msgId,
                     remoteJid: data.key.remoteJid,
+                    remoteJidAlt: data.key.remoteJidAlt, // Inclui para debug
                     fromMe: data.key.fromMe,
                     hasMessage: !!data.message
                 });
