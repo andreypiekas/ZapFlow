@@ -229,20 +229,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         const lastSender = hasMessages ? chat.messages[chat.messages.length - 1].sender : 'system';
         
         // Logic: Agent replied = Waiting. User replied (or new) = To Do.
-        const isWaitingForCustomer = lastSender === 'agent' || lastSender === 'system'; 
+        const isWaitingForCustomer = lastSender === 'agent' || lastSender === 'system';
+        
+        // Chats sem departamento (aguardando triagem) devem aparecer em "Aguardando"
+        const isAwaitingTriage = chat.departmentId === null && !chat.assignedTo;
+        
+        // Chats atribuídos ao usuário atual ou com departamento atribuído
+        const isAssigned = chat.assignedTo === currentUser.id || (chat.departmentId !== null && chat.departmentId !== undefined);
 
         if (activeTab === 'closed') {
             return isClosed;
         }
 
         if (chat.status === 'open' || chat.status === 'pending') {
-            if (activeTab === 'todo') {
-                // Show if: NOT waiting for customer (so, user replied) OR Unread > 0
-                return !isWaitingForCustomer || chat.unreadCount > 0;
-            }
             if (activeTab === 'waiting') {
-                // Show if: Waiting for customer AND No unread messages
-                return isWaitingForCustomer && chat.unreadCount === 0;
+                // "Aguardando Triagem": Chats sem departamento E sem atribuição
+                // OU chats aguardando resposta do cliente (agente respondeu e não há mensagens não lidas)
+                return isAwaitingTriage || (isWaitingForCustomer && chat.unreadCount === 0 && !isAssigned);
+            }
+            if (activeTab === 'todo') {
+                // "A Fazer": Chats atribuídos (com departamento ou assignedTo) 
+                // OU com mensagens não lidas do usuário (cliente respondeu)
+                return isAssigned || (!isWaitingForCustomer || chat.unreadCount > 0);
             }
         }
         
