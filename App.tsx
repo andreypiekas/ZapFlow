@@ -290,13 +290,13 @@ const App: React.FC = () => {
                         const lastFetch = sessionStorage.getItem(lastFetchKey);
                         const now = Date.now();
                         
-                        // Só busca se não buscou nos últimos 3 segundos (evita spam, mas garante atualização)
-                        if (!lastFetch || (now - parseInt(lastFetch)) > 3000) {
+                        // Só busca se não buscou nos últimos 2 segundos (evita spam, mas garante atualização mais frequente)
+                        if (!lastFetch || (now - parseInt(lastFetch)) > 2000) {
                             sessionStorage.setItem(lastFetchKey, now.toString());
                             
                             fetchChatMessages(apiConfig, chatId, 100).then(apiMessages => {
                                 if (apiMessages.length > 0) {
-                                    console.error(`[App] 🔄 Buscou ${apiMessages.length} mensagens da API para ${chatId}`);
+                                    console.log(`[App] 🔄 Buscou ${apiMessages.length} mensagens da API para ${chatId}`);
                                     setChats(currentChats => {
                                         return currentChats.map(c => {
                                             if (c.id === chatId || normalizeJid(c.id) === normalizeJid(chatId)) {
@@ -319,17 +319,20 @@ const App: React.FC = () => {
                                                 
                                                 if (newReceivedMessages.length > 0 && currentUser) {
                                                     const lastNewMsg = newReceivedMessages[newReceivedMessages.length - 1];
-                                                    if (c.assignedTo === currentUser.id) {
+                                                    // Notifica se estiver atribuído ao usuário atual ou se não estiver atribuído a ninguém (triagem)
+                                                    if (c.assignedTo === currentUser.id || !c.assignedTo) {
                                                         addNotification(
                                                             `Nova mensagem de ${c.contactName}`,
                                                             lastNewMsg.content.length > 50 ? lastNewMsg.content.substring(0, 50) + '...' : lastNewMsg.content,
-                                                            'info'
+                                                            'info',
+                                                            true, // Toca som
+                                                            true  // Mostra notificação do navegador
                                                         );
                                                     }
                                                 }
                                                 
                                                 if (uniqueMessages.length > c.messages.length) {
-                                                    console.error(`[App] ✅ Adicionadas ${uniqueMessages.length - c.messages.length} novas mensagens ao chat ${c.contactName}`);
+                                                    console.log(`[App] ✅ Adicionadas ${uniqueMessages.length - c.messages.length} novas mensagens ao chat ${c.contactName}`);
                                                 }
                                                 
                                                 // Lógica para processar mensagens de clientes finalizados
@@ -501,8 +504,8 @@ const App: React.FC = () => {
     // Primeira sincronização
     syncChats();
     
-    // Polling a cada 3 segundos para parecer tempo real
-    intervalIdRef.current = setInterval(syncChats, 3000);
+    // Polling a cada 2 segundos para atualização mais frequente e tempo real
+    intervalIdRef.current = setInterval(syncChats, 2000);
     
     // Inicializa WebSocket de forma assíncrona
     const initWebSocket = async (isReconnect: boolean = false) => {
@@ -686,12 +689,17 @@ const App: React.FC = () => {
                                                 }
                                                 
                                                 // Notifica se for mensagem recebida
-                                                if (mapped.sender === 'user' && currentUser && updatedChat.assignedTo === currentUser.id) {
-                                                    addNotification(
-                                                        `Nova mensagem de ${updatedChat.contactName}`,
-                                                        mapped.content && mapped.content.length > 50 ? mapped.content.substring(0, 50) + '...' : (mapped.content || 'Nova mensagem'),
-                                                        'info'
-                                                    );
+                                                if (mapped.sender === 'user' && currentUser) {
+                                                    // Notifica se estiver atribuído ao usuário atual ou se não estiver atribuído a ninguém (triagem)
+                                                    if (updatedChat.assignedTo === currentUser.id || !updatedChat.assignedTo) {
+                                                        addNotification(
+                                                            `Nova mensagem de ${updatedChat.contactName}`,
+                                                            mapped.content && mapped.content.length > 50 ? mapped.content.substring(0, 50) + '...' : (mapped.content || 'Nova mensagem'),
+                                                            'info',
+                                                            true, // Toca som
+                                                            true  // Mostra notificação do navegador
+                                                        );
+                                                    }
                                                 }
                                                 
                                                 return {
@@ -851,9 +859,81 @@ const App: React.FC = () => {
     });
   }, [contacts]); // Executa quando contatos mudam
 
-  const addNotification = (title: string, message: string, type: 'info' | 'warning' | 'success' = 'info') => {
+  // Solicita permissão para notificações do navegador
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(err => {
+        console.warn('[App] Erro ao solicitar permissão de notificações:', err);
+      });
+    }
+  }, []);
+
+  // Função para tocar som de notificação
+  const playNotificationSound = () => {
+    try {
+      // Cria um contexto de áudio simples usando Web Audio API
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = 800; // Frequência do som
+      oscillator.type = 'sine';
+      
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.3);
+    } catch (err) {
+      console.warn('[App] Erro ao tocar som de notificação:', err);
+    }
+  };
+
+  // Função para mostrar notificação do navegador
+  const showBrowserNotification = (title: string, message: string) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        const notification = new Notification(title, {
+          body: message,
+          icon: '/favicon.ico', // Você pode adicionar um ícone personalizado
+          badge: '/favicon.ico',
+          tag: 'zapflow-message', // Tag para agrupar notificações
+          requireInteraction: false
+        });
+        
+        // Fecha a notificação após 5 segundos
+        setTimeout(() => {
+          notification.close();
+        }, 5000);
+        
+        // Foca na janela quando clica na notificação
+        notification.onclick = () => {
+          window.focus();
+          notification.close();
+        };
+      } catch (err) {
+        console.warn('[App] Erro ao mostrar notificação do navegador:', err);
+      }
+    }
+  };
+
+  const addNotification = (title: string, message: string, type: 'info' | 'warning' | 'success' = 'info', playSound: boolean = false, showBrowser: boolean = false) => {
     const id = Date.now().toString();
     setNotifications(prev => [...prev, { id, title, message, type }]);
+    
+    // Toca som se solicitado (geralmente para novas mensagens)
+    if (playSound) {
+      playNotificationSound();
+    }
+    
+    // Mostra notificação do navegador se solicitado e se a página não está em foco
+    if (showBrowser && !document.hasFocus()) {
+      showBrowserNotification(title, message);
+    }
+    
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
     }, 5000);
