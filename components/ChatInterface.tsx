@@ -20,27 +20,58 @@ interface ChatInterfaceProps {
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, currentUser, onUpdateChat, apiConfig, quickReplies = [], workflows = [], contacts = [], forceSelectChatId }) => {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   
+  // Ref para rastrear o último forceSelectChatId processado
+  const lastForceSelectRef = useRef<string | null>(null);
+  
   // Força a seleção de um chat quando forceSelectChatId é fornecido
   useEffect(() => {
-    if (forceSelectChatId) {
+    if (forceSelectChatId && forceSelectChatId !== lastForceSelectRef.current) {
+      lastForceSelectRef.current = forceSelectChatId;
+      
       // Verifica se o chat existe na lista
       const chatExists = chats.some(c => c.id === forceSelectChatId);
       if (chatExists) {
+        console.log(`[ForceSelect] ✅ Selecionando chat: ${forceSelectChatId}`);
         setSelectedChatId(forceSelectChatId);
       } else {
         // Se o chat ainda não existe, tenta novamente após um pequeno delay
         // Isso é útil quando um novo chat é criado e ainda não está na lista
-        const timeoutId = setTimeout(() => {
+        console.log(`[ForceSelect] ⏳ Chat ${forceSelectChatId} não encontrado, tentando novamente em 200ms...`);
+        const timeoutId1 = setTimeout(() => {
           const chatExistsAfterDelay = chats.some(c => c.id === forceSelectChatId);
           if (chatExistsAfterDelay) {
+            console.log(`[ForceSelect] ✅ Chat ${forceSelectChatId} encontrado após delay, selecionando...`);
             setSelectedChatId(forceSelectChatId);
+          } else {
+            console.log(`[ForceSelect] ⚠️ Chat ${forceSelectChatId} ainda não encontrado, tentando novamente em 500ms...`);
+            // Tenta mais uma vez após um delay maior
+            const timeoutId2 = setTimeout(() => {
+              const chatExistsAfterLongDelay = chats.some(c => c.id === forceSelectChatId);
+              if (chatExistsAfterLongDelay) {
+                console.log(`[ForceSelect] ✅ Chat ${forceSelectChatId} encontrado após delay longo, selecionando...`);
+                setSelectedChatId(forceSelectChatId);
+              } else {
+                console.log(`[ForceSelect] ❌ Chat ${forceSelectChatId} não encontrado após múltiplas tentativas`);
+              }
+            }, 500);
+            
+            return () => clearTimeout(timeoutId2);
           }
         }, 200);
         
-        return () => clearTimeout(timeoutId);
+        return () => clearTimeout(timeoutId1);
       }
     }
   }, [forceSelectChatId, chats]);
+  
+  // Garante que o chat selecionado não seja deselecionado quando a lista de chats é atualizada
+  useEffect(() => {
+    if (selectedChatId && !chats.some(c => c.id === selectedChatId)) {
+      // Se o chat selecionado não existe mais na lista, não faz nada
+      // (não deseleciona, pois pode ser que o chat ainda esteja sendo carregado)
+      console.log(`[ChatInterface] ⚠️ Chat selecionado ${selectedChatId} não encontrado na lista, mantendo seleção`);
+    }
+  }, [chats, selectedChatId]);
   
   // Helper function para extrair número válido do chat
   const getValidPhoneNumber = (chat: Chat): string => {
