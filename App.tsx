@@ -1125,6 +1125,12 @@ const App: React.FC = () => {
   const handleStartChatFromContact = (contact: Contact) => {
     const contactNumber = contact.phone.replace(/\D/g, '');
     
+    if (!contactNumber || contactNumber.length < 8) {
+      console.error('[handleStartChatFromContact] Número de telefone inválido:', contact.phone);
+      alert('Número de telefone inválido. Por favor, verifique o contato.');
+      return;
+    }
+    
     // Verifica se já existe chat com esse número
     const existingChat = chats.find(c => {
       const chatNumber = c.contactNumber.replace(/\D/g, '');
@@ -1137,6 +1143,7 @@ const App: React.FC = () => {
     
     if (existingChat) {
       // Se já existe, atualiza o chat com informações do contato e muda para a view de chat
+      console.log(`[handleStartChatFromContact] Chat existente encontrado: ${existingChat.id}`);
       handleUpdateChat({
         ...existingChat,
         contactName: contact.name,
@@ -1160,13 +1167,29 @@ const App: React.FC = () => {
         assignedTo: currentUser?.id || undefined // Garante que seja atribuído ao usuário atual se disponível
       };
       
-      handleUpdateChat(newChat);
+      console.log(`[handleStartChatFromContact] Criando novo chat: ${chatId} para contato ${contact.name} (${contactNumber})`);
+      
+      // Adiciona o chat diretamente à lista usando setChats para garantir que seja adicionado imediatamente
+      setChats(currentChats => {
+        // Verifica se o chat já não foi adicionado (evita duplicatas)
+        const alreadyExists = currentChats.some(c => c.id === chatId);
+        if (alreadyExists) {
+          console.log(`[handleStartChatFromContact] Chat ${chatId} já existe na lista, atualizando...`);
+          return currentChats.map(c => c.id === chatId ? newChat : c);
+        } else {
+          console.log(`[handleStartChatFromContact] Adicionando novo chat ${chatId} à lista`);
+          return [newChat, ...currentChats];
+        }
+      });
+      
       chatIdToSelect = chatId;
     }
     
     // Muda para a view de chat e força a seleção do chat
     setCurrentView('chat');
     setForceSelectChatId(chatIdToSelect);
+    
+    console.log(`[handleStartChatFromContact] Forçando seleção do chat: ${chatIdToSelect}`);
     
     // Limpa o forceSelectChatId após um delay maior para garantir que o chat seja selecionado
     // mesmo se houver atualizações na lista de chats
