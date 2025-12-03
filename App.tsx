@@ -16,13 +16,23 @@ import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashb
 import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance } from './services/whatsappService'; 
 
 const loadConfig = (): ApiConfig => {
-  const saved = localStorage.getItem('zapflow_config');
-  if (saved) return JSON.parse(saved);
+  try {
+    const saved = localStorage.getItem('zapflow_config');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      console.log('[App] ✅ Configurações carregadas do localStorage:', parsed);
+      return parsed;
+    }
+  } catch (e) {
+    console.error('[App] ❌ Erro ao carregar configurações do localStorage:', e);
+  }
+  console.log('[App] Usando configurações padrão');
   return {
     baseUrl: '', 
     apiKey: '',
     instanceName: 'zapflow',
-    isDemo: false 
+    isDemo: false,
+    googleClientId: ''
   };
 };
 
@@ -1068,7 +1078,17 @@ const App: React.FC = () => {
     setChats(chats.map(c => c.departmentId === id ? { ...c, departmentId: null } : c));
   };
 
-  const handleSaveConfig = (newConfig: ApiConfig) => setApiConfig(newConfig);
+  const handleSaveConfig = (newConfig: ApiConfig) => {
+    console.log('[App] Salvando configurações:', newConfig);
+    setApiConfig(newConfig);
+    // Salva imediatamente no localStorage (além do useEffect)
+    try {
+      localStorage.setItem('zapflow_config', JSON.stringify(newConfig));
+      console.log('[App] ✅ Configurações salvas no localStorage');
+    } catch (e) {
+      console.error('[App] ❌ Erro ao salvar configurações no localStorage:', e);
+    }
+  };
 
   const handleAddUser = (user: User) => setUsers(prevUsers => [...prevUsers, user]);
   const handleUpdateUser = (updatedUser: User) => setUsers(prevUsers => prevUsers.map(u => u.id === updatedUser.id ? updatedUser : u));

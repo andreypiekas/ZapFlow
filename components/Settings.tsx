@@ -13,6 +13,11 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
   const [showSuccess, setShowSuccess] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
 
+  // Sincroniza formData quando config muda (importante para carregar dados salvos)
+  useEffect(() => {
+    setFormData(config);
+  }, [config]);
+
   useEffect(() => {
     if ('Notification' in window) {
       setNotificationPermission(Notification.permission);
