@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ApiConfig } from '../types';
-import { Save, Server, Shield, Globe, User } from 'lucide-react';
+import { Save, Server, Shield, Globe, User, Bell } from 'lucide-react';
 
 interface SettingsProps {
   config: ApiConfig;
@@ -11,6 +11,25 @@ interface SettingsProps {
 const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
   const [formData, setFormData] = useState<ApiConfig>(config);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
+
+  useEffect(() => {
+    if ('Notification' in window) {
+      setNotificationPermission(Notification.permission);
+    }
+  }, []);
+
+  const handleRequestNotificationPermission = () => {
+    if ('Notification' in window) {
+      Notification.requestPermission().then(permission => {
+        setNotificationPermission(permission);
+        if (permission === 'granted') {
+          setShowSuccess(true);
+          setTimeout(() => setShowSuccess(false), 3000);
+        }
+      });
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,6 +141,36 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
                   </div>
               </div>
 
+            </div>
+          </div>
+
+          {/* Notificações do Navegador */}
+          <div className="pt-6 border-t border-slate-200">
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">Notificações</h3>
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Bell className="text-slate-600" size={20} />
+                  <div>
+                    <h4 className="font-semibold text-slate-800 text-sm">Notificações do Navegador</h4>
+                    <p className="text-slate-600 text-xs mt-1">
+                      {notificationPermission === 'granted' && '✅ Notificações ativadas - Você receberá alertas quando novas mensagens chegarem.'}
+                      {notificationPermission === 'denied' && '❌ Notificações bloqueadas - Desbloqueie nas configurações do navegador.'}
+                      {notificationPermission === 'default' && 'Permita notificações para receber alertas de novas mensagens mesmo quando a página não estiver em foco.'}
+                    </p>
+                  </div>
+                </div>
+                {notificationPermission !== 'granted' && (
+                  <button
+                    type="button"
+                    onClick={handleRequestNotificationPermission}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors flex items-center gap-2 text-sm"
+                  >
+                    <Bell size={16} />
+                    {notificationPermission === 'denied' ? 'Ver Configurações' : 'Ativar Notificações'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
