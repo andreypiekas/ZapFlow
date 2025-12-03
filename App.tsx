@@ -1157,7 +1157,7 @@ const App: React.FC = () => {
         lastMessageTime: new Date(),
         status: 'open',
         messages: [],
-        assignedTo: currentUser?.id
+        assignedTo: currentUser?.id || undefined // Garante que seja atribuído ao usuário atual se disponível
       };
       
       handleUpdateChat(newChat);
