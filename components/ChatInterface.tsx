@@ -298,6 +298,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Atualiza o chat selecionado quando o array de chats é atualizado
+  useEffect(() => {
+    if (selectedChatId) {
+      const updatedChat = chats.find(c => c.id === selectedChatId);
+      if (updatedChat && updatedChat.messages.length !== selectedChat?.messages.length) {
+        // Chat foi atualizado com novas mensagens - força re-render
+        // O selectedChat já é derivado, então isso deve funcionar automaticamente
+        // Mas garantimos que o scroll aconteça
+        setTimeout(() => scrollToBottom(), 100);
+      }
+    }
+  }, [chats, selectedChatId]);
+
   useEffect(() => {
     scrollToBottom();
   }, [selectedChat?.messages, messageSearchTerm]);
