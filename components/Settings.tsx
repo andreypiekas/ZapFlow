@@ -1,14 +1,16 @@
 
 import React, { useState, useEffect } from 'react';
-import { ApiConfig } from '../types';
-import { Save, Server, Shield, Globe, User, Bell } from 'lucide-react';
+import { ApiConfig, User, UserRole } from '../types';
+import { Save, Server, Shield, Globe, User as UserIcon, Bell, Lock } from 'lucide-react';
 
 interface SettingsProps {
   config: ApiConfig;
   onSave: (config: ApiConfig) => void;
+  currentUser?: User | null;
 }
 
-const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
+const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
+  const isAdmin = currentUser?.role === UserRole.ADMIN;
   const [formData, setFormData] = useState<ApiConfig>(config);
   const [showSuccess, setShowSuccess] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
@@ -47,11 +49,17 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
     <div className="max-w-4xl mx-auto py-8">
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-6 border-b border-slate-200">
-          <h2 className="text-xl font-bold text-slate-800">Configurações de Integração</h2>
-          <p className="text-slate-500 text-sm mt-1">Configure a conexão com sua instância do WhatsApp e integrações externas.</p>
+          <h2 className="text-xl font-bold text-slate-800">Configurações</h2>
+          <p className="text-slate-500 text-sm mt-1">
+            {isAdmin 
+              ? 'Configure a conexão com sua instância do WhatsApp e integrações externas.'
+              : 'Gerencie suas preferências de notificações.'}
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-8">
+        {/* Configurações do Sistema - Apenas para Admin */}
+        {isAdmin && (
+          <form onSubmit={handleSubmit} className="p-8 space-y-8">
           
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
              <Server className="text-blue-600 mt-1 flex-shrink-0" size={20} />
@@ -131,7 +139,7 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
                   
                   <div className="col-span-1 md:col-span-2">
                     <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
-                      <User size={16} /> Google Client ID (OAuth 2.0)
+                      <UserIcon size={16} /> Google Client ID (OAuth 2.0)
                     </label>
                     <input 
                       type="text" 
@@ -149,48 +157,94 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave }) => {
             </div>
           </div>
 
-          {/* Notificações do Navegador */}
-          <div className="pt-6 border-t border-slate-200">
-            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">Notificações</h3>
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Bell className="text-slate-600" size={20} />
-                  <div>
-                    <h4 className="font-semibold text-slate-800 text-sm">Notificações do Navegador</h4>
-                    <p className="text-slate-600 text-xs mt-1">
-                      {notificationPermission === 'granted' && '✅ Notificações ativadas - Você receberá alertas quando novas mensagens chegarem.'}
-                      {notificationPermission === 'denied' && '❌ Notificações bloqueadas - Desbloqueie nas configurações do navegador.'}
-                      {notificationPermission === 'default' && 'Permita notificações para receber alertas de novas mensagens mesmo quando a página não estiver em foco.'}
-                    </p>
+            {/* Notificações do Navegador */}
+            <div className="pt-6 border-t border-slate-200">
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">Notificações</h3>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Bell className="text-slate-600" size={20} />
+                    <div>
+                      <h4 className="font-semibold text-slate-800 text-sm">Notificações do Navegador</h4>
+                      <p className="text-slate-600 text-xs mt-1">
+                        {notificationPermission === 'granted' && '✅ Notificações ativadas - Você receberá alertas quando novas mensagens chegarem.'}
+                        {notificationPermission === 'denied' && '❌ Notificações bloqueadas - Desbloqueie nas configurações do navegador.'}
+                        {notificationPermission === 'default' && 'Permita notificações para receber alertas de novas mensagens mesmo quando a página não estiver em foco.'}
+                      </p>
+                    </div>
                   </div>
+                  {notificationPermission !== 'granted' && (
+                    <button
+                      type="button"
+                      onClick={handleRequestNotificationPermission}
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors flex items-center gap-2 text-sm"
+                    >
+                      <Bell size={16} />
+                      {notificationPermission === 'denied' ? 'Ver Configurações' : 'Ativar Notificações'}
+                    </button>
+                  )}
                 </div>
-                {notificationPermission !== 'granted' && (
-                  <button
-                    type="button"
-                    onClick={handleRequestNotificationPermission}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors flex items-center gap-2 text-sm"
-                  >
-                    <Bell size={16} />
-                    {notificationPermission === 'denied' ? 'Ver Configurações' : 'Ativar Notificações'}
-                  </button>
-                )}
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-slate-100 flex items-center justify-between">
+              {showSuccess && <span className="text-emerald-600 text-sm font-medium animate-pulse">Configurações salvas com sucesso!</span>}
+              <button 
+                type="submit"
+                className="ml-auto bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-6 rounded-md transition-colors flex items-center gap-2"
+              >
+                <Save size={18} />
+                Salvar Alterações
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Apenas Notificações para Não-Admin */}
+        {!isAdmin && (
+          <div className="p-8 space-y-8">
+            {/* Mensagem de Acesso Restrito */}
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+              <Lock className="text-amber-600 mt-1 flex-shrink-0" size={20} />
+              <div>
+                <h4 className="font-semibold text-amber-800 text-sm">Acesso Restrito</h4>
+                <p className="text-amber-700 text-xs mt-1 leading-relaxed">
+                  Apenas administradores podem alterar as configurações do sistema. Você pode gerenciar suas preferências de notificações abaixo.
+                </p>
+              </div>
+            </div>
+
+            {/* Notificações do Navegador */}
+            <div className="pt-6 border-t border-slate-200">
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">Notificações</h3>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Bell className="text-slate-600" size={20} />
+                    <div>
+                      <h4 className="font-semibold text-slate-800 text-sm">Notificações do Navegador</h4>
+                      <p className="text-slate-600 text-xs mt-1">
+                        {notificationPermission === 'granted' && '✅ Notificações ativadas - Você receberá alertas quando novas mensagens chegarem.'}
+                        {notificationPermission === 'denied' && '❌ Notificações bloqueadas - Desbloqueie nas configurações do navegador.'}
+                        {notificationPermission === 'default' && 'Permita notificações para receber alertas de novas mensagens mesmo quando a página não estiver em foco.'}
+                      </p>
+                    </div>
+                  </div>
+                  {notificationPermission !== 'granted' && (
+                    <button
+                      type="button"
+                      onClick={handleRequestNotificationPermission}
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors flex items-center gap-2 text-sm"
+                    >
+                      <Bell size={16} />
+                      {notificationPermission === 'denied' ? 'Ver Configurações' : 'Ativar Notificações'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-
-          <div className="pt-6 border-t border-slate-100 flex items-center justify-between">
-            {showSuccess && <span className="text-emerald-600 text-sm font-medium animate-pulse">Configurações salvas com sucesso!</span>}
-            <button 
-              type="submit"
-              className="ml-auto bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-6 rounded-md transition-colors flex items-center gap-2"
-            >
-              <Save size={18} />
-              Salvar Alterações
-            </button>
-          </div>
-
-        </form>
+        )}
       </div>
     </div>
   );
