@@ -1168,10 +1168,11 @@ const App: React.FC = () => {
     setCurrentView('chat');
     setForceSelectChatId(chatIdToSelect);
     
-    // Limpa o forceSelectChatId após um pequeno delay para permitir que o useEffect no ChatInterface processe
+    // Limpa o forceSelectChatId após um delay maior para garantir que o chat seja selecionado
+    // mesmo se houver atualizações na lista de chats
     setTimeout(() => {
       setForceSelectChatId(null);
-    }, 100);
+    }, 500);
   };
 
   // Função para atualizar chats com informações de contatos (preservando clientCode)

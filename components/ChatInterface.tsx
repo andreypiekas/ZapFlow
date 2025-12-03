@@ -22,8 +22,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   
   // Força a seleção de um chat quando forceSelectChatId é fornecido
   useEffect(() => {
-    if (forceSelectChatId && chats.some(c => c.id === forceSelectChatId)) {
-      setSelectedChatId(forceSelectChatId);
+    if (forceSelectChatId) {
+      // Verifica se o chat existe na lista
+      const chatExists = chats.some(c => c.id === forceSelectChatId);
+      if (chatExists) {
+        setSelectedChatId(forceSelectChatId);
+      } else {
+        // Se o chat ainda não existe, tenta novamente após um pequeno delay
+        // Isso é útil quando um novo chat é criado e ainda não está na lista
+        const timeoutId = setTimeout(() => {
+          const chatExistsAfterDelay = chats.some(c => c.id === forceSelectChatId);
+          if (chatExistsAfterDelay) {
+            setSelectedChatId(forceSelectChatId);
+          }
+        }, 200);
+        
+        return () => clearTimeout(timeoutId);
+      }
     }
   }, [forceSelectChatId, chats]);
   
