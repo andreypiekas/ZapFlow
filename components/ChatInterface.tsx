@@ -263,33 +263,47 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const isLID = selectedChat?.id?.includes('@lid');
   const isGroup = selectedChat?.id?.includes('@g.us');
   
+  // Ref para rastrear o último selectedChatId processado neste useEffect
+  const lastProcessedChatIdRef = useRef<string | null>(null);
+  
   // Sync editing state with selected chat
   // Usa apenas selectedChatId como dependência para evitar resetar o modo de edição
   // quando o objeto chat é atualizado (ex: após salvar alterações)
   useEffect(() => {
-    if (selectedChat) {
-      // Reseta o modo de edição apenas quando um chat diferente é selecionado
-      setIsEditingContact(false);
+    // Só processa se o selectedChatId mudou (não apenas quando o objeto chat é atualizado)
+    if (selectedChatId && selectedChatId !== lastProcessedChatIdRef.current) {
+      lastProcessedChatIdRef.current = selectedChatId;
       
-      // Atualiza os valores de edição com os dados do chat selecionado
-      setEditContactName(selectedChat.contactName);
-      setEditClientCode(selectedChat.clientCode || '');
-      
-      setShowOptionsMenu(false); 
-      setMessageSearchTerm('');
-      setShowSearch(false);
-      
-      // Zera a contagem de mensagens não lidas quando o chat é selecionado/visualizado
-      if (selectedChat.unreadCount > 0) {
-        const updatedChat = {
-          ...selectedChat,
-          unreadCount: 0
-        };
-        onUpdateChat(updatedChat);
-        console.log(`[ChatInterface] ✅ Contagem de mensagens não lidas zerada para chat ${selectedChat.contactName}`);
+      if (selectedChat) {
+        // Reseta o modo de edição apenas quando um chat diferente é selecionado
+        setIsEditingContact(false);
+        
+        // Atualiza os valores de edição com os dados do chat selecionado
+        setEditContactName(selectedChat.contactName);
+        setEditClientCode(selectedChat.clientCode || '');
+        
+        setShowOptionsMenu(false); 
+        setMessageSearchTerm('');
+        setShowSearch(false);
+        
+        // Zera a contagem de mensagens não lidas quando o chat é selecionado/visualizado
+        if (selectedChat.unreadCount > 0) {
+          const updatedChat = {
+            ...selectedChat,
+            unreadCount: 0
+          };
+          onUpdateChat(updatedChat);
+          console.log(`[ChatInterface] ✅ Contagem de mensagens não lidas zerada para chat ${selectedChat.contactName}`);
+        }
+      } else {
+        // Se o chat não foi encontrado, não faz nada (pode estar sendo carregado)
+        console.log(`[ChatInterface] ⚠️ Chat ${selectedChatId} não encontrado, aguardando...`);
       }
+    } else if (!selectedChatId) {
+      // Se selectedChatId foi limpo, reseta o ref
+      lastProcessedChatIdRef.current = null;
     }
-  }, [selectedChatId]); // Usa apenas selectedChatId para evitar resetar quando o objeto chat é atualizado
+  }, [selectedChatId, selectedChat]); // Inclui selectedChat para detectar quando o objeto é atualizado
 
   // Logic: Filter by Tab AND Search + SORTING
   const filteredChats = chats
