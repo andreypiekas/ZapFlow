@@ -14,10 +14,18 @@ interface ChatInterfaceProps {
   quickReplies?: QuickReply[];
   workflows?: Workflow[];
   contacts?: Contact[];
+  forceSelectChatId?: string | null; // Força a seleção de um chat específico
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, currentUser, onUpdateChat, apiConfig, quickReplies = [], workflows = [], contacts = [] }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, currentUser, onUpdateChat, apiConfig, quickReplies = [], workflows = [], contacts = [], forceSelectChatId }) => {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  
+  // Força a seleção de um chat quando forceSelectChatId é fornecido
+  useEffect(() => {
+    if (forceSelectChatId && chats.some(c => c.id === forceSelectChatId)) {
+      setSelectedChatId(forceSelectChatId);
+    }
+  }, [forceSelectChatId, chats]);
   
   // Helper function para extrair número válido do chat
   const getValidPhoneNumber = (chat: Chat): string => {

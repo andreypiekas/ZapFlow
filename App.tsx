@@ -117,6 +117,7 @@ const App: React.FC = () => {
   const [contacts, setContacts] = useState<Contact[]>(loadContactsFromStorage());
   const [chatbotConfig, setChatbotConfig] = useState<ChatbotConfig>(INITIAL_CHATBOT_CONFIG);
   const [apiConfig, setApiConfig] = useState<ApiConfig>(loadConfig());
+  const [forceSelectChatId, setForceSelectChatId] = useState<string | null>(null);
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
@@ -1132,6 +1133,8 @@ const App: React.FC = () => {
               chatNumber.slice(-8) === contactNumber.slice(-8));
     });
     
+    let chatIdToSelect: string;
+    
     if (existingChat) {
       // Se já existe, atualiza o chat com informações do contato e muda para a view de chat
       handleUpdateChat({
@@ -1139,6 +1142,7 @@ const App: React.FC = () => {
         contactName: contact.name,
         contactAvatar: contact.avatar || existingChat.contactAvatar
       });
+      chatIdToSelect = existingChat.id;
     } else {
       // Cria novo chat
       const chatId = contactNumber.includes('@') ? contactNumber : `${contactNumber}@s.whatsapp.net`;
@@ -1157,10 +1161,17 @@ const App: React.FC = () => {
       };
       
       handleUpdateChat(newChat);
+      chatIdToSelect = chatId;
     }
     
-    // Muda para a view de chat
+    // Muda para a view de chat e força a seleção do chat
     setCurrentView('chat');
+    setForceSelectChatId(chatIdToSelect);
+    
+    // Limpa o forceSelectChatId após um pequeno delay para permitir que o useEffect no ChatInterface processe
+    setTimeout(() => {
+      setForceSelectChatId(null);
+    }, 100);
   };
 
   // Função para atualizar chats com informações de contatos (preservando clientCode)
@@ -1345,7 +1356,7 @@ const App: React.FC = () => {
           </div>
         );
       case 'chat':
-        return <div className="h-full md:p-4"><ChatInterface chats={filteredChats} departments={departments} currentUser={currentUser} onUpdateChat={handleUpdateChat} apiConfig={apiConfig} quickReplies={quickReplies} workflows={workflows} contacts={contacts} /></div>;
+        return <div className="h-full md:p-4"><ChatInterface chats={filteredChats} departments={departments} currentUser={currentUser} onUpdateChat={handleUpdateChat} apiConfig={apiConfig} quickReplies={quickReplies} workflows={workflows} contacts={contacts} forceSelectChatId={forceSelectChatId} /></div>;
       case 'reports': return <ReportsDashboard chats={chats} departments={departments} />;
       case 'contacts': return <Contacts contacts={contacts} onSyncGoogle={handleSyncGoogleContacts} onImportCSV={handleImportCSVContacts} onAddContact={handleAddContact} onStartChat={handleStartChatFromContact} clientId={apiConfig.googleClientId} />;
       case 'chatbot': return <ChatbotSettings config={chatbotConfig} onSave={handleUpdateChatbotConfig} />;
