@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Contact } from '../types';
-import { RefreshCw, Search, Mail, User as UserIcon, Check, Loader2, AlertTriangle, Upload, FileText } from 'lucide-react';
+import { RefreshCw, Search, Mail, User as UserIcon, Check, Loader2, AlertTriangle, Upload, FileText, Plus, MessageSquare } from 'lucide-react';
 
 // Declare Google Global
 declare const google: any;
@@ -9,14 +9,20 @@ interface ContactsProps {
   contacts: Contact[];
   onSyncGoogle: (contacts?: Contact[]) => Promise<void>;
   onImportCSV: (contacts: Contact[]) => Promise<void>;
+  onAddContact: (contact: Contact) => void;
+  onStartChat: (contact: Contact) => void;
   clientId?: string;
 }
 
-const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, onImportCSV, clientId }) => {
+const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, onImportCSV, onAddContact, onStartChat, clientId }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newContactName, setNewContactName] = useState('');
+  const [newContactPhone, setNewContactPhone] = useState('');
+  const [newContactEmail, setNewContactEmail] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSync = async () => {
@@ -253,8 +259,37 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, onImportCSV
     }
   };
 
+  const handleAddNewContact = () => {
+    if (!newContactName.trim() || !newContactPhone.trim()) {
+      setError('Nome e telefone são obrigatórios.');
+      return;
+    }
+
+    const phoneDigits = newContactPhone.replace(/\D/g, '');
+    if (phoneDigits.length < 10) {
+      setError('Telefone inválido. Digite DDD + Número (ex: 11999999999).');
+      return;
+    }
+
+    const newContact: Contact = {
+      id: `manual_${Date.now()}_${Math.random()}`,
+      name: newContactName.trim(),
+      phone: newContactPhone.trim(),
+      email: newContactEmail.trim() || undefined,
+      source: 'manual',
+      lastSync: new Date()
+    };
+
+    onAddContact(newContact);
+    setIsAddModalOpen(false);
+    setNewContactName('');
+    setNewContactPhone('');
+    setNewContactEmail('');
+    setError(null);
+  };
+
   const filteredContacts = contacts.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.phone.includes(searchTerm) ||
     c.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -271,6 +306,13 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, onImportCSV
         
         <div className="flex flex-col items-end gap-2">
             <div className="flex gap-2">
+                <button
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="bg-slate-600 hover:bg-slate-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 transition-colors shadow-sm font-medium"
+                >
+                  <Plus size={20} />
+                  Adicionar Contato
+                </button>
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -334,6 +376,7 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, onImportCSV
                 <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Email</th>
                 <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Origem</th>
                 <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Última Sync</th>
+                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -384,11 +427,21 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, onImportCSV
                   <td className="px-6 py-4 text-xs text-slate-500">
                       {contact.lastSync ? new Date(contact.lastSync).toLocaleString() : '-'}
                   </td>
+                  <td className="px-6 py-4">
+                    <button
+                      onClick={() => onStartChat(contact)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md flex items-center gap-1.5 text-xs font-medium transition-colors"
+                      title="Iniciar chat com este contato"
+                    >
+                      <MessageSquare size={14} />
+                      Chat
+                    </button>
+                  </td>
                 </tr>
               )})}
               {filteredContacts.length === 0 && (
                   <tr>
-                      <td colSpan={5} className="text-center py-8 text-slate-400">
+                      <td colSpan={6} className="text-center py-8 text-slate-400">
                           Nenhum contato encontrado.
                       </td>
                   </tr>
@@ -397,6 +450,78 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, onImportCSV
           </table>
         </div>
       </div>
+
+      {/* Modal para Adicionar Contato */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-slate-800 mb-4">Adicionar Novo Contato</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Nome <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newContactName}
+                  onChange={(e) => setNewContactName(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                  placeholder="Nome completo"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Telefone <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newContactPhone}
+                  onChange={(e) => setNewContactPhone(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                  placeholder="11999999999"
+                />
+                <p className="text-xs text-slate-400 mt-1">Digite DDD + Número (ex: 11999999999)</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Email (opcional)
+                </label>
+                <input
+                  type="email"
+                  value={newContactEmail}
+                  onChange={(e) => setNewContactEmail(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                  placeholder="email@exemplo.com"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setIsAddModalOpen(false);
+                  setNewContactName('');
+                  setNewContactPhone('');
+                  setNewContactEmail('');
+                  setError(null);
+                }}
+                className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleAddNewContact}
+                className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors"
+              >
+                Adicionar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1102,6 +1102,67 @@ const App: React.FC = () => {
   const handleUpdateWorkflow = (updatedWf: Workflow) => setWorkflows(workflows.map(w => w.id === updatedWf.id ? updatedWf : w));
   const handleDeleteWorkflow = (id: string) => setWorkflows(workflows.filter(w => w.id !== id));
 
+  // Adiciona novo contato manualmente
+  const handleAddContact = (contact: Contact) => {
+    setContacts(currentContacts => {
+      // Verifica se já existe contato com o mesmo telefone
+      const existingIndex = currentContacts.findIndex(c => 
+        normalizePhoneForMatch(c.phone) === normalizePhoneForMatch(contact.phone)
+      );
+      if (existingIndex >= 0) {
+        // Atualiza contato existente
+        const updated = [...currentContacts];
+        updated[existingIndex] = { ...contact, source: 'manual' as const };
+        return updated;
+      }
+      // Adiciona novo contato
+      return [...currentContacts, { ...contact, source: 'manual' as const }];
+    });
+  };
+
+  // Inicia chat a partir de um contato
+  const handleStartChatFromContact = (contact: Contact) => {
+    const contactNumber = contact.phone.replace(/\D/g, '');
+    
+    // Verifica se já existe chat com esse número
+    const existingChat = chats.find(c => {
+      const chatNumber = c.contactNumber.replace(/\D/g, '');
+      return chatNumber === contactNumber || 
+             (chatNumber.length >= 8 && contactNumber.length >= 8 && 
+              chatNumber.slice(-8) === contactNumber.slice(-8));
+    });
+    
+    if (existingChat) {
+      // Se já existe, atualiza o chat com informações do contato e muda para a view de chat
+      handleUpdateChat({
+        ...existingChat,
+        contactName: contact.name,
+        contactAvatar: contact.avatar || existingChat.contactAvatar
+      });
+    } else {
+      // Cria novo chat
+      const chatId = contactNumber.includes('@') ? contactNumber : `${contactNumber}@s.whatsapp.net`;
+      const newChat: Chat = {
+        id: chatId,
+        contactName: contact.name,
+        contactNumber: contactNumber,
+        contactAvatar: contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}`,
+        departmentId: null,
+        unreadCount: 0,
+        lastMessage: '',
+        lastMessageTime: new Date(),
+        status: 'open',
+        messages: [],
+        assignedTo: currentUser?.id
+      };
+      
+      handleUpdateChat(newChat);
+    }
+    
+    // Muda para a view de chat
+    setCurrentView('chat');
+  };
+
   // Função para atualizar chats com informações de contatos (preservando clientCode)
   const updateChatsWithContacts = (contactList: Contact[]) => {
     setChats(currentChats => {
@@ -1233,7 +1294,8 @@ const App: React.FC = () => {
   const canAccess = (view: ViewState): boolean => {
     if (!currentUser) return false;
     if (currentUser.role === UserRole.ADMIN) return true;
-    if (['settings', 'users', 'connections', 'departments', 'reports', 'workflows', 'contacts', 'chatbot'].includes(view)) return false;
+    // Contatos agora está disponível para todos
+    if (['settings', 'users', 'connections', 'departments', 'reports', 'workflows', 'chatbot'].includes(view)) return false;
     return true;
   };
 
