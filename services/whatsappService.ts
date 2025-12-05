@@ -1455,7 +1455,30 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
             }
         }
         
-        const sortedMessages = messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+        const sortedMessages = messages.sort((a, b) => {
+            const timeA = a.timestamp?.getTime() || 0;
+            const timeB = b.timestamp?.getTime() || 0;
+            const timeDiff = timeA - timeB;
+            const absTimeDiff = Math.abs(timeDiff);
+            
+            // Se timestamps são muito próximos (< 10 segundos) e senders diferentes
+            // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
+            // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
+            // independentemente de pequenas diferenças de sincronização de relógio
+            if (absTimeDiff < 10000 && a.sender !== b.sender) {
+                // Agente sempre vem antes do usuário quando timestamps estão próximos
+                if (a.sender === 'agent' && b.sender === 'user') {
+                    return -1; // Agente antes
+                }
+                // Usuário sempre vem depois do agente quando timestamps estão próximos
+                if (a.sender === 'user' && b.sender === 'agent') {
+                    return 1; // Usuário depois
+                }
+            }
+            
+            // Para diferenças maiores ou quando não se aplica a lógica especial, usa timestamp real
+            return timeDiff;
+        });
         // Log apenas se não encontrou mensagens (para não poluir quando funciona)
         if (sortedMessages.length === 0) {
             console.warn(`[fetchChatMessages] ⚠️ Nenhuma mensagem encontrada para ${chatId}`);
