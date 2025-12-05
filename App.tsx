@@ -358,16 +358,27 @@ const App: React.FC = () => {
                                                     }
                                                 });
                                                 
-                                                // Ordena por timestamp
+                                                // Ordena por timestamp, priorizando mensagens do agente quando timestamps são próximos
                                                 const uniqueMessages = Array.from(messageMap.values())
                                                     .sort((a, b) => {
                                                         const timeA = a.timestamp?.getTime() || 0;
                                                         const timeB = b.timestamp?.getTime() || 0;
-                                                        // Se timestamps são muito próximos (menos de 1 segundo), mantém ordem de inserção
-                                                        if (Math.abs(timeA - timeB) < 1000) {
-                                                            return 0;
+                                                        const timeDiff = timeA - timeB;
+                                                        
+                                                        // Se timestamps são muito próximos (menos de 3 segundos), usa lógica especial
+                                                        if (Math.abs(timeDiff) < 3000) {
+                                                            // Se uma é do agente (enviada) e outra do usuário (recebida), agente fica depois
+                                                            if (a.sender === 'agent' && b.sender === 'user') {
+                                                                return 1; // Agente depois (mais recente)
+                                                            }
+                                                            if (a.sender === 'user' && b.sender === 'agent') {
+                                                                return -1; // Usuário antes
+                                                            }
+                                                            // Se são do mesmo sender, mantém ordem de timestamp
+                                                            return timeDiff;
                                                         }
-                                                        return timeA - timeB;
+                                                        
+                                                        return timeDiff;
                                                     });
                                                 
                                                 // Detecta se há novas mensagens recebidas
@@ -493,9 +504,18 @@ const App: React.FC = () => {
                             const timeB = b.timestamp?.getTime() || 0;
                             const timeDiff = timeA - timeB;
                             
-                            // Se a diferença for menor que 2 segundos, usa ordem de inserção
+                            // Se a diferença for menor que 3 segundos, usa lógica especial
                             // Isso evita que mensagens recebidas apareçam antes de mensagens enviadas recentemente
-                            if (Math.abs(timeDiff) < 2000) {
+                            if (Math.abs(timeDiff) < 3000) {
+                                // Se uma é do agente (enviada) e outra do usuário (recebida), agente fica depois
+                                if (a.sender === 'agent' && b.sender === 'user') {
+                                    return 1; // Agente depois (mais recente)
+                                }
+                                if (a.sender === 'user' && b.sender === 'agent') {
+                                    return -1; // Usuário antes
+                                }
+                                
+                                // Se são do mesmo sender, usa ordem de inserção
                                 const keyA = a.id || `${timeA}_${a.content?.substring(0, 20)}`;
                                 const keyB = b.id || `${timeB}_${b.content?.substring(0, 20)}`;
                                 const orderA = messageOrder.get(keyA) ?? 999999;
@@ -1185,7 +1205,68 @@ const App: React.FC = () => {
                 }
             }
         }
-        setChats(chats.map(c => c.id === updatedChat.id ? updatedChat : c));
+        
+        // Faz merge inteligente: preserva mensagens locais recentes e ordena corretamente
+        setChats(chats.map(c => {
+            if (c.id === updatedChat.id) {
+                // Se o chat atualizado tem mensagens, faz merge preservando ordem
+                if (updatedChat.messages.length > 0 && c.messages.length > 0) {
+                    const messageMap = new Map<string, Message>();
+                    
+                    // Adiciona mensagens existentes primeiro
+                    c.messages.forEach(msg => {
+                        const key = msg.id || `${msg.timestamp?.getTime()}_${msg.content?.substring(0, 50)}`;
+                        messageMap.set(key, msg);
+                    });
+                    
+                    // Adiciona/atualiza com mensagens novas (prioriza novas se forem mais recentes)
+                    updatedChat.messages.forEach(msg => {
+                        const key = msg.id || `${msg.timestamp?.getTime()}_${msg.content?.substring(0, 50)}`;
+                        const existing = messageMap.get(key);
+                        
+                        if (!existing) {
+                            // Nova mensagem, adiciona
+                            messageMap.set(key, msg);
+                        } else if (msg.timestamp && existing.timestamp) {
+                            // Se a nova for mais recente, substitui
+                            if (msg.timestamp.getTime() > existing.timestamp.getTime()) {
+                                messageMap.set(key, msg);
+                            }
+                        }
+                    });
+                    
+                    // Ordena por timestamp, priorizando mensagens do agente quando timestamps são próximos
+                    const mergedMessages = Array.from(messageMap.values()).sort((a, b) => {
+                        const timeA = a.timestamp?.getTime() || 0;
+                        const timeB = b.timestamp?.getTime() || 0;
+                        const timeDiff = timeA - timeB;
+                        
+                        // Se timestamps são muito próximos (menos de 3 segundos), usa lógica especial
+                        if (Math.abs(timeDiff) < 3000) {
+                            // Se uma é do agente (enviada) e outra do usuário (recebida), agente fica depois
+                            if (a.sender === 'agent' && b.sender === 'user') {
+                                return 1; // Agente depois (mais recente)
+                            }
+                            if (a.sender === 'user' && b.sender === 'agent') {
+                                return -1; // Usuário antes
+                            }
+                            // Se são do mesmo sender, usa diferença de timestamp (mesmo que pequena)
+                            return timeDiff;
+                        }
+                        
+                        return timeDiff;
+                    });
+                    
+                    return {
+                        ...updatedChat,
+                        messages: mergedMessages
+                    };
+                }
+                
+                return updatedChat;
+            }
+            return c;
+        }));
     } else {
         setChats([updatedChat, ...chats]);
     }
