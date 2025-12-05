@@ -578,14 +578,20 @@ const App: React.FC = () => {
                             }
                         });
                         
-                        mergedMessages.push(...allMessages);
+                        // Adiciona índice de ordem às mensagens antes de ordenar
+                        const messagesWithOrder = allMessages.map((msg, index) => ({
+                            ...msg,
+                            _sortOrder: messageOrder.get(msg.id || `${msg.timestamp?.getTime()}_${msg.content?.substring(0, 20)}`) ?? index + 1000
+                        }));
+                        
+                        mergedMessages.push(...messagesWithOrder);
                         mergedMessages.sort((a, b) => {
                             const timeA = a.timestamp?.getTime() || 0;
                             const timeB = b.timestamp?.getTime() || 0;
                             const timeDiff = timeA - timeB;
                             const absTimeDiff = Math.abs(timeDiff);
                             
-                            // Se timestamps são muito próximos (< 10 segundos) e senders diferentes
+                            // PRIORIDADE 1: Se timestamps são muito próximos (< 10 segundos) e senders diferentes
                             // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
                             // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
                             // independentemente de pequenas diferenças de sincronização de relógio
@@ -600,14 +606,20 @@ const App: React.FC = () => {
                                 }
                             }
                             
-                            // Se timestamps são idênticos e mesmo sender, mantém ordem de inserção
-                            if (absTimeDiff === 0 && a.sender === b.sender) {
-                                return 0;
+                            // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
+                            if (absTimeDiff >= 10000) {
+                                return timeDiff;
                             }
                             
-                            // Para diferenças maiores ou quando não se aplica a lógica especial, usa timestamp real
-                            // Isso garante ordem cronológica correta
-                            return timeDiff;
+                            // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, usa ordem de inserção
+                            const orderA = (a as any)._sortOrder ?? 0;
+                            const orderB = (b as any)._sortOrder ?? 0;
+                            return orderA - orderB;
+                        });
+                        
+                        // Remove o campo temporário de ordenação
+                        mergedMessages.forEach(msg => {
+                            delete (msg as any)._sortOrder;
                         });
 
                         // Preserva status local (closed ou open) - a API sempre retorna 'open', então precisamos preservar o status local
