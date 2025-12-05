@@ -242,10 +242,12 @@ const App: React.FC = () => {
                         const useRealContactNumber = (realDigits > existingDigits && realDigits >= 10) || (existingIsGenerated && realDigits >= 10);
 
                         // Se o chat existente tem ID gerado mas o realChat tem ID válido, atualiza o ID também
-                        // Detecta qualquer ID gerado (cmin*, cmid*, cmio*, chat_*)
+                        // Detecta qualquer ID gerado (cmin*, cmid*, cmio*, cmip*, cmit*, chat_*)
                         const existingIdIsGenerated = existingChat.id.includes('cmin') || 
                                                        existingChat.id.includes('cmid') || 
                                                        existingChat.id.includes('cmio') ||
+                                                       existingChat.id.includes('cmip') ||
+                                                       existingChat.id.includes('cmit') ||
                                                        existingChat.id.startsWith('chat_');
                         // ID válido: tem @, não é grupo, não é gerado
                         const realIdIsValid = realChat.id.includes('@') && 
@@ -253,6 +255,8 @@ const App: React.FC = () => {
                                               !realChat.id.includes('cmin') && 
                                               !realChat.id.includes('cmid') && 
                                               !realChat.id.includes('cmio') &&
+                                              !realChat.id.includes('cmip') &&
+                                              !realChat.id.includes('cmit') &&
                                               !realChat.id.startsWith('chat_');
                         const shouldUpdateId = existingIdIsGenerated && realIdIsValid;
 
@@ -301,8 +305,8 @@ const App: React.FC = () => {
                         const lastFetch = sessionStorage.getItem(lastFetchKey);
                         const now = Date.now();
                         
-                        // Só busca se não buscou nos últimos 2 segundos (evita spam, mas garante atualização mais frequente)
-                        if (!lastFetch || (now - parseInt(lastFetch)) > 2000) {
+                        // Só busca se não buscou nos últimos 5 segundos (evita spam e atualizações excessivas)
+                        if (!lastFetch || (now - parseInt(lastFetch)) > 5000) {
                             sessionStorage.setItem(lastFetchKey, now.toString());
                             
                             fetchChatMessages(apiConfig, chatId, 100).then(apiMessages => {
@@ -379,6 +383,18 @@ const App: React.FC = () => {
                                                     }
                                                 }
                                                 
+                                                // Só atualiza lastMessageTime se realmente houver nova mensagem
+                                                const hasNewMessagesInFetch = uniqueMessages.length > c.messages.length;
+                                                const lastUniqueMsg = uniqueMessages.length > 0 ? uniqueMessages[uniqueMessages.length - 1] : null;
+                                                const lastExistingMsg = c.messages.length > 0 ? c.messages[c.messages.length - 1] : null;
+                                                
+                                                const shouldUpdateTime = hasNewMessagesInFetch && lastUniqueMsg && 
+                                                    (!lastExistingMsg || 
+                                                     !lastUniqueMsg.id || 
+                                                     lastUniqueMsg.id !== lastExistingMsg.id ||
+                                                     (lastUniqueMsg.timestamp && lastExistingMsg.timestamp && 
+                                                      lastUniqueMsg.timestamp.getTime() > lastExistingMsg.timestamp.getTime()));
+                                                
                                                 return {
                                                     ...updatedChat,
                                                     messages: uniqueMessages,
@@ -387,8 +403,9 @@ const App: React.FC = () => {
                                                             uniqueMessages[uniqueMessages.length - 1].content : 
                                                             `📷 ${uniqueMessages[uniqueMessages.length - 1].type}`) : 
                                                         updatedChat.lastMessage,
-                                                    lastMessageTime: uniqueMessages.length > 0 && uniqueMessages[uniqueMessages.length - 1].timestamp ? 
-                                                        uniqueMessages[uniqueMessages.length - 1].timestamp : 
+                                                    // Só atualiza lastMessageTime se realmente houver nova mensagem
+                                                    lastMessageTime: shouldUpdateTime && lastUniqueMsg?.timestamp ? 
+                                                        lastUniqueMsg.timestamp : 
                                                         updatedChat.lastMessageTime,
                                                     unreadCount: newReceivedMessages.length > 0 ? 
                                                         (updatedChat.unreadCount || 0) + newReceivedMessages.length : 
@@ -474,6 +491,19 @@ const App: React.FC = () => {
                         // Se o chat foi reaberto (mudou de closed para open), limpa departamento e atribuição
                         const wasReopened = existingChat.status === 'closed' && finalStatus === 'open';
                         
+                        // Detecta se há novas mensagens reais (não apenas reordenação)
+                        const hasNewMessages = mergedMessages.length > existingChat.messages.length;
+                        const lastMergedMsg = mergedMessages.length > 0 ? mergedMessages[mergedMessages.length - 1] : null;
+                        const lastExistingMsg = existingChat.messages.length > 0 ? existingChat.messages[existingChat.messages.length - 1] : null;
+                        
+                        // Só atualiza lastMessageTime se realmente houver nova mensagem (não apenas reordenação)
+                        const shouldUpdateLastMessageTime = hasNewMessages && lastMergedMsg && 
+                            (!lastExistingMsg || 
+                             !lastMergedMsg.id || 
+                             lastMergedMsg.id !== lastExistingMsg.id ||
+                             (lastMergedMsg.timestamp && lastExistingMsg.timestamp && 
+                              lastMergedMsg.timestamp.getTime() > lastExistingMsg.timestamp.getTime()));
+                        
                         return {
                             ...realChat,
                             messages: mergedMessages, // Usa mensagens mescladas
@@ -494,10 +524,11 @@ const App: React.FC = () => {
                                 (mergedMessages[mergedMessages.length - 1].type === 'text' ? 
                                     mergedMessages[mergedMessages.length - 1].content : 
                                     `📷 ${mergedMessages[mergedMessages.length - 1].type}`) : 
-                                realChat.lastMessage,
-                            lastMessageTime: mergedMessages.length > 0 && mergedMessages[mergedMessages.length - 1].timestamp ? 
-                                mergedMessages[mergedMessages.length - 1].timestamp : 
-                                realChat.lastMessageTime
+                                (existingChat.lastMessage || realChat.lastMessage),
+                            // Só atualiza lastMessageTime se realmente houver nova mensagem
+                            lastMessageTime: shouldUpdateLastMessageTime && lastMergedMsg?.timestamp ? 
+                                lastMergedMsg.timestamp : 
+                                existingChat.lastMessageTime
                         };
                     } else {
                         // console.log(`[App] Novo chat encontrado: ${realChat.id} (${realChat.contactName})`);
@@ -515,8 +546,8 @@ const App: React.FC = () => {
     // Primeira sincronização
     syncChats();
     
-    // Polling a cada 2 segundos para atualização mais frequente e tempo real
-    intervalIdRef.current = setInterval(syncChats, 2000);
+    // Polling a cada 5 segundos para evitar atualizações excessivas (era 2s)
+    intervalIdRef.current = setInterval(syncChats, 5000);
     
     // Inicializa WebSocket de forma assíncrona
     const initWebSocket = async (isReconnect: boolean = false) => {
