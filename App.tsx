@@ -274,22 +274,31 @@ const App: React.FC = () => {
                         });
                         
                         // Depois, adiciona mensagens locais que não estão na API (mensagens enviadas recentemente)
+                        // Se uma mensagem local existe na API, prioriza a local se for mais recente (dentro de 10 segundos)
                         existingChat.messages.forEach(msg => {
                             // Verifica se a mensagem já existe na API (pode ter sido sincronizada)
                             const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
-                            const existsInApi = realChat.messages.some(apiMsg => {
-                                // Compara por ID, ou por timestamp + conteúdo se ID não existir
+                            const existingApiMsg = realChat.messages.find(apiMsg => {
+                                // Compara por ID primeiro (mais confiável)
                                 if (apiMsg.id && msg.id) return apiMsg.id === msg.id;
-                                if (apiMsg.timestamp && msg.timestamp) {
+                                // Depois compara por conteúdo e timestamp próximo
+                                if (apiMsg.timestamp && msg.timestamp && apiMsg.content === msg.content) {
                                     const timeDiff = Math.abs(apiMsg.timestamp.getTime() - msg.timestamp.getTime());
-                                    return timeDiff < 5000 && apiMsg.content === msg.content; // 5 segundos de tolerância
+                                    return timeDiff < 10000; // 10 segundos de tolerância
                                 }
                                 return false;
                             });
                             
-                            // Se não existe na API, mantém a mensagem local (não apenas recentes)
-                            // Isso garante que mensagens enviadas não desapareçam mesmo após F5
-                            if (!existsInApi) {
+                            if (existingApiMsg) {
+                                // Mensagem existe na API: prioriza a local se for mais recente ou igual
+                                if (!msg.timestamp || !existingApiMsg.timestamp || 
+                                    msg.timestamp.getTime() >= existingApiMsg.timestamp.getTime()) {
+                                    // Mensagem local é mais recente ou igual, substitui a da API
+                                    messageMap.set(msgKey, msg);
+                                }
+                                // Se a da API for mais recente, mantém a da API (já está no map)
+                            } else {
+                                // Mensagem não existe na API, adiciona a local
                                 if (!messageMap.has(msgKey)) {
                                     messageMap.set(msgKey, msg);
                                 }
@@ -316,10 +325,50 @@ const App: React.FC = () => {
                                         return currentChats.map(c => {
                                             if (c.id === chatId || normalizeJid(c.id) === normalizeJid(chatId)) {
                                                 // Merge das mensagens da API com as locais
-                                                const allMessages = [...c.messages, ...apiMessages];
-                                                const uniqueMessages = Array.from(
-                                                    new Map(allMessages.map(msg => [msg.id || `${msg.timestamp?.getTime()}_${msg.content}`, msg])).values()
-                                                ).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+                                                // Usa Map para garantir unicidade, mas preserva mensagens locais quando há conflito de timestamp
+                                                const messageMap = new Map<string, Message>();
+                                                
+                                                // Primeiro adiciona mensagens da API (histórico)
+                                                apiMessages.forEach(msg => {
+                                                    const msgKey = msg.id || `${msg.timestamp?.getTime()}_${msg.content?.substring(0, 50)}`;
+                                                    if (!messageMap.has(msgKey)) {
+                                                        messageMap.set(msgKey, msg);
+                                                    }
+                                                });
+                                                
+                                                // Depois adiciona mensagens locais (prioriza sobre API se houver conflito)
+                                                c.messages.forEach(msg => {
+                                                    const msgKey = msg.id || `${msg.timestamp?.getTime()}_${msg.content?.substring(0, 50)}`;
+                                                    // Se já existe na API, verifica se a local é mais recente (dentro de 10 segundos)
+                                                    const existingApiMsg = Array.from(messageMap.values()).find(m => 
+                                                        (m.id && msg.id && m.id === msg.id) ||
+                                                        (m.content === msg.content && m.timestamp && msg.timestamp && 
+                                                         Math.abs(m.timestamp.getTime() - msg.timestamp.getTime()) < 10000)
+                                                    );
+                                                    
+                                                    if (existingApiMsg) {
+                                                        // Se a mensagem local é mais recente (ou igual), prioriza a local
+                                                        if (!msg.timestamp || !existingApiMsg.timestamp || 
+                                                            msg.timestamp.getTime() >= existingApiMsg.timestamp.getTime()) {
+                                                            messageMap.set(msgKey, msg);
+                                                        }
+                                                    } else {
+                                                        // Nova mensagem local, adiciona
+                                                        messageMap.set(msgKey, msg);
+                                                    }
+                                                });
+                                                
+                                                // Ordena por timestamp
+                                                const uniqueMessages = Array.from(messageMap.values())
+                                                    .sort((a, b) => {
+                                                        const timeA = a.timestamp?.getTime() || 0;
+                                                        const timeB = b.timestamp?.getTime() || 0;
+                                                        // Se timestamps são muito próximos (menos de 1 segundo), mantém ordem de inserção
+                                                        if (Math.abs(timeA - timeB) < 1000) {
+                                                            return 0;
+                                                        }
+                                                        return timeA - timeB;
+                                                    });
                                                 
                                                 // Detecta se há novas mensagens recebidas
                                                 const newReceivedMessages = apiMessages.filter(apiMsg => 
@@ -422,11 +471,39 @@ const App: React.FC = () => {
                         }
                         
                         // Converte para array e ordena por timestamp
-                        mergedMessages.push(...Array.from(messageMap.values()));
+                        // Preserva ordem de mensagens locais quando timestamps são muito próximos
+                        const allMessages = Array.from(messageMap.values());
+                        // Cria um índice para rastrear ordem de inserção (mensagens locais têm índice maior)
+                        const messageOrder = new Map<string, number>();
+                        let orderIndex = 0;
+                        realChat.messages.forEach(msg => {
+                            const key = msg.id || `${msg.timestamp?.getTime()}_${msg.content?.substring(0, 20)}`;
+                            messageOrder.set(key, orderIndex++);
+                        });
+                        existingChat.messages.forEach(msg => {
+                            const key = msg.id || `${msg.timestamp?.getTime()}_${msg.content?.substring(0, 20)}`;
+                            if (!messageOrder.has(key)) {
+                                messageOrder.set(key, orderIndex++);
+                            }
+                        });
+                        
+                        mergedMessages.push(...allMessages);
                         mergedMessages.sort((a, b) => {
                             const timeA = a.timestamp?.getTime() || 0;
                             const timeB = b.timestamp?.getTime() || 0;
-                            return timeA - timeB;
+                            const timeDiff = timeA - timeB;
+                            
+                            // Se a diferença for menor que 2 segundos, usa ordem de inserção
+                            // Isso evita que mensagens recebidas apareçam antes de mensagens enviadas recentemente
+                            if (Math.abs(timeDiff) < 2000) {
+                                const keyA = a.id || `${timeA}_${a.content?.substring(0, 20)}`;
+                                const keyB = b.id || `${timeB}_${b.content?.substring(0, 20)}`;
+                                const orderA = messageOrder.get(keyA) ?? 999999;
+                                const orderB = messageOrder.get(keyB) ?? 999999;
+                                return orderA - orderB;
+                            }
+                            
+                            return timeDiff;
                         });
 
                         // Preserva status local (closed ou open) - a API sempre retorna 'open', então precisamos preservar o status local
