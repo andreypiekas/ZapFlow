@@ -274,32 +274,76 @@ const App: React.FC = () => {
                         });
                         
                         // Depois, adiciona mensagens locais que não estão na API (mensagens enviadas recentemente)
-                        // Se uma mensagem local existe na API, prioriza a local se for mais recente (dentro de 10 segundos)
+                        // Se uma mensagem local existe na API, prioriza a local se for mais recente
                         existingChat.messages.forEach(msg => {
                             // Verifica se a mensagem já existe na API (pode ter sido sincronizada)
                             const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
                             const existingApiMsg = realChat.messages.find(apiMsg => {
-                                // Compara por ID primeiro (mais confiável)
-                                if (apiMsg.id && msg.id) return apiMsg.id === msg.id;
-                                // Depois compara por conteúdo e timestamp próximo
-                                if (apiMsg.timestamp && msg.timestamp && apiMsg.content === msg.content) {
+                                // Verifica por ID do WhatsApp (mais confiável)
+                                if (apiMsg.whatsappMessageId && msg.whatsappMessageId && 
+                                    apiMsg.whatsappMessageId === msg.whatsappMessageId) {
+                                    return true;
+                                }
+                                // Compara por ID interno
+                                if (apiMsg.id && msg.id && apiMsg.id === msg.id) {
+                                    return true;
+                                }
+                                // Para mensagens do agente, usa janela maior (30 segundos) e verifica conteúdo normalizado
+                                if (msg.sender === 'agent' && apiMsg.sender === 'agent') {
+                                    const contentMatch = apiMsg.content && msg.content && 
+                                        apiMsg.content.trim() === msg.content.trim();
+                                    const timeMatch = apiMsg.timestamp && msg.timestamp && 
+                                        Math.abs(apiMsg.timestamp.getTime() - msg.timestamp.getTime()) < 30000;
+                                    if (contentMatch && timeMatch) {
+                                        return true;
+                                    }
+                                }
+                                // Para outras mensagens, compara por conteúdo e timestamp próximo (10 segundos)
+                                if (apiMsg.timestamp && msg.timestamp && apiMsg.content && msg.content) {
+                                    const contentMatch = apiMsg.content.trim() === msg.content.trim();
                                     const timeDiff = Math.abs(apiMsg.timestamp.getTime() - msg.timestamp.getTime());
-                                    return timeDiff < 10000; // 10 segundos de tolerância
+                                    if (contentMatch && timeDiff < 10000) {
+                                        return true;
+                                    }
                                 }
                                 return false;
                             });
                             
                             if (existingApiMsg) {
-                                // Mensagem existe na API: prioriza a local se for mais recente ou igual
-                                if (!msg.timestamp || !existingApiMsg.timestamp || 
+                                // Mensagem existe na API: prioriza a local se tiver whatsappMessageId ou for mais recente
+                                if (msg.whatsappMessageId || 
+                                    !msg.timestamp || !existingApiMsg.timestamp || 
                                     msg.timestamp.getTime() >= existingApiMsg.timestamp.getTime()) {
-                                    // Mensagem local é mais recente ou igual, substitui a da API
+                                    // Mensagem local é mais recente ou tem whatsappMessageId, substitui a da API
                                     messageMap.set(msgKey, msg);
                                 }
                                 // Se a da API for mais recente, mantém a da API (já está no map)
                             } else {
-                                // Mensagem não existe na API, adiciona a local
-                                if (!messageMap.has(msgKey)) {
+                                // Mensagem não existe na API, verifica se já não está no map antes de adicionar
+                                const alreadyInMap = Array.from(messageMap.values()).some(m => {
+                                    // Verifica por ID do WhatsApp
+                                    if (m.whatsappMessageId && msg.whatsappMessageId && 
+                                        m.whatsappMessageId === msg.whatsappMessageId) {
+                                        return true;
+                                    }
+                                    // Verifica por ID interno
+                                    if (m.id && msg.id && m.id === msg.id) {
+                                        return true;
+                                    }
+                                    // Verifica por conteúdo + timestamp (para mensagens do agente, usa janela maior)
+                                    if (m.content && msg.content && m.sender === msg.sender) {
+                                        const contentMatch = m.content.trim() === msg.content.trim();
+                                        const timeWindow = msg.sender === 'agent' ? 30000 : 10000;
+                                        const timeMatch = m.timestamp && msg.timestamp && 
+                                            Math.abs(m.timestamp.getTime() - msg.timestamp.getTime()) < timeWindow;
+                                        if (contentMatch && timeMatch) {
+                                            return true;
+                                        }
+                                    }
+                                    return false;
+                                });
+                                
+                                if (!alreadyInMap) {
                                     messageMap.set(msgKey, msg);
                                 }
                             }
@@ -339,16 +383,43 @@ const App: React.FC = () => {
                                                 // Depois adiciona mensagens locais (prioriza sobre API se houver conflito)
                                                 c.messages.forEach(msg => {
                                                     const msgKey = msg.id || `${msg.timestamp?.getTime()}_${msg.content?.substring(0, 50)}`;
-                                                    // Se já existe na API, verifica se a local é mais recente (dentro de 10 segundos)
-                                                    const existingApiMsg = Array.from(messageMap.values()).find(m => 
-                                                        (m.id && msg.id && m.id === msg.id) ||
-                                                        (m.content === msg.content && m.timestamp && msg.timestamp && 
-                                                         Math.abs(m.timestamp.getTime() - msg.timestamp.getTime()) < 10000)
-                                                    );
+                                                    // Verifica se já existe na API usando múltiplos critérios
+                                                    const existingApiMsg = Array.from(messageMap.values()).find(m => {
+                                                        // Verifica por ID do WhatsApp (mais confiável)
+                                                        if (m.whatsappMessageId && msg.whatsappMessageId && 
+                                                            m.whatsappMessageId === msg.whatsappMessageId) {
+                                                            return true;
+                                                        }
+                                                        // Verifica por ID interno
+                                                        if (m.id && msg.id && m.id === msg.id) {
+                                                            return true;
+                                                        }
+                                                        // Para mensagens do agente, usa janela maior (30 segundos)
+                                                        if (msg.sender === 'agent' && m.sender === 'agent') {
+                                                            const contentMatch = m.content && msg.content && 
+                                                                m.content.trim() === msg.content.trim();
+                                                            const timeMatch = m.timestamp && msg.timestamp && 
+                                                                Math.abs(m.timestamp.getTime() - msg.timestamp.getTime()) < 30000;
+                                                            if (contentMatch && timeMatch) {
+                                                                return true;
+                                                            }
+                                                        }
+                                                        // Para outras mensagens, usa janela menor (10 segundos)
+                                                        if (m.content && msg.content && 
+                                                            m.content.trim() === msg.content.trim() &&
+                                                            m.sender === msg.sender &&
+                                                            m.timestamp && msg.timestamp && 
+                                                            Math.abs(m.timestamp.getTime() - msg.timestamp.getTime()) < 10000) {
+                                                            return true;
+                                                        }
+                                                        return false;
+                                                    });
                                                     
                                                     if (existingApiMsg) {
-                                                        // Se a mensagem local é mais recente (ou igual), prioriza a local
-                                                        if (!msg.timestamp || !existingApiMsg.timestamp || 
+                                                        // Se a mensagem local tem whatsappMessageId ou é mais recente, prioriza a local
+                                                        // Isso garante que mensagens atualizadas localmente não sejam sobrescritas
+                                                        if (msg.whatsappMessageId || 
+                                                            !msg.timestamp || !existingApiMsg.timestamp || 
                                                             msg.timestamp.getTime() >= existingApiMsg.timestamp.getTime()) {
                                                             messageMap.set(msgKey, msg);
                                                         }
@@ -807,19 +878,25 @@ const App: React.FC = () => {
                                             let messageIndex = -1;
                                             let shouldUpdate = false;
                                             
-                                            if (mapped.sender === 'agent' && mapped.whatsappMessageId) {
+                                            // Para mensagens enviadas (agent), tenta encontrar mensagem local para atualizar
+                                            if (mapped.sender === 'agent') {
                                                 // Procura mensagem local sem whatsappMessageId mas com mesmo conteúdo e timestamp próximo
                                                 messageIndex = chat.messages.findIndex(m => {
-                                                    // Se já tem whatsappMessageId, verifica por ele
-                                                    if (m.whatsappMessageId && m.whatsappMessageId === mapped.whatsappMessageId) {
+                                                    // Se já tem whatsappMessageId, verifica por ele (mais confiável)
+                                                    if (m.whatsappMessageId && mapped.whatsappMessageId && 
+                                                        m.whatsappMessageId === mapped.whatsappMessageId) {
                                                         return true;
                                                     }
                                                     // Se não tem whatsappMessageId, verifica por conteúdo + timestamp (mensagem local pendente)
-                                                    if (!m.whatsappMessageId && m.sender === 'agent' &&
-                                                        m.content === mapped.content &&
-                                                        m.timestamp && mapped.timestamp && 
-                                                        Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 5000) {
-                                                        return true;
+                                                    // Aumenta janela de tempo para 30 segundos para capturar confirmações com delay
+                                                    if (!m.whatsappMessageId && m.sender === 'agent') {
+                                                        const contentMatch = m.content && mapped.content && 
+                                                            m.content.trim() === mapped.content.trim();
+                                                        const timeMatch = m.timestamp && mapped.timestamp && 
+                                                            Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 30000;
+                                                        if (contentMatch && timeMatch) {
+                                                            return true;
+                                                        }
                                                     }
                                                     return false;
                                                 });
@@ -840,8 +917,19 @@ const App: React.FC = () => {
                                                 if (m.id && mapped.id && m.id === mapped.id) {
                                                     return true;
                                                 }
-                                                // Verifica por conteúdo + timestamp muito próximo (evita duplicação)
-                                                if (m.content === mapped.content && 
+                                                // Para mensagens do agente, verifica também por conteúdo + timestamp (pode ter sido atualizada)
+                                                if (mapped.sender === 'agent' && m.sender === 'agent') {
+                                                    const contentMatch = m.content && mapped.content && 
+                                                        m.content.trim() === mapped.content.trim();
+                                                    const timeMatch = m.timestamp && mapped.timestamp && 
+                                                        Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 30000;
+                                                    if (contentMatch && timeMatch) {
+                                                        return true;
+                                                    }
+                                                }
+                                                // Para outras mensagens, verifica por conteúdo + timestamp muito próximo (evita duplicação)
+                                                if (m.content && mapped.content && 
+                                                    m.content.trim() === mapped.content.trim() &&
                                                     m.sender === mapped.sender &&
                                                     m.timestamp && mapped.timestamp && 
                                                     Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 1000) {
