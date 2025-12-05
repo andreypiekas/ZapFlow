@@ -797,8 +797,35 @@ const App: React.FC = () => {
                                         );
                                         
                                         if (chatJid === messageJid || chatNumberMatch) {
-                                            // Verifica se a mensagem já existe (verifica por ID do WhatsApp ou por conteúdo + timestamp)
-                                            const exists = chat.messages.some(m => {
+                                            // Para mensagens enviadas (fromMe: true), tenta atualizar mensagem local existente
+                                            // ao invés de adicionar uma nova (evita duplicação)
+                                            let messageIndex = -1;
+                                            let shouldUpdate = false;
+                                            
+                                            if (mapped.sender === 'agent' && mapped.whatsappMessageId) {
+                                                // Procura mensagem local sem whatsappMessageId mas com mesmo conteúdo e timestamp próximo
+                                                messageIndex = chat.messages.findIndex(m => {
+                                                    // Se já tem whatsappMessageId, verifica por ele
+                                                    if (m.whatsappMessageId && m.whatsappMessageId === mapped.whatsappMessageId) {
+                                                        return true;
+                                                    }
+                                                    // Se não tem whatsappMessageId, verifica por conteúdo + timestamp (mensagem local pendente)
+                                                    if (!m.whatsappMessageId && m.sender === 'agent' &&
+                                                        m.content === mapped.content &&
+                                                        m.timestamp && mapped.timestamp && 
+                                                        Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 5000) {
+                                                        return true;
+                                                    }
+                                                    return false;
+                                                });
+                                                
+                                                if (messageIndex >= 0) {
+                                                    shouldUpdate = true;
+                                                }
+                                            }
+                                            
+                                            // Verifica se a mensagem já existe (para mensagens recebidas ou já atualizadas)
+                                            const exists = !shouldUpdate && chat.messages.some(m => {
                                                 // Verifica por ID do WhatsApp (mais confiável)
                                                 if (m.whatsappMessageId && mapped.whatsappMessageId && 
                                                     m.whatsappMessageId === mapped.whatsappMessageId) {
@@ -818,7 +845,57 @@ const App: React.FC = () => {
                                                 return false;
                                             });
                                             
-                                            if (!exists) {
+                                            if (shouldUpdate && messageIndex >= 0) {
+                                                // Atualiza mensagem local existente com dados da API (inclui whatsappMessageId)
+                                                chatUpdated = true;
+                                                console.log(`[App] 🔄 Mensagem enviada atualizada com ID do WhatsApp no chat ${chat.contactName}`);
+                                                const updatedMessages = [...chat.messages];
+                                                updatedMessages[messageIndex] = {
+                                                    ...updatedMessages[messageIndex],
+                                                    whatsappMessageId: mapped.whatsappMessageId,
+                                                    id: mapped.whatsappMessageId || updatedMessages[messageIndex].id, // Usa ID do WhatsApp se disponível
+                                                    rawMessage: mapped.rawMessage,
+                                                    status: mapped.status // Atualiza status (pode ter mudado)
+                                                };
+                                                
+                                                // Reordena após atualização
+                                                const sortedMessages = updatedMessages.sort((a, b) => {
+                                                    const timeA = a.timestamp?.getTime() || 0;
+                                                    const timeB = b.timestamp?.getTime() || 0;
+                                                    const timeDiff = timeA - timeB;
+                                                    const absTimeDiff = Math.abs(timeDiff);
+                                                    
+                                                    // Se timestamps são idênticos ou muito próximos, usa lógica especial
+                                                    if (absTimeDiff < 2000 && a.sender !== b.sender) {
+                                                        // Prioriza agente sobre usuário quando timestamps são idênticos/próximos
+                                                        if (a.sender === 'agent' && b.sender === 'user') {
+                                                            return 1; // Agente depois
+                                                        }
+                                                        if (a.sender === 'user' && b.sender === 'agent') {
+                                                            return -1; // Usuário antes
+                                                        }
+                                                    }
+                                                    
+                                                    // Se timestamps são idênticos e mesmo sender, mantém ordem
+                                                    if (absTimeDiff === 0 && a.sender === b.sender) {
+                                                        return 0;
+                                                    }
+                                                    
+                                                    return timeDiff;
+                                                });
+                                                
+                                                // Lógica para processar mensagens de clientes finalizados
+                                                let updatedChat = { ...chat };
+                                                
+                                                return {
+                                                    ...updatedChat,
+                                                    messages: sortedMessages,
+                                                    lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
+                                                    lastMessageTime: mapped.timestamp,
+                                                    unreadCount: updatedChat.unreadCount
+                                                };
+                                            } else if (!exists) {
+                                                // Nova mensagem (não existe e não é atualização)
                                                 chatUpdated = true;
                                                 console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}`);
                                                 const updatedMessages = [...chat.messages, mapped].sort((a, b) => {
@@ -829,7 +906,7 @@ const App: React.FC = () => {
                                                     
                                                     // Se timestamps são idênticos ou muito próximos, usa lógica especial
                                                     if (absTimeDiff < 2000 && a.sender !== b.sender) {
-                                                        // Prioriza agente sobre usuário quando timestamps são próximos
+                                                        // Prioriza agente sobre usuário quando timestamps são idênticos/próximos
                                                         if (a.sender === 'agent' && b.sender === 'user') {
                                                             return 1; // Agente depois
                                                         }
