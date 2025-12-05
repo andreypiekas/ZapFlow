@@ -366,16 +366,21 @@ const App: React.FC = () => {
                                                         const timeDiff = timeA - timeB;
                                                         const absTimeDiff = Math.abs(timeDiff);
                                                         
-                                                        // Se a diferença for muito pequena (< 2 segundos), usa lógica especial
+                                                        // Se timestamps são idênticos ou muito próximos (< 2 segundos), usa lógica especial
                                                         // Isso evita problemas de sincronização de relógio
                                                         if (absTimeDiff < 2000 && a.sender !== b.sender) {
-                                                            // Prioriza agente sobre usuário apenas quando diferença é muito pequena
+                                                            // Prioriza agente sobre usuário quando timestamps são idênticos/próximos
                                                             if (a.sender === 'agent' && b.sender === 'user') {
                                                                 return 1; // Agente depois
                                                             }
                                                             if (a.sender === 'user' && b.sender === 'agent') {
                                                                 return -1; // Usuário antes
                                                             }
+                                                        }
+                                                        
+                                                        // Se timestamps são idênticos e mesmo sender, mantém ordem
+                                                        if (absTimeDiff === 0 && a.sender === b.sender) {
+                                                            return 0;
                                                         }
                                                         
                                                         // Para diferenças maiores ou mesmo sender, usa timestamp real
@@ -506,10 +511,10 @@ const App: React.FC = () => {
                             const timeDiff = timeA - timeB;
                             const absTimeDiff = Math.abs(timeDiff);
                             
-                            // Se a diferença for muito pequena (< 2 segundos), usa lógica especial
+                            // Se timestamps são idênticos ou muito próximos (< 2 segundos), usa lógica especial
                             // Isso evita problemas de sincronização de relógio entre cliente e servidor
                             if (absTimeDiff < 2000 && a.sender !== b.sender) {
-                                // Se uma é do agente e outra do usuário com timestamps muito próximos
+                                // Se uma é do agente e outra do usuário com timestamps idênticos/próximos
                                 // Prioriza agente sobre usuário (mensagens enviadas aparecem depois)
                                 if (a.sender === 'agent' && b.sender === 'user') {
                                     return 1; // Agente depois
@@ -517,6 +522,11 @@ const App: React.FC = () => {
                                 if (a.sender === 'user' && b.sender === 'agent') {
                                     return -1; // Usuário antes
                                 }
+                            }
+                            
+                            // Se timestamps são idênticos e mesmo sender, mantém ordem de inserção
+                            if (absTimeDiff === 0 && a.sender === b.sender) {
+                                return 0;
                             }
                             
                             // Para diferenças maiores ou mesmo sender, usa timestamp real
@@ -787,20 +797,54 @@ const App: React.FC = () => {
                                         );
                                         
                                         if (chatJid === messageJid || chatNumberMatch) {
-                                            // Verifica se a mensagem já existe
-                                            const exists = chat.messages.some(m => 
-                                                m.id === mapped.id || 
-                                                (m.timestamp && mapped.timestamp && 
-                                                 Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 2000 &&
-                                                 m.content === mapped.content)
-                                            );
+                                            // Verifica se a mensagem já existe (verifica por ID do WhatsApp ou por conteúdo + timestamp)
+                                            const exists = chat.messages.some(m => {
+                                                // Verifica por ID do WhatsApp (mais confiável)
+                                                if (m.whatsappMessageId && mapped.whatsappMessageId && 
+                                                    m.whatsappMessageId === mapped.whatsappMessageId) {
+                                                    return true;
+                                                }
+                                                // Verifica por ID interno
+                                                if (m.id && mapped.id && m.id === mapped.id) {
+                                                    return true;
+                                                }
+                                                // Verifica por conteúdo + timestamp muito próximo (evita duplicação)
+                                                if (m.content === mapped.content && 
+                                                    m.sender === mapped.sender &&
+                                                    m.timestamp && mapped.timestamp && 
+                                                    Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 1000) {
+                                                    return true;
+                                                }
+                                                return false;
+                                            });
                                             
                                             if (!exists) {
                                                 chatUpdated = true;
                                                 console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}`);
-                                                const updatedMessages = [...chat.messages, mapped].sort((a, b) => 
-                                                    a.timestamp.getTime() - b.timestamp.getTime()
-                                                );
+                                                const updatedMessages = [...chat.messages, mapped].sort((a, b) => {
+                                                    const timeA = a.timestamp?.getTime() || 0;
+                                                    const timeB = b.timestamp?.getTime() || 0;
+                                                    const timeDiff = timeA - timeB;
+                                                    const absTimeDiff = Math.abs(timeDiff);
+                                                    
+                                                    // Se timestamps são idênticos ou muito próximos, usa lógica especial
+                                                    if (absTimeDiff < 2000 && a.sender !== b.sender) {
+                                                        // Prioriza agente sobre usuário quando timestamps são próximos
+                                                        if (a.sender === 'agent' && b.sender === 'user') {
+                                                            return 1; // Agente depois
+                                                        }
+                                                        if (a.sender === 'user' && b.sender === 'agent') {
+                                                            return -1; // Usuário antes
+                                                        }
+                                                    }
+                                                    
+                                                    // Se timestamps são idênticos e mesmo sender, mantém ordem
+                                                    if (absTimeDiff === 0 && a.sender === b.sender) {
+                                                        return 0;
+                                                    }
+                                                    
+                                                    return timeDiff;
+                                                });
                                                 
                                                 // Lógica para processar mensagens de clientes finalizados
                                                 let updatedChat = { ...chat };
@@ -1243,16 +1287,21 @@ const App: React.FC = () => {
                         const timeDiff = timeA - timeB;
                         const absTimeDiff = Math.abs(timeDiff);
                         
-                        // Se a diferença for muito pequena (< 2 segundos), usa lógica especial
+                        // Se timestamps são idênticos ou muito próximos (< 2 segundos), usa lógica especial
                         // Isso evita problemas de sincronização de relógio
                         if (absTimeDiff < 2000 && a.sender !== b.sender) {
-                            // Prioriza agente sobre usuário apenas quando diferença é muito pequena
+                            // Prioriza agente sobre usuário quando timestamps são idênticos/próximos
                             if (a.sender === 'agent' && b.sender === 'user') {
                                 return 1; // Agente depois
                             }
                             if (a.sender === 'user' && b.sender === 'agent') {
                                 return -1; // Usuário antes
                             }
+                        }
+                        
+                        // Se timestamps são idênticos e mesmo sender, mantém ordem de inserção
+                        if (absTimeDiff === 0 && a.sender === b.sender) {
+                            return 0;
                         }
                         
                         // Para diferenças maiores ou mesmo sender, usa timestamp real
