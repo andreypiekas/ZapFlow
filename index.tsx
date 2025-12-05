@@ -9,14 +9,47 @@ if (typeof console !== 'undefined') {
     const originalWarn = console.warn;
     
     const shouldFilter = (args: any[]): boolean => {
-        return args.some(arg => {
-            if (typeof arg === 'string') {
-                // Filtra strings muito longas que parecem base64 (imagens)
-                return (arg.length > 1000 && (arg.includes('iVBORw0KGgo') || arg.includes('data:image') || arg.includes('/9j/'))) ||
-                       arg.includes(':5173/') && arg.length > 500;
+        // Converte todos os argumentos para string para verificação
+        const fullText = args.map(arg => {
+            if (typeof arg === 'string') return arg;
+            if (arg && typeof arg === 'object') {
+                try {
+                    return JSON.stringify(arg);
+                } catch (e) {
+                    return String(arg);
+                }
             }
-            return false;
-        });
+            return String(arg);
+        }).join(' ');
+        
+        // Filtra strings que contêm padrões de base64/imagens longas
+        // Especialmente aquelas que começam com :5173/ (porta de dev)
+        if (fullText.length > 500) {
+            const hasBase64Pattern = fullText.includes('iVBORw0KGgo') || 
+                                    fullText.includes('data:image') || 
+                                    fullText.includes('/9j/') ||
+                                    (fullText.includes(':5173/') && fullText.length > 1000);
+            
+            if (hasBase64Pattern) {
+                return true;
+            }
+        }
+        
+        // Filtra especificamente linhas que começam com :5173/ e são muito longas
+        // Também verifica se qualquer argumento individual começa com :5173/
+        for (const arg of args) {
+            const str = typeof arg === 'string' ? arg : String(arg);
+            // Verifica se começa com :5173/ e é muito longa (base64 de imagem)
+            if (str.trim().startsWith(':5173/') && str.length > 1000) {
+                return true;
+            }
+            // Verifica se contém :5173/ seguido de base64 longo
+            if (str.includes(':5173/') && str.length > 1000 && (str.includes('iVBORw0KGgo') || str.includes('/9j/'))) {
+                return true;
+            }
+        }
+        
+        return false;
     };
     
     console.error = (...args: any[]) => {

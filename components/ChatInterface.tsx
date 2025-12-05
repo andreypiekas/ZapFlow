@@ -69,7 +69,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     if (selectedChatId && !chats.some(c => c.id === selectedChatId)) {
       // Se o chat selecionado não existe mais na lista, não faz nada
       // (não deseleciona, pois pode ser que o chat ainda esteja sendo carregado)
-      console.log(`[ChatInterface] ⚠️ Chat selecionado ${selectedChatId} não encontrado na lista, mantendo seleção`);
+      // Log removido para produção
     }
   }, [chats, selectedChatId]);
   
@@ -293,11 +293,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             unreadCount: 0
           };
           onUpdateChat(updatedChat);
-          console.log(`[ChatInterface] ✅ Contagem de mensagens não lidas zerada para chat ${selectedChat.contactName}`);
+          // Log removido para produção
         }
       } else {
         // Se o chat não foi encontrado, não faz nada (pode estar sendo carregado)
-        console.log(`[ChatInterface] ⚠️ Chat ${selectedChatId} não encontrado, aguardando...`);
+        // Log removido para produção
       }
     } else if (!selectedChatId) {
       // Se selectedChatId foi limpo, reseta o ref
