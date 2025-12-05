@@ -358,26 +358,27 @@ const App: React.FC = () => {
                                                     }
                                                 });
                                                 
-                                                // Ordena por timestamp, priorizando mensagens do agente quando timestamps são próximos
+                                                // Ordena por timestamp, respeitando ordem cronológica real
                                                 const uniqueMessages = Array.from(messageMap.values())
                                                     .sort((a, b) => {
                                                         const timeA = a.timestamp?.getTime() || 0;
                                                         const timeB = b.timestamp?.getTime() || 0;
                                                         const timeDiff = timeA - timeB;
+                                                        const absTimeDiff = Math.abs(timeDiff);
                                                         
-                                                        // Se timestamps são muito próximos (menos de 3 segundos), usa lógica especial
-                                                        if (Math.abs(timeDiff) < 3000) {
-                                                            // Se uma é do agente (enviada) e outra do usuário (recebida), agente fica depois
+                                                        // Se a diferença for muito pequena (< 2 segundos), usa lógica especial
+                                                        // Isso evita problemas de sincronização de relógio
+                                                        if (absTimeDiff < 2000 && a.sender !== b.sender) {
+                                                            // Prioriza agente sobre usuário apenas quando diferença é muito pequena
                                                             if (a.sender === 'agent' && b.sender === 'user') {
-                                                                return 1; // Agente depois (mais recente)
+                                                                return 1; // Agente depois
                                                             }
                                                             if (a.sender === 'user' && b.sender === 'agent') {
                                                                 return -1; // Usuário antes
                                                             }
-                                                            // Se são do mesmo sender, mantém ordem de timestamp
-                                                            return timeDiff;
                                                         }
                                                         
+                                                        // Para diferenças maiores ou mesmo sender, usa timestamp real
                                                         return timeDiff;
                                                     });
                                                 
@@ -503,26 +504,23 @@ const App: React.FC = () => {
                             const timeA = a.timestamp?.getTime() || 0;
                             const timeB = b.timestamp?.getTime() || 0;
                             const timeDiff = timeA - timeB;
+                            const absTimeDiff = Math.abs(timeDiff);
                             
-                            // Se a diferença for menor que 3 segundos, usa lógica especial
-                            // Isso evita que mensagens recebidas apareçam antes de mensagens enviadas recentemente
-                            if (Math.abs(timeDiff) < 3000) {
-                                // Se uma é do agente (enviada) e outra do usuário (recebida), agente fica depois
+                            // Se a diferença for muito pequena (< 2 segundos), usa lógica especial
+                            // Isso evita problemas de sincronização de relógio entre cliente e servidor
+                            if (absTimeDiff < 2000 && a.sender !== b.sender) {
+                                // Se uma é do agente e outra do usuário com timestamps muito próximos
+                                // Prioriza agente sobre usuário (mensagens enviadas aparecem depois)
                                 if (a.sender === 'agent' && b.sender === 'user') {
-                                    return 1; // Agente depois (mais recente)
+                                    return 1; // Agente depois
                                 }
                                 if (a.sender === 'user' && b.sender === 'agent') {
                                     return -1; // Usuário antes
                                 }
-                                
-                                // Se são do mesmo sender, usa ordem de inserção
-                                const keyA = a.id || `${timeA}_${a.content?.substring(0, 20)}`;
-                                const keyB = b.id || `${timeB}_${b.content?.substring(0, 20)}`;
-                                const orderA = messageOrder.get(keyA) ?? 999999;
-                                const orderB = messageOrder.get(keyB) ?? 999999;
-                                return orderA - orderB;
                             }
                             
+                            // Para diferenças maiores ou mesmo sender, usa timestamp real
+                            // Isso garante ordem cronológica correta
                             return timeDiff;
                         });
 
@@ -1235,25 +1233,26 @@ const App: React.FC = () => {
                         }
                     });
                     
-                    // Ordena por timestamp, priorizando mensagens do agente quando timestamps são próximos
+                    // Ordena por timestamp, respeitando ordem cronológica real
                     const mergedMessages = Array.from(messageMap.values()).sort((a, b) => {
                         const timeA = a.timestamp?.getTime() || 0;
                         const timeB = b.timestamp?.getTime() || 0;
                         const timeDiff = timeA - timeB;
+                        const absTimeDiff = Math.abs(timeDiff);
                         
-                        // Se timestamps são muito próximos (menos de 3 segundos), usa lógica especial
-                        if (Math.abs(timeDiff) < 3000) {
-                            // Se uma é do agente (enviada) e outra do usuário (recebida), agente fica depois
+                        // Se a diferença for muito pequena (< 2 segundos), usa lógica especial
+                        // Isso evita problemas de sincronização de relógio
+                        if (absTimeDiff < 2000 && a.sender !== b.sender) {
+                            // Prioriza agente sobre usuário apenas quando diferença é muito pequena
                             if (a.sender === 'agent' && b.sender === 'user') {
-                                return 1; // Agente depois (mais recente)
+                                return 1; // Agente depois
                             }
                             if (a.sender === 'user' && b.sender === 'agent') {
                                 return -1; // Usuário antes
                             }
-                            // Se são do mesmo sender, usa diferença de timestamp (mesmo que pequena)
-                            return timeDiff;
                         }
                         
+                        // Para diferenças maiores ou mesmo sender, usa timestamp real
                         return timeDiff;
                     });
                     
