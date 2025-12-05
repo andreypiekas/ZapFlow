@@ -709,7 +709,16 @@ const App: React.FC = () => {
                         try {
                             data = JSON.parse(event.data);
                         } catch (e) {
-                            console.log('[App] 📨 Mensagem WebSocket não é JSON:', event.data.substring(0, 100));
+                            // Não loga dados base64 completos (imagens) - apenas preview
+                            // Filtra strings base64 muito longas (imagens) para não poluir console
+                            if (event.data.length > 1000 || event.data.includes('iVBORw0KGgo') || event.data.includes('data:image')) {
+                                console.log('[App] 📨 Mensagem WebSocket não é JSON (dados binários/base64, tamanho:', event.data.length, 'bytes)');
+                            } else {
+                                const preview = event.data.length > 200 
+                                    ? event.data.substring(0, 200) + '...' 
+                                    : event.data.substring(0, 100);
+                                console.log('[App] 📨 Mensagem WebSocket não é JSON:', preview);
+                            }
                             data = { raw: event.data };
                         }
                     } else {
@@ -847,7 +856,11 @@ const App: React.FC = () => {
                         console.log('[App] ℹ️ Evento WebSocket não é de mensagem:', eventType || 'sem tipo');
                     }
                 } catch (err) {
-                    console.error('[App] ❌ Erro ao processar mensagem WebSocket:', err, event.data);
+                    // Não loga event.data completo para evitar poluir console com base64/imagens
+                    const dataPreview = typeof event.data === 'string' 
+                        ? (event.data.length > 200 ? event.data.substring(0, 200) + '...' : event.data)
+                        : '[objeto]';
+                    console.error('[App] ❌ Erro ao processar mensagem WebSocket:', err, dataPreview);
                 }
             };
             

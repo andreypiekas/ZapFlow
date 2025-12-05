@@ -2,6 +2,42 @@ import React, { ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
+// Filtra logs do console que contêm dados base64 longos (imagens) para não poluir o console
+if (typeof console !== 'undefined') {
+    const originalError = console.error;
+    const originalLog = console.log;
+    const originalWarn = console.warn;
+    
+    const shouldFilter = (args: any[]): boolean => {
+        return args.some(arg => {
+            if (typeof arg === 'string') {
+                // Filtra strings muito longas que parecem base64 (imagens)
+                return (arg.length > 1000 && (arg.includes('iVBORw0KGgo') || arg.includes('data:image') || arg.includes('/9j/'))) ||
+                       arg.includes(':5173/') && arg.length > 500;
+            }
+            return false;
+        });
+    };
+    
+    console.error = (...args: any[]) => {
+        if (!shouldFilter(args)) {
+            originalError.apply(console, args);
+        }
+    };
+    
+    console.log = (...args: any[]) => {
+        if (!shouldFilter(args)) {
+            originalLog.apply(console, args);
+        }
+    };
+    
+    console.warn = (...args: any[]) => {
+        if (!shouldFilter(args)) {
+            originalWarn.apply(console, args);
+        }
+    };
+}
+
 interface ErrorBoundaryProps {
   children?: ReactNode;
 }
