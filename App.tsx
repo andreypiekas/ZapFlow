@@ -1468,17 +1468,17 @@ const App: React.FC = () => {
                         const absTimeDiff = Math.abs(timeDiff);
                         
                         // Se timestamps são muito próximos (< 10 segundos) e senders diferentes
-                        // Aplica lógica especial apenas quando a mensagem do agente tem timestamp anterior ou igual
-                        // Isso garante que mensagens enviadas apareçam depois de recebidas quando timestamps estão próximos
-                        // Mas respeita a ordem por timestamp quando a diferença é significativa
+                        // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
+                        // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
+                        // independentemente de pequenas diferenças de sincronização de relógio
                         if (absTimeDiff < 10000 && a.sender !== b.sender) {
-                            // Se agente tem timestamp anterior ou igual ao usuário, agente vem depois
-                            if (a.sender === 'agent' && b.sender === 'user' && timeA <= timeB) {
-                                return 1; // Agente depois
+                            // Agente sempre vem antes do usuário quando timestamps estão próximos
+                            if (a.sender === 'agent' && b.sender === 'user') {
+                                return -1; // Agente antes
                             }
-                            // Se usuário tem timestamp anterior ou igual ao agente, usuário vem antes
-                            if (a.sender === 'user' && b.sender === 'agent' && timeA <= timeB) {
-                                return -1; // Usuário antes
+                            // Usuário sempre vem depois do agente quando timestamps estão próximos
+                            if (a.sender === 'user' && b.sender === 'agent') {
+                                return 1; // Usuário depois
                             }
                         }
                         
