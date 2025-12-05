@@ -20,13 +20,13 @@ const loadConfig = (): ApiConfig => {
     const saved = localStorage.getItem('zapflow_config');
     if (saved) {
       const parsed = JSON.parse(saved);
-      console.log('[App] ✅ Configurações carregadas do localStorage:', parsed);
+      // Log removido para produção - não expor informações sensíveis
       return parsed;
     }
   } catch (e) {
     console.error('[App] ❌ Erro ao carregar configurações do localStorage:', e);
   }
-  console.log('[App] Usando configurações padrão');
+  // Log removido para produção
   return {
     baseUrl: '', 
     apiKey: '',
@@ -1111,12 +1111,12 @@ const App: React.FC = () => {
   };
 
   const handleSaveConfig = (newConfig: ApiConfig) => {
-    console.log('[App] Salvando configurações:', newConfig);
+    // Log removido para produção - não expor informações sensíveis
     setApiConfig(newConfig);
     // Salva imediatamente no localStorage (além do useEffect)
     try {
       localStorage.setItem('zapflow_config', JSON.stringify(newConfig));
-      console.log('[App] ✅ Configurações salvas no localStorage');
+      // Log removido para produção
     } catch (e) {
       console.error('[App] ❌ Erro ao salvar configurações no localStorage:', e);
     }
