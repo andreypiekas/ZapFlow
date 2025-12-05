@@ -22,6 +22,11 @@ if (typeof console !== 'undefined') {
             return String(arg);
         }).join(' ');
         
+        // Filtra erros 431 (Request Header Fields Too Large) - geralmente causados por base64 longo
+        if (fullText.includes('431') || fullText.includes('Request Header Fields Too Large')) {
+            return true;
+        }
+        
         // Filtra strings que contêm padrões de base64/imagens longas
         // Especialmente aquelas que começam com :5173/ (porta de dev)
         if (fullText.length > 500) {
@@ -45,6 +50,10 @@ if (typeof console !== 'undefined') {
             }
             // Verifica se contém :5173/ seguido de base64 longo
             if (str.includes(':5173/') && str.length > 1000 && (str.includes('iVBORw0KGgo') || str.includes('/9j/'))) {
+                return true;
+            }
+            // Filtra erros de conexão abortada com base64
+            if (str.includes('ERR_CONNECTION_ABORTED') && str.includes(':5173/')) {
                 return true;
             }
         }

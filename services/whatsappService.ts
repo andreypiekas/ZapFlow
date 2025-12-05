@@ -419,15 +419,17 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
 
     if (Array.isArray(data)) {
         if (depth === 0) {
-            console.log(`[ExtractChats] Array recebido com ${data.length} itens`);
+            // Log removido para produção - muito verboso
+            // console.log(`[ExtractChats] Array recebido com ${data.length} itens`);
             if (data.length > 0) {
-                console.log(`[ExtractChats] Primeiro item:`, {
-                    keys: Object.keys(data[0]).slice(0, 15),
-                    hasKey: !!data[0].key,
-                    keyRemoteJid: data[0].key?.remoteJid,
-                    hasId: !!data[0].id,
-                    id: data[0].id
-                });
+                // Log removido para produção - muito verboso
+                // console.log(`[ExtractChats] Primeiro item:`, {
+                //     keys: Object.keys(data[0]).slice(0, 15),
+                //     hasKey: !!data[0].key,
+                //     keyRemoteJid: data[0].key?.remoteJid,
+                //     hasId: !!data[0].id,
+                //     id: data[0].id
+                // });
             }
         }
         data.forEach(item => extractChatsRecursively(item, collectedChats, depth + 1));
@@ -727,18 +729,19 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         if (!rawData) return [];
 
         // Debug: Log estrutura dos dados recebidos
-        console.log('[FetchChats] Dados brutos recebidos:', {
-            isArray: Array.isArray(rawData),
-            type: typeof rawData,
-            keys: rawData && typeof rawData === 'object' ? Object.keys(rawData).slice(0, 20) : [],
-            firstLevel: Array.isArray(rawData) && rawData.length > 0 ? {
-                firstItemKeys: Object.keys(rawData[0]),
-                firstItemType: typeof rawData[0],
-                firstItem: rawData[0] // Log completo do primeiro item
-            } : rawData && typeof rawData === 'object' ? {
-                sampleKeys: Object.keys(rawData).slice(0, 10)
-            } : null
-        });
+        // Log removido para produção - muito verboso
+        // console.log('[FetchChats] Dados brutos recebidos:', {
+        //     isArray: Array.isArray(rawData),
+        //     type: typeof rawData,
+        //     keys: rawData && typeof rawData === 'object' ? Object.keys(rawData).slice(0, 20) : [],
+        //     firstLevel: Array.isArray(rawData) && rawData.length > 0 ? {
+        //         firstItemKeys: Object.keys(rawData[0]),
+        //         firstItemType: typeof rawData[0],
+        //         firstItem: rawData[0] // Log completo do primeiro item
+        //     } : rawData && typeof rawData === 'object' ? {
+        //         sampleKeys: Object.keys(rawData).slice(0, 10)
+        //     } : null
+        // });
 
         // 3. Processa os dados usando o Parser Recursivo Universal
         const chatsMap = new Map<string, any>();

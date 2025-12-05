@@ -883,12 +883,14 @@ const App: React.FC = () => {
             };
             
             ws.onerror = (error) => {
-                console.error('[App] ❌ Erro no WebSocket:', error);
+                // Log removido para produção - muito verboso
+                // console.error('[App] ❌ Erro no WebSocket:', error);
                 // Não tenta reconectar imediatamente, deixa o onclose tratar
             };
             
             ws.onclose = (event) => {
-                console.log(`[App] WebSocket desconectado (code: ${event.code}, reason: ${event.reason || 'sem motivo'})`);
+                // Log removido para produção - muito verboso
+                // console.log(`[App] WebSocket desconectado (code: ${event.code}, reason: ${event.reason || 'sem motivo'})`);
                 
                 // Só reconecta se não foi fechado intencionalmente (code 1000)
                 if (event.code !== 1000) {
@@ -902,7 +904,8 @@ const App: React.FC = () => {
                     );
                     
                     if (wsReconnectAttemptsRef.current <= MAX_RECONNECT_ATTEMPTS) {
-                        console.log(`[App] Tentando reconectar WebSocket em ${delay/1000}s... (tentativa ${wsReconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`);
+                        // Log removido para produção - muito verboso
+                        // console.log(`[App] Tentando reconectar WebSocket em ${delay/1000}s... (tentativa ${wsReconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`);
                         
                         wsReconnectTimeoutRef.current = setTimeout(() => {
                             if (currentUser && apiConfig.baseUrl && !apiConfig.isDemo) {
