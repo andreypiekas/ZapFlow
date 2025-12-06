@@ -17,10 +17,29 @@ const pool = new Pool({
     `postgresql://${process.env.DB_USER || 'postgres'}:${process.env.DB_PASSWORD || ''}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME || 'zapflow'}`
 });
 
-// Middleware
+// Middleware CORS
+const corsOrigins = process.env.CORS_ORIGIN?.split(',').map(o => o.trim()) || ['http://localhost:5173', 'http://localhost:3000'];
 app.use(cors({
-  origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:5173', 'http://localhost:3000'],
-  credentials: true
+  origin: (origin, callback) => {
+    // Permitir requisições sem origin (Postman, curl, etc)
+    if (!origin) return callback(null, true);
+    
+    // Verificar se origin está na lista permitida
+    if (corsOrigins.includes(origin) || corsOrigins.includes('*')) {
+      return callback(null, true);
+    }
+    
+    // Permitir se origin contém localhost ou IP do servidor
+    const serverIP = process.env.SERVER_IP || 'localhost';
+    if (origin.includes('localhost') || origin.includes(serverIP)) {
+      return callback(null, true);
+    }
+    
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 
@@ -226,6 +245,20 @@ app.post('/api/data/:dataType/batch', authenticateToken, async (req, res) => {
   }
 });
 
+// Rota raiz
+app.get('/', (req, res) => {
+  res.json({ 
+    service: 'ZapFlow Backend API',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/api/health',
+      login: '/api/auth/login',
+      data: '/api/data/:dataType'
+    }
+  });
+});
+
 // Health check
 app.get('/api/health', async (req, res) => {
   try {
@@ -237,8 +270,19 @@ app.get('/api/health', async (req, res) => {
 });
 
 // Iniciar servidor
-app.listen(PORT, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
+  console.log(`📊 Health check: http://0.0.0.0:${PORT}/api/health`);
+  console.log(`🌐 Acessível em: http://localhost:${PORT} e http://${process.env.SERVER_IP || 'localhost'}:${PORT}`);
+});
+
+// Tratamento de erros
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`❌ Porta ${PORT} já está em uso`);
+  } else {
+    console.error('❌ Erro no servidor:', error);
+  }
+  process.exit(1);
 });
 

@@ -852,6 +852,9 @@ JWT_SECRET=${JWT_SECRET}
 # Porta do servidor
 PORT=${SERVER_PORT}
 
+# IP do servidor (para CORS e logs)
+SERVER_IP=${SERVER_IP}
+
 # CORS - URLs permitidas
 CORS_ORIGIN=${CORS_ORIGIN}
 EOF
@@ -871,8 +874,8 @@ npm run migrate || {
 echo -e "${GREEN}✅ Migração concluída${NC}"
 echo ""
 
-# 7. Verificar instalação
-echo -e "${YELLOW}[7/7] Verificando instalação...${NC}"
+# 7. Verificar instalação e iniciar servidor
+echo -e "${YELLOW}[7/7] Verificando instalação e iniciando servidor...${NC}"
 
 # Testar conexão
 if npm run migrate > /dev/null 2>&1; then
@@ -881,28 +884,73 @@ else
     echo -e "${YELLOW}⚠️  Não foi possível verificar a conexão${NC}"
 fi
 
+# Verificar se PM2 está instalado
+if ! command -v pm2 &> /dev/null; then
+    echo "Instalando PM2 globalmente..."
+    sudo npm install -g pm2
+    echo -e "${GREEN}✅ PM2 instalado${NC}"
+fi
+
+# Parar instância anterior se existir
+pm2 delete zapflow-backend 2>/dev/null || true
+
+# Iniciar servidor com PM2
+echo "Iniciando servidor backend com PM2..."
+cd "$PROJECT_ROOT/backend"
+pm2 start server.js --name zapflow-backend --cwd "$(pwd)"
+pm2 save
+
+# Configurar PM2 para iniciar no boot
+if pm2 startup | grep -q "sudo"; then
+    echo "Configurando PM2 para iniciar no boot..."
+    pm2 startup | grep "sudo" | bash || echo -e "${YELLOW}⚠️  Não foi possível configurar startup automático${NC}"
+fi
+
+# Voltar para a raiz
+cd "$PROJECT_ROOT"
+
+# Aguardar servidor iniciar
+sleep 3
+
+# Verificar se servidor está rodando
+if pm2 list | grep -q "zapflow-backend.*online"; then
+    echo -e "${GREEN}✅ Servidor backend iniciado com PM2${NC}"
+    echo -e "${GREEN}   Status: $(pm2 jlist | grep -o '"zapflow-backend"[^}]*"status":"[^"]*' | grep -o '"status":"[^"]*' | cut -d'"' -f4)${NC}"
+else
+    echo -e "${YELLOW}⚠️  Servidor pode não ter iniciado corretamente${NC}"
+    echo "Verifique: pm2 logs zapflow-backend"
+fi
+
 echo ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  Instalação concluída com sucesso!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
+echo -e "${BLUE}Servidor Backend:${NC}"
+echo -e "   ${GREEN}✅ Rodando em segundo plano com PM2${NC}"
+echo -e "   ${GREEN}✅ URL: http://${SERVER_IP}:${SERVER_PORT:-3001}${NC}"
+echo -e "   ${GREEN}✅ Health: http://${SERVER_IP}:${SERVER_PORT:-3001}/api/health${NC}"
+echo ""
+echo -e "${BLUE}Comandos úteis:${NC}"
+echo -e "   ${YELLOW}pm2 status${NC}                    - Ver status do servidor"
+echo -e "   ${YELLOW}pm2 logs zapflow-backend${NC}     - Ver logs do servidor"
+echo -e "   ${YELLOW}pm2 restart zapflow-backend${NC}  - Reiniciar servidor"
+echo -e "   ${YELLOW}pm2 stop zapflow-backend${NC}     - Parar servidor"
+echo ""
 echo -e "${BLUE}Próximos passos:${NC}"
 echo ""
-echo "1. Inicie o servidor backend:"
-echo -e "   ${YELLOW}cd backend${NC}"
-echo -e "   ${YELLOW}npm run dev${NC}"
-echo ""
-echo "2. Configure o frontend (opcional):"
+echo "1. Configure o frontend (opcional):"
 echo "   Adicione no .env do frontend:"
 echo -e "   ${YELLOW}VITE_API_URL=http://${SERVER_IP}:${SERVER_PORT:-3001}/api${NC}"
 echo ""
-echo "3. Credenciais padrão do admin:"
+echo "2. Credenciais padrão do admin:"
 echo -e "   ${YELLOW}Username: admin${NC}"
 echo -e "   ${YELLOW}Password: admin123${NC}"
 echo -e "   ${RED}⚠️  ALTERE A SENHA EM PRODUÇÃO!${NC}"
 echo ""
-echo "4. Teste a API:"
+echo "3. Teste a API:"
 echo -e "   ${YELLOW}curl http://${SERVER_IP}:${SERVER_PORT:-3001}/api/health${NC}"
+echo -e "   ${YELLOW}curl http://${SERVER_IP}:${SERVER_PORT:-3001}/${NC}"
 echo ""
 
 # Voltar para a raiz do projeto
