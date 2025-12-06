@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw, Smile, Tag, Plus, Clock, User as UserIcon, AlertTriangle } from 'lucide-react';
 import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow, Contact } from '../types';
 import { generateSmartReply } from '../services/geminiService';
-import { sendRealMessage, sendRealMediaMessage, blobToBase64 } from '../services/whatsappService';
+import { sendRealMessage, sendRealMediaMessage, blobToBase64, sendRealContact } from '../services/whatsappService';
 import { AVAILABLE_TAGS, EMOJIS, STICKERS } from '../constants';
 
 interface ChatInterfaceProps {
@@ -247,6 +247,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+
+  // Contact Selection States
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
+  const [contactSearchTerm, setContactSearchTerm] = useState('');
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -643,6 +647,50 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     setIsSending(false);
     clearAttachment();
     setInputText('');
+  };
+
+  const handleSendContact = async (contact: Contact) => {
+    if (!selectedChat) return;
+
+    const targetNumber = getValidPhoneNumber(selectedChat);
+    const targetDigits = targetNumber.replace(/\D/g, '').length;
+    if (!targetNumber || targetDigits < 10) {
+        alert('Erro: Não foi possível encontrar um número de telefone válido para este contato.');
+        return;
+    }
+
+    setIsSending(true);
+    try {
+        const success = await sendRealContact(
+            apiConfig,
+            targetNumber,
+            contact.name,
+            contact.phone,
+            contact.email
+        );
+
+        if (success) {
+            // Cria mensagem local indicando que um contato foi enviado
+            const newMessage: Message = {
+                id: `m_${Date.now()}`,
+                content: `📇 Contato enviado: ${contact.name}`,
+                sender: 'agent',
+                timestamp: new Date(),
+                status: MessageStatus.SENT,
+                type: 'text'
+            };
+            updateChatWithNewMessage(newMessage);
+            setIsContactModalOpen(false);
+            setContactSearchTerm('');
+        } else {
+            alert('Erro ao enviar contato. Tente novamente.');
+        }
+    } catch (error) {
+        console.error('[handleSendContact] Erro:', error);
+        alert('Erro ao enviar contato. Tente novamente.');
+    } finally {
+        setIsSending(false);
+    }
   };
 
   const handleSendMessage = async () => {
@@ -1774,6 +1822,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                                     >
                                         <Paperclip size={20} />
                                     </button>
+                                    <button 
+                                        onClick={() => setIsContactModalOpen(true)}
+                                        className="p-2 rounded-full transition-colors flex-shrink-0 text-slate-500 hover:bg-slate-200"
+                                        title="Enviar contato"
+                                    >
+                                        <UserIcon size={20} />
+                                    </button>
                                     
                                     <div className="flex-1 relative">
                                         <input 
@@ -1885,6 +1940,71 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                     </button>
                  </div>
              </div>
+          </div>
+        </div>
+      )}
+
+      {/* Contact Selection Modal */}
+      {isContactModalOpen && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 animate-in zoom-in duration-200 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-800">Enviar Contato</h3>
+              <button 
+                onClick={() => { setIsContactModalOpen(false); setContactSearchTerm(''); }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <input
+                type="text"
+                value={contactSearchTerm}
+                onChange={(e) => setContactSearchTerm(e.target.value)}
+                placeholder="Buscar contato..."
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto border border-slate-200 rounded-lg">
+              {contacts
+                .filter(contact => 
+                  contact.name.toLowerCase().includes(contactSearchTerm.toLowerCase()) ||
+                  contact.phone.includes(contactSearchTerm)
+                )
+                .map(contact => (
+                  <button
+                    key={contact.id}
+                    onClick={() => handleSendContact(contact)}
+                    disabled={isSending}
+                    className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-50 last:border-0 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <img 
+                      src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}`} 
+                      className="w-10 h-10 rounded-full"
+                      alt={contact.name}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-800 truncate">{contact.name}</p>
+                      <p className="text-xs text-slate-500 truncate">{contact.phone}</p>
+                      {contact.email && (
+                        <p className="text-xs text-slate-400 truncate">{contact.email}</p>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              {contacts.filter(contact => 
+                contact.name.toLowerCase().includes(contactSearchTerm.toLowerCase()) ||
+                contact.phone.includes(contactSearchTerm)
+              ).length === 0 && (
+                <div className="p-4 text-center text-slate-400 text-sm">
+                  {contactSearchTerm ? 'Nenhum contato encontrado' : 'Nenhum contato cadastrado'}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

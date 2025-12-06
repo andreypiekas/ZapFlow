@@ -408,6 +408,96 @@ export const sendRealMediaMessage = async (
   }
 };
 
+// Envia um contato via WhatsApp (vCard)
+export const sendRealContact = async (
+  config: ApiConfig,
+  phone: string,
+  contactName: string,
+  contactPhone: string,
+  contactEmail?: string
+) => {
+  if (config.isDemo) {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return true;
+  }
+
+  const active = await findActiveInstance(config);
+  const target = active?.instanceName || config.instanceName;
+  
+  // Formata o número de destino
+  const cleanPhone = formatPhoneForApi(phone);
+  
+  // Formata o número do contato a ser enviado
+  const cleanContactPhone = formatPhoneForApi(contactPhone);
+
+  try {
+    // Gera vCard format
+    let vcard = `BEGIN:VCARD\n`;
+    vcard += `VERSION:3.0\n`;
+    vcard += `FN:${contactName}\n`;
+    vcard += `N:${contactName};;;;\n`;
+    vcard += `TEL;TYPE=CELL:${cleanContactPhone}\n`;
+    if (contactEmail) {
+      vcard += `EMAIL:${contactEmail}\n`;
+    }
+    vcard += `END:VCARD`;
+
+    // Payload para Evolution API
+    const payload: any = {
+      number: cleanPhone,
+      contacts: {
+        displayName: contactName,
+        contacts: [
+          {
+            name: contactName,
+            number: cleanContactPhone
+          }
+        ]
+      },
+      delay: 1200
+    };
+
+    // Tenta endpoint sendContact primeiro
+    let response = await fetch(`${config.baseUrl}/message/sendContact/${target}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': config.apiKey
+      },
+      body: JSON.stringify(payload)
+    });
+
+    // Se não funcionar, tenta com vCard direto
+    if (!response.ok) {
+      const payloadVCard = {
+        number: cleanPhone,
+        vcard: vcard,
+        delay: 1200
+      };
+
+      response = await fetch(`${config.baseUrl}/message/sendText/${target}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': config.apiKey
+        },
+        body: JSON.stringify(payloadVCard)
+      });
+    }
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[sendRealContact] Falha API: ${response.status}`, errorText);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("[sendRealContact] Erro de rede:", error);
+    return false;
+  }
+};
+
 // --- CHAT SYNC & PARSING ---
 
 // Função recursiva para encontrar mensagens onde quer que elas estejam aninhadas
