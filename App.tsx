@@ -13,7 +13,7 @@ import ReportsDashboard from './components/ReportsDashboard';
 import Contacts from './components/Contacts';
 import ChatbotSettings from './components/ChatbotSettings';
 import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot, ChevronLeft, ChevronRight } from 'lucide-react';
-import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance } from './services/whatsappService'; 
+import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance, sendDepartmentSelectionMessage, processDepartmentSelection } from './services/whatsappService'; 
 
 const loadConfig = (): ApiConfig => {
   try {
@@ -697,6 +697,64 @@ const App: React.FC = () => {
                         const lastMergedMsg = mergedMessages.length > 0 ? mergedMessages[mergedMessages.length - 1] : null;
                         const lastExistingMsg = existingChat.messages.length > 0 ? existingChat.messages[existingChat.messages.length - 1] : null;
                         
+                        // Lógica de seleção de setores para novos contatos
+                        let finalDepartmentId = wasReopened ? null : existingChat.departmentId;
+                        let finalStatusForDept = finalStatus;
+                        
+                        if (hasNewUserMessages && existingChat.departmentId === null && departments.length > 0) {
+                            // Encontra a última mensagem nova do usuário
+                            const newUserMessages = mergedMessages.filter(msg => {
+                                const isNew = !existingChat.messages.some(existingMsg => 
+                                    existingMsg.id === msg.id || 
+                                    (existingMsg.timestamp && msg.timestamp && 
+                                     Math.abs(existingMsg.timestamp.getTime() - msg.timestamp.getTime()) < 5000 &&
+                                     existingMsg.content === msg.content)
+                                );
+                                return isNew && msg.sender === 'user';
+                            });
+                            
+                            if (newUserMessages.length > 0) {
+                                const lastNewUserMessage = newUserMessages[newUserMessages.length - 1];
+                                const messageContent = lastNewUserMessage.content.trim();
+                                
+                                // Verifica se é resposta numérica para seleção de setor
+                                const selectedDeptId = processDepartmentSelection(messageContent, departments);
+                                
+                                if (selectedDeptId) {
+                                    // Usuário selecionou um setor válido
+                                    finalDepartmentId = selectedDeptId;
+                                    finalStatusForDept = 'pending'; // Vai para triagem do setor
+                                    console.log(`[App] ✅ Setor selecionado pelo usuário via sync: ${departments.find(d => d.id === selectedDeptId)?.name}`);
+                                    
+                                    // Remove a mensagem numérica da lista (é apenas uma resposta de seleção)
+                                    const messageIndex = mergedMessages.findIndex(m => m.id === lastNewUserMessage.id);
+                                    if (messageIndex >= 0) {
+                                        mergedMessages.splice(messageIndex, 1);
+                                    }
+                                } else {
+                                    // É primeira mensagem do usuário e ainda não tem departamento - envia mensagem de seleção
+                                    const isFirstUserMessage = mergedMessages.filter(m => m.sender === 'user').length === 1;
+                                    
+                                    if (isFirstUserMessage) {
+                                        // Envia mensagem de seleção de setores de forma assíncrona
+                                        sendDepartmentSelectionMessage(
+                                            apiConfig,
+                                            existingChat.contactNumber,
+                                            departments
+                                        ).then(sent => {
+                                            if (sent) {
+                                                console.log(`[App] ✅ Mensagem de seleção de setores enviada para ${existingChat.contactName} via sync`);
+                                            } else {
+                                                console.error(`[App] ❌ Falha ao enviar mensagem de seleção de setores para ${existingChat.contactName}`);
+                                            }
+                                        }).catch(err => {
+                                            console.error(`[App] ❌ Erro ao enviar mensagem de seleção de setores:`, err);
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        
                         // Só atualiza lastMessageTime se realmente houver nova mensagem (não apenas reordenação)
                         const shouldUpdateLastMessageTime = hasNewMessages && lastMergedMsg && 
                             (!lastExistingMsg || 
@@ -712,11 +770,11 @@ const App: React.FC = () => {
                             contactName: existingChat.contactName, // Mantém nome editado localmente se houver
                             contactNumber: useRealContactNumber ? realChat.contactNumber : existingChat.contactNumber, // Atualiza se número mais completo
                             clientCode: existingChat.clientCode,
-                            // Se chat foi reaberto, remove departamento e atribuição para voltar à triagem
-                            departmentId: wasReopened ? null : existingChat.departmentId,
+                            // Se chat foi reaberto ou setor foi selecionado, atualiza departamento
+                            departmentId: finalDepartmentId,
                             assignedTo: wasReopened ? undefined : existingChat.assignedTo,
                             tags: existingChat.tags,
-                            status: finalStatus,
+                            status: finalStatusForDept,
                             rating: existingChat.rating,
                             awaitingRating: wasReopened ? false : existingChat.awaitingRating, // Cancela aguardo de avaliação se reaberto
                             activeWorkflow: existingChat.activeWorkflow,
@@ -1077,6 +1135,50 @@ const App: React.FC = () => {
                                                             endedAt: undefined // Remove data de finalização
                                                         };
                                                         console.log(`[App] 🔄 Chat ${chat.contactName} reaberto - cliente enviou nova mensagem`);
+                                                    }
+                                                }
+                                                
+                                                // Lógica de seleção de setores para novos contatos
+                                                if (mapped.sender === 'user') {
+                                                    const messageContent = mapped.content.trim();
+                                                    
+                                                    // Verifica se é resposta numérica para seleção de setor
+                                                    if (updatedChat.departmentId === null && departments.length > 0) {
+                                                        const selectedDeptId = processDepartmentSelection(messageContent, departments);
+                                                        
+                                                        if (selectedDeptId) {
+                                                            // Usuário selecionou um setor válido
+                                                            updatedChat = {
+                                                                ...updatedChat,
+                                                                departmentId: selectedDeptId,
+                                                                status: 'pending' // Vai para triagem do setor
+                                                            };
+                                                            console.log(`[App] ✅ Setor selecionado pelo usuário: ${departments.find(d => d.id === selectedDeptId)?.name}`);
+                                                            
+                                                            // Remove a mensagem numérica da lista (é apenas uma resposta de seleção)
+                                                            const filteredMessages = updatedMessages.filter(m => m.id !== mapped.id);
+                                                            updatedMessages = filteredMessages;
+                                                        } else {
+                                                            // É primeira mensagem do usuário e ainda não tem departamento - envia mensagem de seleção
+                                                            const isFirstUserMessage = updatedChat.messages.filter(m => m.sender === 'user').length === 1;
+                                                            
+                                                            if (isFirstUserMessage) {
+                                                                // Envia mensagem de seleção de setores de forma assíncrona
+                                                                sendDepartmentSelectionMessage(
+                                                                    apiConfig,
+                                                                    updatedChat.contactNumber,
+                                                                    departments
+                                                                ).then(sent => {
+                                                                    if (sent) {
+                                                                        console.log(`[App] ✅ Mensagem de seleção de setores enviada para ${updatedChat.contactName}`);
+                                                                    } else {
+                                                                        console.error(`[App] ❌ Falha ao enviar mensagem de seleção de setores para ${updatedChat.contactName}`);
+                                                                    }
+                                                                }).catch(err => {
+                                                                    console.error(`[App] ❌ Erro ao enviar mensagem de seleção de setores:`, err);
+                                                                });
+                                                            }
+                                                        }
                                                     }
                                                 }
                                                 

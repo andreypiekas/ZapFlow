@@ -1,4 +1,4 @@
-import { ApiConfig, Chat, Message, MessageStatus } from "../types";
+import { ApiConfig, Chat, Message, MessageStatus, Department } from "../types";
 
 // Serviço compatível com Evolution API v1.x/v2.x (usando versão latest)
 // Documentação base: https://doc.evolution-api.com/
@@ -1489,4 +1489,63 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         console.error(`[fetchChatMessages] Stack trace:`, error instanceof Error ? error.stack : 'N/A');
         return [];
     }
+};
+
+// --- DEPARTMENT SELECTION MESSAGE ---
+
+// Gera saudação baseada no horário do dia
+export const getGreetingByTime = (): string => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) {
+        return 'Bom dia';
+    } else if (hour >= 12 && hour < 18) {
+        return 'Boa tarde';
+    } else {
+        return 'Boa noite';
+    }
+};
+
+// Gera mensagem de seleção de setores
+export const generateDepartmentSelectionMessage = (departments: Department[]): string => {
+    const greeting = getGreetingByTime();
+    let message = `${greeting}! Favor selecionar o departamento para atendimento:\n\n`;
+    
+    departments.forEach((dept, index) => {
+        message += `${index + 1} - ${dept.name}\n`;
+    });
+    
+    return message.trim();
+};
+
+// Envia mensagem de seleção de setores
+export const sendDepartmentSelectionMessage = async (
+    config: ApiConfig,
+    phone: string,
+    departments: Department[]
+): Promise<boolean> => {
+    if (departments.length === 0) {
+        console.warn('[sendDepartmentSelectionMessage] Nenhum departamento disponível');
+        return false;
+    }
+    
+    const message = generateDepartmentSelectionMessage(departments);
+    return await sendRealMessage(config, phone, message);
+};
+
+// Processa resposta numérica do usuário e retorna o ID do departamento selecionado
+export const processDepartmentSelection = (
+    messageContent: string,
+    departments: Department[]
+): string | null => {
+    // Remove espaços e converte para número
+    const trimmed = messageContent.trim();
+    const number = parseInt(trimmed, 10);
+    
+    // Verifica se é um número válido e está no range
+    if (isNaN(number) || number < 1 || number > departments.length) {
+        return null;
+    }
+    
+    // Retorna o ID do departamento correspondente (índice é number - 1)
+    return departments[number - 1]?.id || null;
 };
