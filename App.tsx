@@ -14,7 +14,8 @@ import Contacts from './components/Contacts';
 import ChatbotSettings from './components/ChatbotSettings';
 import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot, ChevronLeft, ChevronRight } from 'lucide-react';
 import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance, sendDepartmentSelectionMessage, processDepartmentSelection } from './services/whatsappService';
-import { processChatbotMessages } from './services/chatbotService'; 
+import { processChatbotMessages } from './services/chatbotService';
+import { storageService } from './services/storageService'; 
 
 const loadConfig = (): ApiConfig => {
   try {
@@ -198,103 +199,136 @@ const App: React.FC = () => {
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
+  // Persiste configurações usando storageService (API + localStorage)
   useEffect(() => {
-    localStorage.setItem('zapflow_config', JSON.stringify(apiConfig));
+    storageService.save('config', apiConfig).catch(err => {
+      console.error('[App] Erro ao salvar configurações:', err);
+    });
   }, [apiConfig]);
 
-  // Persiste chats no localStorage sempre que mudarem
+  // Persiste chats usando storageService
   useEffect(() => {
-    try {
-      localStorage.setItem('zapflow_chats', JSON.stringify(chats));
-    } catch (e) {
-      console.error('[App] Erro ao salvar chats no localStorage:', e);
-    }
+    storageService.save('chats', chats).catch(err => {
+      console.error('[App] Erro ao salvar chats:', err);
+    });
   }, [chats]);
 
-  // Persiste usuários no localStorage sempre que mudarem
+  // Persiste usuários usando storageService
   useEffect(() => {
-    try {
-      localStorage.setItem('zapflow_users', JSON.stringify(users));
-    } catch (e) {
-      console.error('[App] Erro ao salvar usuários no localStorage:', e);
-    }
+    storageService.save('users', users).catch(err => {
+      console.error('[App] Erro ao salvar usuários:', err);
+    });
   }, [users]);
 
-  // Persiste contatos no localStorage sempre que mudarem
+  // Persiste contatos usando storageService
   useEffect(() => {
-    try {
-      localStorage.setItem('zapflow_contacts', JSON.stringify(contacts));
-    } catch (e) {
-      console.error('[App] Erro ao salvar contatos no localStorage:', e);
-    }
+    storageService.save('contacts', contacts).catch(err => {
+      console.error('[App] Erro ao salvar contatos:', err);
+    });
   }, [contacts]);
 
-  // Persiste departamentos no localStorage sempre que mudarem
+  // Persiste departamentos usando storageService
   useEffect(() => {
-    try {
-      localStorage.setItem('zapflow_departments', JSON.stringify(departments));
-    } catch (e) {
-      console.error('[App] Erro ao salvar departamentos no localStorage:', e);
-    }
+    storageService.save('departments', departments).catch(err => {
+      console.error('[App] Erro ao salvar departamentos:', err);
+    });
   }, [departments]);
 
-  // Persiste respostas rápidas no localStorage sempre que mudarem
+  // Persiste respostas rápidas usando storageService
   useEffect(() => {
-    try {
-      localStorage.setItem('zapflow_quickReplies', JSON.stringify(quickReplies));
-    } catch (e) {
-      console.error('[App] Erro ao salvar respostas rápidas no localStorage:', e);
-    }
+    storageService.save('quickReplies', quickReplies).catch(err => {
+      console.error('[App] Erro ao salvar respostas rápidas:', err);
+    });
   }, [quickReplies]);
 
-  // Persiste workflows no localStorage sempre que mudarem
+  // Persiste workflows usando storageService
   useEffect(() => {
-    try {
-      localStorage.setItem('zapflow_workflows', JSON.stringify(workflows));
-    } catch (e) {
-      console.error('[App] Erro ao salvar workflows no localStorage:', e);
-    }
+    storageService.save('workflows', workflows).catch(err => {
+      console.error('[App] Erro ao salvar workflows:', err);
+    });
   }, [workflows]);
 
-  // Persiste configuração do chatbot no localStorage sempre que mudar
+  // Persiste configuração do chatbot usando storageService
   useEffect(() => {
-    try {
-      localStorage.setItem('zapflow_chatbotConfig', JSON.stringify(chatbotConfig));
-    } catch (e) {
-      console.error('[App] Erro ao salvar configuração do chatbot no localStorage:', e);
-    }
+    storageService.save('chatbotConfig', chatbotConfig).catch(err => {
+      console.error('[App] Erro ao salvar configuração do chatbot:', err);
+    });
   }, [chatbotConfig]);
 
-  // Persiste view state no localStorage sempre que mudar
+  // Persiste view state usando storageService
   useEffect(() => {
-    try {
-      localStorage.setItem('zapflow_currentView', currentView);
-    } catch (e) {
-      console.error('[App] Erro ao salvar view state no localStorage:', e);
-    }
+    storageService.save('viewState', currentView).catch(err => {
+      console.error('[App] Erro ao salvar view state:', err);
+    });
   }, [currentView]);
 
-  // Persiste estado da sidebar no localStorage sempre que mudar
+  // Persiste estado da sidebar usando storageService
   useEffect(() => {
-    try {
-      localStorage.setItem('zapflow_sidebarCollapsed', JSON.stringify(isSidebarCollapsed));
-    } catch (e) {
-      console.error('[App] Erro ao salvar estado da sidebar no localStorage:', e);
-    }
+    storageService.save('sidebarState', isSidebarCollapsed).catch(err => {
+      console.error('[App] Erro ao salvar estado da sidebar:', err);
+    });
   }, [isSidebarCollapsed]);
 
-  // Persiste sessão do usuário no localStorage sempre que mudar
+  // Persiste sessão do usuário
   useEffect(() => {
-    try {
-      if (currentUser) {
+    if (currentUser) {
+      // Salva no localStorage para compatibilidade
+      try {
         localStorage.setItem('zapflow_user', JSON.stringify(currentUser));
-      } else {
-        localStorage.removeItem('zapflow_user');
+      } catch (e) {
+        console.error('[App] Erro ao salvar sessão do usuário:', e);
       }
-    } catch (e) {
-      console.error('[App] Erro ao salvar sessão do usuário no localStorage:', e);
+    } else {
+      localStorage.removeItem('zapflow_user');
     }
   }, [currentUser]);
+
+  // Carrega dados da API quando o componente montar e usuário estiver logado
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const loadDataFromAPI = async () => {
+      try {
+        // Tenta carregar cada tipo de dado da API
+        const [apiConfigData, departmentsData, quickRepliesData, workflowsData, chatbotConfigData, viewStateData, sidebarStateData] = await Promise.all([
+          storageService.load<ApiConfig>('config'),
+          storageService.load<Department[]>('departments'),
+          storageService.load<QuickReply[]>('quickReplies'),
+          storageService.load<Workflow[]>('workflows'),
+          storageService.load<ChatbotConfig>('chatbotConfig'),
+          storageService.load<ViewState>('viewState'),
+          storageService.load<boolean>('sidebarState'),
+        ]);
+
+        // Atualiza apenas se os dados vieram da API (não são null)
+        if (apiConfigData) {
+          setApiConfig(prev => ({ ...prev, ...apiConfigData }));
+        }
+        if (departmentsData && departmentsData.length > 0) {
+          setDepartments(departmentsData);
+        }
+        if (quickRepliesData && quickRepliesData.length > 0) {
+          setQuickReplies(quickRepliesData);
+        }
+        if (workflowsData && workflowsData.length > 0) {
+          setWorkflows(workflowsData);
+        }
+        if (chatbotConfigData) {
+          setChatbotConfig(chatbotConfigData);
+        }
+        if (viewStateData) {
+          setCurrentView(viewStateData);
+        }
+        if (sidebarStateData !== null) {
+          setIsSidebarCollapsed(sidebarStateData);
+        }
+      } catch (error) {
+        console.error('[App] Erro ao carregar dados da API:', error);
+      }
+    };
+
+    loadDataFromAPI();
+  }, [currentUser]); // Executa quando o usuário fizer login
 
   // Refs para armazenar interval e WebSocket
   const intervalIdRef = useRef<ReturnType<typeof setInterval> | null>(null);

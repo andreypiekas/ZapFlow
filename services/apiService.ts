@@ -1,0 +1,163 @@
+// Serviço para comunicação com a API backend
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
+
+export interface ApiResponse<T> {
+  success?: boolean;
+  data?: T;
+  error?: string;
+}
+
+class ApiService {
+  private getToken(): string | null {
+    return localStorage.getItem('zapflow_auth_token');
+  }
+
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const token = this.getToken();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers,
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
+        throw new Error(error.error || `HTTP ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error(`[ApiService] Erro na requisição ${endpoint}:`, error);
+      throw error;
+    }
+  }
+
+  // Autenticação
+  async login(username: string, password: string): Promise<{ token: string; user: any }> {
+    const response = await this.request<{ token: string; user: any }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+    
+    if (response.token) {
+      localStorage.setItem('zapflow_auth_token', response.token);
+      localStorage.setItem('zapflow_user', JSON.stringify(response.user));
+    }
+    
+    return response;
+  }
+
+  logout(): void {
+    localStorage.removeItem('zapflow_auth_token');
+    localStorage.removeItem('zapflow_user');
+  }
+
+  // Operações de dados
+  async getData<T>(dataType: string, key?: string): Promise<T | null> {
+    try {
+      const endpoint = key 
+        ? `/api/data/${dataType}?key=${encodeURIComponent(key)}`
+        : `/api/data/${dataType}`;
+      
+      const response = await this.request<T | { [key: string]: T }>(endpoint);
+      
+      if (key) {
+        return response as T;
+      } else {
+        // Se não há key, retorna o primeiro valor ou null
+        const data = response as { [key: string]: T };
+        const keys = Object.keys(data);
+        return keys.length > 0 ? data[keys[0]] : null;
+      }
+    } catch (error) {
+      console.error(`[ApiService] Erro ao buscar ${dataType}:`, error);
+      return null;
+    }
+  }
+
+  async getAllData<T>(dataType: string): Promise<{ [key: string]: T }> {
+    try {
+      const response = await this.request<{ [key: string]: T }>(`/api/data/${dataType}`);
+      return response;
+    } catch (error) {
+      console.error(`[ApiService] Erro ao buscar todos os dados de ${dataType}:`, error);
+      return {};
+    }
+  }
+
+  async saveData<T>(dataType: string, key: string, value: T): Promise<boolean> {
+    try {
+      await this.request('/api/data/' + dataType, {
+        method: 'POST',
+        body: JSON.stringify({ key, value }),
+      });
+      return true;
+    } catch (error) {
+      console.error(`[ApiService] Erro ao salvar ${dataType}/${key}:`, error);
+      return false;
+    }
+  }
+
+  async saveBatchData<T>(dataType: string, data: { [key: string]: T }): Promise<boolean> {
+    try {
+      await this.request('/api/data/' + dataType + '/batch', {
+        method: 'POST',
+        body: JSON.stringify({ data }),
+      });
+      return true;
+    } catch (error) {
+      console.error(`[ApiService] Erro ao salvar lote de ${dataType}:`, error);
+      return false;
+    }
+  }
+
+  async updateData<T>(dataType: string, key: string, value: T): Promise<boolean> {
+    try {
+      await this.request(`/api/data/${dataType}/${encodeURIComponent(key)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ value }),
+      });
+      return true;
+    } catch (error) {
+      console.error(`[ApiService] Erro ao atualizar ${dataType}/${key}:`, error);
+      return false;
+    }
+  }
+
+  async deleteData(dataType: string, key: string): Promise<boolean> {
+    try {
+      await this.request(`/api/data/${dataType}/${encodeURIComponent(key)}`, {
+        method: 'DELETE',
+      });
+      return true;
+    } catch (error) {
+      console.error(`[ApiService] Erro ao deletar ${dataType}/${key}:`, error);
+      return false;
+    }
+  }
+
+  // Health check
+  async healthCheck(): Promise<boolean> {
+    try {
+      const response = await this.request<{ status: string; database: string }>('/api/health');
+      return response.status === 'ok' && response.database === 'connected';
+    } catch (error) {
+      return false;
+    }
+  }
+}
+
+export const apiService = new ApiService();
+

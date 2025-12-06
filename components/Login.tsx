@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { User, UserRole } from '../types';
 import { User as UserIcon, Lock } from 'lucide-react';
+import { apiService } from '../services/apiService';
 
 interface LoginProps {
   users: User[];
@@ -12,17 +13,54 @@ const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Find user by email and simple password check
-    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+    setError('');
+    setIsLoading(true);
 
-    if (user) {
-      onLogin(user);
-    } else {
-      setError('Credenciais inválidas. Verifique email e senha.');
+    try {
+      // Tenta fazer login via API primeiro
+      try {
+        const response = await apiService.login(email, password);
+        if (response.user) {
+          // Converte o usuário da API para o formato esperado
+          const user: User = {
+            id: response.user.id.toString(),
+            username: response.user.username,
+            name: response.user.name,
+            email: response.user.email || email,
+            role: response.user.role as UserRole,
+            password: '' // Não armazena senha
+          };
+          onLogin(user);
+          setIsLoading(false);
+          return;
+        }
+      } catch (apiError: any) {
+        // Se a API não estiver disponível ou falhar, tenta login local
+        if (apiError.message && !apiError.message.includes('Failed to fetch')) {
+          setError(apiError.message || 'Credenciais inválidas');
+          setIsLoading(false);
+          return;
+        }
+        // Se for erro de rede, continua para login local
+      }
+
+      // Fallback: login local (compatibilidade)
+      const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+
+      if (user) {
+        onLogin(user);
+      } else {
+        setError('Credenciais inválidas. Verifique email e senha.');
+      }
+    } catch (err) {
+      setError('Erro ao fazer login. Tente novamente.');
+      console.error('[Login] Erro:', err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -81,9 +119,10 @@ const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
 
             <button 
               type="submit"
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-4 rounded-md transition-colors flex items-center justify-center gap-2"
+              disabled={isLoading}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-md transition-colors flex items-center justify-center gap-2"
             >
-              Entrar na Plataforma
+              {isLoading ? 'Entrando...' : 'Entrar na Plataforma'}
             </button>
           </form>
 
