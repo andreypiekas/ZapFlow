@@ -49,10 +49,27 @@ function Get-ServerIP {
 $SERVER_IP = Get-ServerIP
 Write-Host ""
 
+# Detectar e navegar para a raiz do projeto
+$SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
+$SCRIPT_DIR_NAME = Split-Path -Leaf $SCRIPT_DIR
+$PROJECT_ROOT = Get-Location
+
+# Se o script está em scripts/, a raiz do projeto é o diretório pai
+if ($SCRIPT_DIR_NAME -eq "scripts") {
+    $PROJECT_ROOT = Split-Path -Parent $SCRIPT_DIR
+    Set-Location $PROJECT_ROOT
+    Write-Host "✅ Navegando para a raiz do projeto: $(Get-Location)" -ForegroundColor Green
+    Write-Host ""
+} else {
+    # Se não está em scripts/, assume que já está na raiz
+    $PROJECT_ROOT = Get-Location
+}
+
 # Verificar se está na raiz do projeto
 if (-not (Test-Path "backend")) {
     Write-Host "❌ Erro: Diretório 'backend' não encontrado." -ForegroundColor Red
-    Write-Host "Execute este script da raiz do projeto ZapFlow."
+    Write-Host "Execute este script da raiz do projeto ZapFlow ou da pasta scripts/."
+    Write-Host "Diretório atual: $(Get-Location)"
     exit 1
 }
 
@@ -246,5 +263,6 @@ Write-Host "4. Teste a API:"
 Write-Host "   curl http://${SERVER_IP}:$SERVER_PORT/api/health" -ForegroundColor Yellow
 Write-Host ""
 
-Set-Location ..
+# Voltar para a raiz do projeto
+Set-Location $PROJECT_ROOT
 

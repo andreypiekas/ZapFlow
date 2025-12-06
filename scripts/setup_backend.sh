@@ -45,10 +45,26 @@ detect_server_ip() {
 detect_server_ip
 echo ""
 
+# Detectar e navegar para a raiz do projeto
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CURRENT_DIR="$(pwd)"
+
+# Se o script está em scripts/, a raiz do projeto é o diretório pai
+if [ "$(basename "$SCRIPT_DIR")" = "scripts" ]; then
+    PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+    cd "$PROJECT_ROOT"
+    echo -e "${GREEN}✅ Navegando para a raiz do projeto: $(pwd)${NC}"
+    echo ""
+else
+    # Se não está em scripts/, assume que já está na raiz
+    PROJECT_ROOT="$(pwd)"
+fi
+
 # Verificar se está na raiz do projeto
 if [ ! -d "backend" ]; then
     echo -e "${RED}❌ Erro: Diretório 'backend' não encontrado.${NC}"
-    echo "Execute este script da raiz do projeto ZapFlow."
+    echo "Execute este script da raiz do projeto ZapFlow ou da pasta scripts/."
+    echo "Diretório atual: $(pwd)"
     exit 1
 fi
 
@@ -254,4 +270,7 @@ echo ""
 echo "4. Teste a API:"
 echo -e "   ${YELLOW}curl http://${SERVER_IP}:${SERVER_PORT:-3001}/api/health${NC}"
 echo ""
+
+# Voltar para a raiz do projeto
+cd "$PROJECT_ROOT"
 
