@@ -88,25 +88,81 @@ echo ""
 
 # 2. Verificar PostgreSQL
 echo -e "${YELLOW}[2/7] Verificando PostgreSQL...${NC}"
-if ! command -v psql &> /dev/null; then
-    echo -e "${YELLOW}⚠️  PostgreSQL não encontrado.${NC}"
-    echo "Deseja instalar o PostgreSQL? (s/n)"
+
+# Verificar se PostgreSQL nativo está instalado e rodando
+PG_NATIVE_INSTALLED=false
+PG_NATIVE_RUNNING=false
+
+# Verificar se o serviço PostgreSQL existe
+if command -v systemctl &> /dev/null; then
+    if systemctl list-unit-files | grep -q "postgresql"; then
+        PG_NATIVE_INSTALLED=true
+        if systemctl is-active --quiet postgresql 2>/dev/null; then
+            PG_NATIVE_RUNNING=true
+        fi
+    fi
+fi
+
+# Verificar se psql está disponível (pode ser do Docker)
+if command -v psql &> /dev/null; then
+    # Tentar conectar ao PostgreSQL nativo (não Docker)
+    if pg_isready -h localhost -p 54321 > /dev/null 2>&1 || pg_isready -h localhost -p 5432 > /dev/null 2>&1; then
+        PG_NATIVE_RUNNING=true
+    fi
+fi
+
+# Verificar se há processo PostgreSQL nativo rodando
+if pgrep -f "postgres.*main" > /dev/null 2>&1 && ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "postgres"; then
+    PG_NATIVE_RUNNING=true
+    PG_NATIVE_INSTALLED=true
+fi
+
+if [ "$PG_NATIVE_INSTALLED" = false ] || [ "$PG_NATIVE_RUNNING" = false ]; then
+    if [ "$PG_NATIVE_INSTALLED" = false ]; then
+        echo -e "${YELLOW}⚠️  PostgreSQL nativo não está instalado.${NC}"
+        echo -e "${YELLOW}   Detectado PostgreSQL em Docker (Evolution API), mas precisamos do PostgreSQL nativo.${NC}"
+    else
+        echo -e "${YELLOW}⚠️  PostgreSQL nativo está instalado mas não está rodando.${NC}"
+    fi
+    
+    echo ""
+    echo "O ZapFlow precisa do PostgreSQL nativo (não Docker) para o backend."
+    echo "Deseja instalar/iniciar o PostgreSQL nativo? (s/n)"
     read -r INSTALL_PG
     
     if [ "$INSTALL_PG" = "s" ] || [ "$INSTALL_PG" = "S" ]; then
         if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-            echo "Instalando PostgreSQL..."
-            sudo apt update
-            sudo apt install -y postgresql postgresql-contrib
-            sudo systemctl start postgresql
-            sudo systemctl enable postgresql
+            if [ "$PG_NATIVE_INSTALLED" = false ]; then
+                echo "Instalando PostgreSQL nativo..."
+                sudo apt update
+                sudo apt install -y postgresql postgresql-contrib
+            fi
+            
+            # Tentar iniciar PostgreSQL
+            echo "Iniciando PostgreSQL..."
+            if sudo systemctl start postgresql 2>/dev/null; then
+                echo -e "${GREEN}✅ PostgreSQL iniciado${NC}"
+                sudo systemctl enable postgresql
+                sleep 3
+            else
+                # Tentar iniciar via service
+                if sudo service postgresql start 2>/dev/null; then
+                    echo -e "${GREEN}✅ PostgreSQL iniciado via service${NC}"
+                    sleep 3
+                else
+                    echo -e "${YELLOW}⚠️  Não foi possível iniciar automaticamente.${NC}"
+                    echo "Tente manualmente: sudo systemctl start postgresql"
+                fi
+            fi
         elif [[ "$OSTYPE" == "darwin"* ]]; then
             echo "Instalando PostgreSQL via Homebrew..."
             if ! command -v brew &> /dev/null; then
                 echo -e "${RED}❌ Homebrew não encontrado. Instale o Homebrew primeiro.${NC}"
                 exit 1
             fi
-            brew install postgresql@14
+            if [ "$PG_NATIVE_INSTALLED" = false ]; then
+                brew install postgresql@14
+            fi
             brew services start postgresql@14
         else
             echo -e "${RED}❌ Sistema operacional não suportado para instalação automática.${NC}"
@@ -114,8 +170,18 @@ if ! command -v psql &> /dev/null; then
             exit 1
         fi
     else
-        echo -e "${RED}❌ PostgreSQL é necessário. Instale manualmente e execute o script novamente.${NC}"
+        echo -e "${RED}❌ PostgreSQL nativo é necessário para o backend.${NC}"
+        echo "Instale manualmente e execute o script novamente."
         exit 1
+    fi
+fi
+
+# Verificar novamente se está rodando
+if ! pg_isready -h localhost -p 54321 > /dev/null 2>&1 && ! pg_isready -h localhost -p 5432 > /dev/null 2>&1; then
+    if ! systemctl is-active --quiet postgresql 2>/dev/null; then
+        echo -e "${YELLOW}⚠️  PostgreSQL ainda não está rodando.${NC}"
+        echo "Tente iniciar manualmente: sudo systemctl start postgresql"
+        echo "Ou verifique o status: sudo systemctl status postgresql"
     fi
 fi
 
@@ -222,14 +288,71 @@ detect_postgresql() {
     if [ "$PG_RUNNING" = true ]; then
         echo -e "${GREEN}✅ PostgreSQL está rodando${NC}"
         
-        # Tentar detectar a porta em uso
-        DETECTED_PORT=$(sudo netstat -tlnp 2>/dev/null | grep postgres | grep LISTEN | head -1 | awk '{print $4}' | cut -d':' -f2)
+        # Tentar detectar a porta em uso (excluindo Docker)
+        # Primeiro, obter PIDs do Docker
+        DOCKER_PIDS=""
+        if command -v docker &> /dev/null; then
+            DOCKER_PIDS=$(docker ps --format '{{.ID}}' 2>/dev/null | xargs -I {} docker inspect --format '{{.State.Pid}}' {} 2>/dev/null | tr '\n' '|' | sed 's/|$//')
+        fi
+        
+        # Detectar porta via netstat, excluindo processos do Docker
+        DETECTED_PORT=""
+        if command -v netstat &> /dev/null; then
+            while IFS= read -r line; do
+                PORT=$(echo "$line" | awk '{print $4}' | cut -d':' -f2)
+                PID=$(echo "$line" | awk '{print $7}' | cut -d'/' -f1)
+                # Verificar se o PID não é do Docker
+                if [ -n "$PID" ] && [ -n "$DOCKER_PIDS" ]; then
+                    if echo "$DOCKER_PIDS" | grep -q "\b$PID\b"; then
+                        continue
+                    fi
+                fi
+                # Verificar se é realmente PostgreSQL nativo
+                if [ -n "$PID" ]; then
+                    CMD=$(ps -p "$PID" -o cmd= 2>/dev/null | grep -i postgres | grep -v docker)
+                    if [ -n "$CMD" ]; then
+                        DETECTED_PORT="$PORT"
+                        break
+                    fi
+                fi
+            done < <(sudo netstat -tlnp 2>/dev/null | grep postgres | grep LISTEN || true)
+        fi
+        
+        # Se não encontrou, tentar via ss
+        if [ -z "$DETECTED_PORT" ] && command -v ss &> /dev/null; then
+            while IFS= read -r line; do
+                PORT=$(echo "$line" | awk '{print $4}' | cut -d':' -f2)
+                PID=$(echo "$line" | awk '{print $6}' | cut -d',' -f2 | cut -d'=' -f2)
+                if [ -n "$PID" ] && [ -n "$DOCKER_PIDS" ]; then
+                    if echo "$DOCKER_PIDS" | grep -q "\b$PID\b"; then
+                        continue
+                    fi
+                fi
+                if [ -n "$PID" ]; then
+                    CMD=$(ps -p "$PID" -o cmd= 2>/dev/null | grep -i postgres | grep -v docker)
+                    if [ -n "$CMD" ]; then
+                        DETECTED_PORT="$PORT"
+                        break
+                    fi
+                fi
+            done < <(sudo ss -tlnp 2>/dev/null | grep postgres | grep LISTEN || true)
+        fi
+        
+        # Se ainda não encontrou, tentar via pg_isready
         if [ -z "$DETECTED_PORT" ]; then
-            DETECTED_PORT=$(sudo ss -tlnp 2>/dev/null | grep postgres | grep LISTEN | head -1 | awk '{print $4}' | cut -d':' -f2)
+            for PORT in 54321 5432; do
+                if pg_isready -h localhost -p "$PORT" > /dev/null 2>&1; then
+                    # Verificar se não é Docker
+                    if ! docker ps --format '{{.Ports}}' 2>/dev/null | grep -q ":$PORT->"; then
+                        DETECTED_PORT="$PORT"
+                        break
+                    fi
+                fi
+            done
         fi
         
         if [ -n "$DETECTED_PORT" ]; then
-            echo -e "${GREEN}✅ PostgreSQL detectado na porta: $DETECTED_PORT${NC}"
+            echo -e "${GREEN}✅ PostgreSQL nativo detectado na porta: $DETECTED_PORT${NC}"
             
             # Verificar se está escutando em localhost ou IP
             LISTEN_ADDR=$(sudo netstat -tlnp 2>/dev/null | grep postgres | grep ":$DETECTED_PORT" | head -1 | awk '{print $4}' | cut -d':' -f1)
@@ -383,6 +506,17 @@ else
         fi
     fi
     
+    # Se ainda falhou, tentar porta 54321 (padrão do autoinstall)
+    if [ "$CONNECTION_SUCCESS" = false ] && [ "$DB_PORT" != "54321" ]; then
+        echo -e "${YELLOW}⚠️  Tentando porta 54321 (padrão do autoinstall)...${NC}"
+        if PGPASSWORD=$DB_PASSWORD psql -h localhost -p 54321 -U "$DB_USER" -d postgres -c "SELECT 1;" > /dev/null 2>&1; then
+            echo -e "${GREEN}✅ Conexão estabelecida em localhost:54321${NC}"
+            DB_HOST="localhost"
+            DB_PORT="54321"
+            CONNECTION_SUCCESS=true
+        fi
+    fi
+    
     # Se ainda falhou, tentar porta padrão 5432
     if [ "$CONNECTION_SUCCESS" = false ] && [ "$DB_PORT" != "5432" ]; then
         echo -e "${YELLOW}⚠️  Tentando porta padrão 5432...${NC}"
@@ -438,8 +572,11 @@ else
     if [ "$DB_HOST" != "localhost" ]; then
         echo "  - localhost:$DB_PORT"
     fi
+    if [ "$DB_PORT" != "54321" ]; then
+        echo "  - localhost:54321 (padrão do autoinstall)"
+    fi
     if [ "$DB_PORT" != "5432" ]; then
-        echo "  - localhost:5432"
+        echo "  - localhost:5432 (porta padrão)"
     fi
     echo ""
     echo "Verifique:"
