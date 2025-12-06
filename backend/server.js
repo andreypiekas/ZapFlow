@@ -41,7 +41,9 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-app.use(express.json());
+// Aumentar limite do body parser para permitir payloads grandes (chats com muitas mensagens)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Middleware de autenticação
 const authenticateToken = async (req, res, next) => {
