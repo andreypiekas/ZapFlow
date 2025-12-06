@@ -238,19 +238,19 @@ DOCKER_PG_PORT_EXPOSED=false
 
 # Verificar se há PostgreSQL em Docker (Evolution API)
 check_docker_postgres() {
-    DOCKER_PG_DETECTED=false
-    DOCKER_PG_PORT_EXPOSED=false
+    local detected=false
+    local port_exposed=false
     
     if command -v docker &> /dev/null; then
         # Verificar container evolution_postgres especificamente
         if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "evolution_postgres"; then
-            DOCKER_PG_DETECTED=true
+            detected=true
             echo -e "${GREEN}✅ PostgreSQL em Docker detectado (Evolution API)${NC}"
             
             # Verificar se a porta está exposta para o host
             DOCKER_PORTS=$(docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null | grep "evolution_postgres" | awk '{print $2}')
             if echo "$DOCKER_PORTS" | grep -q "5432"; then
-                DOCKER_PG_PORT_EXPOSED=true
+                port_exposed=true
                 EXPOSED_PORT=$(echo "$DOCKER_PORTS" | grep -oP '0\.0\.0\.0:\K\d+(?=->5432)' | head -1)
                 if [ -n "$EXPOSED_PORT" ]; then
                     echo -e "${YELLOW}⚠️  ATENÇÃO: PostgreSQL Docker está expondo porta $EXPOSED_PORT->5432 para o host${NC}"
@@ -276,6 +276,10 @@ check_docker_postgres() {
             echo -e "${GREEN}     Usuário: zapflow_user${NC}"
         fi
     fi
+    
+    # Atualizar variáveis globais
+    DOCKER_PG_DETECTED=$detected
+    DOCKER_PG_PORT_EXPOSED=$port_exposed
 }
 
 # Detectar instalações existentes e portas em uso
@@ -416,11 +420,101 @@ detect_postgresql() {
                 SUGGESTED_HOST="$LISTEN_ADDR"
             fi
             
-            # Se a porta detectada é 5432, sugerir porta alternativa
+            # Se a porta detectada é 5432, configurar para usar 54321
             if [ "$DETECTED_PORT" = "5432" ]; then
                 echo -e "${YELLOW}⚠️  PostgreSQL está usando a porta padrão 5432${NC}"
-                echo -e "${YELLOW}   Para evitar conflitos, vamos usar a porta 54321${NC}"
-                SUGGESTED_PORT="54321"
+                
+                # Se Docker está rodando, configurar PostgreSQL nativo para porta 54321
+                if [ "$DOCKER_PG_DETECTED" = true ]; then
+                    echo -e "${YELLOW}   Configurando PostgreSQL nativo para usar porta 54321 (evitar conflito com Docker)...${NC}"
+                    
+                    # Encontrar arquivo de configuração
+                    PG_CONF=$(sudo find /etc/postgresql -name postgresql.conf 2>/dev/null | head -1)
+                    if [ -n "$PG_CONF" ]; then
+                        # Fazer backup
+                        if [ ! -f "${PG_CONF}.backup" ]; then
+                            sudo cp "$PG_CONF" "${PG_CONF}.backup"
+                            echo -e "${GREEN}   Backup criado: ${PG_CONF}.backup${NC}"
+                        fi
+                        
+                        # Alterar porta para 54321
+                        if sudo sed -i "s/^#*port = .*/port = 54321/" "$PG_CONF" 2>/dev/null || sudo sed -i "s/^port = .*/port = 54321/" "$PG_CONF" 2>/dev/null; then
+                            # Se não encontrou a linha, adicionar
+                            if ! grep -q "^port = 54321" "$PG_CONF"; then
+                                echo "port = 54321" | sudo tee -a "$PG_CONF" > /dev/null
+                            fi
+                            
+                            echo -e "${GREEN}   Porta alterada para 54321 no arquivo de configuração${NC}"
+                            
+                            # Reiniciar PostgreSQL
+                            echo "Reiniciando PostgreSQL..."
+                            if sudo systemctl restart postgresql 2>/dev/null; then
+                                sleep 3
+                                echo -e "${GREEN}   PostgreSQL reiniciado${NC}"
+                                
+                                # Verificar se está rodando na nova porta (aguardar até 15 segundos)
+                                PORT_CHANGED=false
+                                for i in {1..15}; do
+                                    if pg_isready -h localhost -p 54321 > /dev/null 2>&1; then
+                                        echo -e "${GREEN}✅ PostgreSQL agora está rodando na porta 54321${NC}"
+                                        DETECTED_PORT="54321"
+                                        SUGGESTED_PORT="54321"
+                                        PORT_CHANGED=true
+                                        break
+                                    fi
+                                    echo -n "."
+                                    sleep 1
+                                done
+                                echo ""
+                                
+                                if [ "$PORT_CHANGED" = false ]; then
+                                    echo -e "${YELLOW}⚠️  PostgreSQL não responde na porta 54321 após reiniciar${NC}"
+                                    echo -e "${YELLOW}   Verificando se ainda está na porta 5432...${NC}"
+                                    
+                                    # Verificar se ainda está na 5432
+                                    if pg_isready -h localhost -p 5432 > /dev/null 2>&1; then
+                                        echo -e "${YELLOW}   PostgreSQL ainda está na porta 5432${NC}"
+                                        echo -e "${YELLOW}   A configuração pode não ter sido aplicada corretamente.${NC}"
+                                        echo ""
+                                        echo "Opções:"
+                                        echo "  1. Usar porta 5432 temporariamente (pode conflitar com Docker)"
+                                        echo "  2. Configurar manualmente e executar o script novamente"
+                                        echo ""
+                                        read -p "Deseja usar porta 5432 temporariamente? (s/n): " USE_5432
+                                        if [ "$USE_5432" = "s" ] || [ "$USE_5432" = "S" ]; then
+                                            SUGGESTED_PORT="5432"
+                                            echo -e "${YELLOW}⚠️  Usando porta 5432. Configure para 54321 manualmente depois.${NC}"
+                                        else
+                                            SUGGESTED_PORT="54321"
+                                            echo -e "${YELLOW}   Configure manualmente: sudo nano /etc/postgresql/*/main/postgresql.conf${NC}"
+                                            echo -e "${YELLOW}   Altere 'port = 5432' para 'port = 54321'${NC}"
+                                            echo -e "${YELLOW}   Depois: sudo systemctl restart postgresql${NC}"
+                                        fi
+                                    else
+                                        echo -e "${RED}❌ PostgreSQL não está respondendo em nenhuma porta${NC}"
+                                        echo "Verifique: sudo systemctl status postgresql"
+                                        SUGGESTED_PORT="54321"
+                                    fi
+                                fi
+                            else
+                                echo -e "${YELLOW}⚠️  Não foi possível reiniciar PostgreSQL automaticamente${NC}"
+                                echo "Execute manualmente: sudo systemctl restart postgresql"
+                                SUGGESTED_PORT="54321"
+                            fi
+                        else
+                            echo -e "${YELLOW}⚠️  Não foi possível alterar a configuração${NC}"
+                            SUGGESTED_PORT="54321"
+                        fi
+                    else
+                        echo -e "${YELLOW}⚠️  Arquivo de configuração não encontrado${NC}"
+                        echo "Configure manualmente: sudo nano /etc/postgresql/*/main/postgresql.conf"
+                        echo "Altere 'port = 5432' para 'port = 54321'"
+                        SUGGESTED_PORT="54321"
+                    fi
+                else
+                    echo -e "${YELLOW}   Para evitar conflitos, vamos usar a porta 54321${NC}"
+                    SUGGESTED_PORT="54321"
+                fi
             else
                 SUGGESTED_PORT="$DETECTED_PORT"
             fi
@@ -560,43 +654,63 @@ fi
 
 # Testar conexão com PostgreSQL
 echo "Testando conexão com PostgreSQL em $DB_HOST:$DB_PORT..."
-CONNECTION_SUCCESS=false
 
-# Tentar conectar com o host fornecido
-if PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "SELECT 1;" > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ Conexão com PostgreSQL estabelecida em $DB_HOST:$DB_PORT${NC}"
-    CONNECTION_SUCCESS=true
-else
-    # Se falhou e o host não é localhost, tentar localhost
-    if [ "$DB_HOST" != "localhost" ] && [ "$DB_HOST" != "127.0.0.1" ]; then
-        echo -e "${YELLOW}⚠️  Falha ao conectar em $DB_HOST. Tentando localhost...${NC}"
-        if PGPASSWORD=$DB_PASSWORD psql -h localhost -p "$DB_PORT" -U "$DB_USER" -d postgres -c "SELECT 1;" > /dev/null 2>&1; then
-            echo -e "${GREEN}✅ Conexão estabelecida em localhost:$DB_PORT${NC}"
-            echo -e "${YELLOW}⚠️  PostgreSQL está escutando apenas em localhost, não no IP da rede${NC}"
-            DB_HOST="localhost"
-            CONNECTION_SUCCESS=true
-        fi
-    fi
-    
-    # Se ainda falhou, tentar porta 54321 (padrão do autoinstall)
-    if [ "$CONNECTION_SUCCESS" = false ] && [ "$DB_PORT" != "54321" ]; then
-        echo -e "${YELLOW}⚠️  Tentando porta 54321 (padrão do autoinstall)...${NC}"
-        if PGPASSWORD=$DB_PASSWORD psql -h localhost -p 54321 -U "$DB_USER" -d postgres -c "SELECT 1;" > /dev/null 2>&1; then
-            echo -e "${GREEN}✅ Conexão estabelecida em localhost:54321${NC}"
-            DB_HOST="localhost"
-            DB_PORT="54321"
-            CONNECTION_SUCCESS=true
-        fi
-    fi
-    
-    # Se ainda falhou, tentar porta padrão 5432
-    if [ "$CONNECTION_SUCCESS" = false ] && [ "$DB_PORT" != "5432" ]; then
-        echo -e "${YELLOW}⚠️  Tentando porta padrão 5432...${NC}"
+# Se tentou configurar para 54321, verificar se realmente está nessa porta
+if [ "$DB_PORT" = "54321" ] && [ -n "$DETECTED_PORT" ] && [ "$DETECTED_PORT" = "5432" ]; then
+    echo "Verificando se PostgreSQL está realmente na porta 54321..."
+    if ! pg_isready -h localhost -p 54321 > /dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  PostgreSQL ainda não está na porta 54321${NC}"
+        echo -e "${YELLOW}   Tentando conectar na porta 5432 (onde está rodando)...${NC}"
+        # Tentar conectar na porta original primeiro
         if PGPASSWORD=$DB_PASSWORD psql -h localhost -p 5432 -U "$DB_USER" -d postgres -c "SELECT 1;" > /dev/null 2>&1; then
             echo -e "${GREEN}✅ Conexão estabelecida em localhost:5432${NC}"
+            echo -e "${YELLOW}⚠️  Usando porta 5432 (configuração para 54321 não foi aplicada ainda)${NC}"
             DB_HOST="localhost"
             DB_PORT="5432"
             CONNECTION_SUCCESS=true
+        fi
+    fi
+fi
+
+CONNECTION_SUCCESS=${CONNECTION_SUCCESS:-false}
+
+# Tentar conectar com o host/porta informados
+if [ "$CONNECTION_SUCCESS" = false ]; then
+    if PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "SELECT 1;" > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ Conexão com PostgreSQL estabelecida em $DB_HOST:$DB_PORT${NC}"
+        CONNECTION_SUCCESS=true
+    else
+        # Se falhou e o host não é localhost, tentar localhost
+        if [ "$DB_HOST" != "localhost" ] && [ "$DB_HOST" != "127.0.0.1" ]; then
+            echo -e "${YELLOW}⚠️  Falha ao conectar em $DB_HOST. Tentando localhost...${NC}"
+            if PGPASSWORD=$DB_PASSWORD psql -h localhost -p "$DB_PORT" -U "$DB_USER" -d postgres -c "SELECT 1;" > /dev/null 2>&1; then
+                echo -e "${GREEN}✅ Conexão estabelecida em localhost:$DB_PORT${NC}"
+                echo -e "${YELLOW}⚠️  PostgreSQL está escutando apenas em localhost, não no IP da rede${NC}"
+                DB_HOST="localhost"
+                CONNECTION_SUCCESS=true
+            fi
+        fi
+        
+        # Se ainda falhou, tentar porta 54321 (padrão do autoinstall)
+        if [ "$CONNECTION_SUCCESS" = false ] && [ "$DB_PORT" != "54321" ]; then
+            echo -e "${YELLOW}⚠️  Tentando porta 54321 (padrão do autoinstall)...${NC}"
+            if PGPASSWORD=$DB_PASSWORD psql -h localhost -p 54321 -U "$DB_USER" -d postgres -c "SELECT 1;" > /dev/null 2>&1; then
+                echo -e "${GREEN}✅ Conexão estabelecida em localhost:54321${NC}"
+                DB_HOST="localhost"
+                DB_PORT="54321"
+                CONNECTION_SUCCESS=true
+            fi
+        fi
+        
+        # Se ainda falhou, tentar porta padrão 5432
+        if [ "$CONNECTION_SUCCESS" = false ] && [ "$DB_PORT" != "5432" ]; then
+            echo -e "${YELLOW}⚠️  Tentando porta padrão 5432...${NC}"
+            if PGPASSWORD=$DB_PASSWORD psql -h localhost -p 5432 -U "$DB_USER" -d postgres -c "SELECT 1;" > /dev/null 2>&1; then
+                echo -e "${GREEN}✅ Conexão estabelecida em localhost:5432${NC}"
+                DB_HOST="localhost"
+                DB_PORT="5432"
+                CONNECTION_SUCCESS=true
+            fi
         fi
     fi
 fi
