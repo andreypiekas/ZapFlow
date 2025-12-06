@@ -42,8 +42,9 @@ npm run migrate
 ```
 
 Isso criará as tabelas necessárias e um usuário admin padrão:
-- Username: `admin`
-- Password: `admin123`
+- Username: `admin@piekas.com`
+- Password: `123`
+- Role: `ADMIN`
 
 **⚠️ IMPORTANTE: Altere a senha do admin em produção!**
 
@@ -98,8 +99,8 @@ CORS_ORIGIN=http://SEU_IP_SERVIDOR:5173,http://localhost:5173
 **POST /api/auth/login**
 ```json
 {
-  "username": "admin",
-  "password": "admin123"
+  "username": "admin@piekas.com",
+  "password": "123"
 }
 ```
 
@@ -109,10 +110,10 @@ Resposta:
   "token": "jwt_token_aqui",
   "user": {
     "id": 1,
-    "username": "admin",
+    "username": "admin@piekas.com",
     "name": "Administrador",
-    "email": "admin@zapflow.com",
-    "role": "admin"
+    "email": "admin@piekas.com",
+    "role": "ADMIN"
   }
 }
 ```

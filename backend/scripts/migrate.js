@@ -64,7 +64,7 @@ async function migrate() {
       await client.query(
         `INSERT INTO users (username, password_hash, name, email, role) 
          VALUES ($1, $2, $3, $4, $5)`,
-        [adminUsername, hashedPassword, 'Administrador', adminUsername, 'admin']
+        [adminUsername, hashedPassword, 'Administrador', adminUsername, 'ADMIN']
       );
       console.log(`✅ Usuário admin criado (username: ${adminUsername}, password: 123)`);
     } else {
