@@ -126,17 +126,27 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
       }
     };
 
-    if (!config.isDemo && isConfigured && selectedInstance) {
+    // Busca QR code se não houver um já definido OU se a instância mudou (qrCode foi limpo)
+    // Isso evita sobrescrever o QR code que foi definido ao criar a instância, mas busca quando necessário
+    if (!config.isDemo && isConfigured && selectedInstance && !qrCode) {
         loadQR();
     }
-  }, [config, status, isConfigured, selectedInstance]);
+  }, [config, isConfigured, selectedInstance, qrCode]); // Adicionado qrCode para detectar quando é limpo
 
   useEffect(() => {
       if (refreshTimer > 0) {
           timerRef.current = setInterval(() => setRefreshTimer(prev => prev - 1), 1000);
+      } else if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+          // Quando o timer chega a zero, tenta buscar novo QR code ou verificar status
+          if (status !== 'connected' && selectedInstance) {
+              setQrCode(null); // Limpa QR code antigo para forçar busca de novo
+              checkStatus();
+          }
       }
       return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [refreshTimer]);
+  }, [refreshTimer, status, selectedInstance]);
 
   const handleLogout = async () => {
     if (!confirm('Tem certeza que deseja desconectar esta instância?')) return;
@@ -178,6 +188,11 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
       await loadInstances();
       if (newInstance.qrcode) {
         setQrCode(newInstance.qrcode);
+        setStatus('disconnected');
+        setRefreshTimer(40);
+      } else {
+        // Se não veio QR code na resposta, tenta buscar
+        setStatus('disconnected');
       }
     } else {
       alert('Erro ao criar instância. Verifique se o nome já existe ou se a API está acessível.');
@@ -216,7 +231,7 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
     if (onUpdateConfig) {
       onUpdateConfig({ ...config, instanceName });
     }
-    setQrCode(null);
+    setQrCode(null); // Limpa QR code ao trocar de instância
     setStatus('disconnected');
   };
 
