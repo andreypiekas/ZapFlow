@@ -238,6 +238,39 @@ cd ..
 
 echo -e "${BLUE}[8/9] Configurando Frontend...${NC}"
 
+# Garantir que estamos no diretório raiz do projeto
+# Se não estiver, tentar encontrar o diretório correto
+if [ ! -f "package.json" ]; then
+    # Tentar encontrar o diretório do projeto
+    if [ -d "ZapFlow" ] && [ -f "ZapFlow/package.json" ]; then
+        cd ZapFlow
+    elif [ -d "zapflow" ] && [ -f "zapflow/package.json" ]; then
+        cd zapflow
+    else
+        echo "⚠️  package.json não encontrado no diretório atual."
+        echo "   Certifique-se de estar no diretório raiz do projeto ZapFlow."
+        echo "   Ou execute: cd /caminho/para/ZapFlow antes de executar este script."
+        exit 1
+    fi
+fi
+
+# Verificar se package.json tem o script build
+if ! grep -q '"build"' package.json; then
+    echo "⚠️  Script 'build' não encontrado no package.json."
+    echo "   Adicionando script build ao package.json..."
+    # Adicionar script build se não existir
+    if grep -q '"scripts"' package.json; then
+        # Se já tem scripts, adicionar build
+        sed -i '/"scripts"/a\    "build": "vite build",' package.json 2>/dev/null || {
+            # Fallback para edição manual
+            echo "   Por favor, adicione manualmente: \"build\": \"vite build\" no package.json"
+        }
+    else
+        # Se não tem scripts, adicionar seção completa
+        echo "   Por favor, adicione manualmente a seção scripts no package.json"
+    fi
+fi
+
 # Configurar variável de ambiente do frontend para usar o backend
 if [ "$BACKEND_AVAILABLE" = true ]; then
     if [ ! -f ".env" ]; then
@@ -255,9 +288,25 @@ if [ "$BACKEND_AVAILABLE" = true ]; then
     echo "   📝 VITE_API_URL=http://${SERVER_IP}:3001"
 fi
 
+# Verificar se package.json existe antes de instalar
+if [ ! -f "package.json" ]; then
+    echo "❌ Erro: package.json não encontrado!"
+    echo "   Certifique-se de estar no diretório raiz do projeto ZapFlow."
+    exit 1
+fi
+
+echo "📦 Instalando dependências do frontend..."
 rm -rf node_modules package-lock.json
 npm install
-npm run build
+
+echo "🔨 Construindo aplicação frontend..."
+if npm run build; then
+    echo "✅ Build do frontend concluído com sucesso!"
+else
+    echo "⚠️  Erro ao fazer build do frontend."
+    echo "   Verifique os logs acima para mais detalhes."
+    echo "   Continuando mesmo assim..."
+fi
 
 echo -e "${BLUE}[9/9] Finalizando...${NC}"
 
