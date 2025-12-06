@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { ApiConfig, User, UserRole } from '../types';
 import { Save, Server, Shield, Globe, User as UserIcon, Bell, Lock, RefreshCw } from 'lucide-react';
-import { fetchAllInstances, fetchInstanceDetails, updateInstanceName, InstanceInfo } from '../services/whatsappService';
+import { fetchAllInstances, fetchInstanceDetails, InstanceInfo } from '../services/whatsappService';
 
 interface SettingsProps {
   config: ApiConfig;
@@ -18,7 +18,6 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
   const [instances, setInstances] = useState<InstanceInfo[]>([]);
   const [selectedInstanceName, setSelectedInstanceName] = useState<string>(config.instanceName || '');
   const [isLoadingInstances, setIsLoadingInstances] = useState(false);
-  const [isUpdatingName, setIsUpdatingName] = useState(false);
 
   // Sincroniza formData quando config muda (importante para carregar dados salvos)
   useEffect(() => {
@@ -89,29 +88,6 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
     }
   };
 
-  const handleUpdateInstanceName = async () => {
-    if (!selectedInstanceName || !formData.instanceName || selectedInstanceName === formData.instanceName) {
-      return;
-    }
-
-    setIsUpdatingName(true);
-    try {
-      const success = await updateInstanceName(config, selectedInstanceName, formData.instanceName);
-      if (success) {
-        setSelectedInstanceName(formData.instanceName);
-        await loadInstances(); // Recarrega a lista
-        setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 3000);
-      } else {
-        alert('Erro ao atualizar o nome da instância. Verifique se o novo nome é válido e não está em uso.');
-      }
-    } catch (error) {
-      console.error('[Settings] Erro ao atualizar nome da instância:', error);
-      alert('Erro ao atualizar o nome da instância.');
-    } finally {
-      setIsUpdatingName(false);
-    }
-  };
 
   useEffect(() => {
     if ('Notification' in window) {
@@ -265,29 +241,15 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
 
                   <div className="col-span-1 md:col-span-2">
                     <label className="block text-sm font-medium text-slate-700 mb-2">Nome da Instância</label>
-                    <div className="flex gap-2">
-                      <input 
-                        type="text" 
-                        value={formData.instanceName}
-                        onChange={(e) => setFormData({...formData, instanceName: e.target.value})}
-                        className="flex-1 px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
-                        placeholder="Ex: hostgator_whatsapp"
-                      />
-                      {selectedInstanceName && formData.instanceName !== selectedInstanceName && (
-                        <button
-                          type="button"
-                          onClick={handleUpdateInstanceName}
-                          disabled={isUpdatingName}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                        >
-                          {isUpdatingName ? 'Atualizando...' : 'Renomear Instância'}
-                        </button>
-                      )}
-                    </div>
+                    <input 
+                      type="text" 
+                      value={formData.instanceName}
+                      onChange={(e) => setFormData({...formData, instanceName: e.target.value})}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="Ex: hostgator_whatsapp"
+                    />
                     <p className="text-xs text-slate-400 mt-1">
-                      {selectedInstanceName && formData.instanceName !== selectedInstanceName
-                        ? 'Altere o nome acima e clique em "Renomear Instância" para atualizar.'
-                        : 'Nome da instância que será usada. Se você selecionou uma instância acima, o token foi preenchido automaticamente.'}
+                      Nome da instância que será usada. Se você selecionou uma instância acima, o token foi preenchido automaticamente.
                     </p>
                   </div>
               </div>
