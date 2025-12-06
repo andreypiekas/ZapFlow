@@ -165,6 +165,151 @@ export const getDetailedInstanceStatus = async (config: ApiConfig) => {
     }
 };
 
+// Helper para criar headers de autenticação com diferentes formatos
+const createAuthHeaders = (apiKey: string, contentType: string = 'application/json'): Record<string, string> => {
+    const headers: Record<string, string> = {
+        'Content-Type': contentType
+    };
+    
+    // Tenta múltiplos formatos de autenticação (Evolution API pode aceitar diferentes formatos)
+    // Formato padrão: apikey header
+    headers['apikey'] = apiKey;
+    
+    // Também adiciona como Authorization Bearer (algumas versões da Evolution API aceitam)
+    // headers['Authorization'] = `Bearer ${apiKey}`;
+    
+    // E como X-API-Key (formato alternativo)
+    // headers['X-API-Key'] = apiKey;
+    
+    return headers;
+};
+
+// Cria uma nova instância
+export const createInstance = async (
+    config: ApiConfig,
+    instanceName: string,
+    qrcode: boolean = true
+): Promise<InstanceInfo | null> => {
+    if (config.isDemo || !config.baseUrl || !config.apiKey) {
+        console.warn('[createInstance] Configuração inválida:', {
+            isDemo: config.isDemo,
+            hasBaseUrl: !!config.baseUrl,
+            hasApiKey: !!config.apiKey
+        });
+        return null;
+    }
+    
+    // Valida se a API key não está vazia
+    if (!config.apiKey.trim()) {
+        console.error('[createInstance] API Key está vazia');
+        return null;
+    }
+    
+    try {
+        const headers = createAuthHeaders(config.apiKey);
+        const payload = {
+            instanceName,
+            qrcode,
+            integration: 'WHATSAPP-BAILEYS'
+        };
+        
+        console.log('[createInstance] Tentando criar instância:', {
+            baseUrl: config.baseUrl,
+            instanceName,
+            apiKeyLength: config.apiKey.length,
+            apiKeyPreview: config.apiKey.substring(0, 8) + '...'
+        });
+        
+        const response = await fetch(`${config.baseUrl}/instance/create`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            let errorData;
+            try {
+                errorData = JSON.parse(errorText);
+            } catch {
+                errorData = { message: errorText };
+            }
+            
+            console.error('[createInstance] Erro na resposta:', {
+                status: response.status,
+                statusText: response.statusText,
+                error: errorData,
+                headers: Object.fromEntries(response.headers.entries())
+            });
+            
+            // Se for 401, tenta formatos alternativos de autenticação
+            if (response.status === 401) {
+                console.log('[createInstance] Tentando formatos alternativos de autenticação...');
+                
+                // Tenta com Authorization Bearer
+                const headersBearer = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${config.apiKey}`
+                };
+                
+                const responseBearer = await fetch(`${config.baseUrl}/instance/create`, {
+                    method: 'POST',
+                    headers: headersBearer,
+                    body: JSON.stringify(payload)
+                });
+                
+                if (responseBearer.ok) {
+                    const data = await responseBearer.json();
+                    console.log('[createInstance] ✅ Sucesso com Authorization Bearer');
+                    return {
+                        instanceName: data.instanceName || instanceName,
+                        status: data.status || 'qrcode',
+                        qrcode: data.qrcode?.base64 || data.base64,
+                        integration: data.integration || 'WHATSAPP-BAILEYS'
+                    };
+                }
+                
+                // Tenta com X-API-Key
+                const headersXApiKey = {
+                    'Content-Type': 'application/json',
+                    'X-API-Key': config.apiKey
+                };
+                
+                const responseXApiKey = await fetch(`${config.baseUrl}/instance/create`, {
+                    method: 'POST',
+                    headers: headersXApiKey,
+                    body: JSON.stringify(payload)
+                });
+                
+                if (responseXApiKey.ok) {
+                    const data = await responseXApiKey.json();
+                    console.log('[createInstance] ✅ Sucesso com X-API-Key');
+                    return {
+                        instanceName: data.instanceName || instanceName,
+                        status: data.status || 'qrcode',
+                        qrcode: data.qrcode?.base64 || data.base64,
+                        integration: data.integration || 'WHATSAPP-BAILEYS'
+                    };
+                }
+            }
+            
+            return null;
+        }
+        
+        const data = await response.json();
+        console.log('[createInstance] ✅ Instância criada com sucesso');
+        return {
+            instanceName: data.instanceName || instanceName,
+            status: data.status || 'qrcode',
+            qrcode: data.qrcode?.base64 || data.base64,
+            integration: data.integration || 'WHATSAPP-BAILEYS'
+        };
+    } catch (error) {
+        console.error('[createInstance] Erro na requisição:', error);
+        return null;
+    }
+};
+
 export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null> => {
   if (config.isDemo) return null;
   if (!config.baseUrl || !config.apiKey) return null;
@@ -183,20 +328,19 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
 
     // Auto-create se não existir
     if (response.status === 404 || response.status === 400) {
-        await fetch(`${config.baseUrl}/instance/create`, {
-            method: 'POST',
-            headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                instanceName: targetInstance,
-                qrcode: true,
-                integration: "WHATSAPP-BAILEYS"
-            })
-        });
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        response = await fetch(`${config.baseUrl}/instance/connect/${targetInstance}`, {
-            method: 'GET',
-            headers: { 'apikey': config.apiKey }
-        });
+        console.log('[fetchRealQRCode] Instância não encontrada, tentando criar...');
+        const created = await createInstance(config, targetInstance, true);
+        if (created) {
+            console.log('[fetchRealQRCode] Instância criada, aguardando inicialização...');
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            response = await fetch(`${config.baseUrl}/instance/connect/${targetInstance}`, {
+                method: 'GET',
+                headers: { 'apikey': config.apiKey }
+            });
+        } else {
+            console.error('[fetchRealQRCode] Falha ao criar instância');
+            return null;
+        }
     }
 
     if (!response.ok) return null;
@@ -1683,47 +1827,6 @@ export const fetchAllInstances = async (config: ApiConfig): Promise<InstanceInfo
     } catch (error) {
         console.error('[fetchAllInstances] Erro:', error);
         return [];
-    }
-};
-
-// Cria uma nova instância
-export const createInstance = async (
-    config: ApiConfig,
-    instanceName: string,
-    qrcode: boolean = true
-): Promise<InstanceInfo | null> => {
-    if (config.isDemo || !config.baseUrl || !config.apiKey) return null;
-    
-    try {
-        const response = await fetch(`${config.baseUrl}/instance/create`, {
-            method: 'POST',
-            headers: {
-                'apikey': config.apiKey,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                instanceName,
-                qrcode,
-                integration: 'WHATSAPP-BAILEYS'
-            })
-        });
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('[createInstance] Erro:', response.status, errorText);
-            return null;
-        }
-        
-        const data = await response.json();
-        return {
-            instanceName: data.instanceName || instanceName,
-            status: data.status || 'qrcode',
-            qrcode: data.qrcode?.base64 || data.base64,
-            integration: data.integration || 'WHATSAPP-BAILEYS'
-        };
-    } catch (error) {
-        console.error('[createInstance] Erro:', error);
-        return null;
     }
 };
 
