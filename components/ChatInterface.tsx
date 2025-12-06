@@ -610,6 +610,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   };
 
   // --- SENDING LOGIC ---
+  // Função auxiliar para formatar cabeçalho com nome e departamento
+  const formatMessageHeader = (): string => {
+    if (!currentUser.name) return '';
+    const userDepartmentId = currentUser.departmentId || selectedChat?.departmentId;
+    const userDepartment = userDepartmentId 
+      ? departments.find(d => d.id === userDepartmentId)
+      : null;
+    return userDepartment 
+      ? `${currentUser.name} - ${userDepartment.name}:\n`
+      : `${currentUser.name}:\n`;
+  };
+
   const sendMediaMessage = async (blob: Blob | File, type: 'image' | 'audio' | 'document' | 'video') => {
     if (!selectedChat) return;
     setIsSending(true);
@@ -640,7 +652,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         return;
     }
 
-    const success = await sendRealMediaMessage(apiConfig, targetNumber, blob, inputText, type, selectedFile?.name);
+    // Formata legenda com nome e departamento se houver legenda
+    let captionToSend = inputText || '';
+    if (captionToSend && currentUser.name) {
+      captionToSend = formatMessageHeader() + captionToSend;
+    }
+
+    const success = await sendRealMediaMessage(apiConfig, targetNumber, blob, captionToSend, type, selectedFile?.name);
     
     finalizeMessageStatus(newMessage, success);
     
@@ -706,9 +724,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     if (!inputText.trim()) return;
     setIsSending(true);
 
+    // Formata mensagem com nome e departamento para envio ao WhatsApp
+    let messageToSend = inputText;
+    if (currentUser.name) {
+      messageToSend = formatMessageHeader() + inputText;
+    }
+
     const newMessage: Message = {
       id: `m_${Date.now()}`,
-      content: inputText,
+      content: inputText, // Mantém conteúdo original na mensagem local (sem nome/departamento)
       sender: 'agent',
       timestamp: new Date(),
       status: MessageStatus.SENT,
@@ -742,7 +766,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     console.log(`[handleSendMessage] Respondendo à mensagem: ${replyToId} (whatsappId: ${replyingTo?.whatsappMessageId}, id: ${replyingTo?.id}, hasRaw: ${!!replyToRaw})`);
     
     try {
-        const success = await sendRealMessage(apiConfig, targetNumber, inputText, replyToId, replyToRaw);
+        // Envia mensagem formatada com nome e departamento ao WhatsApp
+        const success = await sendRealMessage(apiConfig, targetNumber, messageToSend, replyToId, replyToRaw);
         
         if (!success) {
             // Se retornou false mas não lançou erro, mostra mensagem genérica
