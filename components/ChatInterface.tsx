@@ -1546,17 +1546,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                       )}
                       
                       {/* Nome e Setor para mensagens enviadas (agent) */}
-                      {msg.sender === 'agent' && currentUser.departmentId && (
-                        <div className="px-2 pt-1 pb-0.5">
-                          <span className="font-bold text-slate-800">
-                            {currentUser.name}
-                            {departments.find(d => d.id === currentUser.departmentId) && (
-                              <> - {departments.find(d => d.id === currentUser.departmentId)?.name}</>
-                            )}
-                            :
-                          </span>
-                        </div>
-                      )}
+                      {msg.sender === 'agent' && currentUser.name && (() => {
+                        const userDepartment = currentUser.departmentId 
+                          ? departments.find(d => d.id === currentUser.departmentId)
+                          : null;
+                        return (
+                          <div className="px-2 pt-1 pb-0.5">
+                            <span className="font-bold text-slate-800">
+                              {currentUser.name}
+                              {userDepartment && <> - {userDepartment.name}</>}
+                              :
+                            </span>
+                          </div>
+                        );
+                      })()}
                       
                       <div className="px-2 pt-1">
                         {renderMessageContent(msg)}

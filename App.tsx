@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Chat, Department, ViewState, ApiConfig, User, UserRole, QuickReply, Workflow, Contact, ChatbotConfig } from './types';
+import { Chat, Department, ViewState, ApiConfig, User, UserRole, QuickReply, Workflow, Contact, ChatbotConfig, MessageStatus } from './types';
 import { INITIAL_CHATS, INITIAL_DEPARTMENTS, INITIAL_USERS, INITIAL_QUICK_REPLIES, INITIAL_WORKFLOWS, MOCK_GOOGLE_CONTACTS, INITIAL_CHATBOT_CONFIG } from './constants';
 import Login from './components/Login';
 import ChatInterface from './components/ChatInterface';
@@ -13,7 +13,8 @@ import ReportsDashboard from './components/ReportsDashboard';
 import Contacts from './components/Contacts';
 import ChatbotSettings from './components/ChatbotSettings';
 import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot, ChevronLeft, ChevronRight } from 'lucide-react';
-import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance, sendDepartmentSelectionMessage, processDepartmentSelection } from './services/whatsappService'; 
+import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance, sendDepartmentSelectionMessage, processDepartmentSelection } from './services/whatsappService';
+import { processChatbotMessages } from './services/chatbotService'; 
 
 const loadConfig = (): ApiConfig => {
   try {
@@ -731,9 +732,23 @@ const App: React.FC = () => {
                                     if (messageIndex >= 0) {
                                         mergedMessages.splice(messageIndex, 1);
                                     }
+                                    
+                                    // Adiciona mensagem de confirmação do sistema
+                                    mergedMessages.push({
+                                        id: `sys_dept_${Date.now()}`,
+                                        content: `Atendimento direcionado para ${departments.find(d => d.id === selectedDeptId)?.name}`,
+                                        sender: 'system',
+                                        timestamp: new Date(),
+                                        status: MessageStatus.READ,
+                                        type: 'text'
+                                    });
                                 } else {
                                     // É primeira mensagem do usuário e ainda não tem departamento - envia mensagem de seleção
-                                    const isFirstUserMessage = mergedMessages.filter(m => m.sender === 'user').length === 1;
+                                    // Verifica se já foi enviada para evitar duplicatas
+                                    const hasUserMessages = mergedMessages.some(m => m.sender === 'user');
+                                    const isFirstUserMessage = hasUserMessages && 
+                                        !existingChat.departmentSelectionSent && 
+                                        !existingChat.departmentId;
                                     
                                     if (isFirstUserMessage) {
                                         // Envia mensagem de seleção de setores de forma assíncrona
@@ -744,11 +759,29 @@ const App: React.FC = () => {
                                         ).then(sent => {
                                             if (sent) {
                                                 console.log(`[App] ✅ Mensagem de seleção de setores enviada para ${existingChat.contactName} via sync`);
+                                                // Marca que a mensagem foi enviada
+                                                handleUpdateChat({
+                                                    ...existingChat,
+                                                    departmentSelectionSent: true,
+                                                    awaitingDepartmentSelection: true
+                                                });
                                             } else {
                                                 console.error(`[App] ❌ Falha ao enviar mensagem de seleção de setores para ${existingChat.contactName}`);
                                             }
                                         }).catch(err => {
                                             console.error(`[App] ❌ Erro ao enviar mensagem de seleção de setores:`, err);
+                                        });
+                                    } else if (hasUserMessages && !existingChat.departmentId && departments.length === 0) {
+                                        // Se não há departamentos cadastrados, processa chatbot
+                                        processChatbotMessages(apiConfig, chatbotConfig, {
+                                            ...existingChat,
+                                            messages: mergedMessages
+                                        }).then(sent => {
+                                            if (sent) {
+                                                console.log(`[App] ✅ Chatbot processou mensagem para ${existingChat.contactName}`);
+                                            }
+                                        }).catch(err => {
+                                            console.error(`[App] ❌ Erro ao processar chatbot:`, err);
                                         });
                                     }
                                 }
@@ -777,6 +810,8 @@ const App: React.FC = () => {
                             status: finalStatusForDept,
                             rating: existingChat.rating,
                             awaitingRating: wasReopened ? false : existingChat.awaitingRating, // Cancela aguardo de avaliação se reaberto
+                            awaitingDepartmentSelection: selectedDeptId ? false : existingChat.awaitingDepartmentSelection, // Cancela se setor foi selecionado
+                            departmentSelectionSent: existingChat.departmentSelectionSent || false, // Mantém flag de envio
                             activeWorkflow: existingChat.activeWorkflow,
                             endedAt: wasReopened ? undefined : existingChat.endedAt, // Remove endedAt se reaberto
                             lastMessage: mergedMessages.length > 0 ? 
@@ -790,6 +825,47 @@ const App: React.FC = () => {
                                 existingChat.lastMessageTime
                         };
                     } else {
+                        // Novo chat encontrado - verifica se precisa enviar mensagem de seleção de setores
+                        const hasUserMessages = realChat.messages.some(m => m.sender === 'user');
+                        const needsDepartmentSelection = hasUserMessages && 
+                            !realChat.departmentId && 
+                            !realChat.departmentSelectionSent &&
+                            departments.length > 0;
+                        
+                        if (needsDepartmentSelection) {
+                            // Envia mensagem de seleção de setores de forma assíncrona
+                            sendDepartmentSelectionMessage(
+                                apiConfig,
+                                realChat.contactNumber,
+                                departments
+                            ).then(sent => {
+                                if (sent) {
+                                    console.log(`[App] ✅ Mensagem de seleção de setores enviada para novo chat ${realChat.contactName}`);
+                                    // Atualiza o chat para marcar que a mensagem foi enviada
+                                    setChats(currentChats => {
+                                        return currentChats.map(c => 
+                                            c.id === realChat.id 
+                                                ? { ...c, departmentSelectionSent: true, awaitingDepartmentSelection: true }
+                                                : c
+                                        );
+                                    });
+                                } else {
+                                    console.error(`[App] ❌ Falha ao enviar mensagem de seleção de setores para novo chat ${realChat.contactName}`);
+                                }
+                            }).catch(err => {
+                                console.error(`[App] ❌ Erro ao enviar mensagem de seleção de setores para novo chat:`, err);
+                            });
+                        } else if (hasUserMessages && !realChat.departmentId) {
+                            // Se não precisa de seleção de setores mas é novo chat sem departamento, processa chatbot
+                            processChatbotMessages(apiConfig, chatbotConfig, realChat).then(sent => {
+                                if (sent) {
+                                    console.log(`[App] ✅ Chatbot processou mensagem para novo chat ${realChat.contactName}`);
+                                }
+                            }).catch(err => {
+                                console.error(`[App] ❌ Erro ao processar chatbot:`, err);
+                            });
+                        }
+                        
                         // console.log(`[App] Novo chat encontrado: ${realChat.id} (${realChat.contactName})`);
                         return realChat;
                     }

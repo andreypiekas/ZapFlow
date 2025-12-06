@@ -14,7 +14,12 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
   const totalChats = chats.length;
   const activeChats = chats.filter(c => c.status !== 'closed').length;
   const closedChats = chats.filter(c => c.status === 'closed').length;
-  const ratedChats = chats.filter(c => c.rating !== undefined);
+  
+  // Filtra avaliações válidas (rating deve ser um número entre 1 e 5)
+  const ratedChats = chats.filter(c => {
+    const rating = c.rating;
+    return rating !== undefined && rating !== null && typeof rating === 'number' && rating >= 1 && rating <= 5;
+  });
   
   const averageRating = ratedChats.length > 0 
     ? (ratedChats.reduce((acc, curr) => acc + (curr.rating || 0), 0) / ratedChats.length).toFixed(1)
@@ -29,10 +34,23 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
   const chatsByDepartment = departments.map(dept => {
     const count = chats.filter(c => c.departmentId === dept.id).length;
     const closed = chats.filter(c => c.departmentId === dept.id && c.status === 'closed').length;
-    return { name: dept.name, color: dept.color, count, closed };
+    const rated = chats.filter(c => {
+      const rating = c.rating;
+      return c.departmentId === dept.id && rating !== undefined && rating !== null && typeof rating === 'number' && rating >= 1 && rating <= 5;
+    });
+    const deptAvgRating = rated.length > 0
+      ? (rated.reduce((acc, curr) => acc + (curr.rating || 0), 0) / rated.length).toFixed(1)
+      : 'N/A';
+    return { name: dept.name, color: dept.color, count, closed, rated: rated.length, avgRating: deptAvgRating };
   });
 
   const generalChats = chats.filter(c => !c.departmentId).length;
+  
+  // Distribuição de avaliações (1-5 estrelas)
+  const ratingDistribution = [1, 2, 3, 4, 5].map(rating => ({
+    rating,
+    count: ratedChats.filter(c => c.rating === rating).length
+  }));
 
   const handleExportCSV = () => {
     // Cabeçalho do CSV
@@ -172,13 +190,23 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
                  <div key={dept.name}>
                     <div className="flex justify-between text-sm mb-1">
                        <span className="font-medium text-slate-700">{dept.name}</span>
-                       <span className="text-slate-500">{dept.count} atendimentos</span>
+                       <div className="flex items-center gap-2">
+                         <span className="text-slate-500">{dept.count} atendimentos</span>
+                         {dept.rated > 0 && (
+                           <span className="text-xs text-yellow-600 font-medium">
+                             ⭐ {dept.avgRating} ({dept.rated})
+                           </span>
+                         )}
+                       </div>
                     </div>
                     <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
                        <div className={`h-2.5 rounded-full ${dept.color}`} style={{ width: `${(dept.count / totalChats) * 100}%` }}></div>
                     </div>
-                    <div className="flex justify-end mt-1">
+                    <div className="flex justify-between mt-1">
                        <span className="text-[10px] text-slate-400">{dept.closed} Finalizados</span>
+                       {dept.rated > 0 && (
+                         <span className="text-[10px] text-yellow-600">{dept.rated} avaliados</span>
+                       )}
                     </div>
                  </div>
               ))}
@@ -197,28 +225,81 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
            </div>
         </div>
 
-        {/* Recent Ratings / SLA Alerts */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        {/* Recent Ratings / Distribution */}
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
               <CheckCircle size={18} className="text-slate-500" />
               Últimas Avaliações
-           </h3>
-           <div className="space-y-4">
-              {ratedChats.slice(0, 5).map(chat => (
+            </h3>
+            <div className="space-y-4">
+              {ratedChats
+                .sort((a, b) => {
+                  // Ordena por data de finalização (mais recente primeiro)
+                  const dateA = a.endedAt ? new Date(a.endedAt).getTime() : 0;
+                  const dateB = b.endedAt ? new Date(b.endedAt).getTime() : 0;
+                  return dateB - dateA;
+                })
+                .slice(0, 5)
+                .map(chat => (
                  <div key={chat.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100">
                     <div className="flex justify-between items-center mb-1">
                        <span className="font-bold text-xs text-slate-700">{chat.contactName}</span>
-                       <div className="flex text-yellow-400">
-                          {[...Array(chat.rating)].map((_, i) => <ThumbsUp key={i} size={10} fill="currentColor" />)}
+                       <div className="flex text-yellow-400 gap-0.5">
+                          {[...Array(Math.min(5, Math.max(1, chat.rating || 0)))].map((_, i) => (
+                            <ThumbsUp key={i} size={10} fill="currentColor" />
+                          ))}
                        </div>
                     </div>
-                    <p className="text-xs text-slate-500">Atendido por: {chat.assignedTo || 'Sistema'}</p>
+                    <p className="text-xs text-slate-500">
+                      {chat.endedAt 
+                        ? `Finalizado em ${new Date(chat.endedAt).toLocaleDateString('pt-BR')}`
+                        : 'Atendido por: ' + (chat.assignedTo || 'Sistema')
+                      }
+                    </p>
                  </div>
               ))}
               {ratedChats.length === 0 && (
                   <p className="text-sm text-slate-400 text-center py-4">Nenhuma avaliação recente.</p>
               )}
-           </div>
+            </div>
+          </div>
+
+          {/* Rating Distribution */}
+          {ratedChats.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
+                <ThumbsUp size={18} className="text-slate-500" />
+                Distribuição de Avaliações
+              </h3>
+              <div className="space-y-3">
+                {ratingDistribution.map(({ rating, count }) => {
+                  const percentage = ratedChats.length > 0 ? (count / ratedChats.length) * 100 : 0;
+                  return (
+                    <div key={rating}>
+                      <div className="flex justify-between items-center mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-slate-700">{rating} estrela{rating > 1 ? 's' : ''}</span>
+                          <div className="flex text-yellow-400">
+                            {[...Array(rating)].map((_, i) => (
+                              <ThumbsUp key={i} size={12} fill="currentColor" />
+                            ))}
+                          </div>
+                        </div>
+                        <span className="text-sm text-slate-600 font-medium">{count} ({percentage.toFixed(1)}%)</span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div 
+                          className="h-2 rounded-full bg-yellow-400 transition-all" 
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

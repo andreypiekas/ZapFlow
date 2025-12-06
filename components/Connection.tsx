@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Smartphone, CheckCircle, WifiOff, Loader2, AlertTriangle, Clock, Activity } from 'lucide-react';
+import { Smartphone, CheckCircle, WifiOff, Loader2, AlertTriangle, Clock, Activity, Plus, Trash2, RefreshCw, List } from 'lucide-react';
 import { ApiConfig } from '../types';
-import { fetchRealQRCode, logoutInstance, getDetailedInstanceStatus } from '../services/whatsappService';
+import { fetchRealQRCode, logoutInstance, getDetailedInstanceStatus, fetchAllInstances, createInstance, deleteInstance, getInstanceQRCode, InstanceInfo } from '../services/whatsappService';
 
 interface ConnectionProps {
   config: ApiConfig;
@@ -17,13 +17,39 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
   const [isLoading, setIsLoading] = useState(false);
   const [refreshTimer, setRefreshTimer] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [instances, setInstances] = useState<InstanceInfo[]>([]);
+  const [selectedInstance, setSelectedInstance] = useState<string>(config.instanceName);
+  const [showInstanceList, setShowInstanceList] = useState(false);
+  const [newInstanceName, setNewInstanceName] = useState('');
+  const [isCreatingInstance, setIsCreatingInstance] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   const isConfigured = config.baseUrl && config.apiKey;
+
+  const loadInstances = async () => {
+    if (config.isDemo || !isConfigured) return;
+    const allInstances = await fetchAllInstances(config);
+    setInstances(allInstances);
+    
+    // Se a instância selecionada não existe mais, seleciona a primeira disponível
+    if (allInstances.length > 0 && !allInstances.find(i => i.instanceName === selectedInstance)) {
+      const firstInstance = allInstances[0];
+      setSelectedInstance(firstInstance.instanceName);
+      if (onUpdateConfig) {
+        onUpdateConfig({ ...config, instanceName: firstInstance.instanceName });
+      }
+    }
+  };
 
   const checkStatus = async () => {
     if (config.isDemo || !isConfigured) return;
     
-    const details = await getDetailedInstanceStatus(config);
+    // Atualiza lista de instâncias
+    await loadInstances();
+    
+    // Verifica status da instância selecionada
+    const currentConfig = { ...config, instanceName: selectedInstance };
+    const details = await getDetailedInstanceStatus(currentConfig);
     if (details) {
         setDetailedStatus(details.state);
         
@@ -48,7 +74,8 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
       if (status === 'connecting') return;
 
       setIsLoading(true);
-      const qrData = await fetchRealQRCode(config);
+      const currentConfig = { ...config, instanceName: selectedInstance };
+      const qrData = await getInstanceQRCode(currentConfig, selectedInstance) || await fetchRealQRCode(currentConfig);
       setIsLoading(false);
       
       if (qrData) {
@@ -61,11 +88,12 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
     };
 
     if (!config.isDemo && isConfigured) {
+        loadInstances();
         loadQR();
         const interval = setInterval(checkStatus, 5000);
         return () => clearInterval(interval);
     }
-  }, [config, status, isConfigured]);
+  }, [config, status, isConfigured, selectedInstance]);
 
   useEffect(() => {
       if (refreshTimer > 0) {
@@ -76,18 +104,81 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
 
   const handleLogout = async () => {
     setIsLoading(true);
-    await logoutInstance(config);
+    const currentConfig = { ...config, instanceName: selectedInstance };
+    await logoutInstance(currentConfig);
     setStatus('disconnected');
     setQrCode(null);
+    await loadInstances();
     setIsLoading(false);
   };
 
   const handleFixName = () => {
       if (detectedName && onUpdateConfig) {
           onUpdateConfig({ ...config, instanceName: detectedName });
+          setSelectedInstance(detectedName);
           setDetectedName(null);
           alert(`Corrigido para: ${detectedName}`);
       }
+  };
+
+  const handleCreateInstance = async () => {
+    if (!newInstanceName.trim()) {
+      alert('Digite um nome para a instância');
+      return;
+    }
+    
+    setIsCreatingInstance(true);
+    const newInstance = await createInstance(config, newInstanceName.trim(), true);
+    setIsCreatingInstance(false);
+    
+    if (newInstance) {
+      setSelectedInstance(newInstance.instanceName);
+      if (onUpdateConfig) {
+        onUpdateConfig({ ...config, instanceName: newInstance.instanceName });
+      }
+      setNewInstanceName('');
+      setShowCreateForm(false);
+      await loadInstances();
+      if (newInstance.qrcode) {
+        setQrCode(newInstance.qrcode);
+      }
+    } else {
+      alert('Erro ao criar instância. Verifique se o nome já existe ou se a API está acessível.');
+    }
+  };
+
+  const handleDeleteInstance = async (instanceName: string) => {
+    if (!confirm(`Tem certeza que deseja deletar a instância "${instanceName}"? Esta ação não pode ser desfeita.`)) {
+      return;
+    }
+    
+    setIsLoading(true);
+    const success = await deleteInstance(config, instanceName);
+    setIsLoading(false);
+    
+    if (success) {
+      await loadInstances();
+      if (selectedInstance === instanceName && instances.length > 1) {
+        const remaining = instances.filter(i => i.instanceName !== instanceName);
+        if (remaining.length > 0) {
+          setSelectedInstance(remaining[0].instanceName);
+          if (onUpdateConfig) {
+            onUpdateConfig({ ...config, instanceName: remaining[0].instanceName });
+          }
+        }
+      }
+    } else {
+      alert('Erro ao deletar instância');
+    }
+  };
+
+  const handleSelectInstance = (instanceName: string) => {
+    setSelectedInstance(instanceName);
+    if (onUpdateConfig) {
+      onUpdateConfig({ ...config, instanceName });
+    }
+    setQrCode(null);
+    setStatus('disconnected');
   };
 
   const getStatusLabel = () => {
@@ -112,8 +203,17 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                 Conexão WhatsApp
             </h2>
             <p className="text-slate-500 text-sm mt-1">
-              {config.isDemo ? 'Modo Simulação' : `Instância: ${config.instanceName}`}
+              {config.isDemo ? 'Modo Simulação' : `Instância: ${selectedInstance}`}
             </p>
+            {!config.isDemo && isConfigured && (
+              <button
+                onClick={() => setShowInstanceList(!showInstanceList)}
+                className="mt-2 text-xs text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+              >
+                <List size={14} />
+                {showInstanceList ? 'Ocultar' : 'Gerenciar'} Instâncias ({instances.length})
+              </button>
+            )}
           </div>
           <div className={`px-4 py-1.5 rounded-full text-sm font-bold flex items-center gap-2 border ${getStatusColor()}`}>
             {status === 'connected' ? <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> : 
@@ -122,6 +222,98 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
             {getStatusLabel()}
           </div>
         </div>
+
+        {/* Instance Management Panel */}
+        {!config.isDemo && isConfigured && showInstanceList && (
+          <div className="border-b border-slate-200 bg-slate-50 p-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-slate-800">Gerenciar Instâncias</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowCreateForm(!showCreateForm)}
+                  className="px-3 py-1.5 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 flex items-center gap-1"
+                >
+                  <Plus size={14} />
+                  Nova Instância
+                </button>
+                <button
+                  onClick={loadInstances}
+                  className="px-3 py-1.5 bg-slate-200 text-slate-700 text-sm rounded-lg hover:bg-slate-300 flex items-center gap-1"
+                >
+                  <RefreshCw size={14} />
+                  Atualizar
+                </button>
+              </div>
+            </div>
+
+            {showCreateForm && (
+              <div className="mb-4 p-3 bg-white rounded-lg border border-slate-200">
+                <input
+                  type="text"
+                  value={newInstanceName}
+                  onChange={(e) => setNewInstanceName(e.target.value)}
+                  placeholder="Nome da instância (ex: ZapFlow)"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm mb-2"
+                  onKeyDown={(e) => e.key === 'Enter' && handleCreateInstance()}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleCreateInstance}
+                    disabled={isCreatingInstance}
+                    className="px-4 py-1.5 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {isCreatingInstance ? 'Criando...' : 'Criar'}
+                  </button>
+                  <button
+                    onClick={() => { setShowCreateForm(false); setNewInstanceName(''); }}
+                    className="px-4 py-1.5 bg-slate-200 text-slate-700 text-sm rounded-lg hover:bg-slate-300"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {instances.map((instance) => (
+                <div
+                  key={instance.instanceName}
+                  className={`p-3 bg-white rounded-lg border ${
+                    selectedInstance === instance.instanceName
+                      ? 'border-emerald-500 bg-emerald-50'
+                      : 'border-slate-200'
+                  } flex items-center justify-between`}
+                >
+                  <div className="flex items-center gap-3 flex-1">
+                    <button
+                      onClick={() => handleSelectInstance(instance.instanceName)}
+                      className="text-left flex-1"
+                    >
+                      <div className="font-medium text-slate-800">{instance.instanceName}</div>
+                      <div className="text-xs text-slate-500">
+                        Status: {instance.status === 'open' ? 'Conectado' : 
+                                 instance.status === 'connecting' ? 'Conectando' : 
+                                 instance.status === 'qrcode' ? 'Aguardando QR' : 'Desconectado'}
+                      </div>
+                    </button>
+                  </div>
+                  {selectedInstance !== instance.instanceName && (
+                    <button
+                      onClick={() => handleDeleteInstance(instance.instanceName)}
+                      className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                      title="Deletar instância"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {instances.length === 0 && (
+                <p className="text-sm text-slate-400 text-center py-4">Nenhuma instância encontrada</p>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="p-8">
           {config.isDemo ? (

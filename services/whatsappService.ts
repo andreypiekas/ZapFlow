@@ -1639,3 +1639,136 @@ export const processDepartmentSelection = (
     // Retorna o ID do departamento correspondente (índice é number - 1)
     return departments[number - 1]?.id || null;
 };
+
+// --- INSTANCE MANAGEMENT ---
+
+export interface InstanceInfo {
+    instanceName: string;
+    status: 'open' | 'connecting' | 'close' | 'qrcode';
+    qrcode?: string;
+    integration?: string;
+}
+
+// Lista todas as instâncias
+export const fetchAllInstances = async (config: ApiConfig): Promise<InstanceInfo[]> => {
+    if (config.isDemo || !config.baseUrl || !config.apiKey) return [];
+    
+    try {
+        const response = await fetch(`${config.baseUrl}/instance/fetchInstances`, {
+            method: 'GET',
+            headers: { 'apikey': config.apiKey }
+        });
+        
+        if (!response.ok) return [];
+        
+        const rawData = await response.json();
+        let instances: any[] = [];
+        
+        if (Array.isArray(rawData)) {
+            instances = rawData;
+        } else if (rawData && typeof rawData === 'object') {
+            if (Array.isArray(rawData.instances)) instances = rawData.instances;
+            else if (rawData.instance) instances = [rawData.instance];
+            else if (rawData.instanceName) instances = [rawData];
+        }
+        
+        return instances.map((item: any) => {
+            const instance = item.instance || item;
+            return {
+                instanceName: instance.instanceName || instance.name || item.instanceName || item.name,
+                status: instance.status || instance.state || 'close',
+                integration: instance.integration || 'WHATSAPP-BAILEYS'
+            };
+        }).filter((i: InstanceInfo) => i.instanceName);
+    } catch (error) {
+        console.error('[fetchAllInstances] Erro:', error);
+        return [];
+    }
+};
+
+// Cria uma nova instância
+export const createInstance = async (
+    config: ApiConfig,
+    instanceName: string,
+    qrcode: boolean = true
+): Promise<InstanceInfo | null> => {
+    if (config.isDemo || !config.baseUrl || !config.apiKey) return null;
+    
+    try {
+        const response = await fetch(`${config.baseUrl}/instance/create`, {
+            method: 'POST',
+            headers: {
+                'apikey': config.apiKey,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                instanceName,
+                qrcode,
+                integration: 'WHATSAPP-BAILEYS'
+            })
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[createInstance] Erro:', response.status, errorText);
+            return null;
+        }
+        
+        const data = await response.json();
+        return {
+            instanceName: data.instanceName || instanceName,
+            status: data.status || 'qrcode',
+            qrcode: data.qrcode?.base64 || data.base64,
+            integration: data.integration || 'WHATSAPP-BAILEYS'
+        };
+    } catch (error) {
+        console.error('[createInstance] Erro:', error);
+        return null;
+    }
+};
+
+// Deleta uma instância
+export const deleteInstance = async (config: ApiConfig, instanceName: string): Promise<boolean> => {
+    if (config.isDemo || !config.baseUrl || !config.apiKey) return false;
+    
+    try {
+        const response = await fetch(`${config.baseUrl}/instance/delete/${instanceName}`, {
+            method: 'DELETE',
+            headers: { 'apikey': config.apiKey }
+        });
+        
+        return response.ok;
+    } catch (error) {
+        console.error('[deleteInstance] Erro:', error);
+        return false;
+    }
+};
+
+// Obtém QR Code de uma instância específica
+export const getInstanceQRCode = async (config: ApiConfig, instanceName: string): Promise<string | null> => {
+    if (config.isDemo || !config.baseUrl || !config.apiKey) return null;
+    
+    try {
+        const response = await fetch(`${config.baseUrl}/instance/connect/${instanceName}`, {
+            method: 'GET',
+            headers: { 'apikey': config.apiKey }
+        });
+        
+        if (!response.ok) return null;
+        
+        const data = await response.json();
+        if (data && typeof data.count === 'number') return null;
+        
+        let base64 = data.base64 || data.code || data.qrcode;
+        if (!base64) return null;
+        
+        if (!base64.startsWith('data:image')) {
+            base64 = `data:image/png;base64,${base64}`;
+        }
+        
+        return base64;
+    } catch (error) {
+        console.error('[getInstanceQRCode] Erro:', error);
+        return null;
+    }
+};

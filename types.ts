@@ -130,6 +130,8 @@ export interface Chat {
   endedAt?: Date;
   activeWorkflow?: ActiveWorkflow; // Fluxo ativo neste chat
   awaitingRating?: boolean; // Indica se está aguardando resposta de avaliação (1-5)
+  awaitingDepartmentSelection?: boolean; // Indica se está aguardando seleção de setor pelo usuário
+  departmentSelectionSent?: boolean; // Indica se a mensagem de seleção de setores já foi enviada
 }
 
 export interface ApiConfig {
