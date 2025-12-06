@@ -209,6 +209,8 @@ export const createInstance = async (
         const headers = createAuthHeaders(config.apiKey);
         
         // Gera token UUID automaticamente (formato esperado pelo Evolution API)
+        // Segundo a documentação: "Enter or leave empty to create dynamically"
+        // Vamos gerar automaticamente para garantir consistência
         const generateToken = () => {
             return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
                 const r = Math.random() * 16 | 0;
@@ -219,14 +221,13 @@ export const createInstance = async (
         
         const token = generateToken();
         
-        // Payload conforme formato do Evolution API Manager
-        // Name, Channel (Baileys), Token (gerado automaticamente)
+        // Payload conforme documentação oficial da Evolution API v2
+        // https://doc.evolution-api.com/v2/api-reference/instance-controller/create-instance-basic
         const payload: any = {
-            instanceName,
-            qrcode,
-            integration: 'WHATSAPP-BAILEYS',
-            token: token,
-            channel: 'baileys'
+            instanceName,                    // required: Instance name
+            integration: 'WHATSAPP-BAILEYS', // required: WhatsApp engine
+            token: token,                    // optional: apikey (gerado automaticamente)
+            qrcode: qrcode                   // optional: Create QR Code automatically after creation
         };
         
         console.log('[createInstance] Tentando criar instância:', {
