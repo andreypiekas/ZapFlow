@@ -56,14 +56,21 @@ npm run dev
 npm start
 ```
 
-O servidor estará rodando em `http://localhost:3001`
+O servidor estará rodando em `http://SEU_IP_SERVIDOR:3001`
+
+**Importante:** Substitua `SEU_IP_SERVIDOR` pelo IP real do seu servidor. Para descobrir o IP:
+```bash
+hostname -I | awk '{print $1}'
+# ou
+ip addr show | grep "inet " | grep -v 127.0.0.1
+```
 
 ## Configuração
 
 ### Variáveis de Ambiente (.env)
 
 ```env
-# PostgreSQL
+# PostgreSQL (localhost está correto aqui, pois o PostgreSQL roda no mesmo servidor)
 DATABASE_URL=postgresql://usuario:senha@localhost:5432/zapflow
 # ou
 DB_HOST=localhost
@@ -78,9 +85,11 @@ JWT_SECRET=seu_jwt_secret_super_seguro_aqui
 # Porta do servidor
 PORT=3001
 
-# CORS - URLs permitidas
-CORS_ORIGIN=http://localhost:5173,http://localhost:3000
+# CORS - URLs permitidas (use o IP do servidor, não localhost)
+CORS_ORIGIN=http://SEU_IP_SERVIDOR:5173,http://localhost:5173
 ```
+
+**Nota:** O `DB_HOST=localhost` está correto porque o PostgreSQL roda no mesmo servidor. Mas o `CORS_ORIGIN` deve usar o IP do servidor para permitir acesso do frontend.
 
 ## API Endpoints
 

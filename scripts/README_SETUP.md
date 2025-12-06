@@ -52,7 +52,11 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 2. **Teste a API:**
    ```bash
-   curl http://localhost:3001/api/health
+   # Substitua SEU_IP_SERVIDOR pelo IP real do servidor
+   curl http://SEU_IP_SERVIDOR:3001/api/health
+   
+   # Para descobrir o IP do servidor:
+   hostname -I | awk '{print $1}'
    ```
 
 3. **Faça login:**

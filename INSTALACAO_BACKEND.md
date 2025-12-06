@@ -53,7 +53,16 @@ nano .env
 DATABASE_URL=postgresql://zapflow_user:sua_senha_segura@localhost:5432/zapflow
 JWT_SECRET=seu_jwt_secret_super_seguro_aqui_mude_em_producao
 PORT=3001
-CORS_ORIGIN=http://localhost:5173
+CORS_ORIGIN=http://SEU_IP_SERVIDOR:5173,http://localhost:5173
+```
+
+**Importante:** Substitua `SEU_IP_SERVIDOR` pelo IP real do seu servidor. O `localhost:5173` é mantido como fallback para desenvolvimento local.
+
+Para descobrir o IP do servidor:
+```bash
+hostname -I | awk '{print $1}'
+# ou
+ip addr show | grep "inet " | grep -v 127.0.0.1
 ```
 
 ### 4. Executar Migração
@@ -78,15 +87,24 @@ npm run dev
 npm start
 ```
 
-O servidor estará rodando em `http://localhost:3001`
+O servidor estará rodando em `http://SEU_IP_SERVIDOR:3001`
+
+**Importante:** Substitua `SEU_IP_SERVIDOR` pelo IP real do seu servidor. Para descobrir o IP:
+```bash
+hostname -I | awk '{print $1}'
+# ou
+ip addr show | grep "inet " | grep -v 127.0.0.1
+```
 
 ### 6. Configurar Frontend
 
 No arquivo `.env` do frontend (raiz do projeto), adicione:
 
 ```env
-VITE_API_URL=http://localhost:3001
+VITE_API_URL=http://SEU_IP_SERVIDOR:3001/api
 ```
+
+**Substitua `SEU_IP_SERVIDOR` pelo IP real do seu servidor.**
 
 Ou configure no `vite.config.ts` se necessário.
 
@@ -94,19 +112,24 @@ Ou configure no `vite.config.ts` se necessário.
 
 1. **Health Check:**
 ```bash
-curl http://localhost:3001/api/health
+curl http://SEU_IP_SERVIDOR:3001/api/health
 ```
+
+**Substitua `SEU_IP_SERVIDOR` pelo IP real do seu servidor.**
 
 Deve retornar:
 ```json
-{"status":"ok","database":"connected"}
+{"status":"ok","message":"Backend is running"}
 ```
 
 2. **Teste de Login:**
 ```bash
-curl -X POST http://localhost:3001/api/auth/login \
+curl -X POST http://SEU_IP_SERVIDOR:3001/api/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
+  -d '{"email":"admin","password":"admin123"}'
+```
+
+**Substitua `SEU_IP_SERVIDOR` pelo IP real do seu servidor.**
 ```
 
 ## Produção
