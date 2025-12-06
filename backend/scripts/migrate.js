@@ -27,7 +27,7 @@ async function migrate() {
         password_hash VARCHAR(255) NOT NULL,
         name VARCHAR(255) NOT NULL,
         email VARCHAR(255),
-        role VARCHAR(50) NOT NULL DEFAULT 'agent',
+        role VARCHAR(50) NOT NULL DEFAULT 'AGENT',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -66,9 +66,15 @@ async function migrate() {
          VALUES ($1, $2, $3, $4, $5)`,
         [adminUsername, hashedPassword, 'Administrador', adminUsername, 'ADMIN']
       );
-      console.log(`✅ Usuário admin criado (username: ${adminUsername}, password: 123)`);
+      console.log(`✅ Usuário admin criado (username: ${adminUsername}, password: 123, role: ADMIN)`);
     } else {
-      console.log(`✅ Usuário admin já existe (username: ${adminUsername})`);
+      // Se o admin já existe, atualizar senha e garantir que o role seja 'ADMIN'
+      const hashedPassword = await bcrypt.default.hash('123', 10);
+      await client.query(
+        `UPDATE users SET password_hash = $1, role = $2, updated_at = CURRENT_TIMESTAMP WHERE username = $3`,
+        [hashedPassword, 'ADMIN', adminUsername]
+      );
+      console.log(`✅ Senha e role do usuário admin atualizados (username: ${adminUsername}, password: 123, role: ADMIN)`);
     }
 
     console.log('✅ Migração concluída com sucesso!');
