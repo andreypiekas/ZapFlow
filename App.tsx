@@ -1151,7 +1151,7 @@ const App: React.FC = () => {
                                                 // Nova mensagem (não existe e não é atualização)
                                                 chatUpdated = true;
                                                 console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}`);
-                                                const updatedMessages = [...chat.messages, mapped].sort((a, b) => {
+                                                let updatedMessages = [...chat.messages, mapped].sort((a, b) => {
                                                     const timeA = a.timestamp?.getTime() || 0;
                                                     const timeB = b.timestamp?.getTime() || 0;
                                                     const timeDiff = timeA - timeB;
