@@ -187,14 +187,15 @@ const App: React.FC = () => {
     return [];
   };
 
-  const [chats, setChats] = useState<Chat[]>(loadChatsFromStorage());
-  const [departments, setDepartments] = useState<Department[]>(loadDepartmentsFromStorage());
-  const [users, setUsers] = useState<User[]>(loadUsersFromStorage());
-  const [quickReplies, setQuickReplies] = useState<QuickReply[]>(loadQuickRepliesFromStorage());
-  const [workflows, setWorkflows] = useState<Workflow[]>(loadWorkflowsFromStorage());
-  const [contacts, setContacts] = useState<Contact[]>(loadContactsFromStorage());
-  const [chatbotConfig, setChatbotConfig] = useState<ChatbotConfig>(loadChatbotConfigFromStorage());
-  const [apiConfig, setApiConfig] = useState<ApiConfig>(loadConfig());
+  // Estados iniciais - serão carregados do storageService no useEffect
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [chatbotConfig, setChatbotConfig] = useState<ChatbotConfig>(INITIAL_CHATBOT_CONFIG);
+  const [apiConfig, setApiConfig] = useState<ApiConfig>(loadConfig()); // Config precisa ser carregado imediatamente
   const [forceSelectChatId, setForceSelectChatId] = useState<string | null>(null);
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -283,6 +284,90 @@ const App: React.FC = () => {
     }
   }, [currentUser]);
 
+  // Carrega dados iniciais do storageService (localStorage ou API) quando o componente montar
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        // Carrega todos os dados do storageService (tenta API primeiro, fallback para localStorage)
+        const [
+          departmentsData, 
+          quickRepliesData, 
+          workflowsData, 
+          chatbotConfigData,
+          usersData,
+          contactsData,
+          chatsData
+        ] = await Promise.all([
+          storageService.load<Department[]>('departments'),
+          storageService.load<QuickReply[]>('quickReplies'),
+          storageService.load<Workflow[]>('workflows'),
+          storageService.load<ChatbotConfig>('chatbotConfig'),
+          storageService.load<User[]>('users'),
+          storageService.load<Contact[]>('contacts'),
+          storageService.load<Chat[]>('chats'),
+        ]);
+
+        // Define valores iniciais (usa dados do storage ou valores padrão)
+        if (departmentsData && departmentsData.length > 0) {
+          setDepartments(departmentsData);
+        } else {
+          setDepartments(INITIAL_DEPARTMENTS);
+        }
+
+        if (quickRepliesData && quickRepliesData.length > 0) {
+          setQuickReplies(quickRepliesData);
+        } else {
+          setQuickReplies(INITIAL_QUICK_REPLIES);
+        }
+
+        if (workflowsData && workflowsData.length > 0) {
+          setWorkflows(workflowsData);
+        } else {
+          setWorkflows(INITIAL_WORKFLOWS);
+        }
+
+        if (chatbotConfigData) {
+          setChatbotConfig(chatbotConfigData);
+        }
+
+        if (usersData && usersData.length > 0) {
+          setUsers(usersData);
+        } else {
+          setUsers(INITIAL_USERS);
+        }
+
+        if (contactsData && contactsData.length > 0) {
+          setContacts(contactsData);
+        }
+
+        if (chatsData && chatsData.length > 0) {
+          // Converte timestamps de string para Date
+          const chatsWithDates = chatsData.map((chat: Chat) => ({
+            ...chat,
+            lastMessageTime: chat.lastMessageTime ? new Date(chat.lastMessageTime) : new Date(),
+            messages: chat.messages?.map((msg: Message) => ({
+              ...msg,
+              timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date()
+            })) || []
+          }));
+          setChats(chatsWithDates);
+        } else {
+          setChats(INITIAL_CHATS);
+        }
+      } catch (error) {
+        console.error('[App] Erro ao carregar dados iniciais:', error);
+        // Em caso de erro, usa valores padrão
+        setDepartments(INITIAL_DEPARTMENTS);
+        setQuickReplies(INITIAL_QUICK_REPLIES);
+        setWorkflows(INITIAL_WORKFLOWS);
+        setUsers(INITIAL_USERS);
+        setChats(INITIAL_CHATS);
+      }
+    };
+
+    loadInitialData();
+  }, []); // Executa apenas uma vez quando o componente montar
+
   // Carrega dados da API quando o componente montar e usuário estiver logado
   useEffect(() => {
     if (!currentUser) return;
@@ -290,7 +375,18 @@ const App: React.FC = () => {
     const loadDataFromAPI = async () => {
       try {
         // Tenta carregar cada tipo de dado da API
-        const [apiConfigData, departmentsData, quickRepliesData, workflowsData, chatbotConfigData, viewStateData, sidebarStateData] = await Promise.all([
+        const [
+          apiConfigData, 
+          departmentsData, 
+          quickRepliesData, 
+          workflowsData, 
+          chatbotConfigData, 
+          viewStateData, 
+          sidebarStateData,
+          usersData,
+          contactsData,
+          chatsData
+        ] = await Promise.all([
           storageService.load<ApiConfig>('config'),
           storageService.load<Department[]>('departments'),
           storageService.load<QuickReply[]>('quickReplies'),
@@ -298,6 +394,9 @@ const App: React.FC = () => {
           storageService.load<ChatbotConfig>('chatbotConfig'),
           storageService.load<ViewState>('viewState'),
           storageService.load<boolean>('sidebarState'),
+          storageService.load<User[]>('users'),
+          storageService.load<Contact[]>('contacts'),
+          storageService.load<Chat[]>('chats'),
         ]);
 
         // Atualiza apenas se os dados vieram da API (não são null)
@@ -321,6 +420,25 @@ const App: React.FC = () => {
         }
         if (sidebarStateData !== null) {
           setIsSidebarCollapsed(sidebarStateData);
+        }
+        // Carrega users, contacts e chats da API se existirem
+        if (usersData && usersData.length > 0) {
+          setUsers(usersData);
+        }
+        if (contactsData && contactsData.length > 0) {
+          setContacts(contactsData);
+        }
+        if (chatsData && chatsData.length > 0) {
+          // Converte timestamps de string para Date
+          const chatsWithDates = chatsData.map((chat: Chat) => ({
+            ...chat,
+            lastMessageTime: chat.lastMessageTime ? new Date(chat.lastMessageTime) : new Date(),
+            messages: chat.messages?.map((msg: Message) => ({
+              ...msg,
+              timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date()
+            })) || []
+          }));
+          setChats(chatsWithDates);
         }
       } catch (error) {
         console.error('[App] Erro ao carregar dados da API:', error);
@@ -1924,15 +2042,12 @@ const App: React.FC = () => {
   };
 
   const handleSaveConfig = (newConfig: ApiConfig) => {
-    // Log removido para produção - não expor informações sensíveis
+    // Atualiza o estado (o useEffect vai salvar automaticamente via storageService)
     setApiConfig(newConfig);
-    // Salva imediatamente no localStorage (além do useEffect)
-    try {
-      localStorage.setItem('zapflow_config', JSON.stringify(newConfig));
-      // Log removido para produção
-    } catch (e) {
-      console.error('[App] ❌ Erro ao salvar configurações no localStorage:', e);
-    }
+    // Também salva imediatamente via storageService para garantir persistência
+    storageService.save('config', newConfig).catch(err => {
+      console.error('[App] Erro ao salvar configurações:', err);
+    });
   };
 
   const handleAddUser = (user: User) => setUsers(prevUsers => [...prevUsers, user]);
