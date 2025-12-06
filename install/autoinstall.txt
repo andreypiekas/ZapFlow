@@ -14,10 +14,10 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-echo -e "${BLUE}[1/7] Atualizando Sistema...${NC}"
+echo -e "${BLUE}[1/9] Atualizando Sistema...${NC}"
 sudo apt install -y curl git nano unzip ufw
 
-echo -e "${BLUE}[2/7] Configurando SWAP (4GB)...${NC}"
+echo -e "${BLUE}[2/9] Configurando SWAP (4GB)...${NC}"
 if [ $(swapon --show | wc -l) -eq 0 ]; then
     sudo fallocate -l 4G /swapfile
     sudo chmod 600 /swapfile
@@ -26,20 +26,20 @@ if [ $(swapon --show | wc -l) -eq 0 ]; then
     echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 fi
 
-echo -e "${BLUE}[3/7] Instalando Docker...${NC}"
+echo -e "${BLUE}[3/9] Instalando Docker...${NC}"
 if ! command -v docker &> /dev/null; then
     curl -fsSL https://get.docker.com | sh
     sudo usermod -aG docker $USER
 fi
 
-echo -e "${BLUE}[4/7] Instalando Node.js & PM2...${NC}"
+echo -e "${BLUE}[4/9] Instalando Node.js & PM2...${NC}"
 if ! command -v node &> /dev/null; then
     curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
     sudo apt install -y nodejs
     sudo npm install -g pm2 serve
 fi
 
-echo -e "${BLUE}[5/7] Configurando Evolution API...${NC}"
+echo -e "${BLUE}[5/9] Configurando Evolution API...${NC}"
 SERVER_IP=$(hostname -I | awk '{print $1}')
 
 cat > docker-compose.yml <<EOL
@@ -109,25 +109,164 @@ EOL
 
 sudo docker compose up -d
 
-echo -e "${BLUE}[6/7] Configurando Frontend...${NC}"
+echo -e "${BLUE}[6/8] Instalando PostgreSQL (para backend)...${NC}"
+if ! command -v psql &> /dev/null; then
+    sudo apt install -y postgresql postgresql-contrib
+    sudo systemctl start postgresql
+    sudo systemctl enable postgresql
+fi
+
+# Configurar PostgreSQL
+sudo -u postgres psql -c "CREATE DATABASE zapflow;" 2>/dev/null || echo "Banco zapflow já existe ou erro ao criar"
+sudo -u postgres psql -c "CREATE USER zapflow_user WITH PASSWORD 'zapflow_secure_password_2024';" 2>/dev/null || echo "Usuário já existe"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE zapflow TO zapflow_user;" 2>/dev/null || true
+sudo -u postgres psql -c "ALTER USER zapflow_user CREATEDB;" 2>/dev/null || true
+
+echo -e "${BLUE}[7/8] Configurando Backend API...${NC}"
+cd backend 2>/dev/null || mkdir -p backend && cd backend
+
+# Criar package.json se não existir
+if [ ! -f "package.json" ]; then
+    cat > package.json <<EOL
+{
+  "name": "zapflow-backend",
+  "version": "1.0.0",
+  "description": "Backend API para ZapFlow com PostgreSQL",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "migrate": "node scripts/migrate.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "pg": "^8.11.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
+EOL
+fi
+
+# Instalar dependências do backend
+npm install
+
+# Gerar JWT secret
+JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | base64 | tr -d '\n')
+
+# Criar arquivo .env do backend
+cat > .env <<EOL
+# Configuração do PostgreSQL
+DATABASE_URL=postgresql://zapflow_user:zapflow_secure_password_2024@localhost:5432/zapflow
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=zapflow
+DB_USER=zapflow_user
+DB_PASSWORD=zapflow_secure_password_2024
+
+# JWT Secret para autenticação
+JWT_SECRET=${JWT_SECRET}
+
+# Porta do servidor
+PORT=3001
+
+# CORS - URLs permitidas
+CORS_ORIGIN=http://${SERVER_IP}:5173,http://localhost:5173
+EOL
+
+# Verificar se os arquivos do backend existem
+if [ ! -f "server.js" ] || [ ! -f "scripts/migrate.js" ]; then
+    echo "⚠️  Arquivos do backend não encontrados no diretório backend/"
+    echo "Certifique-se de que você fez git clone completo do repositório."
+    echo "Ou execute: git pull para atualizar o repositório."
+    echo ""
+    echo "Continuando sem backend... (os dados serão salvos apenas no localStorage)"
+    BACKEND_AVAILABLE=false
+else
+    BACKEND_AVAILABLE=true
+    mkdir -p scripts
+    
+    # Executar migração
+    echo "Executando migração do banco de dados..."
+    npm run migrate || {
+        echo "⚠️  Erro na migração. Verificando conexão com PostgreSQL..."
+        echo "Certifique-se de que o PostgreSQL está rodando e as credenciais estão corretas."
+        BACKEND_AVAILABLE=false
+    }
+fi
+
+cd ..
+
+echo -e "${BLUE}[8/9] Configurando Frontend...${NC}"
+
+# Configurar variável de ambiente do frontend para usar o backend
+if [ "$BACKEND_AVAILABLE" = true ]; then
+    if [ ! -f ".env" ]; then
+        echo "VITE_API_URL=http://${SERVER_IP}:3001/api" > .env
+        echo "✅ Arquivo .env do frontend criado com URL do backend"
+    else
+        # Adicionar ou atualizar VITE_API_URL no .env existente
+        if grep -q "VITE_API_URL" .env; then
+            sed -i "s|VITE_API_URL=.*|VITE_API_URL=http://${SERVER_IP}:3001/api|" .env
+        else
+            echo "VITE_API_URL=http://${SERVER_IP}:3001/api" >> .env
+        fi
+        echo "✅ Variável VITE_API_URL configurada no .env"
+    fi
+fi
+
 rm -rf node_modules package-lock.json
 npm install
 npm run build
 
-echo -e "${BLUE}[7/7] Finalizando...${NC}"
+echo -e "${BLUE}[9/9] Finalizando...${NC}"
+
+# Iniciar backend com PM2 (se os arquivos existirem e migração foi bem-sucedida)
+if [ "$BACKEND_AVAILABLE" = true ] && [ -f "backend/server.js" ]; then
+    pm2 delete zapflow-backend 2>/dev/null || true
+    cd backend
+    pm2 start server.js --name zapflow-backend
+    cd ..
+    echo "✅ Backend iniciado com PM2"
+else
+    echo "⚠️  Backend não iniciado (arquivos não encontrados ou erro na migração)"
+    echo "   Os dados serão salvos apenas no localStorage do navegador."
+fi
+
+# Iniciar frontend com PM2
 pm2 delete zapflow-front 2>/dev/null || true
 pm2 start "serve -s dist -l 5173" --name zapflow-front
 pm2 save
 pm2 startup | grep "sudo" | bash || true
 
+# Configurar firewall
 if command -v ufw &> /dev/null; then
-    sudo ufw allow 8080
-    sudo ufw allow 5173
-    sudo ufw allow 22
-    sudo ufw allow 80
+    sudo ufw allow 8080  # Evolution API
+    sudo ufw allow 5173  # Frontend
+    sudo ufw allow 3001  # Backend API
+    sudo ufw allow 22     # SSH
+    sudo ufw allow 80    # HTTP
     sudo ufw --force enable
 fi
 
 echo ""
-echo -e "${GREEN}INSTALAÇÃO CONCLUÍDA!${NC}"
-echo -e "Acesse: http://${SERVER_IP}:5173"
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}  INSTALAÇÃO CONCLUÍDA COM SUCESSO!${NC}"
+echo -e "${GREEN}========================================${NC}"
+echo ""
+echo -e "🌐 Frontend: http://${SERVER_IP}:5173"
+echo -e "🔌 Evolution API: http://${SERVER_IP}:8080"
+echo -e "💾 Backend API: http://${SERVER_IP}:3001"
+echo ""
+echo -e "${BLUE}Credenciais padrão do admin:${NC}"
+echo -e "   Username: ${GREEN}admin${NC}"
+echo -e "   Password: ${GREEN}admin123${NC}"
+echo -e "   ${BLUE}⚠️  ALTERE A SENHA EM PRODUÇÃO!${NC}"
+echo ""
+echo -e "${BLUE}Verificar status:${NC}"
+echo -e "   pm2 status"
+echo -e "   pm2 logs zapflow-backend"
+echo -e "   pm2 logs zapflow-front"
