@@ -121,9 +121,79 @@ fi
 
 echo -e "${GREEN}✅ PostgreSQL encontrado${NC}"
 
+# Inicializar variáveis
+EXISTING_INSTALL=false
+EXISTING_PORT=""
+EXISTING_DB=""
+EXISTING_USER=""
+EXISTING_PASSWORD=""
+
+# Verificar se já existe instalação do ZapFlow
+check_existing_zapflow_install() {
+    echo "Verificando instalações existentes do ZapFlow..."
+    
+    # Verificar se existe banco zapflow na porta 54321 (instalação do autoinstall)
+    if PGPASSWORD="" psql -h localhost -p 54321 -U postgres -d zapflow -c "SELECT 1;" > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ Instalação existente do ZapFlow detectada!${NC}"
+        echo -e "${GREEN}   Banco: zapflow na porta 54321${NC}"
+        
+        # Verificar se usuário zapflow_user existe
+        USER_EXISTS=$(PGPASSWORD="" psql -h localhost -p 54321 -U postgres -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='zapflow_user';" 2>/dev/null)
+        if [ "$USER_EXISTS" = "1" ]; then
+            echo -e "${GREEN}   Usuário: zapflow_user encontrado${NC}"
+            EXISTING_INSTALL=true
+            EXISTING_PORT="54321"
+            EXISTING_DB="zapflow"
+            EXISTING_USER="zapflow_user"
+            EXISTING_PASSWORD="zapflow_secure_password_2024"
+            return 0
+        fi
+    fi
+    
+    # Verificar se existe banco zapflow na porta 5432
+    if PGPASSWORD="" psql -h localhost -p 5432 -U postgres -d zapflow -c "SELECT 1;" > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ Instalação existente do ZapFlow detectada!${NC}"
+        echo -e "${GREEN}   Banco: zapflow na porta 5432${NC}"
+        EXISTING_INSTALL=true
+        EXISTING_PORT="5432"
+        EXISTING_DB="zapflow"
+        EXISTING_USER="zapflow_user"
+        EXISTING_PASSWORD="zapflow_secure_password_2024"
+        return 0
+    fi
+    
+    EXISTING_INSTALL=false
+    return 1
+}
+
+# Verificar se há PostgreSQL em Docker (Evolution API)
+check_docker_postgres() {
+    if command -v docker &> /dev/null; then
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "evolution_postgres\|postgres"; then
+            echo -e "${YELLOW}⚠️  PostgreSQL em Docker detectado (Evolution API)${NC}"
+            echo -e "${YELLOW}   Isso não interfere - o Docker usa porta interna 5432${NC}"
+            echo -e "${YELLOW}   O ZapFlow usará PostgreSQL nativo na porta 54321${NC}"
+        fi
+    fi
+}
+
 # Detectar instalações existentes e portas em uso
 detect_postgresql() {
     echo "Detectando instalações do PostgreSQL..."
+    
+    # Verificar instalação existente do ZapFlow primeiro
+    if check_existing_zapflow_install; then
+        SUGGESTED_HOST="localhost"
+        SUGGESTED_PORT="$EXISTING_PORT"
+        SUGGESTED_DB="$EXISTING_DB"
+        SUGGESTED_USER="$EXISTING_USER"
+        SUGGESTED_PASSWORD="$EXISTING_PASSWORD"
+        echo -e "${GREEN}✅ Usando configuração existente do ZapFlow${NC}"
+        return 0
+    fi
+    
+    # Verificar PostgreSQL em Docker
+    check_docker_postgres
     
     # Verificar se o PostgreSQL está rodando
     PG_RUNNING=false
@@ -248,27 +318,50 @@ echo ""
 # 3. Configurar banco de dados
 echo -e "${YELLOW}[3/7] Configurando banco de dados...${NC}"
 
-# Solicitar informações do banco com sugestões baseadas na detecção
-echo "Informe os dados do PostgreSQL:"
-echo -n "Host [${SUGGESTED_HOST:-localhost}]: "
-read -r DB_HOST
-DB_HOST=${DB_HOST:-${SUGGESTED_HOST:-localhost}}
+# Se já existe instalação do ZapFlow, usar automaticamente
+if [ "$EXISTING_INSTALL" = true ]; then
+    echo -e "${GREEN}✅ Usando instalação existente do ZapFlow${NC}"
+    DB_HOST="${SUGGESTED_HOST:-localhost}"
+    DB_PORT="${SUGGESTED_PORT:-54321}"
+    DB_NAME="${SUGGESTED_DB:-zapflow}"
+    DB_USER="${SUGGESTED_USER:-zapflow_user}"
+    DB_PASSWORD="${SUGGESTED_PASSWORD:-zapflow_secure_password_2024}"
+    echo "  Host: $DB_HOST"
+    echo "  Porta: $DB_PORT"
+    echo "  Banco: $DB_NAME"
+    echo "  Usuário: $DB_USER"
+    echo ""
+    read -p "Deseja usar essas configurações? (s/n) [s]: " USE_EXISTING
+    USE_EXISTING=${USE_EXISTING:-s}
+    
+    if [ "$USE_EXISTING" != "s" ] && [ "$USE_EXISTING" != "S" ]; then
+        EXISTING_INSTALL=false
+    fi
+fi
 
-echo -n "Porta [${SUGGESTED_PORT:-54321}] (porta alta para evitar conflitos): "
-read -r DB_PORT
-DB_PORT=${DB_PORT:-${SUGGESTED_PORT:-54321}}
+# Se não usar instalação existente, solicitar informações
+if [ "$EXISTING_INSTALL" != true ]; then
+    echo "Informe os dados do PostgreSQL:"
+    echo -n "Host [${SUGGESTED_HOST:-localhost}]: "
+    read -r DB_HOST
+    DB_HOST=${DB_HOST:-${SUGGESTED_HOST:-localhost}}
 
-echo -n "Nome do banco [zapflow]: "
-read -r DB_NAME
-DB_NAME=${DB_NAME:-zapflow}
+    echo -n "Porta [${SUGGESTED_PORT:-54321}] (porta alta para evitar conflitos): "
+    read -r DB_PORT
+    DB_PORT=${DB_PORT:-${SUGGESTED_PORT:-54321}}
 
-echo -n "Usuário [postgres]: "
-read -r DB_USER
-DB_USER=${DB_USER:-postgres}
+    echo -n "Nome do banco [zapflow]: "
+    read -r DB_NAME
+    DB_NAME=${DB_NAME:-zapflow}
 
-echo -n "Senha do PostgreSQL: "
-read -s DB_PASSWORD
-echo ""
+    echo -n "Usuário [postgres]: "
+    read -r DB_USER
+    DB_USER=${DB_USER:-postgres}
+
+    echo -n "Senha do PostgreSQL: "
+    read -s DB_PASSWORD
+    echo ""
+fi
 
 # Testar conexão com PostgreSQL
 echo "Testando conexão com PostgreSQL em $DB_HOST:$DB_PORT..."
@@ -307,17 +400,35 @@ if [ "$CONNECTION_SUCCESS" = true ]; then
     echo -e "${GREEN}✅ Configuração final: Host=$DB_HOST, Porta=$DB_PORT${NC}"
     echo ""
     
-    # Criar banco de dados
-    echo "Criando banco de dados '$DB_NAME'..."
-    if PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "CREATE DATABASE $DB_NAME;" > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ Banco de dados '$DB_NAME' criado com sucesso${NC}"
-    else
-        # Verificar se o banco já existe
-        if PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1;" > /dev/null 2>&1; then
-            echo -e "${YELLOW}⚠️  Banco de dados '$DB_NAME' já existe. Continuando...${NC}"
-        else
-            echo -e "${YELLOW}⚠️  Não foi possível criar o banco. Verifique as permissões.${NC}"
+    # Se não é instalação existente, criar usuário e banco se necessário
+    if [ "$EXISTING_INSTALL" != true ]; then
+        # Verificar se usuário existe, se não, criar
+        USER_EXISTS=$(PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER';" 2>/dev/null || echo "0")
+        if [ "$USER_EXISTS" != "1" ] && [ "$DB_USER" != "postgres" ]; then
+            echo "Criando usuário '$DB_USER'..."
+            # Conectar como postgres para criar usuário
+            if sudo -u postgres PGPORT=$DB_PORT psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';" 2>/dev/null; then
+                echo -e "${GREEN}✅ Usuário '$DB_USER' criado com sucesso${NC}"
+                sudo -u postgres PGPORT=$DB_PORT psql -c "ALTER USER $DB_USER CREATEDB;" 2>/dev/null || true
+            else
+                echo -e "${YELLOW}⚠️  Não foi possível criar o usuário. Continuando...${NC}"
+            fi
         fi
+        
+        # Criar banco de dados
+        echo "Criando banco de dados '$DB_NAME'..."
+        if PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "CREATE DATABASE $DB_NAME;" > /dev/null 2>&1; then
+            echo -e "${GREEN}✅ Banco de dados '$DB_NAME' criado com sucesso${NC}"
+        else
+            # Verificar se o banco já existe
+            if PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1;" > /dev/null 2>&1; then
+                echo -e "${YELLOW}⚠️  Banco de dados '$DB_NAME' já existe. Continuando...${NC}"
+            else
+                echo -e "${YELLOW}⚠️  Não foi possível criar o banco. Verifique as permissões.${NC}"
+            fi
+        fi
+    else
+        echo -e "${GREEN}✅ Usando instalação existente - banco e usuário já configurados${NC}"
     fi
 else
     echo -e "${RED}❌ Erro: Não foi possível conectar ao PostgreSQL${NC}"
