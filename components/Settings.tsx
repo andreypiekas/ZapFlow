@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { ApiConfig, User, UserRole } from '../types';
-import { Save, Server, Shield, Globe, User as UserIcon, Bell, Lock } from 'lucide-react';
+import { Save, Server, Shield, Globe, User as UserIcon, Bell, Lock, RefreshCw } from 'lucide-react';
+import { fetchAllInstances, fetchInstanceDetails, updateInstanceName, InstanceInfo } from '../services/whatsappService';
 
 interface SettingsProps {
   config: ApiConfig;
@@ -14,11 +15,103 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
   const [formData, setFormData] = useState<ApiConfig>(config);
   const [showSuccess, setShowSuccess] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
+  const [instances, setInstances] = useState<InstanceInfo[]>([]);
+  const [selectedInstanceName, setSelectedInstanceName] = useState<string>(config.instanceName || '');
+  const [isLoadingInstances, setIsLoadingInstances] = useState(false);
+  const [isUpdatingName, setIsUpdatingName] = useState(false);
 
   // Sincroniza formData quando config muda (importante para carregar dados salvos)
   useEffect(() => {
     setFormData(config);
+    setSelectedInstanceName(config.instanceName || '');
   }, [config]);
+
+  // Carrega lista de instâncias quando a tela é aberta e não está em modo demo
+  useEffect(() => {
+    if (isAdmin && !config.isDemo && config.baseUrl && (config.authenticationApiKey || config.apiKey)) {
+      loadInstances();
+    }
+  }, [isAdmin, config.isDemo, config.baseUrl, config.authenticationApiKey, config.apiKey]);
+
+  const loadInstances = async () => {
+    if (config.isDemo || !config.baseUrl) return;
+    
+    setIsLoadingInstances(true);
+    try {
+      const allInstances = await fetchAllInstances(config);
+      setInstances(allInstances);
+      
+      // Se a instância selecionada não existe mais, seleciona a primeira disponível
+      if (allInstances.length > 0 && !allInstances.find(i => i.instanceName === selectedInstanceName)) {
+        const firstInstance = allInstances[0];
+        setSelectedInstanceName(firstInstance.instanceName);
+        handleInstanceSelect(firstInstance.instanceName);
+      }
+    } catch (error) {
+      console.error('[Settings] Erro ao carregar instâncias:', error);
+    } finally {
+      setIsLoadingInstances(false);
+    }
+  };
+
+  const handleInstanceSelect = async (instanceName: string) => {
+    setSelectedInstanceName(instanceName);
+    
+    // Busca detalhes da instância selecionada e preenche o token automaticamente
+    if (instanceName && !config.isDemo && config.baseUrl) {
+      try {
+        const details = await fetchInstanceDetails(config, instanceName);
+        if (details) {
+          setFormData({
+            ...formData,
+            instanceName: details.instanceName,
+            apiKey: details.token || formData.apiKey // Preenche o token se disponível
+          });
+        } else {
+          // Se não encontrou detalhes, apenas atualiza o nome
+          setFormData({
+            ...formData,
+            instanceName: instanceName
+          });
+        }
+      } catch (error) {
+        console.error('[Settings] Erro ao buscar detalhes da instância:', error);
+        setFormData({
+          ...formData,
+          instanceName: instanceName
+        });
+      }
+    } else {
+      setFormData({
+        ...formData,
+        instanceName: instanceName
+      });
+    }
+  };
+
+  const handleUpdateInstanceName = async () => {
+    if (!selectedInstanceName || !formData.instanceName || selectedInstanceName === formData.instanceName) {
+      return;
+    }
+
+    setIsUpdatingName(true);
+    try {
+      const success = await updateInstanceName(config, selectedInstanceName, formData.instanceName);
+      if (success) {
+        setSelectedInstanceName(formData.instanceName);
+        await loadInstances(); // Recarrega a lista
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 3000);
+      } else {
+        alert('Erro ao atualizar o nome da instância. Verifique se o novo nome é válido e não está em uso.');
+      }
+    } catch (error) {
+      console.error('[Settings] Erro ao atualizar nome da instância:', error);
+      alert('Erro ao atualizar o nome da instância.');
+    } finally {
+      setIsUpdatingName(false);
+    }
+  };
 
   useEffect(() => {
     if ('Notification' in window) {
@@ -136,14 +229,66 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
                   </div>
 
                   <div className="col-span-1 md:col-span-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                      <Server size={16} /> Selecionar Instância
+                    </label>
+                    <div className="flex gap-2">
+                      <select
+                        value={selectedInstanceName}
+                        onChange={(e) => handleInstanceSelect(e.target.value)}
+                        disabled={isLoadingInstances}
+                        className="flex-1 px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none bg-white disabled:bg-slate-100 disabled:cursor-not-allowed"
+                      >
+                        <option value="">-- Selecione uma instância --</option>
+                        {instances.map((instance) => (
+                          <option key={instance.instanceName} value={instance.instanceName}>
+                            {instance.instanceName} ({instance.status})
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={loadInstances}
+                        disabled={isLoadingInstances}
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        title="Atualizar lista de instâncias"
+                      >
+                        <RefreshCw size={16} className={isLoadingInstances ? 'animate-spin' : ''} />
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {instances.length === 0 
+                        ? 'Nenhuma instância encontrada. Crie uma nova instância na tela de Conexões.'
+                        : `Selecione uma instância para usar. O token será preenchido automaticamente.`}
+                    </p>
+                  </div>
+
+                  <div className="col-span-1 md:col-span-2">
                     <label className="block text-sm font-medium text-slate-700 mb-2">Nome da Instância</label>
-                    <input 
-                      type="text" 
-                      value={formData.instanceName}
-                      onChange={(e) => setFormData({...formData, instanceName: e.target.value})}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
-                      placeholder="Ex: hostgator_whatsapp"
-                    />
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={formData.instanceName}
+                        onChange={(e) => setFormData({...formData, instanceName: e.target.value})}
+                        className="flex-1 px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                        placeholder="Ex: hostgator_whatsapp"
+                      />
+                      {selectedInstanceName && formData.instanceName !== selectedInstanceName && (
+                        <button
+                          type="button"
+                          onClick={handleUpdateInstanceName}
+                          disabled={isUpdatingName}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                        >
+                          {isUpdatingName ? 'Atualizando...' : 'Renomear Instância'}
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      {selectedInstanceName && formData.instanceName !== selectedInstanceName
+                        ? 'Altere o nome acima e clique em "Renomear Instância" para atualizar.'
+                        : 'Nome da instância que será usada. Se você selecionou uma instância acima, o token foi preenchido automaticamente.'}
+                    </p>
                   </div>
               </div>
 

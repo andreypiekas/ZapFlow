@@ -1839,11 +1839,12 @@ export interface InstanceInfo {
     status: 'open' | 'connecting' | 'close' | 'qrcode';
     qrcode?: string;
     integration?: string;
+    token?: string; // Token da instância
 }
 
 // Lista todas as instâncias
 export const fetchAllInstances = async (config: ApiConfig): Promise<InstanceInfo[]> => {
-    if (config.isDemo || !config.baseUrl || !config.apiKey) return [];
+    if (config.isDemo || !config.baseUrl) return [];
     
     try {
         const response = await fetch(`${config.baseUrl}/instance/fetchInstances`, {
@@ -1866,10 +1867,14 @@ export const fetchAllInstances = async (config: ApiConfig): Promise<InstanceInfo
         
         return instances.map((item: any) => {
             const instance = item.instance || item;
+            const statusValue = instance.status || instance.state || 'close';
             return {
                 instanceName: instance.instanceName || instance.name || item.instanceName || item.name,
-                status: instance.status || instance.state || 'close',
-                integration: instance.integration || 'WHATSAPP-BAILEYS'
+                status: (statusValue === 'open' || statusValue === 'connecting' || statusValue === 'close' || statusValue === 'qrcode') 
+                    ? statusValue as 'open' | 'connecting' | 'close' | 'qrcode'
+                    : 'close' as 'open' | 'connecting' | 'close' | 'qrcode',
+                integration: instance.integration || 'WHATSAPP-BAILEYS',
+                token: instance.token || instance.apikey || item.token || item.apikey
             };
         }).filter((i: InstanceInfo) => i.instanceName);
     } catch (error) {
@@ -1878,9 +1883,126 @@ export const fetchAllInstances = async (config: ApiConfig): Promise<InstanceInfo
     }
 };
 
+// Busca detalhes de uma instância específica (incluindo token)
+export const fetchInstanceDetails = async (config: ApiConfig, instanceName: string): Promise<InstanceInfo | null> => {
+    if (config.isDemo || !config.baseUrl || !instanceName) return null;
+    
+    try {
+        // Busca todas as instâncias e filtra pela desejada
+        const allInstances = await fetchAllInstances(config);
+        const instance = allInstances.find(i => i.instanceName === instanceName);
+        
+        if (instance) {
+            // Tenta buscar mais detalhes via endpoint específico se disponível
+            try {
+                const response = await fetch(`${config.baseUrl}/instance/fetchInstances`, {
+                    method: 'GET',
+                    headers: { 'apikey': getAuthKey(config) }
+                });
+                
+                if (response.ok) {
+                    const rawData = await response.json();
+                    let instances: any[] = [];
+                    
+                    if (Array.isArray(rawData)) {
+                        instances = rawData;
+                    } else if (rawData && typeof rawData === 'object') {
+                        if (Array.isArray(rawData.instances)) instances = rawData.instances;
+                        else if (rawData.instance) instances = [rawData.instance];
+                        else if (rawData.instanceName) instances = [rawData];
+                    }
+                    
+                    const found = instances.find((item: any) => {
+                        const inst = item.instance || item;
+                        const name = inst.instanceName || inst.name || item.instanceName || item.name;
+                        return name === instanceName;
+                    });
+                    
+                    if (found) {
+                        const inst = found.instance || found;
+                        const statusValue = inst.status || inst.state || 'close';
+                        return {
+                            instanceName: inst.instanceName || inst.name || found.instanceName || found.name,
+                            status: (statusValue === 'open' || statusValue === 'connecting' || statusValue === 'close' || statusValue === 'qrcode') 
+                                ? statusValue as 'open' | 'connecting' | 'close' | 'qrcode'
+                                : 'close' as 'open' | 'connecting' | 'close' | 'qrcode',
+                            integration: inst.integration || 'WHATSAPP-BAILEYS',
+                            token: inst.token || inst.apikey || found.token || found.apikey || instance.token
+                        };
+                    }
+                }
+            } catch (e) {
+                console.warn('[fetchInstanceDetails] Erro ao buscar detalhes adicionais:', e);
+            }
+            
+            return instance;
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('[fetchInstanceDetails] Erro:', error);
+        return null;
+    }
+};
+
+// Atualiza o nome de uma instância (renomeia)
+// Nota: A Evolution API pode não ter endpoint direto para renomear
+// Esta função tenta atualizar, mas pode precisar criar nova e deletar antiga
+export const updateInstanceName = async (config: ApiConfig, oldInstanceName: string, newInstanceName: string): Promise<boolean> => {
+    if (config.isDemo || !config.baseUrl || !oldInstanceName || !newInstanceName || oldInstanceName === newInstanceName) {
+        return false;
+    }
+    
+    try {
+        // Primeiro, busca os detalhes da instância antiga
+        const instanceDetails = await fetchInstanceDetails(config, oldInstanceName);
+        if (!instanceDetails) {
+            console.error('[updateInstanceName] Instância não encontrada:', oldInstanceName);
+            return false;
+        }
+        
+        // Tenta usar endpoint de update se existir (algumas versões da Evolution API têm)
+        try {
+            const response = await fetch(`${config.baseUrl}/instance/update/${oldInstanceName}`, {
+                method: 'PUT',
+                headers: createAuthHeaders(config),
+                body: JSON.stringify({ instanceName: newInstanceName })
+            });
+            
+            if (response.ok) {
+                console.log('[updateInstanceName] ✅ Nome atualizado com sucesso');
+                return true;
+            }
+        } catch (e) {
+            console.warn('[updateInstanceName] Endpoint PUT não disponível, tentando alternativa...');
+        }
+        
+        // Se não funcionar, cria nova instância com o novo nome e mesmo token
+        const token = instanceDetails.token || '';
+        
+        // Cria uma nova instância com o token da antiga
+        const configWithToken = {
+            ...config,
+            apiKey: token // Usa o token da instância antiga
+        };
+        
+        const created = await createInstance(configWithToken, newInstanceName, false);
+        
+        if (created) {
+            console.log('[updateInstanceName] ✅ Nova instância criada com o mesmo token. Delete a antiga manualmente se necessário.');
+            return true;
+        }
+        
+        return false;
+    } catch (error) {
+        console.error('[updateInstanceName] Erro:', error);
+        return false;
+    }
+};
+
 // Deleta uma instância
 export const deleteInstance = async (config: ApiConfig, instanceName: string): Promise<boolean> => {
-    if (config.isDemo || !config.baseUrl || !config.apiKey) return false;
+    if (config.isDemo || !config.baseUrl) return false;
     
     try {
         const response = await fetch(`${config.baseUrl}/instance/delete/${instanceName}`, {
