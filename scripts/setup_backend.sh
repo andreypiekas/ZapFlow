@@ -232,13 +232,48 @@ check_existing_zapflow_install() {
     return 1
 }
 
+# Variáveis globais para Docker
+DOCKER_PG_DETECTED=false
+DOCKER_PG_PORT_EXPOSED=false
+
 # Verificar se há PostgreSQL em Docker (Evolution API)
 check_docker_postgres() {
+    DOCKER_PG_DETECTED=false
+    DOCKER_PG_PORT_EXPOSED=false
+    
     if command -v docker &> /dev/null; then
-        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "evolution_postgres\|postgres"; then
-            echo -e "${YELLOW}⚠️  PostgreSQL em Docker detectado (Evolution API)${NC}"
-            echo -e "${YELLOW}   Isso não interfere - o Docker usa porta interna 5432${NC}"
-            echo -e "${YELLOW}   O ZapFlow usará PostgreSQL nativo na porta 54321${NC}"
+        # Verificar container evolution_postgres especificamente
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "evolution_postgres"; then
+            DOCKER_PG_DETECTED=true
+            echo -e "${GREEN}✅ PostgreSQL em Docker detectado (Evolution API)${NC}"
+            
+            # Verificar se a porta está exposta para o host
+            DOCKER_PORTS=$(docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null | grep "evolution_postgres" | awk '{print $2}')
+            if echo "$DOCKER_PORTS" | grep -q "5432"; then
+                DOCKER_PG_PORT_EXPOSED=true
+                EXPOSED_PORT=$(echo "$DOCKER_PORTS" | grep -oP '0\.0\.0\.0:\K\d+(?=->5432)' | head -1)
+                if [ -n "$EXPOSED_PORT" ]; then
+                    echo -e "${YELLOW}⚠️  ATENÇÃO: PostgreSQL Docker está expondo porta $EXPOSED_PORT->5432 para o host${NC}"
+                    echo -e "${YELLOW}   Isso pode causar conflito! Use porta diferente para PostgreSQL nativo.${NC}"
+                fi
+            else
+                echo -e "${GREEN}   Porta 5432 não está exposta para o host (apenas interna do Docker)${NC}"
+                echo -e "${GREEN}   Não há conflito - o ZapFlow usará PostgreSQL nativo na porta 54321${NC}"
+            fi
+            
+            # Verificar configurações do Docker
+            DOCKER_PG_USER=$(docker exec evolution_postgres psql -U postgres -tAc "SELECT current_user;" 2>/dev/null || echo "user")
+            DOCKER_PG_DB=$(docker exec evolution_postgres psql -U postgres -tAc "SELECT datname FROM pg_database WHERE datname='evolution';" 2>/dev/null || echo "evolution")
+            
+            echo -e "${BLUE}   Configuração Docker:${NC}"
+            echo -e "${BLUE}     Container: evolution_postgres${NC}"
+            echo -e "${BLUE}     Usuário: ${DOCKER_PG_USER}${NC}"
+            echo -e "${BLUE}     Banco: ${DOCKER_PG_DB}${NC}"
+            echo ""
+            echo -e "${GREEN}   O ZapFlow usará PostgreSQL NATIVO separado:${NC}"
+            echo -e "${GREEN}     Porta: 54321 (para evitar conflitos)${NC}"
+            echo -e "${GREEN}     Banco: zapflow${NC}"
+            echo -e "${GREEN}     Usuário: zapflow_user${NC}"
         fi
     fi
 }
@@ -342,8 +377,21 @@ detect_postgresql() {
         if [ -z "$DETECTED_PORT" ]; then
             for PORT in 54321 5432; do
                 if pg_isready -h localhost -p "$PORT" > /dev/null 2>&1; then
-                    # Verificar se não é Docker
-                    if ! docker ps --format '{{.Ports}}' 2>/dev/null | grep -q ":$PORT->"; then
+                    # Verificar se não é Docker (verificar se porta está mapeada do Docker)
+                    IS_DOCKER_PORT=false
+                    if command -v docker &> /dev/null; then
+                        # Verificar se algum container está mapeando essa porta
+                        DOCKER_PORT_MAP=$(docker ps --format '{{.Ports}}' 2>/dev/null | grep -oP "0\.0\.0\.0:\K\d+(?=->$PORT)" || true)
+                        if [ -n "$DOCKER_PORT_MAP" ]; then
+                            IS_DOCKER_PORT=true
+                        fi
+                        # Verificar se é container evolution_postgres
+                        if docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null | grep "evolution_postgres" | grep -q ":$PORT"; then
+                            IS_DOCKER_PORT=true
+                        fi
+                    fi
+                    
+                    if [ "$IS_DOCKER_PORT" = false ]; then
                         DETECTED_PORT="$PORT"
                         break
                     fi
@@ -431,7 +479,13 @@ detect_postgresql() {
         fi
         
         SUGGESTED_HOST="localhost"
-        SUGGESTED_PORT="54321"
+        # Se Docker está rodando, sempre usar porta 54321 para evitar conflitos
+        if [ "$DOCKER_PG_DETECTED" = true ]; then
+            SUGGESTED_PORT="54321"
+            echo -e "${GREEN}   Usando porta 54321 para evitar conflito com Docker${NC}"
+        else
+            SUGGESTED_PORT="54321"
+        fi
     fi
 }
 
@@ -484,6 +538,24 @@ if [ "$EXISTING_INSTALL" != true ]; then
     echo -n "Senha do PostgreSQL: "
     read -s DB_PASSWORD
     echo ""
+    
+    # Verificar se está tentando usar configurações do Docker
+    if [ "$DB_NAME" = "evolution" ] || [ "$DB_USER" = "user" ]; then
+        echo -e "${RED}⚠️  ATENÇÃO: Você está tentando usar configurações do Docker (Evolution API)!${NC}"
+        echo -e "${RED}   Banco 'evolution' e usuário 'user' são do container Docker.${NC}"
+        echo -e "${YELLOW}   O ZapFlow precisa de um PostgreSQL NATIVO separado.${NC}"
+        echo ""
+        echo "Recomendado para ZapFlow:"
+        echo "  - Banco: zapflow"
+        echo "  - Usuário: zapflow_user ou postgres"
+        echo "  - Porta: 54321 (para evitar conflitos)"
+        echo ""
+        read -p "Deseja continuar mesmo assim? (s/n): " CONTINUE_DOCKER
+        if [ "$CONTINUE_DOCKER" != "s" ] && [ "$CONTINUE_DOCKER" != "S" ]; then
+            echo "Por favor, use configurações diferentes do Docker."
+            exit 1
+        fi
+    fi
 fi
 
 # Testar conexão com PostgreSQL
