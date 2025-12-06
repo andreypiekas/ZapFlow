@@ -41,7 +41,7 @@ export const findActiveInstance = async (config: ApiConfig) => {
     try {
         const response = await fetch(`${config.baseUrl}/instance/fetchInstances`, {
             method: 'GET',
-            headers: { 'apikey': config.apiKey }
+            headers: { 'apikey': getAuthKey(config) }
         });
         
         if (!response.ok) return null;
@@ -165,21 +165,28 @@ export const getDetailedInstanceStatus = async (config: ApiConfig) => {
     }
 };
 
+// Helper para obter a chave de autenticação correta
+// Usa authenticationApiKey (AUTHENTICATION_API_KEY do servidor) para autenticar requisições HTTP
+// Se não estiver configurada, usa apiKey como fallback (compatibilidade com versões antigas)
+const getAuthKey = (config: ApiConfig): string => {
+    return config.authenticationApiKey || config.apiKey || '';
+};
+
 // Helper para criar headers de autenticação com diferentes formatos
-const createAuthHeaders = (apiKey: string, contentType: string = 'application/json'): Record<string, string> => {
+// Usa authenticationApiKey (AUTHENTICATION_API_KEY do servidor) para autenticar requisições HTTP
+const createAuthHeaders = (config: ApiConfig, contentType: string = 'application/json'): Record<string, string> => {
     const headers: Record<string, string> = {
         'Content-Type': contentType
     };
     
-    // Tenta múltiplos formatos de autenticação (Evolution API pode aceitar diferentes formatos)
-    // Formato padrão: apikey header
-    headers['apikey'] = apiKey;
+    const authKey = getAuthKey(config);
     
-    // Também adiciona como Authorization Bearer (algumas versões da Evolution API aceitam)
-    // headers['Authorization'] = `Bearer ${apiKey}`;
+    if (!authKey) {
+        console.warn('[createAuthHeaders] ⚠️ Nenhuma chave de autenticação configurada');
+    }
     
-    // E como X-API-Key (formato alternativo)
-    // headers['X-API-Key'] = apiKey;
+    // Formato padrão: apikey header (AUTHENTICATION_API_KEY do servidor)
+    headers['apikey'] = authKey;
     
     return headers;
 };
@@ -190,27 +197,32 @@ export const createInstance = async (
     instanceName: string,
     qrcode: boolean = true
 ): Promise<InstanceInfo | null> => {
-    if (config.isDemo || !config.baseUrl || !config.apiKey) {
+    if (config.isDemo || !config.baseUrl) {
         console.warn('[createInstance] Configuração inválida:', {
             isDemo: config.isDemo,
-            hasBaseUrl: !!config.baseUrl,
-            hasApiKey: !!config.apiKey
+            hasBaseUrl: !!config.baseUrl
         });
         return null;
     }
     
-    // Valida se a API key não está vazia
-    if (!config.apiKey.trim()) {
-        console.error('[createInstance] API Key está vazia');
+    // Valida se a AUTHENTICATION_API_KEY está configurada (necessária para autenticar requisições HTTP)
+    const authKey = config.authenticationApiKey || config.apiKey;
+    if (!authKey || !authKey.trim()) {
+        console.error('[createInstance] ❌ AUTHENTICATION_API_KEY não configurada');
+        if (typeof window !== 'undefined') {
+            setTimeout(() => {
+                alert('❌ Erro de Configuração\n\nA AUTHENTICATION_API_KEY não está configurada.\n\nPor favor:\n1. Vá em Configurações do ZapFlow\n2. Preencha o campo "AUTHENTICATION_API_KEY (Servidor)"\n3. Use a mesma chave do arquivo docker-compose.yml (variável AUTHENTICATION_API_KEY)\n4. Salve e tente novamente');
+            }, 100);
+        }
         return null;
     }
     
     try {
-        const headers = createAuthHeaders(config.apiKey);
+        // Usa authenticationApiKey (AUTHENTICATION_API_KEY do servidor) para autenticar requisições HTTP
+        const headers = createAuthHeaders(config);
         
         // Gera token UUID automaticamente (formato esperado pelo Evolution API)
-        // Segundo a documentação: "Enter or leave empty to create dynamically"
-        // Vamos gerar automaticamente para garantir consistência
+        // Se apiKey (token da instância) estiver configurado, usa ele; caso contrário, gera automaticamente
         const generateToken = () => {
             return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
                 const r = Math.random() * 16 | 0;
@@ -219,24 +231,27 @@ export const createInstance = async (
             });
         };
         
-        const token = generateToken();
+        // Token da instância: usa apiKey se fornecido, senão gera automaticamente
+        const instanceToken = config.apiKey && config.apiKey.trim() && config.apiKey !== authKey 
+            ? config.apiKey 
+            : generateToken();
         
         // Payload conforme documentação oficial da Evolution API v2
         // https://doc.evolution-api.com/v2/api-reference/instance-controller/create-instance-basic
         const payload: any = {
             instanceName,                    // required: Instance name
             integration: 'WHATSAPP-BAILEYS', // required: WhatsApp engine
-            token: token,                    // optional: apikey (gerado automaticamente)
+            token: instanceToken,            // optional: Token da instância (gerado automaticamente se não fornecido)
             qrcode: qrcode                   // optional: Create QR Code automatically after creation
         };
         
         console.log('[createInstance] Tentando criar instância:', {
             baseUrl: config.baseUrl,
             instanceName,
-            apiKeyLength: config.apiKey.length,
-            apiKeyPreview: config.apiKey.substring(0, 8) + '...',
-            token: token.substring(0, 8) + '...',
-            payload: { ...payload, token: token.substring(0, 8) + '...' }
+            hasAuthenticationApiKey: !!config.authenticationApiKey,
+            authKeyPreview: authKey.substring(0, 8) + '...',
+            instanceTokenPreview: instanceToken.substring(0, 8) + '...',
+            payload: { ...payload, token: instanceToken.substring(0, 8) + '...' }
         });
         
         const response = await fetch(`${config.baseUrl}/instance/create`, {
@@ -263,13 +278,13 @@ export const createInstance = async (
             
             // Se for 401, tenta formatos alternativos de autenticação
             if (response.status === 401) {
-                console.warn('[createInstance] ⚠️ Erro 401 (Unauthorized) - API Key pode estar incorreta');
+                console.warn('[createInstance] ⚠️ Erro 401 (Unauthorized) - AUTHENTICATION_API_KEY pode estar incorreta');
                 console.log('[createInstance] Tentando formatos alternativos de autenticação...');
                 
                 // Tenta com Authorization Bearer
                 const headersBearer = {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${config.apiKey}`
+                    'Authorization': `Bearer ${authKey}`
                 };
                 
                 const responseBearer = await fetch(`${config.baseUrl}/instance/create`, {
@@ -292,7 +307,7 @@ export const createInstance = async (
                 // Tenta com X-API-Key
                 const headersXApiKey = {
                     'Content-Type': 'application/json',
-                    'X-API-Key': config.apiKey
+                    'X-API-Key': authKey
                 };
                 
                 const responseXApiKey = await fetch(`${config.baseUrl}/instance/create`, {
@@ -314,14 +329,14 @@ export const createInstance = async (
                 
                 // Se todas as tentativas falharam, mostra mensagem clara
                 console.error('[createInstance] ❌ Falha na autenticação após tentar todos os formatos');
-                console.error('[createInstance] 💡 Verifique se a API Key nas configurações corresponde à AUTHENTICATION_API_KEY do servidor Evolution API');
-                console.error('[createInstance] 💡 A API Key deve ser exatamente igual à configurada no docker-compose.yml (variável AUTHENTICATION_API_KEY)');
+                console.error('[createInstance] 💡 Verifique se a AUTHENTICATION_API_KEY nas configurações corresponde à do servidor Evolution API');
+                console.error('[createInstance] 💡 A AUTHENTICATION_API_KEY deve ser exatamente igual à configurada no docker-compose.yml (variável AUTHENTICATION_API_KEY)');
                 console.error('[createInstance] 💡 A mesma chave usada para fazer login no Evolution Manager deve ser usada aqui');
                 
                 // Mostra alerta para o usuário
                 if (typeof window !== 'undefined') {
                     setTimeout(() => {
-                        alert('❌ Erro de Autenticação\n\nA API Key configurada não corresponde à chave do servidor.\n\nPor favor:\n1. Abra o arquivo docker-compose.yml do servidor Evolution API\n2. Localize a variável AUTHENTICATION_API_KEY\n3. Vá em Configurações do ZapFlow\n4. Cole a mesma chave no campo "Global API Key"\n5. Salve e tente novamente\n\nA API Key deve ser exatamente igual à do docker-compose.yml!');
+                        alert('❌ Erro de Autenticação\n\nA AUTHENTICATION_API_KEY configurada não corresponde à chave do servidor.\n\nPor favor:\n1. Abra o arquivo docker-compose.yml do servidor Evolution API\n2. Localize a variável AUTHENTICATION_API_KEY\n3. Vá em Configurações do ZapFlow\n4. Cole a mesma chave no campo "AUTHENTICATION_API_KEY (Servidor)"\n5. Salve e tente novamente\n\nA AUTHENTICATION_API_KEY deve ser exatamente igual à do docker-compose.yml!');
                     }, 100);
                 }
             }
@@ -368,7 +383,7 @@ export const fetchRealQRCode = async (config: ApiConfig): Promise<string | null>
             await new Promise(resolve => setTimeout(resolve, 3000));
             response = await fetch(`${config.baseUrl}/instance/connect/${targetInstance}`, {
                 method: 'GET',
-                headers: { 'apikey': config.apiKey }
+                headers: { 'apikey': getAuthKey(config) }
             });
         } else {
             console.error('[fetchRealQRCode] Falha ao criar instância');
@@ -469,7 +484,7 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': config.apiKey
+        'apikey': getAuthKey(config)
       },
       body: JSON.stringify(payload)
     });
@@ -498,7 +513,7 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'apikey': config.apiKey
+                    'apikey': getAuthKey(config)
                 },
                 body: JSON.stringify(payload)
             });
@@ -568,7 +583,7 @@ export const sendRealMediaMessage = async (
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': config.apiKey
+        'apikey': getAuthKey(config)
       },
       body: JSON.stringify(body)
     });
@@ -639,7 +654,7 @@ export const sendRealContact = async (
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': config.apiKey
+        'apikey': getAuthKey(config)
       },
       body: JSON.stringify(payload)
     });
@@ -656,7 +671,7 @@ export const sendRealContact = async (
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': config.apiKey
+          'apikey': getAuthKey(config)
         },
         body: JSON.stringify(payloadVCard)
       });
@@ -983,7 +998,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                     // Fallback Final: fetchAllMessages (V2 antigo)
                     const resAll = await fetch(`${config.baseUrl}/message/fetchAllMessages/${instanceName}`, {
                         method: 'GET',
-                        headers: { 'apikey': config.apiKey }
+                        headers: { 'apikey': getAuthKey(config) }
                     });
                     if (resAll.ok) rawData = await resAll.json();
                 }
@@ -1585,7 +1600,7 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                 const res = await fetch(endpoint.url, {
                     method: endpoint.body ? 'POST' : 'GET',
                     headers: { 
-                        'apikey': config.apiKey, 
+                        'apikey': getAuthKey(config), 
                         'Content-Type': 'application/json' 
                     },
                     body: endpoint.body ? JSON.stringify(endpoint.body) : undefined
@@ -1833,7 +1848,7 @@ export const fetchAllInstances = async (config: ApiConfig): Promise<InstanceInfo
     try {
         const response = await fetch(`${config.baseUrl}/instance/fetchInstances`, {
             method: 'GET',
-            headers: { 'apikey': config.apiKey }
+            headers: { 'apikey': getAuthKey(config) }
         });
         
         if (!response.ok) return [];
@@ -1870,7 +1885,7 @@ export const deleteInstance = async (config: ApiConfig, instanceName: string): P
     try {
         const response = await fetch(`${config.baseUrl}/instance/delete/${instanceName}`, {
             method: 'DELETE',
-            headers: { 'apikey': config.apiKey }
+            headers: { 'apikey': getAuthKey(config) }
         });
         
         return response.ok;
@@ -1887,7 +1902,7 @@ export const getInstanceQRCode = async (config: ApiConfig, instanceName: string)
     try {
         const response = await fetch(`${config.baseUrl}/instance/connect/${instanceName}`, {
             method: 'GET',
-            headers: { 'apikey': config.apiKey }
+            headers: { 'apikey': getAuthKey(config) }
         });
         
         if (!response.ok) return null;

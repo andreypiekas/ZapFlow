@@ -136,7 +136,8 @@ export interface Chat {
 
 export interface ApiConfig {
   baseUrl: string;
-  apiKey: string;
+  apiKey: string; // Token da instância (usado no campo 'token' do payload)
+  authenticationApiKey?: string; // AUTHENTICATION_API_KEY do servidor (usado no header 'apikey' das requisições HTTP)
   instanceName: string;
   isDemo: boolean;
   googleClientId?: string; // Client ID for Google People API

@@ -109,15 +109,30 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
-                      <Shield size={16} /> Global API Key
+                      <Shield size={16} /> AUTHENTICATION_API_KEY (Servidor)
+                    </label>
+                    <input 
+                      type="password" 
+                      value={formData.authenticationApiKey || ''}
+                      onChange={(e) => setFormData({...formData, authenticationApiKey: e.target.value})}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="B8349283-F143-429D-B6C2-9386E8016558"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Chave de autenticação do servidor (do docker-compose.yml). Usada para autenticar requisições HTTP.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                      <Shield size={16} /> Token da Instância (Opcional)
                     </label>
                     <input 
                       type="password" 
                       value={formData.apiKey}
                       onChange={(e) => setFormData({...formData, apiKey: e.target.value})}
                       className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
-                      placeholder="Sua chave de autenticação"
+                      placeholder="Deixe vazio para gerar automaticamente"
                     />
+                    <p className="text-xs text-slate-400 mt-1">Token específico da instância. Se deixado vazio, será gerado automaticamente ao criar a instância.</p>
                   </div>
 
                   <div className="col-span-1 md:col-span-2">
