@@ -40,7 +40,20 @@ if ! command -v node &> /dev/null; then
 fi
 
 echo -e "${BLUE}[5/9] Configurando Evolution API...${NC}"
-SERVER_IP=$(hostname -I | awk '{print $1}')
+# Detectar IP do servidor automaticamente com fallbacks
+SERVER_IP=$(hostname -I | awk '{print $1}' 2>/dev/null)
+if [ -z "$SERVER_IP" ]; then
+    SERVER_IP=$(ip addr show | grep "inet " | grep -v 127.0.0.1 | head -1 | awk '{print $2}' | cut -d'/' -f1 2>/dev/null)
+fi
+if [ -z "$SERVER_IP" ]; then
+    SERVER_IP=$(ifconfig | grep "inet " | grep -v 127.0.0.1 | head -1 | awk '{print $2}' 2>/dev/null)
+fi
+if [ -z "$SERVER_IP" ]; then
+    SERVER_IP="localhost"
+    echo -e "${YELLOW}⚠️  Não foi possível detectar o IP do servidor. Usando 'localhost'.${NC}"
+else
+    echo -e "${GREEN}✅ IP do servidor detectado: ${SERVER_IP}${NC}"
+fi
 
 cat > docker-compose.yml <<EOL
 services:

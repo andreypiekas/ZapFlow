@@ -18,6 +18,33 @@ echo -e "${BLUE}  Instalação do Backend ZapFlow${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
+# Detectar IP do servidor automaticamente
+detect_server_ip() {
+    # Tenta vários métodos para detectar o IP
+    if command -v hostname &> /dev/null; then
+        SERVER_IP=$(hostname -I | awk '{print $1}' 2>/dev/null)
+    fi
+    
+    if [ -z "$SERVER_IP" ]; then
+        SERVER_IP=$(ip addr show | grep "inet " | grep -v 127.0.0.1 | head -1 | awk '{print $2}' | cut -d'/' -f1 2>/dev/null)
+    fi
+    
+    if [ -z "$SERVER_IP" ]; then
+        SERVER_IP=$(ifconfig | grep "inet " | grep -v 127.0.0.1 | head -1 | awk '{print $2}' 2>/dev/null)
+    fi
+    
+    if [ -z "$SERVER_IP" ]; then
+        SERVER_IP="localhost"
+        echo -e "${YELLOW}⚠️  Não foi possível detectar o IP do servidor automaticamente.${NC}"
+        echo -e "${YELLOW}   Usando 'localhost'. Configure manualmente se necessário.${NC}"
+    else
+        echo -e "${GREEN}✅ IP do servidor detectado: ${SERVER_IP}${NC}"
+    fi
+}
+
+detect_server_ip
+echo ""
+
 # Verificar se está na raiz do projeto
 if [ ! -d "backend" ]; then
     echo -e "${RED}❌ Erro: Diretório 'backend' não encontrado.${NC}"
@@ -152,10 +179,12 @@ if [ ! -f ".env" ]; then
     read -r SERVER_PORT
     SERVER_PORT=${SERVER_PORT:-3001}
     
-    # Solicitar CORS origin
-    echo -n "CORS Origin (URL do frontend) [http://localhost:5173]: "
+    # Configurar CORS origin automaticamente com IP detectado
+    DEFAULT_CORS_ORIGIN="http://${SERVER_IP}:5173,http://localhost:5173"
+    echo -e "CORS Origin detectado automaticamente: ${DEFAULT_CORS_ORIGIN}"
+    echo -n "Deseja alterar? (Enter para usar o padrão ou digite uma URL customizada): "
     read -r CORS_ORIGIN
-    CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:5173}
+    CORS_ORIGIN=${CORS_ORIGIN:-$DEFAULT_CORS_ORIGIN}
     
     # Criar arquivo .env
     cat > .env << EOF
@@ -215,7 +244,7 @@ echo -e "   ${YELLOW}npm run dev${NC}"
 echo ""
 echo "2. Configure o frontend (opcional):"
 echo "   Adicione no .env do frontend:"
-echo -e "   ${YELLOW}VITE_API_URL=http://localhost:${SERVER_PORT:-3001}${NC}"
+echo -e "   ${YELLOW}VITE_API_URL=http://${SERVER_IP}:${SERVER_PORT:-3001}/api${NC}"
 echo ""
 echo "3. Credenciais padrão do admin:"
 echo -e "   ${YELLOW}Username: admin${NC}"
@@ -223,6 +252,6 @@ echo -e "   ${YELLOW}Password: admin123${NC}"
 echo -e "   ${RED}⚠️  ALTERE A SENHA EM PRODUÇÃO!${NC}"
 echo ""
 echo "4. Teste a API:"
-echo -e "   ${YELLOW}curl http://localhost:${SERVER_PORT:-3001}/api/health${NC}"
+echo -e "   ${YELLOW}curl http://${SERVER_IP}:${SERVER_PORT:-3001}/api/health${NC}"
 echo ""
 

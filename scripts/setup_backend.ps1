@@ -9,6 +9,46 @@ Write-Host "  Instalação do Backend ZapFlow" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
+# Detectar IP do servidor automaticamente
+function Get-ServerIP {
+    $ip = $null
+    
+    # Tenta obter IP via Get-NetIPAddress
+    try {
+        $ip = (Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias "Ethernet*","Wi-Fi*" | Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" } | Select-Object -First 1).IPAddress
+    } catch {}
+    
+    # Se não encontrou, tenta via ipconfig
+    if (-not $ip) {
+        try {
+            $ipconfig = ipconfig | Select-String -Pattern "IPv4" | Select-Object -First 1
+            if ($ipconfig) {
+                $ip = ($ipconfig -split ":")[1].Trim()
+            }
+        } catch {}
+    }
+    
+    # Se ainda não encontrou, tenta via WMI
+    if (-not $ip) {
+        try {
+            $ip = (Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object { $_.IPAddress -ne $null -and $_.IPAddress -notlike "127.*" } | Select-Object -First 1).IPAddress[0]
+        } catch {}
+    }
+    
+    if (-not $ip) {
+        $ip = "localhost"
+        Write-Host "⚠️  Não foi possível detectar o IP do servidor automaticamente." -ForegroundColor Yellow
+        Write-Host "   Usando 'localhost'. Configure manualmente se necessário." -ForegroundColor Yellow
+    } else {
+        Write-Host "✅ IP do servidor detectado: $ip" -ForegroundColor Green
+    }
+    
+    return $ip
+}
+
+$SERVER_IP = Get-ServerIP
+Write-Host ""
+
 # Verificar se está na raiz do projeto
 if (-not (Test-Path "backend")) {
     Write-Host "❌ Erro: Diretório 'backend' não encontrado." -ForegroundColor Red
@@ -133,9 +173,11 @@ if (-not (Test-Path ".env")) {
     $SERVER_PORT = Read-Host "Porta do servidor backend [3001]"
     if ([string]::IsNullOrWhiteSpace($SERVER_PORT)) { $SERVER_PORT = "3001" }
     
-    # Solicitar CORS origin
-    $CORS_ORIGIN = Read-Host "CORS Origin (URL do frontend) [http://localhost:5173]"
-    if ([string]::IsNullOrWhiteSpace($CORS_ORIGIN)) { $CORS_ORIGIN = "http://localhost:5173" }
+    # Configurar CORS origin automaticamente com IP detectado
+    $DEFAULT_CORS_ORIGIN = "http://${SERVER_IP}:5173,http://localhost:5173"
+    Write-Host "CORS Origin detectado automaticamente: $DEFAULT_CORS_ORIGIN" -ForegroundColor Green
+    $CORS_ORIGIN = Read-Host "Deseja alterar? (Enter para usar o padrão ou digite uma URL customizada)"
+    if ([string]::IsNullOrWhiteSpace($CORS_ORIGIN)) { $CORS_ORIGIN = $DEFAULT_CORS_ORIGIN }
     
     # Criar arquivo .env
     $envContent = @"
@@ -193,7 +235,7 @@ Write-Host "   npm run dev" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "2. Configure o frontend (opcional):"
 Write-Host "   Adicione no .env do frontend:"
-Write-Host "   VITE_API_URL=http://localhost:$SERVER_PORT" -ForegroundColor Yellow
+Write-Host "   VITE_API_URL=http://${SERVER_IP}:$SERVER_PORT/api" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "3. Credenciais padrão do admin:"
 Write-Host "   Username: admin" -ForegroundColor Yellow
@@ -201,7 +243,7 @@ Write-Host "   Password: admin123" -ForegroundColor Yellow
 Write-Host "   ⚠️  ALTERE A SENHA EM PRODUÇÃO!" -ForegroundColor Red
 Write-Host ""
 Write-Host "4. Teste a API:"
-Write-Host "   curl http://localhost:$SERVER_PORT/api/health" -ForegroundColor Yellow
+Write-Host "   curl http://${SERVER_IP}:$SERVER_PORT/api/health" -ForegroundColor Yellow
 Write-Host ""
 
 Set-Location ..
