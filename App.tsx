@@ -437,7 +437,7 @@ const App: React.FC = () => {
                                                         const timeDiff = timeA - timeB;
                                                         const absTimeDiff = Math.abs(timeDiff);
                                                         
-                                                        // Se timestamps são muito próximos (< 10 segundos) e senders diferentes
+                                                        // PRIORIDADE 1: Se timestamps são muito próximos (< 10 segundos) e senders diferentes
                                                         // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
                                                         // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
                                                         // independentemente de pequenas diferenças de sincronização de relógio
@@ -452,13 +452,14 @@ const App: React.FC = () => {
                                                             }
                                                         }
                                                         
-                                                        // Se timestamps são idênticos e mesmo sender, mantém ordem
-                                                        if (absTimeDiff === 0 && a.sender === b.sender) {
-                                                            return 0;
+                                                        // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
+                                                        if (absTimeDiff >= 10000) {
+                                                            return timeDiff;
                                                         }
                                                         
-                                                        // Para diferenças maiores ou quando não se aplica a lógica especial, usa timestamp real
-                                                        return timeDiff;
+                                                        // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, mantém ordem de inserção
+                                                        // (retorna 0 para manter ordem estável quando senders são iguais)
+                                                        return 0;
                                                     });
                                                 
                                                 // Detecta se há novas mensagens recebidas
@@ -612,9 +613,16 @@ const App: React.FC = () => {
                             }
                             
                             // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, usa ordem de inserção
-                            const orderA = (a as any)._sortOrder ?? 0;
-                            const orderB = (b as any)._sortOrder ?? 0;
-                            return orderA - orderB;
+                            // Mas só aplica se os senders forem iguais (caso contrário, a PRIORIDADE 1 já foi aplicada)
+                            if (a.sender === b.sender) {
+                                const orderA = (a as any)._sortOrder ?? 0;
+                                const orderB = (b as any)._sortOrder ?? 0;
+                                return orderA - orderB;
+                            }
+                            
+                            // Se chegou aqui, os senders são diferentes mas a PRIORIDADE 1 não foi aplicada
+                            // Isso não deveria acontecer, mas como fallback, usa timestamp
+                            return timeDiff;
                         });
                         
                         // Remove o campo temporário de ordenação
@@ -970,7 +978,7 @@ const App: React.FC = () => {
                                                     const timeDiff = timeA - timeB;
                                                     const absTimeDiff = Math.abs(timeDiff);
                                                     
-                                                    // Se timestamps são muito próximos (< 10 segundos) e senders diferentes
+                                                    // PRIORIDADE 1: Se timestamps são muito próximos (< 10 segundos) e senders diferentes
                                                     // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
                                                     // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
                                                     // independentemente de pequenas diferenças de sincronização de relógio
@@ -985,13 +993,14 @@ const App: React.FC = () => {
                                                         }
                                                     }
                                                     
-                                                    // Se timestamps são idênticos e mesmo sender, mantém ordem
-                                                    if (absTimeDiff === 0 && a.sender === b.sender) {
-                                                        return 0;
+                                                    // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
+                                                    if (absTimeDiff >= 10000) {
+                                                        return timeDiff;
                                                     }
                                                     
-                                                    // Para diferenças maiores ou quando não se aplica a lógica especial, usa timestamp real
-                                                    return timeDiff;
+                                                    // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, mantém ordem de inserção
+                                                    // (retorna 0 para manter ordem estável quando senders são iguais)
+                                                    return 0;
                                                 });
                                                 
                                                 // Lógica para processar mensagens de clientes finalizados
@@ -1014,7 +1023,7 @@ const App: React.FC = () => {
                                                     const timeDiff = timeA - timeB;
                                                     const absTimeDiff = Math.abs(timeDiff);
                                                     
-                                                    // Se timestamps são muito próximos (< 10 segundos) e senders diferentes
+                                                    // PRIORIDADE 1: Se timestamps são muito próximos (< 10 segundos) e senders diferentes
                                                     // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
                                                     // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
                                                     // independentemente de pequenas diferenças de sincronização de relógio
@@ -1029,13 +1038,14 @@ const App: React.FC = () => {
                                                         }
                                                     }
                                                     
-                                                    // Se timestamps são idênticos e mesmo sender, mantém ordem
-                                                    if (absTimeDiff === 0 && a.sender === b.sender) {
-                                                        return 0;
+                                                    // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
+                                                    if (absTimeDiff >= 10000) {
+                                                        return timeDiff;
                                                     }
                                                     
-                                                    // Para diferenças maiores ou quando não se aplica a lógica especial, usa timestamp real
-                                                    return timeDiff;
+                                                    // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, mantém ordem de inserção
+                                                    // (retorna 0 para manter ordem estável quando senders são iguais)
+                                                    return 0;
                                                 });
                                                 
                                                 // Lógica para processar mensagens de clientes finalizados
@@ -1479,7 +1489,7 @@ const App: React.FC = () => {
                         const timeDiff = timeA - timeB;
                         const absTimeDiff = Math.abs(timeDiff);
                         
-                        // Se timestamps são muito próximos (< 10 segundos) e senders diferentes
+                        // PRIORIDADE 1: Se timestamps são muito próximos (< 10 segundos) e senders diferentes
                         // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
                         // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
                         // independentemente de pequenas diferenças de sincronização de relógio
@@ -1494,13 +1504,14 @@ const App: React.FC = () => {
                             }
                         }
                         
-                        // Se timestamps são idênticos e mesmo sender, mantém ordem de inserção
-                        if (absTimeDiff === 0 && a.sender === b.sender) {
-                            return 0;
+                        // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
+                        if (absTimeDiff >= 10000) {
+                            return timeDiff;
                         }
                         
-                        // Para diferenças maiores ou quando não se aplica a lógica especial, usa timestamp real
-                        return timeDiff;
+                        // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, mantém ordem de inserção
+                        // (retorna 0 para manter ordem estável quando senders são iguais)
+                        return 0;
                     });
                     
                     return {
