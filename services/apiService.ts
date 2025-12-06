@@ -161,3 +161,29 @@ class ApiService {
 
 export const apiService = new ApiService();
 
+// Funções auxiliares exportadas
+export const getAuthToken = (): string | null => {
+  return localStorage.getItem('zapflow_auth_token');
+};
+
+export const checkApiHealth = async (): Promise<boolean> => {
+  return apiService.healthCheck();
+};
+
+// Exportar funções do serviço para compatibilidade
+export const loginUser = (username: string, password: string) => {
+  return apiService.login(username, password);
+};
+
+export const saveUserData = <T>(dataType: string, key: string, value: T) => {
+  return apiService.saveData<T>(dataType, key, value);
+};
+
+export const loadUserData = <T>(dataType: string, key?: string) => {
+  return apiService.getData<T>(dataType, key);
+};
+
+export const deleteUserData = (dataType: string, key: string) => {
+  return apiService.deleteData(dataType, key);
+};
+
