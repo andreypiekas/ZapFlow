@@ -810,7 +810,7 @@ const App: React.FC = () => {
                             status: finalStatusForDept,
                             rating: existingChat.rating,
                             awaitingRating: wasReopened ? false : existingChat.awaitingRating, // Cancela aguardo de avaliação se reaberto
-                            awaitingDepartmentSelection: selectedDeptId ? false : existingChat.awaitingDepartmentSelection, // Cancela se setor foi selecionado
+                            awaitingDepartmentSelection: (finalDepartmentId && finalDepartmentId !== existingChat.departmentId) ? false : existingChat.awaitingDepartmentSelection, // Cancela se setor foi selecionado
                             departmentSelectionSent: existingChat.departmentSelectionSent || false, // Mantém flag de envio
                             activeWorkflow: existingChat.activeWorkflow,
                             endedAt: wasReopened ? undefined : existingChat.endedAt, // Remove endedAt se reaberto
