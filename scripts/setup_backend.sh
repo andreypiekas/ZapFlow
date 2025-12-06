@@ -936,12 +936,32 @@ echo -e "   ${YELLOW}pm2 status${NC}                    - Ver status do servidor
 echo -e "   ${YELLOW}pm2 logs zapflow-backend${NC}     - Ver logs do servidor"
 echo -e "   ${YELLOW}pm2 restart zapflow-backend${NC}  - Reiniciar servidor"
 echo -e "   ${YELLOW}pm2 stop zapflow-backend${NC}     - Parar servidor"
+# Configurar .env do frontend
+echo ""
+echo -e "${YELLOW}Configurando .env do frontend...${NC}"
+cd "$PROJECT_ROOT"
+
+if [ ! -f ".env" ]; then
+    echo "VITE_API_URL=http://${SERVER_IP}:${SERVER_PORT:-3001}" > .env
+    echo -e "${GREEN}✅ Arquivo .env do frontend criado com URL do backend${NC}"
+else
+    # Adicionar ou atualizar VITE_API_URL no .env existente
+    if grep -q "VITE_API_URL" .env; then
+        sed -i "s|VITE_API_URL=.*|VITE_API_URL=http://${SERVER_IP}:${SERVER_PORT:-3001}|" .env
+    else
+        echo "VITE_API_URL=http://${SERVER_IP}:${SERVER_PORT:-3001}" >> .env
+    fi
+    echo -e "${GREEN}✅ Variável VITE_API_URL configurada no .env${NC}"
+fi
+echo "   📝 VITE_API_URL=http://${SERVER_IP}:${SERVER_PORT:-3001}"
+echo ""
+
 echo ""
 echo -e "${BLUE}Próximos passos:${NC}"
 echo ""
-echo "1. Configure o frontend (opcional):"
-echo "   Adicione no .env do frontend:"
-echo -e "   ${YELLOW}VITE_API_URL=http://${SERVER_IP}:${SERVER_PORT:-3001}/api${NC}"
+echo "1. Frontend configurado:"
+echo -e "   ${GREEN}✅ Arquivo .env do frontend configurado automaticamente${NC}"
+echo -e "   ${YELLOW}VITE_API_URL=http://${SERVER_IP}:${SERVER_PORT:-3001}${NC}"
 echo ""
 echo "2. Credenciais padrão do admin:"
 echo -e "   ${YELLOW}Username: admin${NC}"
