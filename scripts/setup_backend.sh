@@ -120,20 +120,76 @@ if ! command -v psql &> /dev/null; then
 fi
 
 echo -e "${GREEN}✅ PostgreSQL encontrado${NC}"
+
+# Detectar instalações existentes e portas em uso
+detect_postgresql() {
+    echo "Detectando instalações do PostgreSQL..."
+    
+    # Verificar se o PostgreSQL está rodando
+    if systemctl is-active --quiet postgresql 2>/dev/null || pg_isready > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ PostgreSQL está rodando${NC}"
+        
+        # Tentar detectar a porta em uso
+        DETECTED_PORT=$(sudo netstat -tlnp 2>/dev/null | grep postgres | grep LISTEN | head -1 | awk '{print $4}' | cut -d':' -f2)
+        if [ -z "$DETECTED_PORT" ]; then
+            DETECTED_PORT=$(sudo ss -tlnp 2>/dev/null | grep postgres | grep LISTEN | head -1 | awk '{print $4}' | cut -d':' -f2)
+        fi
+        
+        if [ -n "$DETECTED_PORT" ]; then
+            echo -e "${GREEN}✅ PostgreSQL detectado na porta: $DETECTED_PORT${NC}"
+            
+            # Verificar se está escutando em localhost ou IP
+            LISTEN_ADDR=$(sudo netstat -tlnp 2>/dev/null | grep postgres | grep ":$DETECTED_PORT" | head -1 | awk '{print $4}' | cut -d':' -f1)
+            if [ -z "$LISTEN_ADDR" ]; then
+                LISTEN_ADDR=$(sudo ss -tlnp 2>/dev/null | grep postgres | grep ":$DETECTED_PORT" | head -1 | awk '{print $4}' | cut -d':' -f1)
+            fi
+            
+            if [ "$LISTEN_ADDR" = "127.0.0.1" ] || [ "$LISTEN_ADDR" = "::1" ] || [ "$LISTEN_ADDR" = "*" ] || [ -z "$LISTEN_ADDR" ]; then
+                echo -e "${YELLOW}⚠️  PostgreSQL está escutando apenas em localhost (não no IP da rede)${NC}"
+                SUGGESTED_HOST="localhost"
+            else
+                echo -e "${GREEN}✅ PostgreSQL está escutando em: $LISTEN_ADDR${NC}"
+                SUGGESTED_HOST="$LISTEN_ADDR"
+            fi
+            
+            # Se a porta detectada é 5432, sugerir porta alternativa
+            if [ "$DETECTED_PORT" = "5432" ]; then
+                echo -e "${YELLOW}⚠️  PostgreSQL está usando a porta padrão 5432${NC}"
+                echo -e "${YELLOW}   Para evitar conflitos, vamos usar a porta 54321${NC}"
+                SUGGESTED_PORT="54321"
+            else
+                SUGGESTED_PORT="$DETECTED_PORT"
+            fi
+        else
+            echo -e "${YELLOW}⚠️  Não foi possível detectar a porta do PostgreSQL${NC}"
+            SUGGESTED_HOST="localhost"
+            SUGGESTED_PORT="54321"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  PostgreSQL não está rodando${NC}"
+        echo "Iniciando PostgreSQL..."
+        sudo systemctl start postgresql 2>/dev/null || sudo service postgresql start 2>/dev/null
+        sleep 2
+        SUGGESTED_HOST="localhost"
+        SUGGESTED_PORT="54321"
+    fi
+}
+
+detect_postgresql
 echo ""
 
 # 3. Configurar banco de dados
 echo -e "${YELLOW}[3/7] Configurando banco de dados...${NC}"
 
-# Solicitar informações do banco
+# Solicitar informações do banco com sugestões baseadas na detecção
 echo "Informe os dados do PostgreSQL:"
-echo -n "Host [localhost]: "
+echo -n "Host [${SUGGESTED_HOST:-localhost}]: "
 read -r DB_HOST
-DB_HOST=${DB_HOST:-localhost}
+DB_HOST=${DB_HOST:-${SUGGESTED_HOST:-localhost}}
 
-echo -n "Porta [54321] (porta alta para evitar conflitos): "
+echo -n "Porta [${SUGGESTED_PORT:-54321}] (porta alta para evitar conflitos): "
 read -r DB_PORT
-DB_PORT=${DB_PORT:-54321}
+DB_PORT=${DB_PORT:-${SUGGESTED_PORT:-54321}}
 
 echo -n "Nome do banco [zapflow]: "
 read -r DB_NAME
@@ -148,9 +204,41 @@ read -s DB_PASSWORD
 echo ""
 
 # Testar conexão com PostgreSQL
-echo "Testando conexão com PostgreSQL..."
+echo "Testando conexão com PostgreSQL em $DB_HOST:$DB_PORT..."
+CONNECTION_SUCCESS=false
+
+# Tentar conectar com o host fornecido
 if PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "SELECT 1;" > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ Conexão com PostgreSQL estabelecida${NC}"
+    echo -e "${GREEN}✅ Conexão com PostgreSQL estabelecida em $DB_HOST:$DB_PORT${NC}"
+    CONNECTION_SUCCESS=true
+else
+    # Se falhou e o host não é localhost, tentar localhost
+    if [ "$DB_HOST" != "localhost" ] && [ "$DB_HOST" != "127.0.0.1" ]; then
+        echo -e "${YELLOW}⚠️  Falha ao conectar em $DB_HOST. Tentando localhost...${NC}"
+        if PGPASSWORD=$DB_PASSWORD psql -h localhost -p "$DB_PORT" -U "$DB_USER" -d postgres -c "SELECT 1;" > /dev/null 2>&1; then
+            echo -e "${GREEN}✅ Conexão estabelecida em localhost:$DB_PORT${NC}"
+            echo -e "${YELLOW}⚠️  PostgreSQL está escutando apenas em localhost, não no IP da rede${NC}"
+            DB_HOST="localhost"
+            CONNECTION_SUCCESS=true
+        fi
+    fi
+    
+    # Se ainda falhou, tentar porta padrão 5432
+    if [ "$CONNECTION_SUCCESS" = false ] && [ "$DB_PORT" != "5432" ]; then
+        echo -e "${YELLOW}⚠️  Tentando porta padrão 5432...${NC}"
+        if PGPASSWORD=$DB_PASSWORD psql -h localhost -p 5432 -U "$DB_USER" -d postgres -c "SELECT 1;" > /dev/null 2>&1; then
+            echo -e "${GREEN}✅ Conexão estabelecida em localhost:5432${NC}"
+            DB_HOST="localhost"
+            DB_PORT="5432"
+            CONNECTION_SUCCESS=true
+        fi
+    fi
+fi
+
+if [ "$CONNECTION_SUCCESS" = true ]; then
+    # Informar valores finais usados
+    echo -e "${GREEN}✅ Configuração final: Host=$DB_HOST, Porta=$DB_PORT${NC}"
+    echo ""
     
     # Criar banco de dados
     echo "Criando banco de dados '$DB_NAME'..."
@@ -167,16 +255,34 @@ if PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d pos
 else
     echo -e "${RED}❌ Erro: Não foi possível conectar ao PostgreSQL${NC}"
     echo ""
-    echo "Verifique:"
-    echo "  1. O PostgreSQL está rodando? (sudo systemctl status postgresql)"
-    echo "  2. A porta está correta? (padrão: 5432, mas você pode usar 54321)"
-    echo "  3. O host está correto? (localhost ou IP do servidor)"
-    echo "  4. As credenciais estão corretas?"
+    echo "Tentativas realizadas:"
+    echo "  - $DB_HOST:$DB_PORT"
+    if [ "$DB_HOST" != "localhost" ]; then
+        echo "  - localhost:$DB_PORT"
+    fi
+    if [ "$DB_PORT" != "5432" ]; then
+        echo "  - localhost:5432"
+    fi
     echo ""
-    echo "Se o PostgreSQL está em outra porta, configure manualmente:"
-    echo "  sudo nano /etc/postgresql/*/main/postgresql.conf"
-    echo "  # Procure por 'port =' e altere para 54321"
-    echo "  sudo systemctl restart postgresql"
+    echo "Verifique:"
+    echo "  1. O PostgreSQL está rodando?"
+    echo "     sudo systemctl status postgresql"
+    echo "     sudo systemctl start postgresql"
+    echo ""
+    echo "  2. A porta está correta?"
+    echo "     sudo netstat -tlnp | grep postgres"
+    echo "     ou"
+    echo "     sudo ss -tlnp | grep postgres"
+    echo ""
+    echo "  3. O PostgreSQL está escutando no IP correto?"
+    echo "     sudo nano /etc/postgresql/*/main/postgresql.conf"
+    echo "     # Procure por 'listen_addresses' e altere para '*' ou o IP específico"
+    echo "     sudo nano /etc/postgresql/*/main/pg_hba.conf"
+    echo "     # Adicione linha: host all all 0.0.0.0/0 md5"
+    echo "     sudo systemctl restart postgresql"
+    echo ""
+    echo "  4. As credenciais estão corretas?"
+    echo "     sudo -u postgres psql -c \"\\du\""
     echo ""
     read -p "Deseja continuar mesmo assim? (s/n): " CONTINUE
     if [ "$CONTINUE" != "s" ] && [ "$CONTINUE" != "S" ]; then

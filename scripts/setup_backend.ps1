@@ -125,15 +125,53 @@ try {
 }
 Write-Host ""
 
+# Detectar instalações existentes do PostgreSQL
+Write-Host "Detectando instalações do PostgreSQL..."
+$SUGGESTED_HOST = "localhost"
+$SUGGESTED_PORT = "54321"
+
+try {
+    # Verificar se PostgreSQL está rodando
+    $pgProcess = Get-Process -Name "postgres" -ErrorAction SilentlyContinue
+    if ($pgProcess) {
+        Write-Host "✅ PostgreSQL está rodando" -ForegroundColor Green
+        
+        # Tentar detectar porta (Windows)
+        $listeningPorts = netstat -ano | Select-String "LISTENING" | Select-String "postgres"
+        if ($listeningPorts) {
+            $portLine = $listeningPorts | Select-Object -First 1
+            if ($portLine -match ":(\d+)\s") {
+                $detectedPort = $matches[1]
+                Write-Host "✅ PostgreSQL detectado na porta: $detectedPort" -ForegroundColor Green
+                if ($detectedPort -eq "5432") {
+                    Write-Host "⚠️  PostgreSQL está usando a porta padrão 5432" -ForegroundColor Yellow
+                    Write-Host "   Para evitar conflitos, vamos usar a porta 54321" -ForegroundColor Yellow
+                } else {
+                    $SUGGESTED_PORT = $detectedPort
+                }
+            }
+        }
+    } else {
+        Write-Host "⚠️  PostgreSQL não está rodando" -ForegroundColor Yellow
+        Write-Host "Iniciando PostgreSQL..."
+        Start-Service postgresql* -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+    }
+} catch {
+    Write-Host "⚠️  Não foi possível detectar a configuração do PostgreSQL" -ForegroundColor Yellow
+}
+
+Write-Host ""
+
 # 3. Configurar banco de dados
 Write-Host "[3/7] Configurando banco de dados..." -ForegroundColor Yellow
 
 Write-Host "Informe os dados do PostgreSQL:"
-$DB_HOST = Read-Host "Host [localhost]"
-if ([string]::IsNullOrWhiteSpace($DB_HOST)) { $DB_HOST = "localhost" }
+$DB_HOST = Read-Host "Host [$SUGGESTED_HOST]"
+if ([string]::IsNullOrWhiteSpace($DB_HOST)) { $DB_HOST = $SUGGESTED_HOST }
 
-$DB_PORT = Read-Host "Porta [54321] (porta alta para evitar conflitos)"
-if ([string]::IsNullOrWhiteSpace($DB_PORT)) { $DB_PORT = "54321" }
+$DB_PORT = Read-Host "Porta [$SUGGESTED_PORT] (porta alta para evitar conflitos)"
+if ([string]::IsNullOrWhiteSpace($DB_PORT)) { $DB_PORT = $SUGGESTED_PORT }
 
 $DB_NAME = Read-Host "Nome do banco [zapflow]"
 if ([string]::IsNullOrWhiteSpace($DB_NAME)) { $DB_NAME = "zapflow" }
@@ -146,36 +184,82 @@ $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePass
 $DB_PASSWORD = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
 
 # Testar conexão com PostgreSQL
-Write-Host "Testando conexão com PostgreSQL..."
+Write-Host "Testando conexão com PostgreSQL em ${DB_HOST}:${DB_PORT}..."
 $env:PGPASSWORD = $DB_PASSWORD
+$CONNECTION_SUCCESS = $false
+
+# Tentar conectar com o host fornecido
 try {
     $testResult = psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d postgres -c "SELECT 1;" 2>&1
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "✅ Conexão com PostgreSQL estabelecida" -ForegroundColor Green
-        
-        # Criar banco de dados
-        Write-Host "Criando banco de dados '$DB_NAME'..."
-        $createResult = psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d postgres -c "CREATE DATABASE $DB_NAME;" 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "✅ Banco de dados '$DB_NAME' criado com sucesso" -ForegroundColor Green
-        } else {
-            # Verificar se o banco já existe
-            $checkResult = psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -c "SELECT 1;" 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "⚠️  Banco de dados '$DB_NAME' já existe. Continuando..." -ForegroundColor Yellow
-            } else {
-                Write-Host "⚠️  Não foi possível criar o banco. Verifique as permissões." -ForegroundColor Yellow
-            }
-        }
+        Write-Host "✅ Conexão com PostgreSQL estabelecida em ${DB_HOST}:${DB_PORT}" -ForegroundColor Green
+        $CONNECTION_SUCCESS = $true
     } else {
         throw "Connection failed"
     }
 } catch {
+    # Se falhou e o host não é localhost, tentar localhost
+    if ($DB_HOST -ne "localhost" -and $DB_HOST -ne "127.0.0.1") {
+        Write-Host "⚠️  Falha ao conectar em $DB_HOST. Tentando localhost..." -ForegroundColor Yellow
+        try {
+            $testResult = psql -h localhost -p $DB_PORT -U $DB_USER -d postgres -c "SELECT 1;" 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "✅ Conexão estabelecida em localhost:${DB_PORT}" -ForegroundColor Green
+                Write-Host "⚠️  PostgreSQL está escutando apenas em localhost, não no IP da rede" -ForegroundColor Yellow
+                $DB_HOST = "localhost"
+                $CONNECTION_SUCCESS = $true
+            }
+        } catch {}
+    }
+    
+    # Se ainda falhou, tentar porta padrão 5432
+    if (-not $CONNECTION_SUCCESS -and $DB_PORT -ne "5432") {
+        Write-Host "⚠️  Tentando porta padrão 5432..." -ForegroundColor Yellow
+        try {
+            $testResult = psql -h localhost -p 5432 -U $DB_USER -d postgres -c "SELECT 1;" 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "✅ Conexão estabelecida em localhost:5432" -ForegroundColor Green
+                $DB_HOST = "localhost"
+                $DB_PORT = "5432"
+                $CONNECTION_SUCCESS = $true
+            }
+        } catch {}
+    }
+}
+
+if ($CONNECTION_SUCCESS) {
+    Write-Host "✅ Configuração final: Host=$DB_HOST, Porta=$DB_PORT" -ForegroundColor Green
+    Write-Host ""
+    
+    # Criar banco de dados
+    Write-Host "Criando banco de dados '$DB_NAME'..."
+    $createResult = psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d postgres -c "CREATE DATABASE $DB_NAME;" 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "✅ Banco de dados '$DB_NAME' criado com sucesso" -ForegroundColor Green
+    } else {
+        # Verificar se o banco já existe
+        $checkResult = psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -c "SELECT 1;" 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "⚠️  Banco de dados '$DB_NAME' já existe. Continuando..." -ForegroundColor Yellow
+        } else {
+            Write-Host "⚠️  Não foi possível criar o banco. Verifique as permissões." -ForegroundColor Yellow
+        }
+    }
+} else {
     Write-Host "❌ Erro: Não foi possível conectar ao PostgreSQL" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Tentativas realizadas:" -ForegroundColor Yellow
+    Write-Host "  - ${DB_HOST}:${DB_PORT}"
+    if ($DB_HOST -ne "localhost") {
+        Write-Host "  - localhost:${DB_PORT}"
+    }
+    if ($DB_PORT -ne "5432") {
+        Write-Host "  - localhost:5432"
+    }
     Write-Host ""
     Write-Host "Verifique:" -ForegroundColor Yellow
     Write-Host "  1. O PostgreSQL está rodando?"
-    Write-Host "  2. A porta está correta? (padrão: 5432, mas você pode usar 54321)"
+    Write-Host "  2. A porta está correta?"
     Write-Host "  3. O host está correto? (localhost ou IP do servidor)"
     Write-Host "  4. As credenciais estão corretas?"
     Write-Host ""
