@@ -126,7 +126,30 @@ detect_postgresql() {
     echo "Detectando instalações do PostgreSQL..."
     
     # Verificar se o PostgreSQL está rodando
-    if systemctl is-active --quiet postgresql 2>/dev/null || pg_isready > /dev/null 2>&1; then
+    PG_RUNNING=false
+    
+    # Tentar verificar via systemctl
+    if command -v systemctl &> /dev/null; then
+        if systemctl is-active --quiet postgresql 2>/dev/null; then
+            PG_RUNNING=true
+        fi
+    fi
+    
+    # Tentar verificar via pg_isready
+    if [ "$PG_RUNNING" = false ] && command -v pg_isready &> /dev/null; then
+        if pg_isready > /dev/null 2>&1; then
+            PG_RUNNING=true
+        fi
+    fi
+    
+    # Tentar verificar via processo
+    if [ "$PG_RUNNING" = false ]; then
+        if pgrep -x postgres > /dev/null 2>&1 || pgrep -f "postgres:" > /dev/null 2>&1; then
+            PG_RUNNING=true
+        fi
+    fi
+    
+    if [ "$PG_RUNNING" = true ]; then
         echo -e "${GREEN}✅ PostgreSQL está rodando${NC}"
         
         # Tentar detectar a porta em uso
@@ -167,9 +190,53 @@ detect_postgresql() {
         fi
     else
         echo -e "${YELLOW}⚠️  PostgreSQL não está rodando${NC}"
-        echo "Iniciando PostgreSQL..."
-        sudo systemctl start postgresql 2>/dev/null || sudo service postgresql start 2>/dev/null
-        sleep 2
+        echo "Tentando iniciar PostgreSQL..."
+        
+        # Tentar iniciar via systemctl
+        if command -v systemctl &> /dev/null; then
+            if sudo systemctl start postgresql 2>/dev/null; then
+                echo -e "${GREEN}✅ PostgreSQL iniciado via systemctl${NC}"
+                sleep 3
+                # Verificar se realmente iniciou
+                if systemctl is-active --quiet postgresql 2>/dev/null; then
+                    PG_RUNNING=true
+                fi
+            fi
+        fi
+        
+        # Se systemctl não funcionou, tentar service
+        if [ "$PG_RUNNING" = false ] && command -v service &> /dev/null; then
+            if sudo service postgresql start 2>/dev/null; then
+                echo -e "${GREEN}✅ PostgreSQL iniciado via service${NC}"
+                sleep 3
+                if pg_isready > /dev/null 2>&1 || pgrep -x postgres > /dev/null 2>&1; then
+                    PG_RUNNING=true
+                fi
+            fi
+        fi
+        
+        # Se ainda não está rodando, tentar iniciar manualmente
+        if [ "$PG_RUNNING" = false ]; then
+            echo -e "${YELLOW}⚠️  Não foi possível iniciar o PostgreSQL automaticamente${NC}"
+            echo ""
+            echo "Tente iniciar manualmente:"
+            echo "  sudo systemctl start postgresql"
+            echo "  ou"
+            echo "  sudo service postgresql start"
+            echo "  ou"
+            echo "  sudo -u postgres /usr/lib/postgresql/*/bin/pg_ctl start -D /var/lib/postgresql/*/main"
+            echo ""
+            read -p "Pressione Enter após iniciar o PostgreSQL, ou 's' para continuar mesmo assim: " CONTINUE
+            if [ "$CONTINUE" != "s" ] && [ "$CONTINUE" != "S" ]; then
+                # Verificar novamente após esperar
+                sleep 2
+                if pg_isready > /dev/null 2>&1 || systemctl is-active --quiet postgresql 2>/dev/null; then
+                    PG_RUNNING=true
+                    echo -e "${GREEN}✅ PostgreSQL agora está rodando${NC}"
+                fi
+            fi
+        fi
+        
         SUGGESTED_HOST="localhost"
         SUGGESTED_PORT="54321"
     fi
