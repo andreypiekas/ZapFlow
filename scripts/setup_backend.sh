@@ -131,9 +131,9 @@ echo -n "Host [localhost]: "
 read -r DB_HOST
 DB_HOST=${DB_HOST:-localhost}
 
-echo -n "Porta [5432]: "
+echo -n "Porta [54321] (porta alta para evitar conflitos): "
 read -r DB_PORT
-DB_PORT=${DB_PORT:-5432}
+DB_PORT=${DB_PORT:-54321}
 
 echo -n "Nome do banco [zapflow]: "
 read -r DB_NAME
@@ -147,15 +147,42 @@ echo -n "Senha do PostgreSQL: "
 read -s DB_PASSWORD
 echo ""
 
-# Tentar criar o banco de dados
-echo "Criando banco de dados..."
-PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "SELECT 1" 2>/dev/null || {
-    echo -e "${YELLOW}⚠️  Não foi possível conectar. Tentando criar banco...${NC}"
-}
-
-PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "CREATE DATABASE $DB_NAME;" 2>/dev/null || {
-    echo -e "${YELLOW}⚠️  Banco de dados pode já existir. Continuando...${NC}"
-}
+# Testar conexão com PostgreSQL
+echo "Testando conexão com PostgreSQL..."
+if PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "SELECT 1;" > /dev/null 2>&1; then
+    echo -e "${GREEN}✅ Conexão com PostgreSQL estabelecida${NC}"
+    
+    # Criar banco de dados
+    echo "Criando banco de dados '$DB_NAME'..."
+    if PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "CREATE DATABASE $DB_NAME;" > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ Banco de dados '$DB_NAME' criado com sucesso${NC}"
+    else
+        # Verificar se o banco já existe
+        if PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1;" > /dev/null 2>&1; then
+            echo -e "${YELLOW}⚠️  Banco de dados '$DB_NAME' já existe. Continuando...${NC}"
+        else
+            echo -e "${YELLOW}⚠️  Não foi possível criar o banco. Verifique as permissões.${NC}"
+        fi
+    fi
+else
+    echo -e "${RED}❌ Erro: Não foi possível conectar ao PostgreSQL${NC}"
+    echo ""
+    echo "Verifique:"
+    echo "  1. O PostgreSQL está rodando? (sudo systemctl status postgresql)"
+    echo "  2. A porta está correta? (padrão: 5432, mas você pode usar 54321)"
+    echo "  3. O host está correto? (localhost ou IP do servidor)"
+    echo "  4. As credenciais estão corretas?"
+    echo ""
+    echo "Se o PostgreSQL está em outra porta, configure manualmente:"
+    echo "  sudo nano /etc/postgresql/*/main/postgresql.conf"
+    echo "  # Procure por 'port =' e altere para 54321"
+    echo "  sudo systemctl restart postgresql"
+    echo ""
+    read -p "Deseja continuar mesmo assim? (s/n): " CONTINUE
+    if [ "$CONTINUE" != "s" ] && [ "$CONTINUE" != "S" ]; then
+        exit 1
+    fi
+fi
 
 echo -e "${GREEN}✅ Banco de dados configurado${NC}"
 echo ""

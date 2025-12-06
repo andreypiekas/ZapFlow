@@ -129,11 +129,34 @@ if ! command -v psql &> /dev/null; then
     sudo systemctl enable postgresql
 fi
 
-# Configurar PostgreSQL
-sudo -u postgres psql -c "CREATE DATABASE zapflow;" 2>/dev/null || echo "Banco zapflow já existe ou erro ao criar"
-sudo -u postgres psql -c "CREATE USER zapflow_user WITH PASSWORD 'zapflow_secure_password_2024';" 2>/dev/null || echo "Usuário já existe"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE zapflow TO zapflow_user;" 2>/dev/null || true
-sudo -u postgres psql -c "ALTER USER zapflow_user CREATEDB;" 2>/dev/null || true
+# Configurar PostgreSQL na porta alta (54321) para evitar conflitos
+echo "Configurando PostgreSQL na porta 54321..."
+PG_CONF=$(sudo find /etc/postgresql -name postgresql.conf 2>/dev/null | head -1)
+if [ -n "$PG_CONF" ]; then
+    # Fazer backup
+    sudo cp "$PG_CONF" "${PG_CONF}.backup"
+    # Alterar porta para 54321
+    sudo sed -i "s/^#*port = .*/port = 54321/" "$PG_CONF" 2>/dev/null || sudo sed -i "s/^port = .*/port = 54321/" "$PG_CONF" 2>/dev/null
+    # Se não encontrou a linha, adicionar
+    if ! grep -q "^port = 54321" "$PG_CONF"; then
+        echo "port = 54321" | sudo tee -a "$PG_CONF" > /dev/null
+    fi
+    sudo systemctl restart postgresql
+    echo -e "${GREEN}✅ PostgreSQL configurado para usar porta 54321${NC}"
+else
+    echo -e "${YELLOW}⚠️  Arquivo de configuração do PostgreSQL não encontrado.${NC}"
+    echo "Configure manualmente: sudo nano /etc/postgresql/*/main/postgresql.conf"
+    echo "Altere 'port = 5432' para 'port = 54321'"
+fi
+
+# Aguardar PostgreSQL iniciar
+sleep 2
+
+# Configurar banco de dados (usando porta 54321)
+sudo -u postgres PGPORT=54321 psql -c "CREATE DATABASE zapflow;" 2>/dev/null || echo "Banco zapflow já existe ou erro ao criar"
+sudo -u postgres PGPORT=54321 psql -c "CREATE USER zapflow_user WITH PASSWORD 'zapflow_secure_password_2024';" 2>/dev/null || echo "Usuário já existe"
+sudo -u postgres PGPORT=54321 psql -c "GRANT ALL PRIVILEGES ON DATABASE zapflow TO zapflow_user;" 2>/dev/null || true
+sudo -u postgres PGPORT=54321 psql -c "ALTER USER zapflow_user CREATEDB;" 2>/dev/null || true
 
 echo -e "${BLUE}[7/8] Configurando Backend API...${NC}"
 cd backend 2>/dev/null || mkdir -p backend && cd backend
@@ -172,10 +195,10 @@ JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | base6
 
 # Criar arquivo .env do backend
 cat > .env <<EOL
-# Configuração do PostgreSQL
-DATABASE_URL=postgresql://zapflow_user:zapflow_secure_password_2024@localhost:5432/zapflow
+# Configuração do PostgreSQL (porta alta para evitar conflitos)
+DATABASE_URL=postgresql://zapflow_user:zapflow_secure_password_2024@localhost:54321/zapflow
 DB_HOST=localhost
-DB_PORT=5432
+DB_PORT=54321
 DB_NAME=zapflow
 DB_USER=zapflow_user
 DB_PASSWORD=zapflow_secure_password_2024
