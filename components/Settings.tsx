@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { ApiConfig, User, UserRole } from '../types';
-import { Save, Server, Shield, Globe, User as UserIcon, Bell, Lock, RefreshCw } from 'lucide-react';
+import { Save, Server, Shield, Globe, User as UserIcon, Bell, Lock, RefreshCw, Database, HardDrive } from 'lucide-react';
 import { fetchAllInstances, fetchInstanceDetails, InstanceInfo } from '../services/whatsappService';
+import { checkApiHealth, getAuthToken } from '../services/apiService';
 
 interface SettingsProps {
   config: ApiConfig;
@@ -18,6 +19,8 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
   const [instances, setInstances] = useState<InstanceInfo[]>([]);
   const [selectedInstanceName, setSelectedInstanceName] = useState<string>(config.instanceName || '');
   const [isLoadingInstances, setIsLoadingInstances] = useState(false);
+  const [storageStatus, setStorageStatus] = useState<'api' | 'localstorage' | 'checking'>('checking');
+  const [apiUrl, setApiUrl] = useState<string>('');
 
   // Sincroniza formData quando config muda (importante para carregar dados salvos)
   useEffect(() => {
@@ -95,6 +98,37 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
     }
   }, []);
 
+  // Verificar status do armazenamento (API vs localStorage)
+  useEffect(() => {
+    const checkStorageStatus = async () => {
+      // Obter URL da API do ambiente
+      const apiBaseUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
+      const apiUrlClean = apiBaseUrl.replace('/api', '');
+      setApiUrl(apiUrlClean);
+
+      // Verificar se há token de autenticação
+      const hasToken = getAuthToken() !== null;
+      
+      if (hasToken) {
+        // Se tem token, verificar se API está respondendo
+        try {
+          const isHealthy = await checkApiHealth();
+          setStorageStatus(isHealthy ? 'api' : 'localstorage');
+        } catch (error) {
+          setStorageStatus('localstorage');
+        }
+      } else {
+        // Sem token, usando localStorage
+        setStorageStatus('localstorage');
+      }
+    };
+
+    checkStorageStatus();
+    // Verificar a cada 10 segundos
+    const interval = setInterval(checkStorageStatus, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleRequestNotificationPermission = () => {
     if ('Notification' in window) {
       Notification.requestPermission().then(permission => {
@@ -118,12 +152,69 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
     <div className="max-w-4xl mx-auto py-8">
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-6 border-b border-slate-200">
-          <h2 className="text-xl font-bold text-slate-800">Configurações</h2>
-          <p className="text-slate-500 text-sm mt-1">
-            {isAdmin 
-              ? 'Configure a conexão com sua instância do WhatsApp e integrações externas.'
-              : 'Gerencie suas preferências de notificações.'}
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-slate-800">Configurações</h2>
+              <p className="text-slate-500 text-sm mt-1">
+                {isAdmin 
+                  ? 'Configure a conexão com sua instância do WhatsApp e integrações externas.'
+                  : 'Gerencie suas preferências de notificações.'}
+              </p>
+            </div>
+            {/* Indicador de Armazenamento */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border ${
+              storageStatus === 'api' 
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                : storageStatus === 'checking'
+                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                : 'bg-amber-50 text-amber-700 border-amber-200'
+            }`}>
+              {storageStatus === 'api' ? (
+                <>
+                  <Database size={14} />
+                  <span>Banco de Dados</span>
+                </>
+              ) : storageStatus === 'checking' ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin" />
+                  <span>Verificando...</span>
+                </>
+              ) : (
+                <>
+                  <HardDrive size={14} />
+                  <span>LocalStorage</span>
+                </>
+              )}
+            </div>
+          </div>
+          {/* Informação detalhada sobre armazenamento */}
+          {storageStatus !== 'checking' && (
+            <div className={`mt-3 p-2 rounded text-xs ${
+              storageStatus === 'api' 
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                : 'bg-amber-50 text-amber-700 border border-amber-200'
+            }`}>
+              {storageStatus === 'api' ? (
+                <div className="flex items-start gap-2">
+                  <Database size={14} className="mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold">Dados salvos no PostgreSQL</p>
+                    <p className="text-emerald-600">Seus dados estão sendo persistidos no banco de dados e estarão disponíveis em qualquer navegador após login.</p>
+                    {apiUrl && <p className="text-emerald-600 mt-1">API: {apiUrl}</p>}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2">
+                  <HardDrive size={14} className="mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="font-semibold">Dados salvos no LocalStorage</p>
+                    <p className="text-amber-600">Seus dados estão sendo salvos apenas no navegador atual. Para usar o banco de dados, configure o backend e faça login.</p>
+                    {apiUrl && <p className="text-amber-600 mt-1">API não disponível: {apiUrl}</p>}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Configurações do Sistema - Apenas para Admin */}
