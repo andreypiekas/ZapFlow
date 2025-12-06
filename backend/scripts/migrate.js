@@ -56,16 +56,19 @@ async function migrate() {
 
     // Criar usuário admin padrão se não existir
     const bcrypt = await import('bcryptjs');
-    const adminExists = await client.query('SELECT id FROM users WHERE username = $1', ['admin']);
+    const adminUsername = 'admin@piekas.com';
+    const adminExists = await client.query('SELECT id FROM users WHERE username = $1', [adminUsername]);
     
     if (adminExists.rows.length === 0) {
-      const hashedPassword = await bcrypt.default.hash('admin123', 10);
+      const hashedPassword = await bcrypt.default.hash('123', 10);
       await client.query(
         `INSERT INTO users (username, password_hash, name, email, role) 
          VALUES ($1, $2, $3, $4, $5)`,
-        ['admin', hashedPassword, 'Administrador', 'admin@zapflow.com', 'admin']
+        [adminUsername, hashedPassword, 'Administrador', adminUsername, 'admin']
       );
-      console.log('✅ Usuário admin criado (username: admin, password: admin123)');
+      console.log(`✅ Usuário admin criado (username: ${adminUsername}, password: 123)`);
+    } else {
+      console.log(`✅ Usuário admin já existe (username: ${adminUsername})`);
     }
 
     console.log('✅ Migração concluída com sucesso!');
