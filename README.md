@@ -97,12 +97,59 @@ Os scripts abaixo podem ser executados diretamente ou criados no servidor a part
 ### Scripts Shell (.sh)
 *   **[scripts/upgrade_evolution.sh](./scripts/upgrade_evolution.sh)**: Atualiza Evolution API para a versão mais recente.
 *   **[scripts/factory_reset_complete.sh](./scripts/factory_reset_complete.sh)**: **Cuidado!** Apaga tudo e reinicia a instalação (Factory Reset completo).
+*   **[scripts/setup_backend.sh](./scripts/setup_backend.sh)**: Instala e configura o backend PostgreSQL automaticamente (Linux/macOS).
+*   **[scripts/setup_backend.ps1](./scripts/setup_backend.ps1)**: Instala e configura o backend PostgreSQL automaticamente (Windows).
 
 ### Scripts de Instalação (.txt - criar como .sh no servidor)
 *   **[install/setup_evolution.txt](./install/setup_evolution.txt)**: Instala Docker, Banco de Dados e API do zero.
 *   **[install/factory_reset.txt](./install/factory_reset.txt)**: **Cuidado!** Apaga tudo e reinicia a instalação (Factory Reset).
 *   **[install/debug.txt](./install/debug.txt)**: Diagnóstico de rede e conexão.
 *   **[install/fix_evolution_network.txt](./install/fix_evolution_network.txt)**: Corrige problemas de firewall do Docker (Erro de QR Code não gerado).
+
+---
+
+## 💾 Persistência de Dados
+
+O ZapFlow agora suporta persistência segura de dados usando PostgreSQL:
+
+### Backend API (Recomendado)
+
+O sistema inclui um backend completo com:
+- **PostgreSQL** para armazenamento seguro
+- **Autenticação JWT** para segurança
+- **API REST** para salvar/carregar dados
+- **Sistema híbrido**: Usa API quando disponível, localStorage como fallback
+
+#### Instalação Rápida do Backend
+
+**Linux/macOS:**
+```bash
+./scripts/setup_backend.sh
+```
+
+**Windows:**
+```powershell
+.\scripts\setup_backend.ps1
+```
+
+Para instruções detalhadas, consulte:
+- **[INSTALACAO_BACKEND.md](./INSTALACAO_BACKEND.md)** - Guia completo
+- **[backend/README.md](./backend/README.md)** - Documentação da API
+
+### Dados Persistidos
+
+Com o backend configurado, os seguintes dados são salvos no PostgreSQL:
+- ✅ Configurações da API
+- ✅ Chats e mensagens
+- ✅ Contatos
+- ✅ Usuários
+- ✅ Departamentos
+- ✅ Respostas rápidas
+- ✅ Workflows
+- ✅ Configuração do chatbot
+- ✅ Preferências de UI
+
+**Sem backend:** Os dados são salvos no localStorage do navegador (específico por navegador).
 
 ---
 
