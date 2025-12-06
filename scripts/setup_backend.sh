@@ -910,12 +910,44 @@ fi
 cd "$PROJECT_ROOT"
 
 # Aguardar servidor iniciar
-sleep 3
+echo "Aguardando servidor iniciar..."
+sleep 5
 
 # Verificar se servidor está rodando
 if pm2 list | grep -q "zapflow-backend.*online"; then
     echo -e "${GREEN}✅ Servidor backend iniciado com PM2${NC}"
     echo -e "${GREEN}   Status: $(pm2 jlist | grep -o '"zapflow-backend"[^}]*"status":"[^"]*' | grep -o '"status":"[^"]*' | cut -d'"' -f4)${NC}"
+    
+    # Testar conectividade da API
+    echo "Testando conectividade da API..."
+    API_URL="http://${SERVER_IP}:${SERVER_PORT:-3001}/api/health"
+    
+    # Tentar conectar até 10 vezes (10 segundos)
+    API_ACCESSIBLE=false
+    for i in {1..10}; do
+        if curl -s -f -m 2 "$API_URL" > /dev/null 2>&1; then
+            API_ACCESSIBLE=true
+            echo -e "${GREEN}✅ API está acessível em $API_URL${NC}"
+            break
+        fi
+        echo -n "."
+        sleep 1
+    done
+    echo ""
+    
+    if [ "$API_ACCESSIBLE" = false ]; then
+        echo -e "${YELLOW}⚠️  API não está respondendo após 10 segundos${NC}"
+        echo -e "${YELLOW}   Isso pode ser normal se o servidor ainda está inicializando${NC}"
+        echo ""
+        echo "Verifique:"
+        echo "  1. Se o servidor está rodando: pm2 status"
+        echo "  2. Logs do servidor: pm2 logs zapflow-backend"
+        echo "  3. Se a porta está aberta no firewall:"
+        echo "     sudo ufw allow ${SERVER_PORT:-3001}/tcp"
+        echo "     ou"
+        echo "     sudo firewall-cmd --add-port=${SERVER_PORT:-3001}/tcp --permanent"
+        echo "  4. Teste manualmente: curl http://${SERVER_IP}:${SERVER_PORT:-3001}/api/health"
+    fi
 else
     echo -e "${YELLOW}⚠️  Servidor pode não ter iniciado corretamente${NC}"
     echo "Verifique: pm2 logs zapflow-backend"
@@ -971,6 +1003,19 @@ echo ""
 echo "3. Teste a API:"
 echo -e "   ${YELLOW}curl http://${SERVER_IP}:${SERVER_PORT:-3001}/api/health${NC}"
 echo -e "   ${YELLOW}curl http://${SERVER_IP}:${SERVER_PORT:-3001}/${NC}"
+echo ""
+echo "4. Se a API não estiver acessível:"
+echo -e "   ${YELLOW}Verifique o firewall:${NC}"
+if command -v ufw &> /dev/null; then
+    echo -e "   ${YELLOW}sudo ufw allow ${SERVER_PORT:-3001}/tcp${NC}"
+elif command -v firewall-cmd &> /dev/null; then
+    echo -e "   ${YELLOW}sudo firewall-cmd --add-port=${SERVER_PORT:-3001}/tcp --permanent${NC}"
+    echo -e "   ${YELLOW}sudo firewall-cmd --reload${NC}"
+else
+    echo -e "   ${YELLOW}Configure o firewall para permitir a porta ${SERVER_PORT:-3001}${NC}"
+fi
+echo -e "   ${YELLOW}Verifique logs: pm2 logs zapflow-backend${NC}"
+echo -e "   ${YELLOW}Reinicie se necessário: pm2 restart zapflow-backend${NC}"
 echo ""
 
 # Voltar para a raiz do projeto
