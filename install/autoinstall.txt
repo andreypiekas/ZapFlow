@@ -268,6 +268,38 @@ if [ "$BACKEND_AVAILABLE" = true ] && [ -f "backend/server.js" ]; then
     pm2 start server.js --name zapflow-backend
     cd ..
     echo "✅ Backend iniciado com PM2"
+    
+    # Aguardar servidor iniciar
+    echo "Aguardando servidor backend iniciar..."
+    sleep 5
+    
+    # Testar conectividade da API
+    echo "Testando conectividade da API backend..."
+    API_URL="http://${SERVER_IP}:3001/api/health"
+    
+    # Tentar conectar até 10 vezes (10 segundos)
+    API_ACCESSIBLE=false
+    for i in {1..10}; do
+        if curl -s -f -m 2 "$API_URL" > /dev/null 2>&1; then
+            API_ACCESSIBLE=true
+            echo "✅ API backend está acessível em $API_URL"
+            break
+        fi
+        echo -n "."
+        sleep 1
+    done
+    echo ""
+    
+    if [ "$API_ACCESSIBLE" = false ]; then
+        echo "⚠️  API backend não está respondendo após 10 segundos"
+        echo "   Isso pode ser normal se o servidor ainda está inicializando"
+        echo ""
+        echo "Verifique:"
+        echo "  1. Se o servidor está rodando: pm2 status"
+        echo "  2. Logs do servidor: pm2 logs zapflow-backend"
+        echo "  3. Se a porta está aberta no firewall (já configurado acima)"
+        echo "  4. Teste manualmente: curl http://${SERVER_IP}:3001/api/health"
+    fi
 else
     echo "⚠️  Backend não iniciado (arquivos não encontrados ou erro na migração)"
     echo "   Os dados serão salvos apenas no localStorage do navegador."
@@ -303,7 +335,20 @@ echo -e "   Username: ${GREEN}admin${NC}"
 echo -e "   Password: ${GREEN}admin123${NC}"
 echo -e "   ${BLUE}⚠️  ALTERE A SENHA EM PRODUÇÃO!${NC}"
 echo ""
-echo -e "${BLUE}Verificar status:${NC}"
-echo -e "   pm2 status"
-echo -e "   pm2 logs zapflow-backend"
-echo -e "   pm2 logs zapflow-front"
+echo -e "${BLUE}Comandos úteis:${NC}"
+echo -e "   ${YELLOW}pm2 status${NC}                    - Ver status de todos os serviços"
+echo -e "   ${YELLOW}pm2 logs zapflow-backend${NC}     - Ver logs do backend"
+echo -e "   ${YELLOW}pm2 logs zapflow-front${NC}       - Ver logs do frontend"
+echo -e "   ${YELLOW}pm2 restart zapflow-backend${NC}  - Reiniciar backend"
+echo -e "   ${YELLOW}pm2 restart zapflow-front${NC}    - Reiniciar frontend"
+echo ""
+echo -e "${BLUE}Testar APIs:${NC}"
+echo -e "   ${YELLOW}curl http://${SERVER_IP}:3001/api/health${NC}     - Backend API"
+echo -e "   ${YELLOW}curl http://${SERVER_IP}:3001/${NC}              - Backend root"
+echo -e "   ${YELLOW}curl http://${SERVER_IP}:8080/instance/fetchInstances${NC} - Evolution API"
+echo ""
+echo -e "${BLUE}Se a API backend não estiver acessível:${NC}"
+echo -e "   1. Verifique o firewall (já configurado acima)"
+echo -e "   2. Verifique logs: ${YELLOW}pm2 logs zapflow-backend${NC}"
+echo -e "   3. Reinicie o backend: ${YELLOW}pm2 restart zapflow-backend${NC}"
+echo -e "   4. Verifique se está escutando no IP correto: ${YELLOW}netstat -tlnp | grep 3001${NC}"
