@@ -16,9 +16,13 @@ type DataType =
 class StorageService {
   private useAPI: boolean = false;
   private apiAvailable: boolean | null = null;
+  private consecutiveFailures: number = 0;
+  private maxConsecutiveFailures: number = 3;
 
   constructor() {
     this.checkAPI();
+    // Verifica a API periodicamente (a cada 30 segundos)
+    setInterval(() => this.checkAPI(), 30000);
   }
 
   private async checkAPI(): Promise<void> {
@@ -28,14 +32,20 @@ class StorageService {
       this.useAPI = isAvailable;
       
       if (isAvailable) {
-        console.log('[StorageService] ✅ API disponível, usando backend');
+        if (this.consecutiveFailures > 0) {
+          console.log('[StorageService] ✅ API reconectada, voltando a usar backend');
+        }
+        this.consecutiveFailures = 0;
       } else {
         console.log('[StorageService] ⚠️ API indisponível, usando localStorage');
       }
     } catch (error) {
-      this.apiAvailable = false;
-      this.useAPI = false;
-      console.log('[StorageService] ⚠️ Erro ao verificar API, usando localStorage');
+      this.consecutiveFailures++;
+      if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+        this.apiAvailable = false;
+        this.useAPI = false;
+        console.log('[StorageService] ⚠️ Muitas falhas consecutivas, desabilitando API temporariamente');
+      }
     }
   }
 
@@ -61,11 +71,16 @@ class StorageService {
       try {
         const data = await apiService.getData<T>(dataType, key || 'default');
         if (data !== null) {
+          this.consecutiveFailures = 0;
+          console.log(`[StorageService] ✅ ${dataType}/${key || 'default'} carregado da API`);
           return data;
         }
       } catch (error) {
         console.warn(`[StorageService] Erro ao carregar ${dataType} da API, usando localStorage:`, error);
-        this.useAPI = false;
+        this.consecutiveFailures++;
+        if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+          this.useAPI = false;
+        }
       }
     }
 
@@ -90,23 +105,37 @@ class StorageService {
   async save<T>(dataType: DataType, value: T, key?: string): Promise<boolean> {
     const storageKey = key || 'default';
 
+    // Sempre salva no localStorage primeiro (backup imediato)
+    const localStorageSuccess = this.saveToLocalStorage(dataType, value, key);
+
     // Se API está disponível, tenta salvar
     if (this.useAPI && this.apiAvailable) {
       try {
         const success = await apiService.saveData(dataType, storageKey, value);
         if (success) {
-          // Também salva no localStorage como backup
-          this.saveToLocalStorage(dataType, value, key);
+          this.consecutiveFailures = 0;
+          console.log(`[StorageService] ✅ ${dataType}/${storageKey} salvo na API`);
           return true;
         }
-      } catch (error) {
-        console.warn(`[StorageService] Erro ao salvar ${dataType} na API, usando localStorage:`, error);
-        this.useAPI = false;
+      } catch (error: any) {
+        // Erro 413 (Payload Too Large) não deve desabilitar permanentemente a API
+        // Pode ser temporário ou resolvido após reiniciar o backend
+        if (error?.message?.includes('413') || error?.message?.includes('Payload Too Large')) {
+          console.warn(`[StorageService] ⚠️ Payload muito grande para ${dataType}/${storageKey}, usando localStorage. Reinicie o backend para aplicar o limite de 50MB.`);
+          // Não desabilita a API para erros 413, pois pode ser resolvido
+        } else {
+          console.warn(`[StorageService] Erro ao salvar ${dataType} na API, usando localStorage:`, error);
+          this.consecutiveFailures++;
+          if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+            this.useAPI = false;
+            console.warn('[StorageService] Muitas falhas, desabilitando API temporariamente');
+          }
+        }
       }
     }
 
-    // Fallback para localStorage
-    return this.saveToLocalStorage(dataType, value, key);
+    // Retorna sucesso se salvou no localStorage
+    return localStorageSuccess;
   }
 
   private saveToLocalStorage<T>(dataType: DataType, value: T, key?: string): boolean {
@@ -130,43 +159,59 @@ class StorageService {
   }
 
   async saveBatch<T>(dataType: DataType, data: { [key: string]: T }): Promise<boolean> {
+    // Sempre salva no localStorage primeiro (backup imediato)
+    const localStorageSuccess = this.saveToLocalStorage(dataType, data);
+
     // Se API está disponível, tenta salvar em lote
     if (this.useAPI && this.apiAvailable) {
       try {
         const success = await apiService.saveBatchData(dataType, data);
         if (success) {
-          // Também salva no localStorage como backup
-          this.saveToLocalStorage(dataType, data);
+          this.consecutiveFailures = 0;
+          console.log(`[StorageService] ✅ Lote de ${dataType} salvo na API`);
           return true;
         }
-      } catch (error) {
-        console.warn(`[StorageService] Erro ao salvar lote de ${dataType} na API, usando localStorage:`, error);
-        this.useAPI = false;
+      } catch (error: any) {
+        if (error?.message?.includes('413') || error?.message?.includes('Payload Too Large')) {
+          console.warn(`[StorageService] ⚠️ Payload muito grande para lote de ${dataType}, usando localStorage. Reinicie o backend.`);
+        } else {
+          console.warn(`[StorageService] Erro ao salvar lote de ${dataType} na API, usando localStorage:`, error);
+          this.consecutiveFailures++;
+          if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+            this.useAPI = false;
+          }
+        }
       }
     }
 
-    // Fallback para localStorage
-    return this.saveToLocalStorage(dataType, data);
+    // Retorna sucesso se salvou no localStorage
+    return localStorageSuccess;
   }
 
   async delete(dataType: DataType, key: string): Promise<boolean> {
+    // Sempre remove do localStorage primeiro
+    const localStorageSuccess = this.deleteFromLocalStorage(dataType, key);
+
     // Se API está disponível, tenta deletar
     if (this.useAPI && this.apiAvailable) {
       try {
         const success = await apiService.deleteData(dataType, key);
         if (success) {
-          // Também remove do localStorage
-          this.deleteFromLocalStorage(dataType, key);
+          this.consecutiveFailures = 0;
+          console.log(`[StorageService] ✅ ${dataType}/${key} deletado da API`);
           return true;
         }
       } catch (error) {
         console.warn(`[StorageService] Erro ao deletar ${dataType}/${key} da API, usando localStorage:`, error);
-        this.useAPI = false;
+        this.consecutiveFailures++;
+        if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+          this.useAPI = false;
+        }
       }
     }
 
-    // Fallback para localStorage
-    return this.deleteFromLocalStorage(dataType, key);
+    // Retorna sucesso se removeu do localStorage
+    return localStorageSuccess;
   }
 
   private deleteFromLocalStorage(dataType: DataType, key: string): boolean {
