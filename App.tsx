@@ -1231,7 +1231,8 @@ const App: React.FC = () => {
                                                             updatedChat = {
                                                                 ...updatedChat,
                                                                 departmentId: selectedDeptId,
-                                                                status: 'pending' // Vai para triagem do setor
+                                                                status: 'pending', // Vai para triagem do setor
+                                                                awaitingDepartmentSelection: false // Não está mais aguardando seleção
                                                             };
                                                             console.log(`[App] ✅ Setor selecionado pelo usuário: ${departments.find(d => d.id === selectedDeptId)?.name}`);
                                                             
@@ -1305,8 +1306,8 @@ const App: React.FC = () => {
                                                     lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
                                                     lastMessageTime: mapped.timestamp,
                                                     unreadCount: mapped.sender === 'user' ? (updatedChat.unreadCount || 0) + 1 : updatedChat.unreadCount,
-                                                    // Garante que o status seja 'open' se foi reaberto e está aguardando seleção de setor
-                                                    status: (updatedChat.status === 'closed' && updatedChat.awaitingDepartmentSelection) ? 'open' : updatedChat.status
+                                                    // Status já foi atualizado corretamente acima (pode ser 'open', 'pending', ou 'closed')
+                                                    status: updatedChat.status
                                                 };
                                             } else {
                                                 console.log(`[App] ⚠️ Mensagem já existe no chat ${chat.contactName}`);

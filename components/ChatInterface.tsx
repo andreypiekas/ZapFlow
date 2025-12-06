@@ -1359,7 +1359,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                                     </div>
                                     <p className="text-xs opacity-90 text-emerald-100 truncate flex items-center gap-1">
                                         {getDepartmentName(selectedChat.departmentId)} 
-                                        {!isAssigned && selectedChat.status === 'open' && " • Aguardando Atendimento"}
+                                        {!isAssigned && (selectedChat.status === 'open' || selectedChat.status === 'pending') && " • Aguardando Atendimento"}
                                     </p>
                                 </div>
                             )}
@@ -1394,7 +1394,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                             )}
                         </div>
 
-                        {selectedChat.status === 'open' && isAssignedToMe && (
+                        {(selectedChat.status === 'open' || selectedChat.status === 'pending') && isAssignedToMe && (
                             <>
                                 <button 
                                     onClick={() => setIsFinishingModalOpen(true)}
@@ -1593,7 +1593,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             </div>
 
             {/* Input Area or Assume Button */}
-            {selectedChat.status === 'open' ? (
+            {selectedChat.status !== 'closed' ? (
                 <>
                 {isAssigned && !isAssignedToMe ? (
                      <div className="p-4 bg-slate-100 text-center border-t border-slate-200">
