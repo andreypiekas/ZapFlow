@@ -11,7 +11,7 @@ interface ConnectionProps {
 
 const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, onUpdateConfig }) => {
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
-  const [detailedStatus, setDetailedStatus] = useState<string>('-');
+  const [detailedStatus, setDetailedStatus] = useState<string>('unknown');
   const [detectedName, setDetectedName] = useState<string | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -43,16 +43,28 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
   };
 
   const checkStatus = async () => {
-    if (config.isDemo || !isConfigured) return;
+    if (config.isDemo || !isConfigured || !selectedInstance) return;
     
     // Atualiza lista de instâncias
-    await loadInstances();
+    const allInstances = await fetchAllInstances(config);
+    setInstances(allInstances);
     
     // Verifica status da instância selecionada
     const currentConfig = { ...config, instanceName: selectedInstance };
     const details = await getDetailedInstanceStatus(currentConfig);
-    if (details) {
-        setDetailedStatus(details.state);
+    
+    // Mapeia o status para um formato mais amigável
+    const statusMap: Record<string, string> = {
+        'open': 'Conectado',
+        'connecting': 'Conectando...',
+        'close': 'Desconectado',
+        'qrcode': 'Aguardando QR Code',
+        'not_found': 'Não Encontrado'
+    };
+    
+    if (details && details.state) {
+        const friendlyStatus = statusMap[details.state] || details.state || 'unknown';
+        setDetailedStatus(friendlyStatus);
         
         if (details.isMismatch && details.name) {
             setDetectedName(details.name);
@@ -65,6 +77,15 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
             setStatus('connecting');
         } else {
             if (status === 'connected') setStatus('disconnected');
+        }
+    } else {
+        // Se não conseguiu buscar o status, tenta buscar da lista de instâncias
+        const instance = allInstances.find(i => i.instanceName === selectedInstance);
+        if (instance) {
+            const friendlyStatus = statusMap[instance.status] || instance.status || 'unknown';
+            setDetailedStatus(friendlyStatus);
+        } else {
+            setDetailedStatus('unknown');
         }
     }
   };

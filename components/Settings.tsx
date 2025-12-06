@@ -56,14 +56,14 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
   const handleInstanceSelect = async (instanceName: string) => {
     setSelectedInstanceName(instanceName);
     
-    // Busca detalhes da instância selecionada e preenche o token automaticamente
+    // Busca detalhes da instância selecionada e preenche o token e nome automaticamente
     if (instanceName && !config.isDemo && config.baseUrl) {
       try {
         const details = await fetchInstanceDetails(config, instanceName);
         if (details) {
           setFormData({
             ...formData,
-            instanceName: details.instanceName,
+            instanceName: details.instanceName, // Preenche o nome automaticamente
             apiKey: details.token || formData.apiKey // Preenche o token se disponível
           });
         } else {
@@ -244,12 +244,13 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
                     <input 
                       type="text" 
                       value={formData.instanceName}
-                      onChange={(e) => setFormData({...formData, instanceName: e.target.value})}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
-                      placeholder="Ex: hostgator_whatsapp"
+                      readOnly
+                      disabled
+                      className="w-full px-4 py-2 border border-slate-300 rounded-md bg-slate-50 text-slate-600 cursor-not-allowed"
+                      placeholder="Selecione uma instância acima"
                     />
                     <p className="text-xs text-slate-400 mt-1">
-                      Nome da instância que será usada. Se você selecionou uma instância acima, o token foi preenchido automaticamente.
+                      Nome da instância selecionada. Este campo é preenchido automaticamente quando você seleciona uma instância acima.
                     </p>
                   </div>
               </div>
