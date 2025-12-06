@@ -241,17 +241,18 @@ echo -e "${BLUE}[8/9] Configurando Frontend...${NC}"
 # Configurar variável de ambiente do frontend para usar o backend
 if [ "$BACKEND_AVAILABLE" = true ]; then
     if [ ! -f ".env" ]; then
-        echo "VITE_API_URL=http://${SERVER_IP}:3001/api" > .env
+        echo "VITE_API_URL=http://${SERVER_IP}:3001" > .env
         echo "✅ Arquivo .env do frontend criado com URL do backend"
     else
         # Adicionar ou atualizar VITE_API_URL no .env existente
         if grep -q "VITE_API_URL" .env; then
-            sed -i "s|VITE_API_URL=.*|VITE_API_URL=http://${SERVER_IP}:3001/api|" .env
+            sed -i "s|VITE_API_URL=.*|VITE_API_URL=http://${SERVER_IP}:3001|" .env
         else
-            echo "VITE_API_URL=http://${SERVER_IP}:3001/api" >> .env
+            echo "VITE_API_URL=http://${SERVER_IP}:3001" >> .env
         fi
         echo "✅ Variável VITE_API_URL configurada no .env"
     fi
+    echo "   📝 VITE_API_URL=http://${SERVER_IP}:3001"
 fi
 
 rm -rf node_modules package-lock.json

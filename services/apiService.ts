@@ -1,5 +1,18 @@
 // Serviço para comunicação com a API backend
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
+// Remove /api do final da URL se presente, pois os endpoints já incluem /api
+const getApiBaseUrl = () => {
+  const envUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
+  // Remove /api do final se presente
+  const baseUrl = envUrl.replace(/\/api\/?$/, '');
+  // Log apenas uma vez no carregamento
+  if (!(window as any).__API_BASE_URL_LOGGED) {
+    console.log(`[ApiService] URL da API configurada: ${baseUrl}`);
+    (window as any).__API_BASE_URL_LOGGED = true;
+  }
+  return baseUrl;
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export interface ApiResponse<T> {
   success?: boolean;
