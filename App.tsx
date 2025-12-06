@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Chat, Department, ViewState, ApiConfig, User, UserRole, QuickReply, Workflow, Contact, ChatbotConfig, MessageStatus } from './types';
+import { Chat, Department, ViewState, ApiConfig, User, UserRole, QuickReply, Workflow, Contact, ChatbotConfig, MessageStatus, Message } from './types';
 import { INITIAL_CHATS, INITIAL_DEPARTMENTS, INITIAL_USERS, INITIAL_QUICK_REPLIES, INITIAL_WORKFLOWS, MOCK_GOOGLE_CONTACTS, INITIAL_CHATBOT_CONFIG } from './constants';
 import Login from './components/Login';
 import ChatInterface from './components/ChatInterface';
@@ -38,9 +38,85 @@ const loadConfig = (): ApiConfig => {
 };
 
 const loadUserSession = (): User | null => {
-  const saved = localStorage.getItem('zapflow_user');
-  if (saved) return JSON.parse(saved);
+  try {
+    const saved = localStorage.getItem('zapflow_user');
+    if (saved) return JSON.parse(saved);
+  } catch (e) {
+    console.error('[App] Erro ao carregar sessão do usuário:', e);
+  }
   return null;
+};
+
+const loadDepartmentsFromStorage = (): Department[] => {
+  try {
+    const saved = localStorage.getItem('zapflow_departments');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {
+    console.error('[App] Erro ao carregar departamentos do localStorage:', e);
+  }
+  return INITIAL_DEPARTMENTS;
+};
+
+const loadQuickRepliesFromStorage = (): QuickReply[] => {
+  try {
+    const saved = localStorage.getItem('zapflow_quickReplies');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {
+    console.error('[App] Erro ao carregar respostas rápidas do localStorage:', e);
+  }
+  return INITIAL_QUICK_REPLIES;
+};
+
+const loadWorkflowsFromStorage = (): Workflow[] => {
+  try {
+    const saved = localStorage.getItem('zapflow_workflows');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {
+    console.error('[App] Erro ao carregar workflows do localStorage:', e);
+  }
+  return INITIAL_WORKFLOWS;
+};
+
+const loadChatbotConfigFromStorage = (): ChatbotConfig => {
+  try {
+    const saved = localStorage.getItem('zapflow_chatbotConfig');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {
+    console.error('[App] Erro ao carregar configuração do chatbot do localStorage:', e);
+  }
+  return INITIAL_CHATBOT_CONFIG;
+};
+
+const loadViewStateFromStorage = (): ViewState => {
+  try {
+    const saved = localStorage.getItem('zapflow_currentView');
+    if (saved && ['dashboard', 'chats', 'contacts', 'settings', 'connection', 'departments', 'users', 'quickMessages', 'workflows', 'reports', 'chatbot'].includes(saved)) {
+      return saved as ViewState;
+    }
+  } catch (e) {
+    console.error('[App] Erro ao carregar view state do localStorage:', e);
+  }
+  return 'dashboard';
+};
+
+const loadSidebarStateFromStorage = (): boolean => {
+  try {
+    const saved = localStorage.getItem('zapflow_sidebarCollapsed');
+    if (saved !== null) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {
+    console.error('[App] Erro ao carregar estado da sidebar do localStorage:', e);
+  }
+  return false;
 };
 
 interface Notification {
@@ -52,9 +128,9 @@ interface Notification {
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(loadUserSession);
-  const [currentView, setCurrentView] = useState<ViewState>('dashboard');
+  const [currentView, setCurrentView] = useState<ViewState>(loadViewStateFromStorage());
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(loadSidebarStateFromStorage());
   
   // Carrega chats do localStorage se existir, senão usa INITIAL_CHATS
   const loadChatsFromStorage = (): Chat[] => {
@@ -111,12 +187,12 @@ const App: React.FC = () => {
   };
 
   const [chats, setChats] = useState<Chat[]>(loadChatsFromStorage());
-  const [departments, setDepartments] = useState<Department[]>(INITIAL_DEPARTMENTS);
+  const [departments, setDepartments] = useState<Department[]>(loadDepartmentsFromStorage());
   const [users, setUsers] = useState<User[]>(loadUsersFromStorage());
-  const [quickReplies, setQuickReplies] = useState<QuickReply[]>(INITIAL_QUICK_REPLIES);
-  const [workflows, setWorkflows] = useState<Workflow[]>(INITIAL_WORKFLOWS);
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>(loadQuickRepliesFromStorage());
+  const [workflows, setWorkflows] = useState<Workflow[]>(loadWorkflowsFromStorage());
   const [contacts, setContacts] = useState<Contact[]>(loadContactsFromStorage());
-  const [chatbotConfig, setChatbotConfig] = useState<ChatbotConfig>(INITIAL_CHATBOT_CONFIG);
+  const [chatbotConfig, setChatbotConfig] = useState<ChatbotConfig>(loadChatbotConfigFromStorage());
   const [apiConfig, setApiConfig] = useState<ApiConfig>(loadConfig());
   const [forceSelectChatId, setForceSelectChatId] = useState<string | null>(null);
 
@@ -152,6 +228,73 @@ const App: React.FC = () => {
       console.error('[App] Erro ao salvar contatos no localStorage:', e);
     }
   }, [contacts]);
+
+  // Persiste departamentos no localStorage sempre que mudarem
+  useEffect(() => {
+    try {
+      localStorage.setItem('zapflow_departments', JSON.stringify(departments));
+    } catch (e) {
+      console.error('[App] Erro ao salvar departamentos no localStorage:', e);
+    }
+  }, [departments]);
+
+  // Persiste respostas rápidas no localStorage sempre que mudarem
+  useEffect(() => {
+    try {
+      localStorage.setItem('zapflow_quickReplies', JSON.stringify(quickReplies));
+    } catch (e) {
+      console.error('[App] Erro ao salvar respostas rápidas no localStorage:', e);
+    }
+  }, [quickReplies]);
+
+  // Persiste workflows no localStorage sempre que mudarem
+  useEffect(() => {
+    try {
+      localStorage.setItem('zapflow_workflows', JSON.stringify(workflows));
+    } catch (e) {
+      console.error('[App] Erro ao salvar workflows no localStorage:', e);
+    }
+  }, [workflows]);
+
+  // Persiste configuração do chatbot no localStorage sempre que mudar
+  useEffect(() => {
+    try {
+      localStorage.setItem('zapflow_chatbotConfig', JSON.stringify(chatbotConfig));
+    } catch (e) {
+      console.error('[App] Erro ao salvar configuração do chatbot no localStorage:', e);
+    }
+  }, [chatbotConfig]);
+
+  // Persiste view state no localStorage sempre que mudar
+  useEffect(() => {
+    try {
+      localStorage.setItem('zapflow_currentView', currentView);
+    } catch (e) {
+      console.error('[App] Erro ao salvar view state no localStorage:', e);
+    }
+  }, [currentView]);
+
+  // Persiste estado da sidebar no localStorage sempre que mudar
+  useEffect(() => {
+    try {
+      localStorage.setItem('zapflow_sidebarCollapsed', JSON.stringify(isSidebarCollapsed));
+    } catch (e) {
+      console.error('[App] Erro ao salvar estado da sidebar no localStorage:', e);
+    }
+  }, [isSidebarCollapsed]);
+
+  // Persiste sessão do usuário no localStorage sempre que mudar
+  useEffect(() => {
+    try {
+      if (currentUser) {
+        localStorage.setItem('zapflow_user', JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem('zapflow_user');
+      }
+    } catch (e) {
+      console.error('[App] Erro ao salvar sessão do usuário no localStorage:', e);
+    }
+  }, [currentUser]);
 
   // Refs para armazenar interval e WebSocket
   const intervalIdRef = useRef<ReturnType<typeof setInterval> | null>(null);
