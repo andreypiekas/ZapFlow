@@ -494,36 +494,38 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                     <div className="bg-white p-6 rounded-xl border-2 border-slate-200">
                       <h4 className="font-semibold text-slate-800 mb-4">Conectar WhatsApp</h4>
                       
-                      <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 w-full aspect-square max-w-[300px] mx-auto flex items-center justify-center relative mb-4">
-                        {isLoading && !qrCode ? (
-                          <div className="flex flex-col items-center gap-3">
-                            <Loader2 className="animate-spin text-emerald-600" size={40} />
-                            <span className="text-sm text-slate-500">Carregando QR Code...</span>
-                          </div>
-                        ) : qrCode ? (
-                          <>
-                            <img src={qrCode} className="w-full h-full object-contain" alt="QR Code" />
-                            {refreshTimer > 0 && (
-                              <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                                {refreshTimer}s
-                              </div>
-                            )}
-                            {status === 'connecting' && (
-                              <div className="absolute bottom-2 left-2 right-2 bg-blue-500/90 text-white text-xs px-2 py-1 rounded text-center">
-                                Sincronizando...
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <div className="text-center">
-                            <WifiOff className="text-slate-300 mx-auto mb-2" size={40} />
-                            <p className="text-sm text-slate-400">QR Code indisponível</p>
-                            <button 
-                              onClick={() => checkStatus()} 
-                              className="text-emerald-600 underline text-xs mt-2"
-                            >
-                              Recarregar
-                            </button>
+                      <div className="mb-4">
+                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 w-full aspect-square max-w-[300px] mx-auto flex items-center justify-center relative">
+                          {isLoading && !qrCode ? (
+                            <div className="flex flex-col items-center gap-3">
+                              <Loader2 className="animate-spin text-emerald-600" size={40} />
+                              <span className="text-sm text-slate-500">Carregando QR Code...</span>
+                            </div>
+                          ) : qrCode ? (
+                            <>
+                              <img src={qrCode} className="w-full h-full object-contain" alt="QR Code" />
+                              {refreshTimer > 0 && (
+                                <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                                  {refreshTimer}s
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="text-center">
+                              <WifiOff className="text-slate-300 mx-auto mb-2" size={40} />
+                              <p className="text-sm text-slate-400">QR Code indisponível</p>
+                              <button 
+                                onClick={() => checkStatus()} 
+                                className="text-emerald-600 underline text-xs mt-2"
+                              >
+                                Recarregar
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        {status === 'connecting' && qrCode && (
+                          <div className="mt-2 max-w-[300px] mx-auto bg-blue-500/90 text-white text-xs px-3 py-1.5 rounded text-center">
+                            Sincronizando...
                           </div>
                         )}
                       </div>
