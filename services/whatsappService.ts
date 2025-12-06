@@ -244,6 +244,7 @@ export const createInstance = async (
             
             // Se for 401, tenta formatos alternativos de autenticação
             if (response.status === 401) {
+                console.warn('[createInstance] ⚠️ Erro 401 (Unauthorized) - API Key pode estar incorreta');
                 console.log('[createInstance] Tentando formatos alternativos de autenticação...');
                 
                 // Tenta com Authorization Bearer
@@ -290,6 +291,18 @@ export const createInstance = async (
                         qrcode: data.qrcode?.base64 || data.base64,
                         integration: data.integration || 'WHATSAPP-BAILEYS'
                     };
+                }
+                
+                // Se todas as tentativas falharam, mostra mensagem clara
+                console.error('[createInstance] ❌ Falha na autenticação após tentar todos os formatos');
+                console.error('[createInstance] 💡 Verifique se a API Key nas configurações corresponde à AUTHENTICATION_API_KEY do servidor Evolution API');
+                console.error('[createInstance] 💡 A API Key deve ser exatamente igual à configurada no servidor (variável de ambiente AUTHENTICATION_API_KEY)');
+                
+                // Mostra alerta para o usuário
+                if (typeof window !== 'undefined') {
+                    setTimeout(() => {
+                        alert('❌ Erro de Autenticação\n\nA API Key configurada não corresponde à chave do servidor.\n\nPor favor:\n1. Vá em Configurações\n2. Verifique a "Global API Key"\n3. Certifique-se de que corresponde à AUTHENTICATION_API_KEY do servidor Evolution API');
+                    }, 100);
                 }
             }
             
