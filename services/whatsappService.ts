@@ -207,17 +207,35 @@ export const createInstance = async (
     
     try {
         const headers = createAuthHeaders(config.apiKey);
-        const payload = {
+        
+        // Gera token UUID automaticamente (formato esperado pelo Evolution API)
+        const generateToken = () => {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16).toUpperCase();
+            });
+        };
+        
+        const token = generateToken();
+        
+        // Payload conforme formato do Evolution API Manager
+        // Name, Channel (Baileys), Token (gerado automaticamente)
+        const payload: any = {
             instanceName,
             qrcode,
-            integration: 'WHATSAPP-BAILEYS'
+            integration: 'WHATSAPP-BAILEYS',
+            token: token,
+            channel: 'baileys'
         };
         
         console.log('[createInstance] Tentando criar instância:', {
             baseUrl: config.baseUrl,
             instanceName,
             apiKeyLength: config.apiKey.length,
-            apiKeyPreview: config.apiKey.substring(0, 8) + '...'
+            apiKeyPreview: config.apiKey.substring(0, 8) + '...',
+            token: token.substring(0, 8) + '...',
+            payload: { ...payload, token: token.substring(0, 8) + '...' }
         });
         
         const response = await fetch(`${config.baseUrl}/instance/create`, {
@@ -296,12 +314,13 @@ export const createInstance = async (
                 // Se todas as tentativas falharam, mostra mensagem clara
                 console.error('[createInstance] ❌ Falha na autenticação após tentar todos os formatos');
                 console.error('[createInstance] 💡 Verifique se a API Key nas configurações corresponde à AUTHENTICATION_API_KEY do servidor Evolution API');
-                console.error('[createInstance] 💡 A API Key deve ser exatamente igual à configurada no servidor (variável de ambiente AUTHENTICATION_API_KEY)');
+                console.error('[createInstance] 💡 A API Key deve ser exatamente igual à configurada no docker-compose.yml (variável AUTHENTICATION_API_KEY)');
+                console.error('[createInstance] 💡 A mesma chave usada para fazer login no Evolution Manager deve ser usada aqui');
                 
                 // Mostra alerta para o usuário
                 if (typeof window !== 'undefined') {
                     setTimeout(() => {
-                        alert('❌ Erro de Autenticação\n\nA API Key configurada não corresponde à chave do servidor.\n\nPor favor:\n1. Vá em Configurações\n2. Verifique a "Global API Key"\n3. Certifique-se de que corresponde à AUTHENTICATION_API_KEY do servidor Evolution API');
+                        alert('❌ Erro de Autenticação\n\nA API Key configurada não corresponde à chave do servidor.\n\nPor favor:\n1. Abra o arquivo docker-compose.yml do servidor Evolution API\n2. Localize a variável AUTHENTICATION_API_KEY\n3. Vá em Configurações do ZapFlow\n4. Cole a mesma chave no campo "Global API Key"\n5. Salve e tente novamente\n\nA API Key deve ser exatamente igual à do docker-compose.yml!');
                     }, 100);
                 }
             }
