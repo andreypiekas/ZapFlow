@@ -1547,8 +1547,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                       
                       {/* Nome e Setor para mensagens enviadas (agent) */}
                       {msg.sender === 'agent' && currentUser.name && (() => {
-                        const userDepartment = currentUser.departmentId 
-                          ? departments.find(d => d.id === currentUser.departmentId)
+                        // Tenta usar o departamento do usuário primeiro, depois o do chat como fallback
+                        const userDepartmentId = currentUser.departmentId || selectedChat?.departmentId;
+                        const userDepartment = userDepartmentId 
+                          ? departments.find(d => d.id === userDepartmentId)
                           : null;
                         return (
                           <div className="px-2 pt-1 pb-0.5">
