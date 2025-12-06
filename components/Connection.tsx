@@ -23,7 +23,7 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
   const [isCreatingInstance, setIsCreatingInstance] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
-  const isConfigured = config.baseUrl && config.apiKey;
+  const isConfigured = config.baseUrl && (config.authenticationApiKey || config.apiKey);
 
   const loadInstances = async () => {
     if (config.isDemo || !isConfigured) return;
@@ -59,7 +59,8 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
         'connecting': 'Conectando...',
         'close': 'Desconectado',
         'qrcode': 'Aguardando QR Code',
-        'not_found': 'Não Encontrado'
+        'not_found': 'Não Encontrado',
+        'error': 'Erro na API'
     };
     
     if (details && details.state) {
@@ -91,8 +92,24 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
   };
 
   useEffect(() => {
+    const initConnection = async () => {
+        if (!config.isDemo && isConfigured) {
+            await loadInstances(); // Garante que instances esteja populado
+            await checkStatus(); // Verifica status imediatamente
+        }
+    };
+    
+    initConnection();
+    
+    if (!config.isDemo && isConfigured && selectedInstance) {
+        const interval = setInterval(checkStatus, 5000);
+        return () => clearInterval(interval);
+    }
+  }, [config, isConfigured, selectedInstance]); // Removido 'status' das dependências para evitar loops
+
+  useEffect(() => {
     const loadQR = async () => {
-      if (status === 'connected' || config.isDemo || !isConfigured) return;
+      if (status === 'connected' || config.isDemo || !isConfigured || !selectedInstance) return;
       if (status === 'connecting') return;
 
       setIsLoading(true);
@@ -109,11 +126,8 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
       }
     };
 
-    if (!config.isDemo && isConfigured) {
-        loadInstances();
+    if (!config.isDemo && isConfigured && selectedInstance) {
         loadQR();
-        const interval = setInterval(checkStatus, 5000);
-        return () => clearInterval(interval);
     }
   }, [config, status, isConfigured, selectedInstance]);
 

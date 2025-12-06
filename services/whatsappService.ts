@@ -143,24 +143,47 @@ export const getSystemStatus = async (config: ApiConfig) => {
 };
 
 export const getDetailedInstanceStatus = async (config: ApiConfig) => {
-    if (config.isDemo || !config.baseUrl || !config.apiKey) return null;
+    if (config.isDemo || !config.baseUrl || !getAuthKey(config)) return null;
 
     try {
-        const active = await findActiveInstance(config);
-        
-        if (active && active.instanceName) {
-            // Verifica se o nome bate com a config
-            const isMismatch = active.instanceName !== config.instanceName;
-            return {
-                state: active.status,
-                name: active.instanceName,
-                isMismatch
-            };
+        // Chama diretamente o endpoint de connectionState da Evolution API
+        const response = await fetch(`${config.baseUrl}/instance/connectionState/${config.instanceName}`, {
+            method: 'GET',
+            headers: { 'apikey': getAuthKey(config) }
+        });
+
+        if (!response.ok) {
+            // Se a instância não for encontrada, tenta buscar de fetchInstances
+            if (response.status === 404) {
+                const allInstances = await fetchAllInstances(config);
+                const found = allInstances.find(i => i.instanceName === config.instanceName);
+                if (found) {
+                    return {
+                        state: found.status,
+                        name: found.instanceName,
+                        isMismatch: false // Não há mismatch se achou na lista
+                    };
+                }
+                return { state: 'not_found' };
+            }
+            return { state: 'error' };
         }
 
-        return { state: 'not_found' };
+        const data = await response.json();
+        const instanceState = data.instance?.state || data.state;
+        const instanceName = data.instance?.instanceName || data.instanceName;
+
+        // Verifica se o nome bate com a config
+        const isMismatch = instanceName && instanceName !== config.instanceName;
+
+        return {
+            state: instanceState,
+            name: instanceName,
+            isMismatch
+        };
 
     } catch (e) {
+        console.error('[getDetailedInstanceStatus] Erro:', e);
         return { state: 'connecting' }; // Assume connecting on error to avoid red flash
     }
 };
