@@ -751,6 +751,9 @@ const App: React.FC = () => {
                                         !existingChat.departmentId;
                                     
                                     if (isFirstUserMessage) {
+                                        // Garante que o status seja 'open' quando enviar mensagem de seleção (não 'closed')
+                                        const chatStatusForSelection = existingChat.status === 'closed' ? 'open' : existingChat.status;
+                                        
                                         // Envia mensagem de seleção de setores de forma assíncrona
                                         sendDepartmentSelectionMessage(
                                             apiConfig,
@@ -759,9 +762,10 @@ const App: React.FC = () => {
                                         ).then(sent => {
                                             if (sent) {
                                                 console.log(`[App] ✅ Mensagem de seleção de setores enviada para ${existingChat.contactName} via sync`);
-                                                // Marca que a mensagem foi enviada
+                                                // Marca que a mensagem foi enviada e garante status 'open'
                                                 handleUpdateChat({
                                                     ...existingChat,
+                                                    status: chatStatusForSelection,
                                                     departmentSelectionSent: true,
                                                     awaitingDepartmentSelection: true
                                                 });
@@ -1239,6 +1243,22 @@ const App: React.FC = () => {
                                                             const isFirstUserMessage = updatedChat.messages.filter(m => m.sender === 'user').length === 1;
                                                             
                                                             if (isFirstUserMessage) {
+                                                                // Garante que o status seja 'open' quando enviar mensagem de seleção (não 'closed')
+                                                                if (updatedChat.status === 'closed') {
+                                                                    updatedChat = {
+                                                                        ...updatedChat,
+                                                                        status: 'open',
+                                                                        awaitingDepartmentSelection: true,
+                                                                        departmentSelectionSent: true
+                                                                    };
+                                                                } else {
+                                                                    updatedChat = {
+                                                                        ...updatedChat,
+                                                                        awaitingDepartmentSelection: true,
+                                                                        departmentSelectionSent: true
+                                                                    };
+                                                                }
+                                                                
                                                                 // Envia mensagem de seleção de setores de forma assíncrona
                                                                 sendDepartmentSelectionMessage(
                                                                     apiConfig,
@@ -1247,6 +1267,13 @@ const App: React.FC = () => {
                                                                 ).then(sent => {
                                                                     if (sent) {
                                                                         console.log(`[App] ✅ Mensagem de seleção de setores enviada para ${updatedChat.contactName}`);
+                                                                        // Atualiza o chat para garantir que o status seja mantido
+                                                                        handleUpdateChat({
+                                                                            ...updatedChat,
+                                                                            status: 'open',
+                                                                            awaitingDepartmentSelection: true,
+                                                                            departmentSelectionSent: true
+                                                                        });
                                                                     } else {
                                                                         console.error(`[App] ❌ Falha ao enviar mensagem de seleção de setores para ${updatedChat.contactName}`);
                                                                     }
@@ -1277,7 +1304,9 @@ const App: React.FC = () => {
                                                     messages: updatedMessages,
                                                     lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
                                                     lastMessageTime: mapped.timestamp,
-                                                    unreadCount: mapped.sender === 'user' ? (updatedChat.unreadCount || 0) + 1 : updatedChat.unreadCount
+                                                    unreadCount: mapped.sender === 'user' ? (updatedChat.unreadCount || 0) + 1 : updatedChat.unreadCount,
+                                                    // Garante que o status seja 'open' se foi reaberto e está aguardando seleção de setor
+                                                    status: (updatedChat.status === 'closed' && updatedChat.awaitingDepartmentSelection) ? 'open' : updatedChat.status
                                                 };
                                             } else {
                                                 console.log(`[App] ⚠️ Mensagem já existe no chat ${chat.contactName}`);
