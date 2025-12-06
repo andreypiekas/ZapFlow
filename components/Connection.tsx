@@ -122,7 +122,7 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
   useEffect(() => {
     const loadQR = async () => {
       if (status === 'connected' || config.isDemo || !isConfigured || !selectedInstance) return;
-      if (status === 'connecting') return;
+      // Não retorna se estiver "connecting" - permite buscar QR mesmo durante sincronização
 
       setIsLoading(true);
       const currentConfig = { ...config, instanceName: selectedInstance };
@@ -131,7 +131,10 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
       
       if (qrData) {
         setQrCode(qrData);
-        setStatus('disconnected');
+        // Não força status para 'disconnected' se já estiver em outro estado
+        if (status !== 'connected') {
+          setStatus('disconnected');
+        }
         setRefreshTimer(40); 
       } else {
         // Se não conseguiu buscar QR code, verifica o status novamente
@@ -492,10 +495,10 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                       <h4 className="font-semibold text-slate-800 mb-4">Conectar WhatsApp</h4>
                       
                       <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 w-full aspect-square max-w-[300px] mx-auto flex items-center justify-center relative mb-4">
-                        {isLoading || status === 'connecting' ? (
+                        {isLoading && !qrCode ? (
                           <div className="flex flex-col items-center gap-3">
                             <Loader2 className="animate-spin text-emerald-600" size={40} />
-                            <span className="text-sm text-slate-500">{status === 'connecting' ? 'Sincronizando...' : 'Carregando QR Code...'}</span>
+                            <span className="text-sm text-slate-500">Carregando QR Code...</span>
                           </div>
                         ) : qrCode ? (
                           <>
@@ -503,6 +506,11 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                             {refreshTimer > 0 && (
                               <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
                                 {refreshTimer}s
+                              </div>
+                            )}
+                            {status === 'connecting' && (
+                              <div className="absolute bottom-2 left-2 right-2 bg-blue-500/90 text-white text-xs px-2 py-1 rounded text-center">
+                                Sincronizando...
                               </div>
                             )}
                           </>
