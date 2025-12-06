@@ -73,11 +73,18 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
 
         if (details.state === 'open') {
             setStatus('connected');
-            setQrCode(null);
+            setQrCode(null); // Limpa QR code apenas quando conectado
         } else if (details.state === 'connecting') {
             setStatus('connecting');
+            // Mantém o QR code se já existir, não limpa
         } else {
-            if (status === 'connected') setStatus('disconnected');
+            // Para qualquer outro status (close, qrcode, etc), mantém como desconectado
+            setStatus('disconnected');
+            // Se não houver QR code e o status indicar que precisa de QR, busca um
+            if (!qrCode && (details.state === 'qrcode' || details.state === 'close')) {
+                // Força busca de QR code se não houver um
+                setQrCode(null);
+            }
         }
     } else {
         // Se não conseguiu buscar o status, tenta buscar da lista de instâncias
@@ -85,8 +92,13 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
         if (instance) {
             const friendlyStatus = statusMap[instance.status] || instance.status || 'unknown';
             setDetailedStatus(friendlyStatus);
+            // Se não estiver conectado e não houver QR code, mantém status desconectado
+            if (instance.status !== 'open') {
+                setStatus('disconnected');
+            }
         } else {
             setDetailedStatus('unknown');
+            setStatus('disconnected');
         }
     }
   };
@@ -122,16 +134,17 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
         setStatus('disconnected');
         setRefreshTimer(40); 
       } else {
+        // Se não conseguiu buscar QR code, verifica o status novamente
         await checkStatus();
       }
     };
 
-    // Busca QR code se não houver um já definido OU se a instância mudou (qrCode foi limpo)
-    // Isso evita sobrescrever o QR code que foi definido ao criar a instância, mas busca quando necessário
-    if (!config.isDemo && isConfigured && selectedInstance && !qrCode) {
+    // Busca QR code se não houver um já definido E o status não for 'connected'
+    // Isso garante que o QR code seja mantido enquanto não estiver conectado
+    if (!config.isDemo && isConfigured && selectedInstance && !qrCode && status !== 'connected') {
         loadQR();
     }
-  }, [config, isConfigured, selectedInstance, qrCode]); // Adicionado qrCode para detectar quando é limpo
+  }, [config, isConfigured, selectedInstance, qrCode, status]); // Adicionado status para reagir a mudanças
 
   useEffect(() => {
       if (refreshTimer > 0) {
@@ -139,14 +152,26 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
       } else if (timerRef.current) {
           clearInterval(timerRef.current);
           timerRef.current = null;
-          // Quando o timer chega a zero, tenta buscar novo QR code ou verificar status
+          // Quando o timer chega a zero, busca novo QR code sem limpar o antigo primeiro
+          // Isso mantém o QR code visível até que um novo seja obtido
           if (status !== 'connected' && selectedInstance) {
-              setQrCode(null); // Limpa QR code antigo para forçar busca de novo
-              checkStatus();
+              // Busca novo QR code mantendo o antigo até obter um novo
+              const fetchNewQR = async () => {
+                  const currentConfig = { ...config, instanceName: selectedInstance };
+                  const qrData = await getInstanceQRCode(currentConfig, selectedInstance) || await fetchRealQRCode(currentConfig);
+                  if (qrData) {
+                      setQrCode(qrData);
+                      setRefreshTimer(40);
+                  } else {
+                      // Se não conseguiu novo QR, verifica status mas mantém o QR antigo
+                      await checkStatus();
+                  }
+              };
+              fetchNewQR();
           }
       }
       return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [refreshTimer, status, selectedInstance]);
+  }, [refreshTimer, status, selectedInstance, config]);
 
   const handleLogout = async () => {
     if (!confirm('Tem certeza que deseja desconectar esta instância?')) return;
