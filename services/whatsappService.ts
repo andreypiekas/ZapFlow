@@ -2035,34 +2035,7 @@ export const fetchInstanceDetails = async (config: ApiConfig, instanceName: stri
     if (config.isDemo || !config.baseUrl || !instanceName) return null;
     
     try {
-        // Tenta buscar detalhes via endpoint específico da instância primeiro
-        try {
-            const response = await fetch(`${config.baseUrl}/instance/fetchInstance/${instanceName}`, {
-                method: 'GET',
-                headers: { 'apikey': getAuthKey(config) }
-            });
-            
-            if (response.ok) {
-                const instanceData = await response.json();
-                const inst = instanceData.instance || instanceData;
-                
-                if (inst && (inst.instanceName === instanceName || inst.name === instanceName)) {
-                    const statusValue = inst.status || inst.state || 'close';
-                    return {
-                        instanceName: inst.instanceName || inst.name || instanceName,
-                        status: (statusValue === 'open' || statusValue === 'connecting' || statusValue === 'close' || statusValue === 'qrcode') 
-                            ? statusValue as 'open' | 'connecting' | 'close' | 'qrcode'
-                            : 'close' as 'open' | 'connecting' | 'close' | 'qrcode',
-                        integration: inst.integration || 'WHATSAPP-BAILEYS',
-                        token: inst.token || inst.apikey || instanceData.token || instanceData.apikey
-                    };
-                }
-            }
-        } catch (e) {
-            // Se o endpoint específico falhar, tenta o método alternativo
-        }
-        
-        // Método alternativo: Busca todas as instâncias e filtra pela desejada
+        // Busca todas as instâncias e filtra pela desejada
         const allInstances = await fetchAllInstances(config);
         const instance = allInstances.find(i => i.instanceName === instanceName);
         

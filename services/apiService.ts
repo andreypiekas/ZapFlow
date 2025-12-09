@@ -25,7 +25,16 @@ export interface ApiResponse<T> {
 
 class ApiService {
   private getToken(): string | null {
-    return localStorage.getItem('zapflow_auth_token');
+    const encrypted = localStorage.getItem('zapflow_auth_token');
+    if (!encrypted) return null;
+    
+    // Tenta descriptografar o token se estiver criptografado
+    try {
+      return SecurityService.decrypt(encrypted);
+    } catch {
+      // Se falhar, retorna como está (compatibilidade com tokens antigos não criptografados)
+      return encrypted;
+    }
   }
 
   private async request<T>(
