@@ -130,14 +130,15 @@ export const sendAwayMessage = async (
 
 /**
  * Processa mensagens recebidas e envia respostas automáticas do chatbot se necessário
+ * Retorna objeto com informações sobre o que foi enviado
  */
 export const processChatbotMessages = async (
     config: ApiConfig,
     chatbotConfig: ChatbotConfig,
     chat: any
-): Promise<boolean> => {
+): Promise<{ sent: boolean; type?: 'greeting' | 'away' }> => {
     if (!chatbotConfig.isEnabled) {
-        return false;
+        return { sent: false };
     }
 
     // Verifica se é um novo chat (primeira mensagem do usuário)
@@ -145,16 +146,18 @@ export const processChatbotMessages = async (
     const isNewChat = userMessages.length === 1;
 
     if (!isNewChat) {
-        return false; // Não é um novo chat
+        return { sent: false }; // Não é um novo chat
     }
 
     // Verifica horário e envia mensagem apropriada
     if (isWithinBusinessHours(chatbotConfig)) {
         // Dentro do horário: envia saudação
-        return await sendGreetingMessage(config, chatbotConfig, chat);
+        const sent = await sendGreetingMessage(config, chatbotConfig, chat);
+        return { sent, type: sent ? 'greeting' : undefined };
     } else {
         // Fora do horário: envia mensagem de ausência
-        return await sendAwayMessage(config, chatbotConfig, chat);
+        const sent = await sendAwayMessage(config, chatbotConfig, chat);
+        return { sent, type: sent ? 'away' : undefined };
     }
 };
 

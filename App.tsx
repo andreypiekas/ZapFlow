@@ -1185,8 +1185,27 @@ const App: React.FC = () => {
                                         processChatbotMessages(apiConfig, chatbotConfig, {
                                             ...existingChat,
                                             messages: mergedMessages
-                                        }).then(sent => {
-                                            if (sent) {
+                                        }).then(result => {
+                                            if (result.sent && result.type) {
+                                                // Adiciona mensagem de sistema indicando que o chatbot enviou
+                                                const systemMessage: Message = {
+                                                    id: `sys_chatbot_${Date.now()}`,
+                                                    content: result.type === 'greeting' 
+                                                        ? 'greeting_sent - Saudação automática enviada'
+                                                        : 'away_sent - Mensagem de ausência enviada',
+                                                    sender: 'system',
+                                                    timestamp: new Date(),
+                                                    status: MessageStatus.READ,
+                                                    type: 'text'
+                                                };
+                                                mergedMessages.push(systemMessage);
+                                                
+                                                // Atualiza o chat com a mensagem de sistema
+                                                handleUpdateChat({
+                                                    ...existingChat,
+                                                    messages: mergedMessages
+                                                });
+                                                
                                                 // Log removido para produção - muito verboso
                                                 // console.log(`[App] ✅ Chatbot processou mensagem para ${existingChat.contactName}`);
                                             }
@@ -1268,8 +1287,26 @@ const App: React.FC = () => {
                             });
                         } else if (hasUserMessages && !realChat.departmentId) {
                             // Se não precisa de seleção de setores mas é novo chat sem departamento, processa chatbot
-                            processChatbotMessages(apiConfig, chatbotConfig, realChat).then(sent => {
-                                if (sent) {
+                            processChatbotMessages(apiConfig, chatbotConfig, realChat).then(result => {
+                                if (result.sent && result.type) {
+                                    // Adiciona mensagem de sistema indicando que o chatbot enviou
+                                    const systemMessage: Message = {
+                                        id: `sys_chatbot_${Date.now()}`,
+                                        content: result.type === 'greeting' 
+                                            ? 'greeting_sent - Saudação automática enviada'
+                                            : 'away_sent - Mensagem de ausência enviada',
+                                        sender: 'system',
+                                        timestamp: new Date(),
+                                        status: MessageStatus.READ,
+                                        type: 'text'
+                                    };
+                                    
+                                    // Atualiza o chat com a mensagem de sistema
+                                    handleUpdateChat({
+                                        ...realChat,
+                                        messages: [...(realChat.messages || []), systemMessage]
+                                    });
+                                    
                                     // Log removido para produção - muito verboso
                                     // console.log(`[App] ✅ Chatbot processou mensagem para novo chat ${realChat.contactName}`);
                                 }
