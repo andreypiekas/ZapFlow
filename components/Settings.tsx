@@ -101,30 +101,42 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
       try {
         const details = await fetchInstanceDetails(config, instanceName);
         if (details) {
-          setFormData({
+          const updatedConfig = {
             ...formData,
             instanceName: details.instanceName, // Preenche o nome automaticamente
             apiKey: details.token || formData.apiKey // Preenche o token se disponível
-          });
+          };
+          setFormData(updatedConfig);
+          
+          // Se encontrou um token, salva automaticamente nas configurações
+          if (details.token) {
+            onSave(updatedConfig);
+          }
         } else {
           // Se não encontrou detalhes, apenas atualiza o nome
-          setFormData({
+          const updatedConfig = {
             ...formData,
             instanceName: instanceName
-          });
+          };
+          setFormData(updatedConfig);
+          onSave(updatedConfig);
         }
       } catch (error) {
         console.error('[Settings] Erro ao buscar detalhes da instância:', error);
-        setFormData({
+        const updatedConfig = {
           ...formData,
           instanceName: instanceName
-        });
+        };
+        setFormData(updatedConfig);
+        onSave(updatedConfig);
       }
     } else {
-      setFormData({
+      const updatedConfig = {
         ...formData,
         instanceName: instanceName
-      });
+      };
+      setFormData(updatedConfig);
+      onSave(updatedConfig);
     }
   };
 
