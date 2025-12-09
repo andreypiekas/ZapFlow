@@ -42,14 +42,18 @@ async function migrate() {
     `);
     console.log('✅ Constraint antiga removida (se existia)');
 
-    // 3. Cria nova constraint que permite NULL (tratando NULL como 0 para unicidade)
-    console.log('📝 Criando nova constraint que permite NULL...');
+    // 3. Cria índice único funcional que permite NULL (tratando NULL como 0 para unicidade)
+    console.log('📝 Criando índice único funcional que permite NULL...');
+    // Primeiro, remove o índice se já existir
     await client.query(`
-      ALTER TABLE user_data 
-      ADD CONSTRAINT user_data_user_id_data_type_data_key_key 
-      UNIQUE (COALESCE(user_id, 0), data_type, data_key)
+      DROP INDEX IF EXISTS user_data_user_id_data_type_data_key_unique_idx
     `);
-    console.log('✅ Nova constraint criada');
+    // Cria índice único funcional
+    await client.query(`
+      CREATE UNIQUE INDEX user_data_user_id_data_type_data_key_unique_idx 
+      ON user_data (COALESCE(user_id, 0), data_type, data_key)
+    `);
+    console.log('✅ Índice único funcional criado');
 
     // 4. Migra configurações existentes para globais (user_id = NULL)
     console.log('📝 Migrando configurações existentes para globais...');

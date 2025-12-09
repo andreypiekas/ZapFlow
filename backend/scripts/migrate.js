@@ -56,7 +56,7 @@ async function migrate() {
     `);
     
     // Modificar constraint para permitir user_id NULL (para configurações globais)
-    // Remove a constraint antiga se existir e cria uma nova que permite NULL
+    // Remove a constraint antiga se existir e cria um índice único funcional
     await client.query(`
       DO $$ 
       BEGIN
@@ -66,15 +66,18 @@ async function migrate() {
         ) THEN
           ALTER TABLE user_data DROP CONSTRAINT user_data_user_id_data_type_data_key_key;
         END IF;
-        
-        -- Cria nova constraint que permite NULL (tratando NULL como 0 para unicidade)
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint WHERE conname = 'user_data_user_id_data_type_data_key_key'
-        ) THEN
-          ALTER TABLE user_data ADD CONSTRAINT user_data_user_id_data_type_data_key_key 
-          UNIQUE (COALESCE(user_id, 0), data_type, data_key);
-        END IF;
       END $$;
+    `);
+    
+    // Remove índice único funcional se já existir
+    await client.query(`
+      DROP INDEX IF EXISTS user_data_user_id_data_type_data_key_unique_idx
+    `);
+    
+    // Cria índice único funcional que permite NULL (tratando NULL como 0 para unicidade)
+    await client.query(`
+      CREATE UNIQUE INDEX user_data_user_id_data_type_data_key_unique_idx 
+      ON user_data (COALESCE(user_id, 0), data_type, data_key)
     `);
     
     // Modifica coluna user_id para permitir NULL

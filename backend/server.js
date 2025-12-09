@@ -1381,30 +1381,18 @@ app.put('/api/config', authenticateToken, dataLimiter, async (req, res) => {
       return res.status(400).json({ error: 'config é obrigatório e deve ser um objeto' });
     }
 
-    // Tenta inserir com user_id = NULL primeiro
-    try {
-      await pool.query(
-        `INSERT INTO user_data (user_id, data_type, data_key, data_value)
-         VALUES (NULL, 'config', 'apiConfig', $1)
-         ON CONFLICT (COALESCE(user_id, 0), data_type, data_key)
-         DO UPDATE SET data_value = $1, updated_at = CURRENT_TIMESTAMP`,
-        [JSON.stringify(config)]
-      );
-    } catch (nullError) {
-      // Se falhar com NULL (por causa da constraint), tenta com user_id = 0
-      // Primeiro remove qualquer registro existente com NULL ou 0
-      await pool.query(
-        `DELETE FROM user_data 
-         WHERE (user_id IS NULL OR user_id = 0) AND data_type = 'config' AND data_key = 'apiConfig'`
-      );
-      
-      // Insere com user_id = 0
-      await pool.query(
-        `INSERT INTO user_data (user_id, data_type, data_key, data_value)
-         VALUES (0, 'config', 'apiConfig', $1)`,
-        [JSON.stringify(config)]
-      );
-    }
+    // Remove qualquer configuração global existente (NULL ou 0)
+    await pool.query(
+      `DELETE FROM user_data 
+       WHERE (user_id IS NULL OR user_id = 0) AND data_type = 'config' AND data_key = 'apiConfig'`
+    );
+    
+    // Insere como configuração global (user_id = NULL)
+    await pool.query(
+      `INSERT INTO user_data (user_id, data_type, data_key, data_value)
+       VALUES (NULL, 'config', 'apiConfig', $1)`,
+      [JSON.stringify(config)]
+    );
 
     res.json({ success: true });
   } catch (error) {
