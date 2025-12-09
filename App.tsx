@@ -1717,62 +1717,9 @@ const App: React.FC = () => {
                                                 chatUpdated = true;
                                                 
                                                 // Verifica se o chat estava fechado e recebeu mensagem do cliente
+                                                // A reabertura será processada mais abaixo, após atualizar mensagens
                                                 const wasClosed = chat.status === 'closed';
                                                 const isUserMessage = mapped.sender === 'user';
-                                                
-                                                if (wasClosed && isUserMessage) {
-                                                    console.log(`[App] 🔄 Chat fechado ${chat.id} recebeu mensagem do cliente, reabrindo...`);
-                                                    
-                                                    // Atualiza status para pending e limpa assignedTo (será salvo no banco via handleUpdateChat)
-                                                    chat.status = 'pending';
-                                                    chat.assignedTo = undefined;
-                                                    chat.departmentId = null;
-                                                    chat.endedAt = undefined;
-                                                    
-                                                    // Envia mensagem de saudação padrão após adicionar a mensagem
-                                                    setTimeout(async () => {
-                                                        try {
-                                                            const chatbotConfig = await storageService.load<ChatbotConfig>('chatbotConfig');
-                                                            if (chatbotConfig && chatbotConfig.isEnabled && chatbotConfig.greetingMessage) {
-                                                                // Verifica se já foi enviada (para evitar reenvio)
-                                                                const hasGreeting = chat.messages?.some((msg: Message) =>
-                                                                    msg.sender === 'system' && msg.content?.includes('greeting_sent')
-                                                                );
-                                                                
-                                                                if (!hasGreeting) {
-                                                                    const { sendGreetingMessage } = await import('./services/chatbotService');
-                                                                    const success = await sendGreetingMessage(apiConfig, chatbotConfig, {
-                                                                        ...chat,
-                                                                        status: 'pending',
-                                                                        messages: [...chat.messages, mapped]
-                                                                    });
-                                                                    
-                                                                    if (success) {
-                                                                        // Adiciona mensagem de sistema
-                                                                        const systemMessage: Message = {
-                                                                            id: `sys_chatbot_reopen_${Date.now()}`,
-                                                                            content: 'greeting_sent - Saudação automática enviada (chat reaberto)',
-                                                                            sender: 'system',
-                                                                            timestamp: new Date(),
-                                                                            status: MessageStatus.READ,
-                                                                            type: 'text'
-                                                                        };
-                                                                        
-                                                                        handleUpdateChat({
-                                                                            ...chat,
-                                                                            status: 'pending',
-                                                                            assignedTo: undefined,
-                                                                            departmentId: null,
-                                                                            messages: [...chat.messages, mapped, systemMessage]
-                                                                        });
-                                                                    }
-                                                                }
-                                                            }
-                                                        } catch (error) {
-                                                            console.error('[App] ❌ Erro ao enviar mensagem de saudação para chat reaberto:', error);
-                                                        }
-                                                    }, 500);
-                                                }
                                                 
                                             // Log removido para produção - muito verboso
                                             // console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}`);
