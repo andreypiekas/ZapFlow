@@ -249,6 +249,18 @@ else
             echo "  - Corrigindo data_keys de chats..."
             node scripts/fix-chat-data-keys.js 2>/dev/null || echo "    Nenhum chat para corrigir ou erro (pode ignorar)"
         fi
+        
+        # Migrar configurações para globais (user_id = NULL)
+        if [ -f "scripts/migrate-config-to-global.js" ]; then
+            echo "  - Migrando configurações para globais..."
+            node scripts/migrate-config-to-global.js 2>/dev/null || echo "    Configurações já migradas ou erro (pode ignorar)"
+        fi
+        
+        # Limpar chats inválidos (opcional, mas recomendado)
+        if [ -f "scripts/clean-invalid-chats.js" ]; then
+            echo "  - Limpando chats inválidos..."
+            node scripts/clean-invalid-chats.js 2>/dev/null || echo "    Nenhum chat inválido encontrado ou erro (pode ignorar)"
+        fi
     fi
 fi
 

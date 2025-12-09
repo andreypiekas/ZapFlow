@@ -320,19 +320,33 @@ docker logs evolution-api
 1. **Migração Principal** (`migrate.js`)
    - Cria todas as tabelas necessárias
    - Cria usuário admin padrão
+   - Permite `user_id NULL` para configurações globais
+   - Cria índice único funcional para permitir configurações globais
    - **Execute:** `npm run migrate`
 
 2. **Adicionar department_id** (`add-department-id-to-users.js`)
    - Adiciona campo `department_id` na tabela `users`
-   - **Execute:** `node scripts/add-department-id-to-users.js`
-
-3. **Corrigir data_keys de chats** (`fix-chat-data-keys.js`)
-   - Corrige chats com `data_key` nulo/undefined
+   
+3. **Migrar Configurações para Globais** (`migrate-config-to-global.js`)
+   - Migra configurações de usuários específicos para globais (user_id = NULL)
+   - Atualiza constraint da tabela para permitir configurações globais
+   - **Execute:** `node scripts/migrate-config-to-global.js`
+   
+4. **Corrigir data_keys de Chats** (`fix-chat-data-keys.js`)
+   - Corrige chats com data_key NULL ou inválido
+   - Extrai ID do chat do data_value e atualiza data_key
+   - **Execute:** `node scripts/fix-chat-data-keys.js`
+   
+4. **Corrigir data_keys de Chats** (`fix-chat-data-keys.js`)
+   - Corrige chats com data_key NULL ou inválido
+   - Extrai ID do chat do data_value e atualiza data_key
    - **Execute:** `node scripts/fix-chat-data-keys.js`
 
-4. **Limpar chats inválidos** (`clean-invalid-chats.js`)
-   - Remove chats com números inválidos (< 11 dígitos)
+5. **Limpar Chats Inválidos** (`clean-invalid-chats.js`)
+   - Remove chats com números inválidos (menos de 11 dígitos)
+   - Corrige data_keys de chats com contactNumber válido
    - **Execute:** `node scripts/clean-invalid-chats.js`
+   - **Nota:** Esta limpeza também é executada automaticamente pelo backend a cada 6 horas
 
 ### Executar Todas as Migrações
 
@@ -342,10 +356,11 @@ cd backend
 # Migração principal
 npm run migrate
 
-# Migrações adicionais
+# Migrações adicionais (executadas automaticamente pelo autoinstall)
 node scripts/add-department-id-to-users.js
+node scripts/migrate-config-to-global.js
 node scripts/fix-chat-data-keys.js
-# node scripts/clean-invalid-chats.js  # Opcional, apenas se necessário
+node scripts/clean-invalid-chats.js
 ```
 
 ---
@@ -524,7 +539,10 @@ Use este checklist para garantir que tudo está configurado:
 - [ ] Banco de dados `zapflow` criado
 - [ ] Backend configurado (`.env` criado)
 - [ ] Migração principal executada (`npm run migrate`)
-- [ ] Migração `department_id` executada (se necessário)
+- [ ] Migração `department_id` executada (`node scripts/add-department-id-to-users.js`)
+- [ ] Migração de configurações globais executada (`node scripts/migrate-config-to-global.js`)
+- [ ] Correção de data_keys de chats executada (`node scripts/fix-chat-data-keys.js`)
+- [ ] Limpeza de chats inválidos executada (`node scripts/clean-invalid-chats.js`)
 - [ ] Backend rodando (`npm run dev` ou `pm2 start`)
 - [ ] Health check funcionando (`/api/health`)
 - [ ] Frontend instalado (`npm install`)

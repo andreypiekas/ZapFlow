@@ -93,11 +93,17 @@ Se você está atualizando um banco existente ou precisa corrigir dados:
 # Adicionar campo department_id na tabela users (se não existir)
 node scripts/add-department-id-to-users.js
 
+# Migrar configurações para globais (user_id = NULL)
+node scripts/migrate-config-to-global.js
+
 # Corrigir data_keys de chats (se necessário)
 node scripts/fix-chat-data-keys.js
 
 # Limpar chats inválidos (números com menos de 11 dígitos)
 node scripts/clean-invalid-chats.js
+```
+
+**Nota:** O script `autoinstall.txt` executa todas essas migrações automaticamente durante a instalação.
 ```
 
 ### 5. Iniciar Servidor

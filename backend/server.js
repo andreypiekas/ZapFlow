@@ -1401,3 +1401,74 @@ app.put('/api/config', authenticateToken, dataLimiter, async (req, res) => {
   }
 });
 
+// ============================================================================
+// Endpoint para limpeza de chats inválidos (apenas ADMIN)
+// ============================================================================
+
+app.post('/api/admin/cleanup-invalid-chats', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    // Verifica se o usuário é ADMIN
+    const userResult = await pool.query(
+      'SELECT role FROM users WHERE id = $1',
+      [req.user.id]
+    );
+
+    if (userResult.rows.length === 0 || userResult.rows[0].role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Apenas administradores podem executar limpeza de chats' });
+    }
+
+    // Importa dinamicamente o serviço de limpeza
+    const { cleanInvalidChats } = await import('./services/chatCleanupService.js');
+    
+    // Executa a limpeza
+    const summary = await cleanInvalidChats(pool);
+
+    res.json({ 
+      success: true, 
+      message: 'Limpeza de chats inválidos concluída',
+      summary 
+    });
+  } catch (error) {
+    console.error('Erro ao executar limpeza de chats:', error);
+    res.status(500).json({ error: 'Erro ao executar limpeza de chats' });
+  }
+});
+
+// ============================================================================
+// Rotina periódica de limpeza de chats inválidos (executa a cada 6 horas)
+// ============================================================================
+
+let cleanupInterval = null;
+
+function startChatCleanupScheduler() {
+  // Executa limpeza a cada 6 horas (21600000 ms)
+  const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 horas
+  
+  // Executa imediatamente na inicialização (após 5 minutos para não sobrecarregar)
+  setTimeout(async () => {
+    try {
+      console.log('[ChatCleanup] 🕐 Executando limpeza inicial de chats inválidos...');
+      const { cleanInvalidChats } = await import('./services/chatCleanupService.js');
+      await cleanInvalidChats(pool);
+    } catch (error) {
+      console.error('[ChatCleanup] ❌ Erro na limpeza inicial:', error);
+    }
+  }, 5 * 60 * 1000); // 5 minutos após inicialização
+  
+  // Agenda execuções periódicas
+  cleanupInterval = setInterval(async () => {
+    try {
+      console.log('[ChatCleanup] 🕐 Executando limpeza periódica de chats inválidos...');
+      const { cleanInvalidChats } = await import('./services/chatCleanupService.js');
+      await cleanInvalidChats(pool);
+    } catch (error) {
+      console.error('[ChatCleanup] ❌ Erro na limpeza periódica:', error);
+    }
+  }, CLEANUP_INTERVAL_MS);
+  
+  console.log('[ChatCleanup] ✅ Agendador de limpeza de chats iniciado (executa a cada 6 horas)');
+}
+
+// Inicia o agendador quando o servidor inicia
+startChatCleanupScheduler();
+
