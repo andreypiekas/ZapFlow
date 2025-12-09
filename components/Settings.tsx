@@ -8,7 +8,7 @@ import { storageService } from '../services/storageService';
 
 interface SettingsProps {
   config: ApiConfig;
-  onSave: (config: ApiConfig) => void;
+  onSave: (config: ApiConfig) => void | Promise<void>;
   currentUser?: User | null;
 }
 
