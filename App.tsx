@@ -2989,7 +2989,8 @@ const App: React.FC = () => {
                 id: result.user.id.toString(),
                 name: result.user.name,
                 email: result.user.email || updatedUser.email,
-                role: result.user.role as UserRole
+                role: result.user.role as UserRole,
+                departmentId: result.user.departmentId || updatedUser.departmentId
               };
               setUsers(prevUsers => prevUsers.map(u => u.id === updatedUser.id ? updatedUserFromApi : u));
             }
