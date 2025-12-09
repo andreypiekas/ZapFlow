@@ -1363,25 +1363,49 @@ const App: React.FC = () => {
         });
         
         if (allChatsData && Object.keys(allChatsData).length > 0) {
+          console.log('[App] 🔍 [DEBUG] Estrutura de allChatsData:', {
+            keys: Object.keys(allChatsData),
+            firstKey: Object.keys(allChatsData)[0],
+            firstValue: Object.values(allChatsData)[0],
+            firstValueType: typeof Object.values(allChatsData)[0],
+            firstValueKeys: Object.values(allChatsData)[0] ? Object.keys(Object.values(allChatsData)[0] as any) : []
+          });
+          
           // Converte o objeto de chats em array
-          const chatsArray = Object.values(allChatsData)
-            .filter((chat: any) => chat && chat.id) // Filtra chats inválidos (sem id)
-            .map((chat: any) => {
-              console.log('[App] 🔍 [DEBUG] Processando chat do banco:', {
-                id: chat.id,
-                status: chat.status,
-                assignedTo: chat.assignedTo,
-                departmentId: chat.departmentId
+          // O backend retorna { "chatId": {...chat} }, então precisamos processar cada entrada
+          const chatsArray = Object.entries(allChatsData)
+            .map(([key, chat]: [string, any]) => {
+              // Se o chat é um objeto com id, usa diretamente
+              // Se não, pode ser que a key seja o id
+              const chatObj = chat && typeof chat === 'object' ? chat : { id: key };
+              
+              console.log('[App] 🔍 [DEBUG] Processando entrada do banco:', {
+                key,
+                chatType: typeof chat,
+                chatIsObject: chat && typeof chat === 'object',
+                chatHasId: chat && chat.id,
+                chatObjId: chatObj.id,
+                chatObjStatus: chatObj.status,
+                chatObjAssignedTo: chatObj.assignedTo,
+                chatObjDepartmentId: chatObj.departmentId
               });
+              
               return {
-                ...chat,
-                id: chat.id || String(Date.now()), // Garante que sempre tem id
-                lastMessageTime: chat.lastMessageTime ? new Date(chat.lastMessageTime) : new Date(),
-                messages: chat.messages?.map((msg: Message) => ({
+                ...chatObj,
+                id: chatObj.id || key, // Usa o id do chat ou a key como fallback
+                lastMessageTime: chatObj.lastMessageTime ? new Date(chatObj.lastMessageTime) : new Date(),
+                messages: chatObj.messages?.map((msg: Message) => ({
                   ...msg,
                   timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date()
                 })) || []
               };
+            })
+            .filter((chat: any) => {
+              const isValid = chat && chat.id;
+              if (!isValid) {
+                console.log('[App] 🔍 [DEBUG] Chat filtrado (sem id):', chat);
+              }
+              return isValid;
             });
           
           console.log('[App] 🔍 [DEBUG] Chats processados:', {
