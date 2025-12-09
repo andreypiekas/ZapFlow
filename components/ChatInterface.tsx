@@ -1457,7 +1457,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                                             onClick={() => handleAddTag(tag.name)}
                                             className="w-full text-left px-4 py-2 hover:bg-slate-50 text-sm flex items-center gap-2"
                                         >
-                                            <div className={`w-3 h-3 rounded-full ${tag.color.split(' ')[0]}`}></div>
+                                            <div className={`w-3 h-3 rounded-full ${tag && tag.color && typeof tag.color === 'string' ? tag.color.split(' ')[0] : 'bg-slate-200'}`}></div>
                                             {tag.name}
                                         </button>
                                     ))}
