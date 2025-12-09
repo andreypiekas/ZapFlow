@@ -210,10 +210,10 @@ const App: React.FC = () => {
         return parsed.map((chat: Chat) => ({
           ...chat,
           lastMessageTime: new Date(chat.lastMessageTime),
-          messages: chat.messages.map((msg: Message) => ({
+          messages: (chat.messages && Array.isArray(chat.messages)) ? chat.messages.map((msg: Message) => ({
             ...msg,
             timestamp: new Date(msg.timestamp)
-          }))
+          })) : []
         }));
       }
     } catch (e) {
@@ -2330,7 +2330,7 @@ const App: React.FC = () => {
                                     const chatJid = normalizeJid(chat.id);
                                     if (chatJid === remoteJid) {
                                         // Atualiza status da mensagem correspondente
-                                        const updatedMessages = chat.messages.map(msg => {
+                                        const updatedMessages = (chat.messages && Array.isArray(chat.messages)) ? chat.messages.map(msg => {
                                             if (msg.whatsappMessageId === data.key.id) {
                                                 return {
                                                     ...msg,
@@ -2341,7 +2341,7 @@ const App: React.FC = () => {
                                                 };
                                             }
                                             return msg;
-                                        });
+                                        }) : [];
                                         
                                         return {
                                             ...chat,
