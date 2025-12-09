@@ -1886,23 +1886,20 @@ const App: React.FC = () => {
                 // Code 1005 = no status code (pode ser reconexão Socket.IO - não é erro)
                 // Code 1006 = conexão anormal (reconecta)
                 
-                // Code 1005 após handshake recebido é comportamento normal do Socket.IO
-                // Socket.IO pode fechar a conexão WebSocket e usar polling HTTP, ou reconectar
+                // Code 1005 após handshake recebido pode indicar que Socket.IO não funciona com WebSocket nativo
+                // Socket.IO pode precisar da biblioteca socket.io-client para funcionar corretamente
+                // Por enquanto, não reconecta automaticamente para evitar loop infinito
                 if (event.code === 1005 && handshakeReceived) {
-                    // Handshake foi recebido com sucesso, então a conexão funcionou
-                    // Socket.IO pode estar fazendo upgrade ou reconexão normal
-                    // Não incrementa contador de tentativas para evitar loop
+                    // Handshake foi recebido, mas conexão fecha imediatamente
+                    // Isso pode indicar que Socket.IO precisa da biblioteca cliente, não WebSocket nativo
+                    // Não reconecta automaticamente para evitar loop
                     if (wsReconnectAttemptsRef.current === 0) {
-                        console.log('[App] ℹ️ WebSocket Socket.IO: Conexão fechada após handshake (comportamento normal)');
+                        console.warn('[App] ⚠️ WebSocket Socket.IO: Conexão fecha após handshake. Socket.IO pode precisar da biblioteca socket.io-client. Sistema continuará funcionando via polling.');
+                        setWsStatus('failed');
                     }
-                    // Reconecta com delay menor (Socket.IO pode estar fazendo upgrade)
-                    const delay = 2000; // 2 segundos para reconexão Socket.IO
-                    wsReconnectTimeoutRef.current = setTimeout(() => {
-                        if (currentUser && apiConfig.baseUrl && !apiConfig.isDemo && wsReconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-                            initWebSocket(true);
-                        }
-                    }, delay);
-                    return; // Não processa como erro
+                    // Não reconecta - Socket.IO com WebSocket nativo pode não funcionar corretamente
+                    // O sistema continuará funcionando via polling (sincronização periódica)
+                    return;
                 }
                 
                 // Code 1005 sem handshake pode ser erro real
