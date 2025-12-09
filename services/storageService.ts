@@ -51,21 +51,22 @@ class StorageService {
       this.apiAvailable = isAvailable;
       this.useAPI = isAvailable;
       
-        if (isAvailable) {
-          if (this.consecutiveFailures > 0) {
-            // Log removido para produção - muito verboso
-            // console.log('[StorageService] ✅ API reconectada, voltando a usar backend');
-          }
-          this.consecutiveFailures = 0;
-        } else {
-          console.warn('[StorageService] ⚠️ API indisponível, usando localStorage');
+      if (isAvailable) {
+        if (this.consecutiveFailures > 0) {
+          console.log('[StorageService] ✅ Backend reconectado');
         }
+        this.consecutiveFailures = 0;
+      } else {
+        console.error('[StorageService] ❌ Backend indisponível. Sistema requer backend para funcionar.');
+        console.error('[StorageService] ⚠️ Usando localStorage temporariamente (será removido nos próximos passos).');
+      }
     } catch (error) {
       this.consecutiveFailures++;
       if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
         this.apiAvailable = false;
         this.useAPI = false;
-        console.warn('[StorageService] ⚠️ Muitas falhas consecutivas, desabilitando API temporariamente');
+        console.error('[StorageService] ❌ Backend indisponível após múltiplas tentativas.');
+        console.error('[StorageService] ⚠️ Sistema requer backend para funcionar. Verifique se o servidor está rodando.');
       }
     }
   }
