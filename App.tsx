@@ -1468,10 +1468,10 @@ const App: React.FC = () => {
                     }
                     
                     if (messageData && messageData.key && messageData.key.remoteJid) {
-                            const remoteJid = normalizeJid(messageData.key.remoteJid);
-                            const mapped = mapApiMessageToInternal(messageData);
-                            
-                            if (mapped) {
+                        const remoteJid = normalizeJid(messageData.key.remoteJid);
+                        const mapped = mapApiMessageToInternal(messageData);
+                        
+                        if (mapped) {
                                 setChats(currentChats => {
                                     let chatUpdated = false;
                                     const updatedChats = currentChats.map(chat => {
