@@ -1429,7 +1429,8 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             const isValid = isGroup || (hasValidNumber && (!idIsGenerated || hasValidMessages));
             
             if (!isValid) {
-                console.log(`[ChatFilter] Removendo chat inválido: ID=${chat.id}, contactNumber=${chat.contactNumber}, messages=${chat.messages?.length || 0}, hasValidNumber=${hasValidNumber}, idIsGenerated=${idIsGenerated}`);
+                // Log removido para produção - muito verboso
+                // console.log(`[ChatFilter] Removendo chat inválido: ID=${chat.id}, contactNumber=${chat.contactNumber}, messages=${chat.messages?.length || 0}, hasValidNumber=${hasValidNumber}, idIsGenerated=${idIsGenerated}`);
             }
             
             return isValid;

@@ -2077,7 +2077,14 @@ const App: React.FC = () => {
     setUsers(prevUsers => prevUsers.map(u => u.id === updatedUser.id ? updatedUser : u));
     
     // Se o usuário atualizado for o currentUser, atualiza também o currentUser e o banco de dados
-    if (currentUser && currentUser.id === updatedUser.id) {
+    // Compara tanto por ID quanto por email (para garantir que funcione mesmo se IDs forem diferentes)
+    const isCurrentUser = currentUser && (
+      currentUser.id === updatedUser.id || 
+      currentUser.email === updatedUser.email ||
+      currentUser.username === updatedUser.email
+    );
+    
+    if (isCurrentUser) {
       // Atualiza o currentUser imediatamente
       setCurrentUser(updatedUser);
       
@@ -2088,6 +2095,7 @@ const App: React.FC = () => {
           // Atualiza o currentUser com os dados retornados da API
           const updatedCurrentUser: User = {
             ...currentUser,
+            id: result.user.id.toString(), // Garante que o ID seja string
             name: result.user.name,
             email: result.user.email || updatedUser.email,
             role: result.user.role as UserRole
