@@ -1405,8 +1405,14 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             // Extrai número do contactNumber ou ID
             const contactNumber = chat.contactNumber?.replace(/\D/g, '') || '';
             const chatIdNumber = chat.id.split('@')[0].replace(/\D/g, '');
-            const hasValidNumber = (contactNumber.length >= 10 && contactNumber.length <= 14 && /^\d+$/.test(contactNumber)) ||
-                                   (chatIdNumber.length >= 10 && chatIdNumber.length <= 14 && /^\d+$/.test(chatIdNumber));
+            
+            // Validação mais rigorosa: números brasileiros devem ter:
+            // - 11 dígitos (DDD + número celular: 11 98765-4321)
+            // - 12-13 dígitos (DDI + DDD + número: 55 11 98765-4321)
+            // Números de 10 dígitos são inválidos (faltam dígitos)
+            const isValidContactNumber = contactNumber.length >= 11 && contactNumber.length <= 14 && /^\d+$/.test(contactNumber);
+            const isValidChatIdNumber = chatIdNumber.length >= 11 && chatIdNumber.length <= 14 && /^\d+$/.test(chatIdNumber);
+            const hasValidNumber = isValidContactNumber || isValidChatIdNumber;
             
             // Detecta IDs gerados (cmin*, cmid*, cmio*, cmip*, cmit*, cmiu*)
             const idIsGenerated = chat.id.includes('cmin') || 

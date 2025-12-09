@@ -794,7 +794,11 @@ const App: React.FC = () => {
                                                 console.warn(`[App] ⚠️ [DEBUG] syncChats: Não foi possível enviar mensagem de seleção - número de contato inválido para ${realChat.id} (contactNumber: ${contactNumber})`);
                                             }
                                         } else {
-                                            console.log(`[App] ⚠️ [DEBUG] syncChats: Não enviando mensagem de seleção - chatHasDepartment: ${chatHasDepartment}, departments.length: ${departments.length}`);
+                                            if (departments.length === 0) {
+                                                console.warn(`[App] ⚠️ [DEBUG] syncChats: Não enviando mensagem de seleção - NENHUM DEPARTAMENTO CONFIGURADO. Configure departamentos em Configurações > Departamentos para que a mensagem seja enviada automaticamente.`);
+                                            } else {
+                                                console.log(`[App] ⚠️ [DEBUG] syncChats: Não enviando mensagem de seleção - chatHasDepartment: ${chatHasDepartment}, departments.length: ${departments.length}`);
+                                            }
                                         }
                                         
                                         if (chatHasDepartment) {
