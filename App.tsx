@@ -1257,11 +1257,17 @@ const App: React.FC = () => {
                         // Garante que chats atribuídos e em 'open' não voltem para 'pending' durante sync
                         // Isso previne que chats em "A Fazer" voltem para "Aguardando"
                         // IMPORTANTE: Preserva status 'open' se chat está atribuído, mesmo após reload
-                        if (isAssignedAndOpen) {
-                            // Se o chat está atribuído e em 'open', sempre mantém 'open'
-                            finalStatusForDept = 'open';
-                        } else if (existingChat.status === 'open' && existingChat.assignedTo && finalStatusForDept === 'pending') {
-                            // Fallback: se por algum motivo o status foi alterado para 'pending' mas o chat está atribuído, corrige
+                        // Status do banco tem prioridade absoluta para chats atribuídos
+                        if (existingChat.assignedTo) {
+                            // Se o chat está atribuído, SEMPRE preserva o status do banco
+                            // Não permite que a API sobrescreva o status de chats atribuídos
+                            if (existingChat.status === 'open') {
+                                finalStatusForDept = 'open'; // Força 'open' se está atribuído e era 'open'
+                            } else {
+                                finalStatusForDept = existingChat.status; // Preserva qualquer status do banco
+                            }
+                        } else if (isAssignedAndOpen) {
+                            // Fallback: se por algum motivo isAssignedAndOpen não capturou, força 'open'
                             finalStatusForDept = 'open';
                         }
                         
