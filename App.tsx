@@ -2122,14 +2122,14 @@ const App: React.FC = () => {
         user.role
       );
       
-      if (result.success && result.data) {
+      if (result.success && result.user) {
         // Converte o usuário retornado da API para o formato interno
         const newUser: User = {
-          id: result.data.id.toString(),
-          name: result.data.name,
-          email: result.data.email || result.data.username,
-          role: result.data.role as UserRole,
-          avatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(result.data.name)}&background=0D9488&color=fff`,
+          id: result.user.id.toString(),
+          name: result.user.name,
+          email: result.user.email || result.user.username,
+          role: result.user.role as UserRole,
+          avatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(result.user.name)}&background=0D9488&color=fff`,
           departmentId: user.departmentId,
           allowGeneralConnection: user.allowGeneralConnection
         };
