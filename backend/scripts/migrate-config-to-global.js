@@ -58,7 +58,7 @@ async function migrate() {
     // 4. Migra configurações existentes para globais (user_id = NULL)
     console.log('📝 Migrando configurações existentes para globais...');
     const configResult = await client.query(`
-      SELECT DISTINCT user_id, data_value 
+      SELECT user_id, data_value 
       FROM user_data 
       WHERE data_type = 'config' AND data_key = 'apiConfig'
       ORDER BY updated_at DESC
