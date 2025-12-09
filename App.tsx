@@ -1105,6 +1105,10 @@ const App: React.FC = () => {
                         else if (existingChat.status === 'open' && realChat.status === 'closed') {
                             finalStatus = 'open';
                         }
+                        // Se o chat está atribuído e em 'open', sempre mantém 'open' (preserva após reload)
+                        else if (existingChat.status === 'open' && existingChat.assignedTo) {
+                            finalStatus = 'open'; // Força 'open' se está atribuído
+                        }
                         // Caso padrão: usa o status existente (que já é 'open' ou 'pending')
                         else {
                             finalStatus = existingChat.status || realChat.status;
