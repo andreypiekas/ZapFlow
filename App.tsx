@@ -677,10 +677,11 @@ const App: React.FC = () => {
                         const existingDigits = existingChat.contactNumber?.replace(/\D/g, '').length || 0;
                         const realDigits = realChat.contactNumber?.replace(/\D/g, '').length || 0;
                         // Detecta IDs gerados: qualquer coisa que comece com 'cmin', 'cmid', ou 'chat_'
-                        const existingIsGenerated = existingChat.contactNumber?.includes('cmin') || 
-                                                      existingChat.contactNumber?.includes('cmid') || 
-                                                      existingChat.contactNumber?.startsWith('chat_') || 
-                                                      !/^\d+$/.test(existingChat.contactNumber?.replace(/\D/g, '') || '');
+                        const existingIsGenerated = (existingChat.contactNumber && typeof existingChat.contactNumber === 'string') && (
+                            existingChat.contactNumber.includes('cmin') || 
+                            existingChat.contactNumber.includes('cmid') || 
+                            existingChat.contactNumber.startsWith('chat_')
+                        ) || !/^\d+$/.test((existingChat.contactNumber || '').replace(/\D/g, ''));
                         const useRealContactNumber = (realDigits > existingDigits && realDigits >= 10) || (existingIsGenerated && realDigits >= 10);
 
                         // Se o chat existente tem ID gerado mas o realChat tem ID válido, atualiza o ID também
