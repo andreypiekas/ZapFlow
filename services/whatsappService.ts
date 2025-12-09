@@ -664,10 +664,10 @@ export const sendRealContact = async (
     vcard += `END:VCARD`;
 
     // Payload para Evolution API - sendContact
-    // Formato 1: Usando objeto contacts (formato nativo da Evolution API)
-    const payloadContacts: any = {
+    // Formato 1: Usando objeto contact (singular - formato correto da Evolution API)
+    const payloadContact: any = {
       number: cleanPhone,
-      contacts: {
+      contact: {
         displayName: contactName,
         contacts: [
           {
@@ -686,7 +686,7 @@ export const sendRealContact = async (
         'Content-Type': 'application/json',
         'apikey': getAuthKey(config)
       },
-      body: JSON.stringify(payloadContacts)
+      body: JSON.stringify(payloadContact)
     });
 
     // Se não funcionar, tenta com vCard (formato padrão WhatsApp)
@@ -712,14 +712,21 @@ export const sendRealContact = async (
       });
 
       // Se ainda não funcionar, tenta sendText com vcard (fallback)
+      // IMPORTANTE: sendText requer campo "text" mesmo com vcard
       if (!response.ok) {
+        const payloadVCardWithText = {
+          number: cleanPhone,
+          text: `📇 ${contactName}`, // Campo obrigatório para sendText
+          vcard: vcard,
+          delay: 1200
+        };
         response = await fetch(`${config.baseUrl}/message/sendText/${target}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'apikey': getAuthKey(config)
           },
-          body: JSON.stringify(payloadVCard)
+          body: JSON.stringify(payloadVCardWithText)
         });
       }
     }

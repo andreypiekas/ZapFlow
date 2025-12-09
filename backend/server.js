@@ -120,7 +120,7 @@ const loginLimiter = rateLimit({
 // Rate limiter para rotas de dados (proteção contra abuso de API)
 const dataLimiter = rateLimit({
   windowMs: parseInt(process.env.DATA_RATE_LIMIT_WINDOW_MS || '1') * 60 * 1000, // 1 minuto
-  max: parseInt(process.env.DATA_RATE_LIMIT_MAX || '60'), // 60 requisições por minuto
+  max: parseInt(process.env.DATA_RATE_LIMIT_MAX || '200'), // 200 requisições por minuto (aumentado para evitar 429 em sincronizações frequentes)
   message: {
     error: 'Muitas requisições de dados. Aguarde um momento antes de continuar.',
     retryAfter: '1 minuto'
