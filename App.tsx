@@ -643,10 +643,12 @@ const App: React.FC = () => {
         
         if (realChats.length > 0) {
             setChats(currentChats => {
-                const mergedChats = realChats.map(realChat => {
+                const mergedChats = realChats
+                    .filter(realChat => realChat && realChat.id) // Filtra chats inválidos
+                    .map(realChat => {
                     // Tenta encontrar chat existente por ID ou por contactNumber
                     // IMPORTANTE: Preserva chats existentes que estão atribuídos e em 'open'
-                    let existingChat = currentChats.find(c => c.id === realChat.id);
+                    let existingChat = currentChats.find(c => c && c.id && c.id === realChat.id);
                     
                     // Se não encontrou por ID, tenta encontrar por contactNumber (para casos de IDs gerados)
                     if (!existingChat && realChat.contactNumber) {
@@ -679,9 +681,11 @@ const App: React.FC = () => {
                     }
                     
                     // PRIORIDADE ABSOLUTA: Status do banco tem precedência sobre tudo
-                    const dbChat = dbChatsMap.get(existingChat.id) || dbChatsMap.get(realChat.id);
+                    const dbChat = existingChat && existingChat.id 
+                        ? dbChatsMap.get(existingChat.id) 
+                        : (realChat && realChat.id ? dbChatsMap.get(realChat.id) : undefined);
                     
-                    if (existingChat) {
+                    if (existingChat && realChat) {
                         const newMsgCount = realChat.messages.length;
                         const oldMsgCount = existingChat.messages.length;
                         
