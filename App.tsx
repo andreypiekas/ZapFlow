@@ -1425,11 +1425,14 @@ const App: React.FC = () => {
             wsRef.current = new WebSocket(wsUrl);
             const ws = wsRef.current;
             
+            let handshakeReceived = false;
+            
             ws.onopen = () => {
                 console.log('[App] ✅ WebSocket conectado com sucesso!');
                 // Reset contador de tentativas ao conectar com sucesso
                 wsReconnectAttemptsRef.current = 0;
                 setWsStatus('connected');
+                handshakeReceived = false; // Reset flag
                 // Nota: apiKey já foi enviada na URL, não precisa enviar como mensagem
             };
             
@@ -1448,11 +1451,13 @@ const App: React.FC = () => {
                             
                             // Tipo 0 = CONNECT (handshake inicial) - apenas confirma conexão
                             if (socketIOPacketType === 0) {
+                                handshakeReceived = true;
                                 // Log apenas na primeira vez para não poluir
                                 if (wsReconnectAttemptsRef.current === 0) {
                                     console.log('[App] ✅ WebSocket Socket.IO: Handshake recebido');
                                 }
                                 // Não processa mensagens de CONNECT, apenas confirma que está conectado
+                                // Socket.IO pode manter conexão aberta ou fechar e reconectar - ambos são normais
                                 return;
                             }
                             
@@ -1881,14 +1886,44 @@ const App: React.FC = () => {
                 // Code 1005 = no status code (pode ser reconexão Socket.IO - não é erro)
                 // Code 1006 = conexão anormal (reconecta)
                 
-                // Code 1005 pode ocorrer em reconexões Socket.IO normais, não é erro crítico
-                if (event.code === 1005) {
-                    // Socket.IO pode fechar e reconectar automaticamente, não é erro
-                    // Apenas loga se for a primeira vez
+                // Code 1005 após handshake recebido é comportamento normal do Socket.IO
+                // Socket.IO pode fechar a conexão WebSocket e usar polling HTTP, ou reconectar
+                if (event.code === 1005 && handshakeReceived) {
+                    // Handshake foi recebido com sucesso, então a conexão funcionou
+                    // Socket.IO pode estar fazendo upgrade ou reconexão normal
+                    // Não incrementa contador de tentativas para evitar loop
                     if (wsReconnectAttemptsRef.current === 0) {
-                        console.log('[App] ℹ️ WebSocket reconectando (Socket.IO protocol)...');
+                        console.log('[App] ℹ️ WebSocket Socket.IO: Conexão fechada após handshake (comportamento normal)');
                     }
-                    // Reconecta normalmente
+                    // Reconecta com delay menor (Socket.IO pode estar fazendo upgrade)
+                    const delay = 2000; // 2 segundos para reconexão Socket.IO
+                    wsReconnectTimeoutRef.current = setTimeout(() => {
+                        if (currentUser && apiConfig.baseUrl && !apiConfig.isDemo && wsReconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+                            initWebSocket(true);
+                        }
+                    }, delay);
+                    return; // Não processa como erro
+                }
+                
+                // Code 1005 sem handshake pode ser erro real
+                if (event.code === 1005 && !handshakeReceived) {
+                    // Não recebeu handshake, pode ser erro
+                    wsReconnectAttemptsRef.current += 1;
+                    const delay = Math.min(
+                        INITIAL_RECONNECT_DELAY * Math.pow(2, wsReconnectAttemptsRef.current - 1),
+                        80000
+                    );
+                    if (wsReconnectAttemptsRef.current <= MAX_RECONNECT_ATTEMPTS) {
+                        setWsStatus('connecting');
+                        wsReconnectTimeoutRef.current = setTimeout(() => {
+                            if (currentUser && apiConfig.baseUrl && !apiConfig.isDemo) {
+                                initWebSocket(true);
+                            }
+                        }, delay);
+                    } else {
+                        setWsStatus('failed');
+                    }
+                    return;
                 }
                 
                 // Só reconecta se não foi fechado intencionalmente (code 1000 ou 1001)
