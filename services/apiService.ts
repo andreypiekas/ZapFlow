@@ -600,3 +600,19 @@ export const loadConfig = async (): Promise<any | null> => {
   }
 };
 
+// Limpar chats inválidos (apenas ADMIN)
+export const cleanupInvalidChats = async (): Promise<{ success: boolean; summary?: any; message?: string }> => {
+  try {
+    const response = await apiService.request<{ success: boolean; summary: any; message: string }>('/api/admin/cleanup-invalid-chats', {
+      method: 'POST',
+    });
+    return response;
+  } catch (error: any) {
+    console.error('[ApiService] Erro ao limpar chats inválidos:', error);
+    return { 
+      success: false, 
+      message: error?.message || 'Erro ao executar limpeza de chats inválidos' 
+    };
+  }
+};
+

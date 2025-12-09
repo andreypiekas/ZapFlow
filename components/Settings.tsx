@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { ApiConfig, User, UserRole } from '../types';
-import { Save, Server, Shield, Globe, User as UserIcon, Bell, Lock, RefreshCw, Database, HardDrive, Sparkles } from 'lucide-react';
+import { Save, Server, Shield, Globe, User as UserIcon, Bell, Lock, RefreshCw, Database, HardDrive, Sparkles, Trash2, AlertTriangle, CheckCircle } from 'lucide-react';
 import { fetchAllInstances, fetchInstanceDetails, InstanceInfo } from '../services/whatsappService';
-import { checkApiHealth, getAuthToken } from '../services/apiService';
+import { checkApiHealth, getAuthToken, cleanupInvalidChats } from '../services/apiService';
 import { storageService } from '../services/storageService';
 
 interface SettingsProps {
