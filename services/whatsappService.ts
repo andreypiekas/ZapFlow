@@ -34,6 +34,13 @@ const formatPhoneForApi = (phone: string): string => {
     return clean;
 };
 
+// Função para limpar número de contato SEM adicionar código do país
+// Usado quando queremos preservar o formato exato do número fornecido
+const cleanContactPhone = (phone: string): string => {
+    // Apenas remove caracteres não numéricos, mantém o número como está
+    return phone.replace(/\D/g, '');
+};
+
 // --- CORE SERVICE ---
 
 // Helper interno para encontrar instância ativa de forma blindada
@@ -645,11 +652,12 @@ export const sendRealContact = async (
   const active = await findActiveInstance(config);
   const target = active?.instanceName || config.instanceName;
   
-  // Formata o número de destino
+  // Formata o número de destino (adiciona 55 se necessário)
   const cleanPhone = formatPhoneForApi(phone);
   
-  // Formata o número do contato a ser enviado
-  const cleanContactPhone = formatPhoneForApi(contactPhone);
+  // Limpa o número do contato SEM adicionar código do país
+  // Preserva o formato exato fornecido pelo usuário
+  const cleanContactPhoneNumber = cleanContactPhone(contactPhone);
 
   try {
     // Gera vCard format
@@ -657,7 +665,7 @@ export const sendRealContact = async (
     vcard += `VERSION:3.0\n`;
     vcard += `FN:${contactName}\n`;
     vcard += `N:${contactName};;;;\n`;
-    vcard += `TEL;TYPE=CELL:${cleanContactPhone}\n`;
+    vcard += `TEL;TYPE=CELL:${cleanContactPhoneNumber}\n`;
     if (contactEmail) {
       vcard += `EMAIL:${contactEmail}\n`;
     }
@@ -670,7 +678,7 @@ export const sendRealContact = async (
       contact: [
         {
           fullName: contactName,
-          phoneNumber: cleanContactPhone
+          phoneNumber: cleanContactPhoneNumber
         }
       ],
       delay: 1200
