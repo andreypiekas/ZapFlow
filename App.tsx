@@ -2159,15 +2159,39 @@ const App: React.FC = () => {
   };
 
   const handleUpdateChat = async (updatedChat: Chat) => {
+    console.log('[App] 🔍 [DEBUG] handleUpdateChat CHAMADO:', {
+      chatId: updatedChat.id,
+      status: updatedChat.status,
+      assignedTo: updatedChat.assignedTo,
+      departmentId: updatedChat.departmentId,
+      hasCurrentUser: !!currentUser
+    });
+    
     const chatExists = chats.some(c => c.id === updatedChat.id);
 
     if (chatExists) {
         const oldChat = chats.find(c => c.id === updatedChat.id);
         
+        console.log('[App] 🔍 [DEBUG] handleUpdateChat - Chat existente encontrado:', {
+          oldStatus: oldChat?.status,
+          newStatus: updatedChat.status,
+          oldAssignedTo: oldChat?.assignedTo,
+          newAssignedTo: updatedChat.assignedTo,
+          oldDepartmentId: oldChat?.departmentId,
+          newDepartmentId: updatedChat.departmentId
+        });
+        
         // Verifica se status ou assignedTo mudaram - se sim, salva no banco
         const statusChanged = oldChat && oldChat.status !== updatedChat.status;
         const assignedToChanged = oldChat && oldChat.assignedTo !== updatedChat.assignedTo;
         const departmentIdChanged = oldChat && oldChat.departmentId !== updatedChat.departmentId;
+        
+        console.log('[App] 🔍 [DEBUG] handleUpdateChat - Mudanças detectadas:', {
+          statusChanged,
+          assignedToChanged,
+          departmentIdChanged,
+          willSave: !!(currentUser && (statusChanged || assignedToChanged || departmentIdChanged))
+        });
         
         // Salva no banco se status, assignedTo ou departmentId mudaram
         if (currentUser && (statusChanged || assignedToChanged || departmentIdChanged)) {

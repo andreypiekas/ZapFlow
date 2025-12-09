@@ -313,8 +313,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const filteredChats = chats
     .filter(chat => {
         // 1. Common Search Filter (Applied to all tabs)
-        const matchesSearch = chat.contactName.toLowerCase().includes(filterText.toLowerCase()) ||
-                              chat.contactNumber.includes(filterText) ||
+        const matchesSearch = (chat.contactName || '').toLowerCase().includes(filterText.toLowerCase()) ||
+                              (chat.contactNumber || '').includes(filterText) ||
                               (chat.clientCode && chat.clientCode.includes(filterText));
         
         if (!matchesSearch) return false;
@@ -892,6 +892,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
   const handleTransfer = (deptId: string) => {
     if (!selectedChat) return;
+    console.log('[ChatInterface] 🔍 [DEBUG] handleTransfer chamado para chat:', {
+      chatId: selectedChat.id,
+      currentDepartmentId: selectedChat.departmentId,
+      newDepartmentId: deptId
+    });
     const updatedChat = {
       ...selectedChat,
       departmentId: deptId,
@@ -908,12 +913,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         }
       ]
     };
+    console.log('[ChatInterface] 🔍 [DEBUG] handleTransfer - Chamando onUpdateChat com:', {
+      chatId: updatedChat.id,
+      departmentId: updatedChat.departmentId,
+      assignedTo: updatedChat.assignedTo
+    });
     onUpdateChat(updatedChat);
     setIsTransferModalOpen(false);
   };
 
   const handleFinishChat = (withSurvey: boolean) => {
     if (!selectedChat) return;
+
+    console.log('[ChatInterface] 🔍 [DEBUG] handleFinishChat chamado para chat:', {
+      chatId: selectedChat.id,
+      currentStatus: selectedChat.status,
+      currentAssignedTo: selectedChat.assignedTo,
+      withSurvey
+    });
 
     const endMessage = withSurvey 
       ? 'Atendimento finalizado. Enviamos uma pesquisa de satisfação para o cliente.' 
@@ -939,6 +956,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         }
       ]
     };
+    
+    console.log('[ChatInterface] 🔍 [DEBUG] handleFinishChat - Chamando onUpdateChat com:', {
+      chatId: updatedChat.id,
+      status: updatedChat.status,
+      assignedTo: updatedChat.assignedTo
+    });
     
     // Atualiza o chat
     onUpdateChat(updatedChat);
