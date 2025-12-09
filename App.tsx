@@ -173,7 +173,8 @@ interface Notification {
   type: 'info' | 'warning' | 'success';
 }
 
-// Função auxiliar para encontrar o usuário disponível de um departamento (distribuição round-robin)
+// Função auxiliar para encontrar o operador específico do departamento
+// Retorna o primeiro usuário atribuído ao departamento (não round-robin)
 const findAvailableUserForDepartment = (
   departmentId: string,
   users: User[],
@@ -188,17 +189,8 @@ const findAvailableUserForDepartment = (
     return null;
   }
   
-  // Conta quantos chats 'open' ou 'pending' cada usuário tem
-  const userChatCounts = departmentUsers.map(user => {
-    const assignedChats = chats.filter(
-      chat => chat.assignedTo === user.id && (chat.status === 'open' || chat.status === 'pending')
-    );
-    return { user, count: assignedChats.length };
-  });
-  
-  // Ordena por quantidade de chats (menos chats primeiro) e retorna o primeiro
-  userChatCounts.sort((a, b) => a.count - b.count);
-  return userChatCounts[0]?.user || null;
+  // Retorna o primeiro usuário do departamento (operador específico)
+  return departmentUsers[0] || null;
 };
 
 const App: React.FC = () => {
@@ -603,7 +595,7 @@ const App: React.FC = () => {
             email: u.email || u.username,
             role: u.role as UserRole,
             avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=0D9488&color=fff`,
-            departmentId: undefined, // Não está na tabela users, pode vir de user_data se necessário
+            departmentId: u.departmentId || undefined, // Agora vem do banco de dados
             allowGeneralConnection: false // Não está na tabela users, pode vir de user_data se necessário
           }));
           setUsers(formattedUsers);
@@ -2987,7 +2979,8 @@ const App: React.FC = () => {
               updatedUser.name,
               updatedUser.email,
               updatedUser.role,
-              updatedUser.password // Se houver senha, atualiza
+              updatedUser.password, // Se houver senha, atualiza
+              updatedUser.departmentId // Adiciona departmentId
             );
             if (result.success && result.user) {
               // Atualiza o estado com os dados retornados da API

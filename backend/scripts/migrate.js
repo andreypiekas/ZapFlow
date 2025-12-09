@@ -28,9 +28,16 @@ async function migrate() {
         name VARCHAR(255) NOT NULL,
         email VARCHAR(255),
         role VARCHAR(50) NOT NULL DEFAULT 'AGENT',
+        department_id VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+    
+    // Adicionar coluna department_id se não existir (para migrações existentes)
+    await client.query(`
+      ALTER TABLE users 
+      ADD COLUMN IF NOT EXISTS department_id VARCHAR(255)
     `);
 
     // Criar tabela de dados do usuário (configurações, contatos, etc)

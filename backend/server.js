@@ -365,7 +365,7 @@ app.get('/api/users', authenticateToken, dataLimiter, async (req, res) => {
     }
 
     const result = await pool.query(
-      'SELECT id, username, name, email, role FROM users ORDER BY name',
+      'SELECT id, username, name, email, role, department_id FROM users ORDER BY name',
       []
     );
 
@@ -374,7 +374,8 @@ app.get('/api/users', authenticateToken, dataLimiter, async (req, res) => {
       username: row.username,
       name: row.name,
       email: row.email || row.username,
-      role: row.role
+      role: row.role,
+      departmentId: row.department_id || undefined
     })));
   } catch (error) {
     console.error('Erro ao listar usuários:', error);
@@ -474,7 +475,7 @@ app.put('/api/users/:id', authenticateToken, dataLimiter, async (req, res) => {
       return res.status(400).json({ error: 'ID inválido' });
     }
 
-    const { name, email, role, password } = req.body;
+    const { name, email, role, password, departmentId } = req.body;
 
     const updateFields = [];
     const params = [];
@@ -497,6 +498,10 @@ app.put('/api/users/:id', authenticateToken, dataLimiter, async (req, res) => {
       updateFields.push(`password_hash = $${paramIndex++}`);
       params.push(hashedPassword);
     }
+    if (departmentId !== undefined) {
+      updateFields.push(`department_id = $${paramIndex++}`);
+      params.push(departmentId || null);
+    }
 
     if (updateFields.length === 0) {
       return res.status(400).json({ error: 'Nenhum campo para atualizar' });
@@ -506,7 +511,7 @@ app.put('/api/users/:id', authenticateToken, dataLimiter, async (req, res) => {
     params.push(userId);
 
     const result = await pool.query(
-      `UPDATE users SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING id, username, name, email, role`,
+      `UPDATE users SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING id, username, name, email, role, department_id`,
       params
     );
 
@@ -514,7 +519,17 @@ app.put('/api/users/:id', authenticateToken, dataLimiter, async (req, res) => {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
 
-    res.json({ success: true, user: result.rows[0] });
+    res.json({ 
+      success: true, 
+      user: {
+        id: result.rows[0].id,
+        username: result.rows[0].username,
+        name: result.rows[0].name,
+        email: result.rows[0].email,
+        role: result.rows[0].role,
+        departmentId: result.rows[0].department_id || undefined
+      }
+    });
   } catch (error) {
     console.error('Erro ao atualizar usuário:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });

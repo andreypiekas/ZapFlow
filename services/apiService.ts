@@ -289,11 +289,11 @@ class ApiService {
   }
 
   // Atualizar qualquer usuário (apenas ADMIN)
-  async updateUser(userId: string | number, name?: string, email?: string, role?: string, password?: string): Promise<{ success: boolean; user?: any; error?: string }> {
+  async updateUser(userId: string | number, name?: string, email?: string, role?: string, password?: string, departmentId?: string): Promise<{ success: boolean; user?: any; error?: string }> {
     try {
       const response = await this.request<{ success: boolean; user: any }>(`/api/users/${userId}`, {
         method: 'PUT',
-        body: JSON.stringify({ name, email, role, password }),
+        body: JSON.stringify({ name, email, role, password, departmentId }),
       });
       return response;
     } catch (error: any) {
