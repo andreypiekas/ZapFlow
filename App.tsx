@@ -748,10 +748,14 @@ const App: React.FC = () => {
                                         // pois o departamento foi desatribuído ao fechar o chat
                                         const chatHasDepartment = dbChat?.departmentId || existingChat?.departmentId;
                                         
-                                        console.log(`[App] 🔍 [DEBUG] syncChats: Verificando envio de mensagem de seleção - chatHasDepartment: ${chatHasDepartment}, departments.length: ${departments.length}, realChat.id: ${realChat.id}`);
+                                        // Carrega departamentos diretamente da API para garantir que estão disponíveis
+                                        const departmentsResult = await apiService.getDepartments();
+                                        const availableDepartments = departmentsResult.success && departmentsResult.data ? departmentsResult.data : departments;
+                                        
+                                        console.log(`[App] 🔍 [DEBUG] syncChats: Verificando envio de mensagem de seleção - chatHasDepartment: ${chatHasDepartment}, departments.length: ${availableDepartments.length}, realChat.id: ${realChat.id}`);
                                         
                                         // Se não tem departamento (foi desatribuído ao fechar), SEMPRE envia mensagem de seleção
-                                        if (!chatHasDepartment && departments.length > 0) {
+                                        if (!chatHasDepartment && availableDepartments.length > 0) {
                                             // Envia mensagem de seleção de departamento
                                             // Tenta obter número de várias fontes
                                             const contactNumber = realChat.contactNumber || 
@@ -763,7 +767,7 @@ const App: React.FC = () => {
                                             
                                             if (contactNumber && contactNumber.length >= 10) {
                                                 console.log(`[App] 📤 [DEBUG] syncChats: Chat reaberto sem departamento - Enviando mensagem de seleção de departamento para ${realChat.id} (número: ${contactNumber})`);
-                                                const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, departments);
+                                                const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, availableDepartments);
                                                 
                                                 if (sent) {
                                                     // Adiciona mensagem de sistema
@@ -794,10 +798,10 @@ const App: React.FC = () => {
                                                 console.warn(`[App] ⚠️ [DEBUG] syncChats: Não foi possível enviar mensagem de seleção - número de contato inválido para ${realChat.id} (contactNumber: ${contactNumber})`);
                                             }
                                         } else {
-                                            if (departments.length === 0) {
+                                            if (availableDepartments.length === 0) {
                                                 console.warn(`[App] ⚠️ [DEBUG] syncChats: Não enviando mensagem de seleção - NENHUM DEPARTAMENTO CONFIGURADO. Configure departamentos em Configurações > Departamentos para que a mensagem seja enviada automaticamente.`);
                                             } else {
-                                                console.log(`[App] ⚠️ [DEBUG] syncChats: Não enviando mensagem de seleção - chatHasDepartment: ${chatHasDepartment}, departments.length: ${departments.length}`);
+                                                console.log(`[App] ⚠️ [DEBUG] syncChats: Não enviando mensagem de seleção - chatHasDepartment: ${chatHasDepartment}, departments.length: ${availableDepartments.length}`);
                                             }
                                         }
                                         
