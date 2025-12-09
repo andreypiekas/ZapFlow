@@ -1002,6 +1002,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   // --- ASSIGNMENT & GREETING LOGIC ---
   const handleAssumeChat = () => {
       if (!selectedChat) return;
+      console.log('[ChatInterface] 🔍 [DEBUG] handleAssumeChat chamado para chat:', {
+        chatId: selectedChat.id,
+        currentStatus: selectedChat.status,
+        currentAssignedTo: selectedChat.assignedTo,
+        newAssignedTo: currentUser.id
+      });
       const updatedChat: Chat = {
           ...selectedChat,
           assignedTo: currentUser.id,
@@ -1018,6 +1024,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
               }
           ]
       };
+      console.log('[ChatInterface] 🔍 [DEBUG] handleAssumeChat - Chamando onUpdateChat com:', {
+        chatId: updatedChat.id,
+        status: updatedChat.status,
+        assignedTo: updatedChat.assignedTo
+      });
       onUpdateChat(updatedChat);
   };
 
