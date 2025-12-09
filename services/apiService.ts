@@ -178,6 +178,20 @@ class ApiService {
     }
   }
 
+  // Atualiza status e assignedTo de um chat específico no banco
+  async updateChatStatus(chatId: string, status?: 'open' | 'pending' | 'closed', assignedTo?: string, departmentId?: string | null): Promise<boolean> {
+    try {
+      await this.request(`/api/chats/${encodeURIComponent(chatId)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ status, assignedTo, departmentId }),
+      });
+      return true;
+    } catch (error) {
+      console.error(`[ApiService] Erro ao atualizar status do chat ${chatId}:`, error);
+      return false;
+    }
+  }
+
   // Atualiza o perfil do usuário (nome, email)
   async updateUserProfile(name: string, email?: string): Promise<{ success: boolean; user?: any }> {
     try {

@@ -1106,8 +1106,14 @@ const App: React.FC = () => {
                             finalStatus = 'open';
                         }
                         // Se o chat está atribuído e em 'open', sempre mantém 'open' (preserva após reload)
+                        // IMPORTANTE: Status do banco tem prioridade absoluta se o chat está atribuído
                         else if (existingChat.status === 'open' && existingChat.assignedTo) {
-                            finalStatus = 'open'; // Força 'open' se está atribuído
+                            finalStatus = 'open'; // Força 'open' se está atribuído - nunca volta para 'pending'
+                        }
+                        // Se o chat está atribuído (mesmo que status seja 'pending'), preserva status do banco
+                        else if (existingChat.assignedTo) {
+                            // Se está atribuído, sempre usa status do banco (não permite API sobrescrever)
+                            finalStatus = existingChat.status;
                         }
                         // Caso padrão: usa o status existente (que já é 'open' ou 'pending')
                         else {
@@ -2160,11 +2166,33 @@ const App: React.FC = () => {
     setIsMobileMenuOpen(false);
   };
 
-  const handleUpdateChat = (updatedChat: Chat) => {
+  const handleUpdateChat = async (updatedChat: Chat) => {
     const chatExists = chats.some(c => c.id === updatedChat.id);
 
     if (chatExists) {
         const oldChat = chats.find(c => c.id === updatedChat.id);
+        
+        // Verifica se status ou assignedTo mudaram - se sim, salva no banco
+        const statusChanged = oldChat && oldChat.status !== updatedChat.status;
+        const assignedToChanged = oldChat && oldChat.assignedTo !== updatedChat.assignedTo;
+        const departmentIdChanged = oldChat && oldChat.departmentId !== updatedChat.departmentId;
+        
+        // Salva no banco se status, assignedTo ou departmentId mudaram
+        if (currentUser && (statusChanged || assignedToChanged || departmentIdChanged)) {
+          try {
+            await apiService.updateChatStatus(
+              updatedChat.id,
+              updatedChat.status,
+              updatedChat.assignedTo,
+              updatedChat.departmentId || null
+            );
+            // Log removido para produção - muito verboso
+            // console.log(`[App] ✅ Status do chat ${updatedChat.contactName} salvo no banco: status=${updatedChat.status}, assignedTo=${updatedChat.assignedTo}`);
+          } catch (error) {
+            console.error(`[App] ❌ Erro ao salvar status do chat no banco:`, error);
+          }
+        }
+        
         if (oldChat && currentUser) {
             const newMsgCount = updatedChat.messages.length;
             const oldMsgCount = oldChat.messages.length;

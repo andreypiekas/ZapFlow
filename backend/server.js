@@ -1097,6 +1097,63 @@ app.post('/api/data/:dataType/batch', authenticateToken, dataLimiter, async (req
   }
 });
 
+// ============================================================================
+// Endpoint para atualizar status e assignedTo de um chat específico
+// ============================================================================
+app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const { status, assignedTo, departmentId } = req.body;
+
+    // Busca o chat no user_data
+    const chatResult = await pool.query(
+      `SELECT data_value FROM user_data 
+       WHERE user_id = $1 AND data_type = 'chats' AND data_key = 'default'`,
+      [req.user.id]
+    );
+
+    if (chatResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Chats não encontrados' });
+    }
+
+    const chats = JSON.parse(chatResult.rows[0].data_value);
+    const chatIndex = chats.findIndex((c: any) => c.id === chatId);
+
+    if (chatIndex === -1) {
+      return res.status(404).json({ error: 'Chat não encontrado' });
+    }
+
+    // Atualiza apenas status, assignedTo e departmentId (preserva outros campos)
+    if (status !== undefined) {
+      chats[chatIndex].status = status;
+    }
+    if (assignedTo !== undefined) {
+      chats[chatIndex].assignedTo = assignedTo;
+    }
+    if (departmentId !== undefined) {
+      chats[chatIndex].departmentId = departmentId;
+    }
+    if (status === 'closed') {
+      chats[chatIndex].endedAt = new Date().toISOString();
+    } else if (status === 'open' && chats[chatIndex].endedAt) {
+      chats[chatIndex].endedAt = undefined;
+    }
+
+    // Salva de volta no banco
+    await pool.query(
+      `UPDATE user_data 
+       SET data_value = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $2 AND data_type = 'chats' AND data_key = 'default'`,
+      [JSON.stringify(chats), req.user.id]
+    );
+
+    res.json({ success: true, chat: chats[chatIndex] });
+  } catch (error) {
+    console.error('Erro ao atualizar chat:', error);
+    res.status(500).json({ error: 'Erro ao atualizar chat' });
+  }
+});
+
 // Rota raiz
 app.get('/', (req, res) => {
   res.json({ 
