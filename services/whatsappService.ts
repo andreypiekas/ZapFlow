@@ -663,11 +663,10 @@ export const sendRealContact = async (
     }
     vcard += `END:VCARD`;
 
-    // Payload para Evolution API
-    // IMPORTANTE: A Evolution API exige o campo "text" mesmo para sendContact
-    const payload: any = {
+    // Payload para Evolution API - sendContact
+    // Formato 1: Usando objeto contacts (formato nativo da Evolution API)
+    const payloadContacts: any = {
       number: cleanPhone,
-      text: `📇 ${contactName}`, // Campo obrigatório pela API
       contacts: {
         displayName: contactName,
         contacts: [
@@ -687,19 +686,23 @@ export const sendRealContact = async (
         'Content-Type': 'application/json',
         'apikey': getAuthKey(config)
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payloadContacts)
     });
 
-    // Se não funcionar, tenta com vCard direto
+    // Se não funcionar, tenta com vCard (formato padrão WhatsApp)
     if (!response.ok) {
+      const errorText = await response.text();
+      console.log(`[sendRealContact] sendContact falhou (${response.status}), tentando vCard:`, errorText);
+      
+      // Formato 2: Usando vCard diretamente (formato padrão WhatsApp)
       const payloadVCard = {
         number: cleanPhone,
-        text: `📇 ${contactName}`, // Campo obrigatório pela API
         vcard: vcard,
         delay: 1200
       };
 
-      response = await fetch(`${config.baseUrl}/message/sendText/${target}`, {
+      // Tenta endpoint sendContact com vCard
+      response = await fetch(`${config.baseUrl}/message/sendContact/${target}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -707,6 +710,18 @@ export const sendRealContact = async (
         },
         body: JSON.stringify(payloadVCard)
       });
+
+      // Se ainda não funcionar, tenta sendText com vcard (fallback)
+      if (!response.ok) {
+        response = await fetch(`${config.baseUrl}/message/sendText/${target}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': getAuthKey(config)
+          },
+          body: JSON.stringify(payloadVCard)
+        });
+      }
     }
     
     if (!response.ok) {
