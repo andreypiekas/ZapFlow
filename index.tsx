@@ -1,6 +1,7 @@
 import React, { ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import './src/index.css';
 
 // Filtra logs do console que contêm dados base64 longos (imagens) para não poluir o console
 if (typeof console !== 'undefined') {
