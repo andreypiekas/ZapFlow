@@ -1486,24 +1486,29 @@ const App: React.FC = () => {
           setChats(currentChats => {
             const chatsMap = new Map<string, Chat>();
             
-            // Primeiro, adiciona todos os chats do banco
+            // Primeiro, adiciona todos os chats do banco (apenas se tiverem id válido)
             chatsArray.forEach(chat => {
-              chatsMap.set(chat.id, chat);
+              if (chat && chat.id) {
+                chatsMap.set(chat.id, chat);
+              }
             });
             
             // Depois, adiciona chats atuais que não estão no banco (preserva dados locais)
             currentChats.forEach(chat => {
+              if (!chat || !chat.id) return; // Ignora chats sem id válido
               if (!chatsMap.has(chat.id)) {
                 chatsMap.set(chat.id, chat);
               } else {
                 // Se o chat existe no banco, preserva status, assignedTo e departmentId do banco
-                const dbChat = chatsMap.get(chat.id)!;
-                chatsMap.set(chat.id, {
-                  ...chat,
-                  status: dbChat.status || chat.status,
-                  assignedTo: dbChat.assignedTo || chat.assignedTo,
-                  departmentId: dbChat.departmentId !== undefined ? dbChat.departmentId : chat.departmentId
-                });
+                const dbChat = chatsMap.get(chat.id);
+                if (dbChat) {
+                  chatsMap.set(chat.id, {
+                    ...chat,
+                    status: dbChat.status || chat.status,
+                    assignedTo: dbChat.assignedTo || chat.assignedTo,
+                    departmentId: dbChat.departmentId !== undefined ? dbChat.departmentId : chat.departmentId
+                  });
+                }
               }
             });
             
