@@ -1101,16 +1101,16 @@ const App: React.FC = () => {
                         let finalDepartmentId: string | null;
                         
                         if (dbChat) {
-                            // Chat existe no banco: usa status, assignedTo e departmentId do banco SEMPRE
-                            finalStatus = dbChat.status || existingChat.status || 'pending';
+                            // Chat existe no banco: usa status, assignedTo e departmentId do banco SEMPRE (PRIORIDADE ABSOLUTA)
+                            finalStatus = dbChat.status || 'pending'; // Se não tem status no banco, usa pending
                             finalAssignedTo = dbChat.assignedTo;
-                            finalDepartmentId = dbChat.departmentId !== undefined ? dbChat.departmentId : existingChat.departmentId;
-                        } else if (existingChat.status) {
+                            finalDepartmentId = dbChat.departmentId !== undefined ? dbChat.departmentId : null;
+                        } else if (existingChat && existingChat.status) {
                             // Chat não está no banco mas tem status local: preserva status local
                             finalStatus = existingChat.status;
                             finalAssignedTo = existingChat.assignedTo;
                             finalDepartmentId = existingChat.departmentId;
-                                } else {
+                        } else {
                             // Novo chat sem status: usa status da API (pending para novos chats)
                             finalStatus = realChat.status || 'pending';
                             finalAssignedTo = undefined;
