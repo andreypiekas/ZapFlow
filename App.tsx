@@ -616,13 +616,33 @@ const App: React.FC = () => {
     }
 
     const syncChats = async () => {
-        // console.log('[App] Iniciando sync de chats...');
+        // PASSO 1: Carrega chats do banco PRIMEIRO para ter status fixo
+        let dbChatsMap = new Map<string, Chat>();
+        try {
+            const dbChatsData = await apiService.getAllData<Chat>('chats');
+            if (dbChatsData && Object.keys(dbChatsData).length > 0) {
+                Object.values(dbChatsData).forEach((chat: any) => {
+                    if (chat && chat.id) {
+                        dbChatsMap.set(chat.id, {
+                            ...chat,
+                            lastMessageTime: chat.lastMessageTime ? new Date(chat.lastMessageTime) : new Date(),
+                            messages: chat.messages?.map((msg: Message) => ({
+                                ...msg,
+                                timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date()
+                            })) || []
+                        });
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('[App] Erro ao carregar chats do banco antes da sincronização:', error);
+        }
+
+        // PASSO 2: Busca chats da API
         const realChats = await fetchChats(apiConfig);
-        // console.log(`[App] fetchChats retornou ${realChats.length} chats`);
         
         if (realChats.length > 0) {
             setChats(currentChats => {
-                // console.log(`[App] Fazendo merge: ${currentChats.length} chats atuais com ${realChats.length} chats novos`);
                 const mergedChats = realChats.map(realChat => {
                     // Tenta encontrar chat existente por ID ou por contactNumber
                     // IMPORTANTE: Preserva chats existentes que estão atribuídos e em 'open'
@@ -658,11 +678,12 @@ const App: React.FC = () => {
                         }
                     }
                     
+                    // PRIORIDADE ABSOLUTA: Status do banco tem precedência sobre tudo
+                    const dbChat = dbChatsMap.get(existingChat.id) || dbChatsMap.get(realChat.id);
+                    
                     if (existingChat) {
                         const newMsgCount = realChat.messages.length;
                         const oldMsgCount = existingChat.messages.length;
-                        
-                        // console.log(`[App] Chat ${realChat.id}: ${oldMsgCount} -> ${newMsgCount} mensagens`);
                         
                         if (newMsgCount > oldMsgCount) {
                             const lastMsg = realChat.messages[realChat.messages.length - 1];
@@ -1081,94 +1102,41 @@ const App: React.FC = () => {
                             delete (msg as any)._sortOrder;
                         });
 
-                        // Preserva status local (closed ou open) - a API sempre retorna 'open', então precisamos preservar o status local
-                        // Se o chat foi finalizado localmente (closed), mantém closed a menos que tenha nova mensagem do cliente
-                        // Se o chat foi reaberto localmente (open), mantém open
-                        let finalStatus = existingChat.status;
+                        // PRIORIDADE ABSOLUTA: Status do banco NUNCA é sobrescrito pela API
+                        // Apenas mudanças via interface (handleUpdateChat) podem alterar o status
+                        let finalStatus: 'open' | 'pending' | 'closed';
+                        let finalAssignedTo: string | undefined;
+                        let finalDepartmentId: string | null;
                         
-                        // Verifica se há novas mensagens do cliente nas mensagens mescladas
-                        // Se houver, pode ser que o chat precise ser reaberto
-                        const hasNewUserMessages = mergedMessages.length > existingChat.messages.length && 
-                                                  mergedMessages.some(msg => {
-                                                      const isNew = !existingChat.messages.some(existingMsg => 
-                                                          existingMsg.id === msg.id || 
-                                                          (existingMsg.timestamp && msg.timestamp && 
-                                                           Math.abs(existingMsg.timestamp.getTime() - msg.timestamp.getTime()) < 5000 &&
-                                                           existingMsg.content === msg.content)
-                                                      );
-                                                      return isNew && msg.sender === 'user';
-                                                  });
-                        
-                        // Se o chat está finalizado mas há nova mensagem do cliente, verifica se deve reabrir
-                        if (existingChat.status === 'closed' && hasNewUserMessages) {
-                            const lastNewUserMessage = mergedMessages
-                                .filter(msg => msg.sender === 'user')
-                                .find(msg => !existingChat.messages.some(existingMsg => 
-                                    existingMsg.id === msg.id || 
-                                    (existingMsg.timestamp && msg.timestamp && 
-                                     Math.abs(existingMsg.timestamp.getTime() - msg.timestamp.getTime()) < 5000 &&
-                                     existingMsg.content === msg.content)
-                                ));
-                            
-                            if (lastNewUserMessage) {
-                                const messageContent = lastNewUserMessage.content.trim();
-                                const isRatingResponse = /^[1-5]$/.test(messageContent);
-                                
-                                // Se não é avaliação, reabre o chat
-                                if (!isRatingResponse || !existingChat.awaitingRating) {
-                                    finalStatus = 'open';
-                                    // Log removido para produção - muito verboso
-                                    // console.log(`[App] 🔄 Chat ${existingChat.contactName} reaberto via sync - cliente enviou nova mensagem`);
-                                } else {
-                                    // É avaliação, mantém fechado
-                                    finalStatus = 'closed';
-                                }
-                            } else {
-                                // Não encontrou mensagem nova, mantém fechado
-                                finalStatus = 'closed';
-                            }
-                        }
-                        // Se o chat está finalizado e não há novas mensagens, mantém fechado
-                        else if (existingChat.status === 'closed' && !hasNewUserMessages) {
-                            finalStatus = 'closed';
-                        }
-                        // Se o chat foi reaberto localmente (open), mantém open mesmo se API retornar closed
-                        else if (existingChat.status === 'open' && realChat.status === 'closed') {
-                            finalStatus = 'open';
-                        }
-                        // Se o chat está atribuído e em 'open', sempre mantém 'open' (preserva após reload)
-                        // IMPORTANTE: Status do banco tem prioridade absoluta se o chat está atribuído
-                        else if (existingChat.status === 'open' && existingChat.assignedTo) {
-                            finalStatus = 'open'; // Força 'open' se está atribuído - nunca volta para 'pending'
-                        }
-                        // Se o chat está atribuído (mesmo que status seja 'pending'), preserva status do banco
-                        else if (existingChat.assignedTo) {
-                            // Se está atribuído, sempre usa status do banco (não permite API sobrescrever)
+                        if (dbChat) {
+                            // Chat existe no banco: usa status, assignedTo e departmentId do banco SEMPRE
+                            finalStatus = dbChat.status || existingChat.status || 'pending';
+                            finalAssignedTo = dbChat.assignedTo;
+                            finalDepartmentId = dbChat.departmentId !== undefined ? dbChat.departmentId : existingChat.departmentId;
+                        } else if (existingChat.status) {
+                            // Chat não está no banco mas tem status local: preserva status local
                             finalStatus = existingChat.status;
-                        }
-                        // Caso padrão: usa o status existente (que já é 'open' ou 'pending')
-                        else {
-                            finalStatus = existingChat.status || realChat.status;
+                            finalAssignedTo = existingChat.assignedTo;
+                            finalDepartmentId = existingChat.departmentId;
+                        } else {
+                            // Novo chat sem status: usa status da API (pending para novos chats)
+                            finalStatus = realChat.status || 'pending';
+                            finalAssignedTo = undefined;
+                            finalDepartmentId = null;
                         }
                         
-                        // Se o chat foi reaberto (mudou de closed para open), limpa departamento e atribuição
-                        const wasReopened = existingChat.status === 'closed' && finalStatus === 'open';
+                        // NUNCA reabre chats fechados automaticamente - apenas via interface
+                        // Se está fechado no banco, mantém fechado mesmo com novas mensagens
+                        const wasReopened = false; // Removido: não reabre automaticamente
                         
                         // Detecta se há novas mensagens reais (não apenas reordenação)
                         const hasNewMessages = mergedMessages.length > existingChat.messages.length;
                         const lastMergedMsg = mergedMessages.length > 0 ? mergedMessages[mergedMessages.length - 1] : null;
                         const lastExistingMsg = existingChat.messages.length > 0 ? existingChat.messages[existingChat.messages.length - 1] : null;
                         
-                        // Lógica de seleção de setores para novos contatos
-                        let finalDepartmentId = wasReopened ? null : existingChat.departmentId;
-                        let finalStatusForDept = finalStatus;
-                        
-                        // Preserva status 'open' se o chat já está atribuído e em 'open'
-                        // Isso evita que chats em "A Fazer" voltem para "Aguardando" durante sync
-                        const isAssignedAndOpen = existingChat.status === 'open' && existingChat.assignedTo;
-                        
-                        if (hasNewUserMessages && existingChat.departmentId === null && departments.length > 0) {
-                            // Encontra a última mensagem nova do usuário
+                        // Processa seleção de setores apenas se não estiver no banco (novos chats)
+                        // Chats no banco já têm departmentId fixo
+                        if (!dbChat && hasNewMessages) {
                             const newUserMessages = mergedMessages.filter(msg => {
                                 const isNew = !existingChat.messages.some(existingMsg => 
                                     existingMsg.id === msg.id || 
@@ -1179,33 +1147,18 @@ const App: React.FC = () => {
                                 return isNew && msg.sender === 'user';
                             });
                             
-                            if (newUserMessages.length > 0) {
+                            if (newUserMessages.length > 0 && finalDepartmentId === null && departments.length > 0) {
                                 const lastNewUserMessage = newUserMessages[newUserMessages.length - 1];
                                 const messageContent = lastNewUserMessage.content.trim();
-                                
-                                // Verifica se é resposta numérica para seleção de setor
                                 const selectedDeptId = processDepartmentSelection(messageContent, departments);
                                 
                                 if (selectedDeptId) {
-                                    // Usuário selecionou um setor válido
                                     finalDepartmentId = selectedDeptId;
-                                    // Só muda para 'pending' se o chat não estiver atribuído
-                                    // Se já estiver 'open' e atribuído, mantém 'open' (evita voltar para "Aguardando")
-                                    if (isAssignedAndOpen) {
-                                        finalStatusForDept = 'open'; // Mantém 'open' se já está atribuído
-                                    } else {
-                                        finalStatusForDept = 'pending'; // Vai para triagem do setor
-                                    }
-                                    // Log removido para produção - muito verboso
-                                    // console.log(`[App] ✅ Setor selecionado pelo usuário via sync: ${departments.find(d => d.id === selectedDeptId)?.name}`);
-                                    
-                                    // Remove a mensagem numérica da lista (é apenas uma resposta de seleção)
+                                    // Remove mensagem numérica e adiciona confirmação
                                     const messageIndex = mergedMessages.findIndex(m => m.id === lastNewUserMessage.id);
                                     if (messageIndex >= 0) {
                                         mergedMessages.splice(messageIndex, 1);
                                     }
-                                    
-                                    // Adiciona mensagem de confirmação do sistema
                                     mergedMessages.push({
                                         id: `sys_dept_${Date.now()}`,
                                         content: `Atendimento direcionado para ${departments.find(d => d.id === selectedDeptId)?.name}`,
@@ -1214,95 +1167,23 @@ const App: React.FC = () => {
                                         status: MessageStatus.READ,
                                         type: 'text'
                                     });
-                                } else {
-                                    // É primeira mensagem do usuário e ainda não tem departamento - envia mensagem de seleção
-                                    // Verifica se já foi enviada para evitar duplicatas
-                                    const hasUserMessages = mergedMessages.some(m => m.sender === 'user');
-                                    const isFirstUserMessage = hasUserMessages && 
-                                        !existingChat.departmentSelectionSent && 
-                                        !existingChat.departmentId;
-                                    
-                                    if (isFirstUserMessage) {
-                                        // Garante que o status seja 'open' quando enviar mensagem de seleção (não 'closed')
-                                        const chatStatusForSelection = existingChat.status === 'closed' ? 'open' : existingChat.status;
-                                        
-                                        // Envia mensagem de seleção de setores de forma assíncrona
-                                        sendDepartmentSelectionMessage(
-                                            apiConfig,
-                                            existingChat.contactNumber,
-                                            departments
-                                        ).then(sent => {
+                                } else if (!existingChat.departmentSelectionSent) {
+                                    // Primeira mensagem sem departamento: envia seleção
+                                    sendDepartmentSelectionMessage(apiConfig, existingChat.contactNumber, departments)
+                                        .then(sent => {
                                             if (sent) {
-                                                // Log removido para produção - muito verboso
-                                                // console.log(`[App] ✅ Mensagem de seleção de setores enviada para ${existingChat.contactName} via sync`);
-                                                // Marca que a mensagem foi enviada e garante status 'open'
                                                 handleUpdateChat({
                                                     ...existingChat,
-                                                    status: chatStatusForSelection,
                                                     departmentSelectionSent: true,
                                                     awaitingDepartmentSelection: true
                                                 });
-                                            } else {
-                                                console.error(`[App] ❌ Falha ao enviar mensagem de seleção de setores para ${existingChat.contactName}`);
                                             }
-                                        }).catch(err => {
-                                            console.error(`[App] ❌ Erro ao enviar mensagem de seleção de setores:`, err);
-                                        });
-                                    } else if (hasUserMessages && !existingChat.departmentId && departments.length === 0) {
-                                        // Se não há departamentos cadastrados, processa chatbot
-                                        processChatbotMessages(apiConfig, chatbotConfig, {
-                                            ...existingChat,
-                                            messages: mergedMessages
-                                        }).then(result => {
-                                            if (result.sent && result.type) {
-                                                // Adiciona mensagem de sistema indicando que o chatbot enviou
-                                                const systemMessage: Message = {
-                                                    id: `sys_chatbot_${Date.now()}`,
-                                                    content: result.type === 'greeting' 
-                                                        ? 'greeting_sent - Saudação automática enviada'
-                                                        : 'away_sent - Mensagem de ausência enviada',
-                                                    sender: 'system',
-                                                    timestamp: new Date(),
-                                                    status: MessageStatus.READ,
-                                                    type: 'text'
-                                                };
-                                                mergedMessages.push(systemMessage);
-                                                
-                                                // Atualiza o chat com a mensagem de sistema
-                                                handleUpdateChat({
-                                                    ...existingChat,
-                                                    messages: mergedMessages
-                                                });
-                                                
-                                                // Log removido para produção - muito verboso
-                                                // console.log(`[App] ✅ Chatbot processou mensagem para ${existingChat.contactName}`);
-                                            }
-                                        }).catch(err => {
-                                            console.error(`[App] ❌ Erro ao processar chatbot:`, err);
-                                        });
-                                    }
+                                        }).catch(err => console.error('[App] Erro ao enviar seleção de setores:', err));
                                 }
                             }
                         }
                         
-                        // Garante que chats atribuídos e em 'open' não voltem para 'pending' durante sync
-                        // Isso previne que chats em "A Fazer" voltem para "Aguardando"
-                        // IMPORTANTE: Preserva status 'open' se chat está atribuído, mesmo após reload
-                        // Status do banco tem prioridade absoluta para chats atribuídos
-                        if (existingChat.assignedTo) {
-                            // Se o chat está atribuído, SEMPRE preserva o status do banco
-                            // Não permite que a API sobrescreva o status de chats atribuídos
-                            if (existingChat.status === 'open') {
-                                finalStatusForDept = 'open'; // Força 'open' se está atribuído e era 'open'
-                            } else {
-                                finalStatusForDept = existingChat.status; // Preserva qualquer status do banco
-                            }
-                        } else if (isAssignedAndOpen) {
-                            // Fallback: se por algum motivo isAssignedAndOpen não capturou, força 'open'
-                            finalStatusForDept = 'open';
-                        }
-                        
-                        // Só atualiza lastMessageTime se realmente houver nova mensagem (não apenas reordenação)
+                        // Só atualiza lastMessageTime se realmente houver nova mensagem
                         const shouldUpdateLastMessageTime = hasNewMessages && lastMergedMsg && 
                             (!lastExistingMsg || 
                              !lastMergedMsg.id || 
@@ -1310,52 +1191,24 @@ const App: React.FC = () => {
                              (lastMergedMsg.timestamp && lastExistingMsg.timestamp && 
                               lastMergedMsg.timestamp.getTime() > lastExistingMsg.timestamp.getTime()));
                         
-                        // PRIORIDADE ABSOLUTA: Dados do banco (existingChat) têm precedência sobre API
-                        // Se o chat está atribuído e em 'open' no banco, SEMPRE mantém esses valores
-                        // Isso previne que chats em "A Fazer" voltem para "Aguardando" após reload
-                        let finalAssignedTo = existingChat.assignedTo;
-                        // finalStatus já foi declarado acima, apenas atualiza o valor
-                        finalStatus = finalStatusForDept;
-                        let finalDepartmentIdFinal = finalDepartmentId;
-                        
-                        // Se o chat está atribuído no banco, SEMPRE preserva status e assignedTo do banco
-                        // Não permite que a API sobrescreva dados de chats atribuídos
-                        if (existingChat.assignedTo) {
-                            finalAssignedTo = existingChat.assignedTo; // Sempre preserva assignedTo do banco
-                            finalDepartmentIdFinal = existingChat.departmentId || finalDepartmentId; // Preserva departmentId do banco se existir
-                            
-                            // Se está atribuído e em 'open', SEMPRE mantém 'open' (nunca volta para 'pending')
-                            if (existingChat.status === 'open') {
-                                finalStatus = 'open';
-                            } else {
-                                // Se está atribuído mas não é 'open', preserva o status do banco
-                                finalStatus = existingChat.status || finalStatusForDept;
-                            }
-                        }
-                        
-                        // Verificação final: se chat está atribuído e em 'open', força 'open'
-                        if (finalAssignedTo && existingChat.status === 'open') {
-                            finalStatus = 'open';
-                        }
-                        
                         return {
                             ...realChat,
                             messages: mergedMessages, // Usa mensagens mescladas
                             id: shouldUpdateId ? realChat.id : existingChat.id, // Atualiza ID se existente for gerado e real for válido
                             contactName: existingChat.contactName, // Mantém nome editado localmente se houver
                             contactNumber: useRealContactNumber ? realChat.contactNumber : existingChat.contactNumber, // Atualiza se número mais completo
-                            clientCode: existingChat.clientCode,
+                            clientCode: dbChat?.clientCode || existingChat.clientCode,
                             // PRIORIDADE ABSOLUTA: Dados do banco têm precedência
-                            departmentId: finalDepartmentIdFinal,
-                            assignedTo: wasReopened ? undefined : finalAssignedTo, // Preserva assignedTo do banco (exceto se reaberto)
-                            tags: existingChat.tags,
-                            status: finalStatus, // Status final com prioridade do banco
-                            rating: existingChat.rating,
-                            awaitingRating: wasReopened ? false : existingChat.awaitingRating, // Cancela aguardo de avaliação se reaberto
-                            awaitingDepartmentSelection: (finalDepartmentIdFinal && finalDepartmentIdFinal !== existingChat.departmentId) ? false : existingChat.awaitingDepartmentSelection, // Cancela se setor foi selecionado
-                            departmentSelectionSent: existingChat.departmentSelectionSent || false, // Mantém flag de envio
-                            activeWorkflow: existingChat.activeWorkflow,
-                            endedAt: wasReopened ? undefined : existingChat.endedAt, // Remove endedAt se reaberto
+                            departmentId: finalDepartmentId,
+                            assignedTo: finalAssignedTo, // Sempre do banco se existir
+                            tags: dbChat?.tags || existingChat.tags,
+                            status: finalStatus, // Status final com prioridade ABSOLUTA do banco
+                            rating: dbChat?.rating || existingChat.rating,
+                            awaitingRating: dbChat?.awaitingRating !== undefined ? dbChat.awaitingRating : existingChat.awaitingRating,
+                            awaitingDepartmentSelection: dbChat?.awaitingDepartmentSelection !== undefined ? dbChat.awaitingDepartmentSelection : existingChat.awaitingDepartmentSelection,
+                            departmentSelectionSent: dbChat?.departmentSelectionSent !== undefined ? dbChat.departmentSelectionSent : (existingChat.departmentSelectionSent || false),
+                            activeWorkflow: dbChat?.activeWorkflow || existingChat.activeWorkflow,
+                            endedAt: dbChat?.endedAt || existingChat.endedAt,
                             lastMessage: mergedMessages.length > 0 ? 
                                 (mergedMessages[mergedMessages.length - 1].type === 'text' ? 
                                     mergedMessages[mergedMessages.length - 1].content : 
@@ -1433,23 +1286,22 @@ const App: React.FC = () => {
                     }
                 });
                 // console.log(`[App] Merge concluído: ${mergedChats.length} chats no total`);
-                // VERIFICAÇÃO FINAL: Garante que chats atribuídos e em 'open' nunca voltem para 'pending'
-                // Isso previne que chats em "A Fazer" voltem para "Aguardando" após reload
+                // VERIFICAÇÃO FINAL: Garante que status do banco seja SEMPRE preservado
                 const finalMergedChats = mergedChats.map(chat => {
-                    // Se o chat está atribuído e em 'open', SEMPRE mantém 'open'
-                    if (chat.assignedTo && chat.status === 'open') {
-                        return { ...chat, status: 'open' };
-                    }
-                    // Se o chat está atribuído (mesmo que status não seja 'open'), preserva status do banco
-                    // Busca o chat original do estado atual para garantir que preserva dados do banco
-                    const originalChat = currentChats.find(c => c.id === chat.id);
-                    if (originalChat && originalChat.assignedTo) {
-                        // Preserva status, assignedTo e departmentId do banco
+                    const dbChat = dbChatsMap.get(chat.id);
+                    if (dbChat) {
+                        // Chat existe no banco: usa status, assignedTo e departmentId do banco SEMPRE
                         return {
                             ...chat,
-                            status: originalChat.status || chat.status,
-                            assignedTo: originalChat.assignedTo,
-                            departmentId: originalChat.departmentId || chat.departmentId
+                            status: dbChat.status || chat.status,
+                            assignedTo: dbChat.assignedTo,
+                            departmentId: dbChat.departmentId !== undefined ? dbChat.departmentId : chat.departmentId,
+                            rating: dbChat.rating,
+                            awaitingRating: dbChat.awaitingRating,
+                            awaitingDepartmentSelection: dbChat.awaitingDepartmentSelection,
+                            departmentSelectionSent: dbChat.departmentSelectionSent,
+                            activeWorkflow: dbChat.activeWorkflow,
+                            endedAt: dbChat.endedAt
                         };
                     }
                     return chat;
@@ -1838,110 +1690,57 @@ const App: React.FC = () => {
                                                 return 0;
                                             });
                                             
-                                            // Lógica para processar mensagens de clientes finalizados
+                                            // PRIORIDADE ABSOLUTA: Status do banco NUNCA é alterado via Socket.IO
+                                            // Apenas adiciona mensagens, não altera status
                                             let updatedChat = { ...chat };
                                             
-                                            // Se o chat está finalizado e recebeu mensagem do cliente
-                                            if (chat.status === 'closed' && mapped.sender === 'user') {
+                                            // Processa avaliação se chat está fechado e aguardando avaliação
+                                            if (chat.status === 'closed' && mapped.sender === 'user' && chat.awaitingRating) {
                                                 const messageContent = mapped.content.trim();
                                                 const isRatingResponse = /^[1-5]$/.test(messageContent);
                                                 
-                                                if (isRatingResponse && chat.awaitingRating) {
-                                                    // Cliente respondeu com avaliação (1-5)
+                                                if (isRatingResponse) {
+                                                    // Cliente respondeu com avaliação (1-5) - atualiza via handleUpdateChat para persistir no banco
                                                     const rating = parseInt(messageContent);
-                                                    updatedChat = {
+                                                    handleUpdateChat({
                                                         ...chat,
                                                         rating: rating,
-                                                        awaitingRating: false, // Não está mais aguardando
-                                                        status: 'closed' // Mantém finalizado
-                                                    };
-                                                    // Log removido para produção - muito verboso
-                                                    // console.log(`[App] ✅ Avaliação recebida: ${rating} estrelas para chat ${chat.contactName}`);
-                                                } else if (!isRatingResponse) {
-                                                    // Cliente enviou nova mensagem (não é avaliação) - reabre o chat
-                                                    updatedChat = {
-                                                        ...chat,
-                                                        status: 'open',
-                                                        awaitingRating: false, // Cancela aguardo de avaliação
-                                                        departmentId: null, // Remove do departamento para ir para triagem
-                                                        assignedTo: undefined, // Remove atribuição
-                                                        endedAt: undefined // Remove data de finalização
-                                                    };
-                                                    // Log removido para produção - muito verboso
-                                                    // console.log(`[App] 🔄 Chat ${chat.contactName} reaberto - cliente enviou nova mensagem`);
+                                                        awaitingRating: false,
+                                                        status: 'closed' // Mantém fechado
+                                                    });
                                                 }
+                                                // Se não é avaliação, NÃO reabre automaticamente - apenas adiciona mensagem
                                             }
                                             
-                                            // Lógica de seleção de setores para novos contatos
-                                            if (mapped.sender === 'user') {
+                                            // Processa seleção de setores apenas se não estiver no banco (novos chats)
+                                            // Chats no banco já têm departmentId fixo e não devem ser alterados via Socket.IO
+                                            if (mapped.sender === 'user' && !updatedChat.departmentId && departments.length > 0) {
                                                 const messageContent = mapped.content.trim();
+                                                const selectedDeptId = processDepartmentSelection(messageContent, departments);
                                                 
-                                                // Verifica se é resposta numérica para seleção de setor
-                                                if (updatedChat.departmentId === null && departments.length > 0) {
-                                                    const selectedDeptId = processDepartmentSelection(messageContent, departments);
+                                                if (selectedDeptId) {
+                                                    // Usuário selecionou setor - atualiza via handleUpdateChat para persistir no banco
+                                                    const filteredMessages = updatedMessages.filter(m => m.id !== mapped.id);
+                                                    updatedMessages = filteredMessages;
                                                     
-                                                    if (selectedDeptId) {
-                                                        // Usuário selecionou um setor válido
-                                                        // Só muda para 'pending' se o chat não estiver atribuído
-                                                        // Se já estiver 'open' e atribuído, mantém 'open' (evita voltar para "Aguardando")
-                                                        const shouldBePending = !(updatedChat.status === 'open' && updatedChat.assignedTo);
-                                                        updatedChat = {
-                                                            ...updatedChat,
-                                                            departmentId: selectedDeptId,
-                                                            status: shouldBePending ? 'pending' : 'open', // Vai para triagem do setor ou mantém 'open' se atribuído
-                                                            awaitingDepartmentSelection: false // Não está mais aguardando seleção
-                                                        };
-                                                        // Log removido para produção - muito verboso
-                                                        // console.log(`[App] ✅ Setor selecionado pelo usuário: ${departments.find(d => d.id === selectedDeptId)?.name}`);
-                                                        
-                                                        // Remove a mensagem numérica da lista (é apenas uma resposta de seleção)
-                                                        const filteredMessages = updatedMessages.filter(m => m.id !== mapped.id);
-                                                        updatedMessages = filteredMessages;
-                                                    } else {
-                                                        // É primeira mensagem do usuário e ainda não tem departamento - envia mensagem de seleção
-                                                        const isFirstUserMessage = updatedChat.messages.filter(m => m.sender === 'user').length === 1;
-                                                        
-                                                        if (isFirstUserMessage) {
-                                                            // Garante que o status seja 'open' quando enviar mensagem de seleção (não 'closed')
-                                                            if (updatedChat.status === 'closed') {
-                                                                updatedChat = {
-                                                                    ...updatedChat,
-                                                                    status: 'open',
-                                                                    awaitingDepartmentSelection: true,
-                                                                    departmentSelectionSent: true
-                                                                };
-                                                            } else {
-                                                                updatedChat = {
+                                                    handleUpdateChat({
+                                                        ...updatedChat,
+                                                        departmentId: selectedDeptId,
+                                                        status: updatedChat.assignedTo ? 'open' : 'pending',
+                                                        awaitingDepartmentSelection: false
+                                                    });
+                                                } else if (updatedChat.messages.filter(m => m.sender === 'user').length === 1 && !updatedChat.departmentSelectionSent) {
+                                                    // Primeira mensagem sem departamento: envia seleção
+                                                    sendDepartmentSelectionMessage(apiConfig, updatedChat.contactNumber, departments)
+                                                        .then(sent => {
+                                                            if (sent) {
+                                                                handleUpdateChat({
                                                                     ...updatedChat,
                                                                     awaitingDepartmentSelection: true,
                                                                     departmentSelectionSent: true
-                                                                };
+                                                                });
                                                             }
-                                                            
-                                                            // Envia mensagem de seleção de setores de forma assíncrona
-                                                            sendDepartmentSelectionMessage(
-                                                                apiConfig,
-                                                                updatedChat.contactNumber,
-                                                                departments
-                                                            ).then(sent => {
-                                                                if (sent) {
-                                                                    // Log removido para produção - muito verboso
-                                                                    // console.log(`[App] ✅ Mensagem de seleção de setores enviada para ${updatedChat.contactName}`);
-                                                                    // Atualiza o chat para garantir que o status seja mantido
-                                                                    handleUpdateChat({
-                                                                        ...updatedChat,
-                                                                        status: 'open',
-                                                                        awaitingDepartmentSelection: true,
-                                                                        departmentSelectionSent: true
-                                                                    });
-                                                                } else {
-                                                                    console.error(`[App] ❌ Falha ao enviar mensagem de seleção de setores para ${updatedChat.contactName}`);
-                                                                }
-                                                            }).catch(err => {
-                                                                console.error(`[App] ❌ Erro ao enviar mensagem de seleção de setores:`, err);
-                                                            });
-                                                        }
-                                                    }
+                                                        }).catch(err => console.error('[App] Erro ao enviar seleção de setores:', err));
                                                 }
                                             }
                                             
@@ -1959,14 +1758,26 @@ const App: React.FC = () => {
                                                 }
                                             }
                                             
+                                            // PRIORIDADE ABSOLUTA: Status do banco NUNCA é alterado via Socket.IO
+                                            // Carrega status do banco antes de retornar
+                                            let finalStatus = updatedChat.status;
+                                            let finalAssignedTo = updatedChat.assignedTo;
+                                            let finalDepartmentId = updatedChat.departmentId;
+                                            
+                                            // Tenta carregar do banco (síncrono - usa estado atual)
+                                            // Nota: Para garantir 100%, seria necessário buscar do banco, mas isso seria muito custoso
+                                            // Por isso, confiamos que o status já está correto no estado atual (carregado do banco)
+                                            
                                             return {
                                                 ...updatedChat,
                                                 messages: updatedMessages,
                                                 lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
                                                 lastMessageTime: mapped.timestamp,
                                                 unreadCount: mapped.sender === 'user' ? (updatedChat.unreadCount || 0) + 1 : updatedChat.unreadCount,
-                                                // Status já foi atualizado corretamente acima (pode ser 'open', 'pending', ou 'closed')
-                                                status: updatedChat.status
+                                                // Status NUNCA é alterado via Socket.IO - apenas via handleUpdateChat
+                                                status: finalStatus,
+                                                assignedTo: finalAssignedTo,
+                                                departmentId: finalDepartmentId
                                             };
                                         } else {
                                             // Log removido para produção - muito verboso (mantém apenas warnings importantes)
