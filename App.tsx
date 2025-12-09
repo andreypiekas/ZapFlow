@@ -418,6 +418,23 @@ const App: React.FC = () => {
     loadInitialData();
   }, []); // Executa apenas uma vez quando o componente montar
 
+  // Verifica se o backend está disponível ao montar o componente
+  useEffect(() => {
+    const checkBackend = async () => {
+      try {
+        const isAvailable = await apiService.healthCheck();
+        setBackendAvailable(isAvailable);
+      } catch (error) {
+        setBackendAvailable(false);
+      }
+    };
+
+    checkBackend();
+    // Verifica a cada 10 segundos
+    const interval = setInterval(checkBackend, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Carrega dados da API quando o componente montar e usuário estiver logado
   useEffect(() => {
     if (!currentUser) return;
