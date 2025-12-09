@@ -664,18 +664,16 @@ export const sendRealContact = async (
     vcard += `END:VCARD`;
 
     // Payload para Evolution API - sendContact
-    // Formato 1: Usando objeto contact (singular - formato correto da Evolution API)
+    // Formato 1: contact deve ser um ARRAY diretamente (não um objeto)
     const payloadContact: any = {
       number: cleanPhone,
-      contact: {
-        displayName: contactName,
-        contacts: [
-          {
-            name: contactName,
-            number: cleanContactPhone
-          }
-        ]
-      },
+      contact: [
+        {
+          displayName: contactName,
+          name: contactName,
+          number: cleanContactPhone
+        }
+      ],
       delay: 1200
     };
 
