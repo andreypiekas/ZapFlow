@@ -1321,13 +1321,51 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             } as Chat;
         });
 
-        // 5. Consolida chats duplicados (mesmo número = mesmo chat)
+        // 5. FILTRA CHATS INVÁLIDOS antes de consolidar
+        // Remove chats que não têm número válido, mensagens válidas ou são placeholders vazios
+        const validChats = mappedChats.filter((chat: Chat) => {
+            // Extrai número do contactNumber ou ID
+            const contactNumber = chat.contactNumber?.replace(/\D/g, '') || '';
+            const chatIdNumber = chat.id.split('@')[0].replace(/\D/g, '');
+            const hasValidNumber = (contactNumber.length >= 10 && contactNumber.length <= 14 && /^\d+$/.test(contactNumber)) ||
+                                   (chatIdNumber.length >= 10 && chatIdNumber.length <= 14 && /^\d+$/.test(chatIdNumber));
+            
+            // Detecta IDs gerados (cmin*, cmid*, cmio*, cmip*, cmit*, cmiu*)
+            const idIsGenerated = chat.id.includes('cmin') || 
+                                  chat.id.includes('cmid') || 
+                                  chat.id.includes('cmio') ||
+                                  chat.id.includes('cmip') ||
+                                  chat.id.includes('cmit') ||
+                                  chat.id.includes('cmiu') ||
+                                  chat.id.startsWith('chat_');
+            
+            // Verifica se tem mensagens válidas
+            const hasValidMessages = chat.messages && chat.messages.length > 0;
+            
+            // Verifica se é grupo (grupos são válidos mesmo sem número de telefone)
+            const isGroup = chat.id.includes('@g.us');
+            
+            // Chat é válido se:
+            // 1. É um grupo, OU
+            // 2. Tem número válido E (não tem ID gerado OU tem mensagens válidas)
+            const isValid = isGroup || (hasValidNumber && (!idIsGenerated || hasValidMessages));
+            
+            if (!isValid) {
+                console.log(`[ChatFilter] Removendo chat inválido: ID=${chat.id}, contactNumber=${chat.contactNumber}, messages=${chat.messages?.length || 0}, hasValidNumber=${hasValidNumber}, idIsGenerated=${idIsGenerated}`);
+            }
+            
+            return isValid;
+        });
+        
+        console.log(`[ChatFilter] Filtrados ${mappedChats.length} -> ${validChats.length} chats válidos`);
+        
+        // 6. Consolida chats duplicados (mesmo número = mesmo chat)
         const consolidatedChatsMap = new Map<string, Chat>();
         
         // Primeiro, tenta encontrar números válidos em todos os chats (incluindo LIDs)
         const chatNumberMap = new Map<string, string>(); // Mapeia chat.id -> número válido
         
-        mappedChats.forEach((chat: Chat) => {
+        validChats.forEach((chat: Chat) => {
             // Extrai número do ID do chat se for válido
             const chatIdNumber = chat.id.split('@')[0].replace(/\D/g, '');
             if (chatIdNumber.length >= 10 && /^\d+$/.test(chatIdNumber)) {
@@ -1343,7 +1381,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             // Para LIDs, tenta encontrar correspondência em outros chats
             if (chat.id.includes('@lid')) {
                 // Procura em outros chats por mensagens que referenciem este LID
-                mappedChats.forEach((otherChat: Chat) => {
+                validChats.forEach((otherChat: Chat) => {
                     if (otherChat.id !== chat.id && otherChat.messages) {
                         for (const msg of otherChat.messages) {
                             // Verifica se a mensagem tem remoteJidAlt ou referência ao LID
@@ -1362,7 +1400,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             }
         });
         
-        mappedChats.forEach((chat: Chat) => {
+        validChats.forEach((chat: Chat) => {
             // Determina a chave de consolidação
             let chatKey: string;
             
@@ -1481,7 +1519,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             return true;
         });
         
-        console.log(`[ChatMerge] Total de chats: ${mappedChats.length} -> ${finalChats.length} (após consolidação e filtragem)`);
+        console.log(`[ChatMerge] Total de chats: ${validChats.length} -> ${finalChats.length} (após consolidação e filtragem)`);
         
         return finalChats;
 
