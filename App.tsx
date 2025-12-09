@@ -1972,7 +1972,12 @@ const App: React.FC = () => {
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
-    localStorage.setItem('zapflow_user', JSON.stringify(user));
+    // Salva usuário apenas se não estiver configurado para usar apenas PostgreSQL
+    const { SecurityService } = require('./services/securityService');
+    const { storageService } = require('./services/storageService');
+    if (!storageService.getUseOnlyPostgreSQL()) {
+      localStorage.setItem('zapflow_user', SecurityService.encrypt(JSON.stringify(user)));
+    }
     if (user.role === UserRole.AGENT) {
         setCurrentView('chat');
     } else {
