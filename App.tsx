@@ -1608,7 +1608,22 @@ const App: React.FC = () => {
                                             messageNumber.endsWith(chatIdNumber.slice(-8))
                                         );
                                         
-                                        const chatNumberMatch = exactMatch || fullNumberMatch || partialMatch;
+                                        // Match por número sem código do país (últimos 9-11 dígitos)
+                                        // Ex: 554984329374 vs 4984329374 (sem o 55)
+                                        const chatNumberWithoutCountry = chatNumber.length > 2 ? chatNumber.slice(2) : chatNumber;
+                                        const messageNumberWithoutCountry = messageNumber.length > 2 ? messageNumber.slice(2) : messageNumber;
+                                        const chatIdNumberWithoutCountry = chatIdNumber.length > 2 ? chatIdNumber.slice(2) : chatIdNumber;
+                                        
+                                        const numberWithoutCountryMatch = (
+                                            chatNumberWithoutCountry === messageNumber ||
+                                            messageNumberWithoutCountry === chatNumber ||
+                                            chatIdNumberWithoutCountry === messageNumber ||
+                                            messageNumberWithoutCountry === chatIdNumber ||
+                                            chatNumberWithoutCountry === messageNumberWithoutCountry ||
+                                            chatIdNumberWithoutCountry === messageNumberWithoutCountry
+                                        );
+                                        
+                                        const chatNumberMatch = exactMatch || fullNumberMatch || partialMatch || numberWithoutCountryMatch;
                                         
                                         if (chatJid === messageJid || chatNumberMatch) {
                                             foundChat = true;
