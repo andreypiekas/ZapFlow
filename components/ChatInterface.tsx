@@ -1451,7 +1451,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                             {showTagMenu && (
                                 <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-50 animate-in fade-in zoom-in-95 origin-top-right text-slate-700">
                                     <div className="px-3 py-2 text-xs font-bold text-slate-500 border-b border-slate-100 mb-1">ADICIONAR TAG</div>
-                                    {AVAILABLE_TAGS.map(tag => (
+                                    {(AVAILABLE_TAGS && Array.isArray(AVAILABLE_TAGS) ? AVAILABLE_TAGS : []).map(tag => (
                                         <button 
                                             key={tag.name}
                                             onClick={() => handleAddTag(tag.name)}
