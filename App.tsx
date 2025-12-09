@@ -961,39 +961,27 @@ const App: React.FC = () => {
                                                     // console.log(`[App] ✅ Adicionadas ${uniqueMessages.length - c.messages.length} novas mensagens ao chat ${c.contactName}`);
                                                 }
                                                 
-                                                // Lógica para processar mensagens de clientes finalizados
+                                                // PRIORIDADE ABSOLUTA: Status do banco NUNCA é alterado automaticamente
+                                                // Apenas processa avaliação se chat está fechado e aguardando
                                                 let updatedChat = { ...c };
                                                 
-                                                // Verifica se há novas mensagens do cliente em chat finalizado
-                                                if (c.status === 'closed' && newReceivedMessages.length > 0) {
+                                                // Processa avaliação se chat está fechado e aguardando avaliação
+                                                if (c.status === 'closed' && newReceivedMessages.length > 0 && c.awaitingRating) {
                                                     const lastNewMessage = newReceivedMessages[newReceivedMessages.length - 1];
                                                     const messageContent = lastNewMessage.content.trim();
                                                     const isRatingResponse = /^[1-5]$/.test(messageContent);
                                                     
-                                                    if (isRatingResponse && c.awaitingRating) {
-                                                        // Cliente respondeu com avaliação (1-5)
+                                                    if (isRatingResponse) {
+                                                        // Cliente respondeu com avaliação - atualiza via handleUpdateChat para persistir no banco
                                                         const rating = parseInt(messageContent);
-                                                        updatedChat = {
+                                                        handleUpdateChat({
                                                             ...c,
                                                             rating: rating,
-                                                            awaitingRating: false, // Não está mais aguardando
-                                                            status: 'closed' // Mantém finalizado
-                                                        };
-                                                        // Log removido para produção - muito verboso
-                                                        // console.log(`[App] ✅ Avaliação recebida: ${rating} estrelas para chat ${c.contactName}`);
-                                                    } else if (!isRatingResponse) {
-                                                        // Cliente enviou nova mensagem (não é avaliação) - reabre o chat
-                                                        updatedChat = {
-                                                            ...c,
-                                                            status: 'open',
-                                                            awaitingRating: false, // Cancela aguardo de avaliação
-                                                            departmentId: null, // Remove do departamento para ir para triagem
-                                                            assignedTo: undefined, // Remove atribuição
-                                                            endedAt: undefined // Remove data de finalização
-                                                        };
-                                                        // Log removido para produção - muito verboso
-                                                        // console.log(`[App] 🔄 Chat ${c.contactName} reaberto - cliente enviou nova mensagem`);
+                                                            awaitingRating: false,
+                                                            status: 'closed' // Mantém fechado
+                                                        });
                                                     }
+                                                    // Se não é avaliação, NÃO reabre automaticamente - apenas adiciona mensagem
                                                 }
                                                 
                                                 // Só atualiza lastMessageTime se realmente houver nova mensagem
