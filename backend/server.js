@@ -500,7 +500,539 @@ app.put('/api/user/profile', authenticateToken, dataLimiter, async (req, res) =>
   }
 });
 
+// ============================================================================
+// ENDPOINTS CRUD PARA DEPARTMENTS
+// ============================================================================
+
+// Listar departamentos
+app.get('/api/departments', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, name, description, color FROM departments WHERE user_id = $1 ORDER BY name',
+      [req.user.id]
+    );
+    res.json(result.rows.map(row => ({
+      id: row.id.toString(),
+      name: row.name,
+      description: row.description || '',
+      color: row.color
+    })));
+  } catch (error) {
+    console.error('Erro ao listar departamentos:', error);
+    res.status(500).json({ error: 'Erro ao listar departamentos' });
+  }
+});
+
+// Criar departamento
+app.post('/api/departments', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { name, description, color } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: 'name é obrigatório' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO departments (user_id, name, description, color) 
+       VALUES ($1, $2, $3, $4) 
+       RETURNING id, name, description, color`,
+      [req.user.id, name, description || '', color || 'bg-indigo-500']
+    );
+
+    res.status(201).json({
+      id: result.rows[0].id.toString(),
+      name: result.rows[0].name,
+      description: result.rows[0].description || '',
+      color: result.rows[0].color
+    });
+  } catch (error) {
+    if (error.code === '23505') { // Unique violation
+      return res.status(400).json({ error: 'Já existe um departamento com este nome' });
+    }
+    console.error('Erro ao criar departamento:', error);
+    res.status(500).json({ error: 'Erro ao criar departamento' });
+  }
+});
+
+// Atualizar departamento
+app.put('/api/departments/:id', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, color } = req.body;
+
+    const updateFields = [];
+    const params = [];
+    let paramIndex = 1;
+
+    if (name) {
+      updateFields.push(`name = $${paramIndex++}`);
+      params.push(name);
+    }
+    if (description !== undefined) {
+      updateFields.push(`description = $${paramIndex++}`);
+      params.push(description);
+    }
+    if (color) {
+      updateFields.push(`color = $${paramIndex++}`);
+      params.push(color);
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: 'Nenhum campo para atualizar' });
+    }
+
+    updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+    params.push(parseInt(id));
+    params.push(req.user.id);
+
+    const result = await pool.query(
+      `UPDATE departments 
+       SET ${updateFields.join(', ')} 
+       WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
+       RETURNING id, name, description, color`,
+      params
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Departamento não encontrado' });
+    }
+
+    res.json({
+      id: result.rows[0].id.toString(),
+      name: result.rows[0].name,
+      description: result.rows[0].description || '',
+      color: result.rows[0].color
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar departamento:', error);
+    res.status(500).json({ error: 'Erro ao atualizar departamento' });
+  }
+});
+
+// Deletar departamento
+app.delete('/api/departments/:id', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      'DELETE FROM departments WHERE id = $1 AND user_id = $2 RETURNING id',
+      [parseInt(id), req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Departamento não encontrado' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao deletar departamento:', error);
+    res.status(500).json({ error: 'Erro ao deletar departamento' });
+  }
+});
+
+// ============================================================================
+// ENDPOINTS CRUD PARA CONTACTS
+// ============================================================================
+
+// Listar contatos
+app.get('/api/contacts', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, name, phone, email, avatar, source, last_sync FROM contacts WHERE user_id = $1 ORDER BY name',
+      [req.user.id]
+    );
+    res.json(result.rows.map(row => ({
+      id: row.id.toString(),
+      name: row.name,
+      phone: row.phone,
+      email: row.email,
+      avatar: row.avatar,
+      source: row.source,
+      lastSync: row.last_sync ? new Date(row.last_sync) : undefined
+    })));
+  } catch (error) {
+    console.error('Erro ao listar contatos:', error);
+    res.status(500).json({ error: 'Erro ao listar contatos' });
+  }
+});
+
+// Criar contato
+app.post('/api/contacts', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { name, phone, email, avatar, source } = req.body;
+    if (!name || !phone) {
+      return res.status(400).json({ error: 'name e phone são obrigatórios' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO contacts (user_id, name, phone, email, avatar, source, last_sync) 
+       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) 
+       ON CONFLICT (user_id, phone) 
+       DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email, avatar = EXCLUDED.avatar, 
+                     source = EXCLUDED.source, last_sync = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       RETURNING id, name, phone, email, avatar, source, last_sync`,
+      [req.user.id, name, phone, email || null, avatar || null, source || 'manual']
+    );
+
+    res.status(201).json({
+      id: result.rows[0].id.toString(),
+      name: result.rows[0].name,
+      phone: result.rows[0].phone,
+      email: result.rows[0].email,
+      avatar: result.rows[0].avatar,
+      source: result.rows[0].source,
+      lastSync: result.rows[0].last_sync ? new Date(result.rows[0].last_sync) : undefined
+    });
+  } catch (error) {
+    console.error('Erro ao criar contato:', error);
+    res.status(500).json({ error: 'Erro ao criar contato' });
+  }
+});
+
+// Atualizar contato
+app.put('/api/contacts/:id', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, phone, email, avatar, source } = req.body;
+
+    const updateFields = [];
+    const params = [];
+    let paramIndex = 1;
+
+    if (name) {
+      updateFields.push(`name = $${paramIndex++}`);
+      params.push(name);
+    }
+    if (phone) {
+      updateFields.push(`phone = $${paramIndex++}`);
+      params.push(phone);
+    }
+    if (email !== undefined) {
+      updateFields.push(`email = $${paramIndex++}`);
+      params.push(email || null);
+    }
+    if (avatar !== undefined) {
+      updateFields.push(`avatar = $${paramIndex++}`);
+      params.push(avatar || null);
+    }
+    if (source) {
+      updateFields.push(`source = $${paramIndex++}`);
+      params.push(source);
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: 'Nenhum campo para atualizar' });
+    }
+
+    updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+    params.push(parseInt(id));
+    params.push(req.user.id);
+
+    const result = await pool.query(
+      `UPDATE contacts 
+       SET ${updateFields.join(', ')} 
+       WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
+       RETURNING id, name, phone, email, avatar, source, last_sync`,
+      params
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Contato não encontrado' });
+    }
+
+    res.json({
+      id: result.rows[0].id.toString(),
+      name: result.rows[0].name,
+      phone: result.rows[0].phone,
+      email: result.rows[0].email,
+      avatar: result.rows[0].avatar,
+      source: result.rows[0].source,
+      lastSync: result.rows[0].last_sync ? new Date(result.rows[0].last_sync) : undefined
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar contato:', error);
+    res.status(500).json({ error: 'Erro ao atualizar contato' });
+  }
+});
+
+// Deletar contato
+app.delete('/api/contacts/:id', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      'DELETE FROM contacts WHERE id = $1 AND user_id = $2 RETURNING id',
+      [parseInt(id), req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Contato não encontrado' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao deletar contato:', error);
+    res.status(500).json({ error: 'Erro ao deletar contato' });
+  }
+});
+
+// ============================================================================
+// ENDPOINTS CRUD PARA QUICK REPLIES
+// ============================================================================
+
+// Listar respostas rápidas
+app.get('/api/quick-replies', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, title, content FROM quick_replies WHERE user_id = $1 ORDER BY title',
+      [req.user.id]
+    );
+    res.json(result.rows.map(row => ({
+      id: row.id.toString(),
+      title: row.title,
+      content: row.content
+    })));
+  } catch (error) {
+    console.error('Erro ao listar respostas rápidas:', error);
+    res.status(500).json({ error: 'Erro ao listar respostas rápidas' });
+  }
+});
+
+// Criar resposta rápida
+app.post('/api/quick-replies', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { title, content } = req.body;
+    if (!title || !content) {
+      return res.status(400).json({ error: 'title e content são obrigatórios' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO quick_replies (user_id, title, content) 
+       VALUES ($1, $2, $3) 
+       RETURNING id, title, content`,
+      [req.user.id, title, content]
+    );
+
+    res.status(201).json({
+      id: result.rows[0].id.toString(),
+      title: result.rows[0].title,
+      content: result.rows[0].content
+    });
+  } catch (error) {
+    console.error('Erro ao criar resposta rápida:', error);
+    res.status(500).json({ error: 'Erro ao criar resposta rápida' });
+  }
+});
+
+// Atualizar resposta rápida
+app.put('/api/quick-replies/:id', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, content } = req.body;
+
+    const updateFields = [];
+    const params = [];
+    let paramIndex = 1;
+
+    if (title) {
+      updateFields.push(`title = $${paramIndex++}`);
+      params.push(title);
+    }
+    if (content) {
+      updateFields.push(`content = $${paramIndex++}`);
+      params.push(content);
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: 'Nenhum campo para atualizar' });
+    }
+
+    updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+    params.push(parseInt(id));
+    params.push(req.user.id);
+
+    const result = await pool.query(
+      `UPDATE quick_replies 
+       SET ${updateFields.join(', ')} 
+       WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
+       RETURNING id, title, content`,
+      params
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Resposta rápida não encontrada' });
+    }
+
+    res.json({
+      id: result.rows[0].id.toString(),
+      title: result.rows[0].title,
+      content: result.rows[0].content
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar resposta rápida:', error);
+    res.status(500).json({ error: 'Erro ao atualizar resposta rápida' });
+  }
+});
+
+// Deletar resposta rápida
+app.delete('/api/quick-replies/:id', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      'DELETE FROM quick_replies WHERE id = $1 AND user_id = $2 RETURNING id',
+      [parseInt(id), req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Resposta rápida não encontrada' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao deletar resposta rápida:', error);
+    res.status(500).json({ error: 'Erro ao deletar resposta rápida' });
+  }
+});
+
+// ============================================================================
+// ENDPOINTS CRUD PARA WORKFLOWS
+// ============================================================================
+
+// Listar workflows
+app.get('/api/workflows', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, title, description, trigger_keywords, steps, target_department_id FROM workflows WHERE user_id = $1 ORDER BY title',
+      [req.user.id]
+    );
+    res.json(result.rows.map(row => ({
+      id: row.id.toString(),
+      title: row.title,
+      description: row.description,
+      triggerKeywords: row.trigger_keywords || [],
+      steps: row.steps || [],
+      targetDepartmentId: row.target_department_id
+    })));
+  } catch (error) {
+    console.error('Erro ao listar workflows:', error);
+    res.status(500).json({ error: 'Erro ao listar workflows' });
+  }
+});
+
+// Criar workflow
+app.post('/api/workflows', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { title, description, triggerKeywords, steps, targetDepartmentId } = req.body;
+    if (!title || !steps || !Array.isArray(steps)) {
+      return res.status(400).json({ error: 'title e steps (array) são obrigatórios' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO workflows (user_id, title, description, trigger_keywords, steps, target_department_id) 
+       VALUES ($1, $2, $3, $4, $5, $6) 
+       RETURNING id, title, description, trigger_keywords, steps, target_department_id`,
+      [req.user.id, title, description || null, triggerKeywords || [], JSON.stringify(steps), targetDepartmentId || null]
+    );
+
+    res.status(201).json({
+      id: result.rows[0].id.toString(),
+      title: result.rows[0].title,
+      description: result.rows[0].description,
+      triggerKeywords: result.rows[0].trigger_keywords || [],
+      steps: typeof result.rows[0].steps === 'string' ? JSON.parse(result.rows[0].steps) : result.rows[0].steps,
+      targetDepartmentId: result.rows[0].target_department_id
+    });
+  } catch (error) {
+    console.error('Erro ao criar workflow:', error);
+    res.status(500).json({ error: 'Erro ao criar workflow' });
+  }
+});
+
+// Atualizar workflow
+app.put('/api/workflows/:id', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, description, triggerKeywords, steps, targetDepartmentId } = req.body;
+
+    const updateFields = [];
+    const params = [];
+    let paramIndex = 1;
+
+    if (title) {
+      updateFields.push(`title = $${paramIndex++}`);
+      params.push(title);
+    }
+    if (description !== undefined) {
+      updateFields.push(`description = $${paramIndex++}`);
+      params.push(description || null);
+    }
+    if (triggerKeywords !== undefined) {
+      updateFields.push(`trigger_keywords = $${paramIndex++}`);
+      params.push(triggerKeywords || []);
+    }
+    if (steps !== undefined) {
+      updateFields.push(`steps = $${paramIndex++}`);
+      params.push(JSON.stringify(steps));
+    }
+    if (targetDepartmentId !== undefined) {
+      updateFields.push(`target_department_id = $${paramIndex++}`);
+      params.push(targetDepartmentId || null);
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: 'Nenhum campo para atualizar' });
+    }
+
+    updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+    params.push(parseInt(id));
+    params.push(req.user.id);
+
+    const result = await pool.query(
+      `UPDATE workflows 
+       SET ${updateFields.join(', ')} 
+       WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
+       RETURNING id, title, description, trigger_keywords, steps, target_department_id`,
+      params
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Workflow não encontrado' });
+    }
+
+    res.json({
+      id: result.rows[0].id.toString(),
+      title: result.rows[0].title,
+      description: result.rows[0].description,
+      triggerKeywords: result.rows[0].trigger_keywords || [],
+      steps: typeof result.rows[0].steps === 'string' ? JSON.parse(result.rows[0].steps) : result.rows[0].steps,
+      targetDepartmentId: result.rows[0].target_department_id
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar workflow:', error);
+    res.status(500).json({ error: 'Erro ao atualizar workflow' });
+  }
+});
+
+// Deletar workflow
+app.delete('/api/workflows/:id', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      'DELETE FROM workflows WHERE id = $1 AND user_id = $2 RETURNING id',
+      [parseInt(id), req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Workflow não encontrado' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao deletar workflow:', error);
+    res.status(500).json({ error: 'Erro ao deletar workflow' });
+  }
+});
+
+// ============================================================================
 // Rota para salvar múltiplos dados de uma vez
+// ============================================================================
 app.post('/api/data/:dataType/batch', authenticateToken, dataLimiter, async (req, res) => {
   try {
     const { dataType } = req.params;

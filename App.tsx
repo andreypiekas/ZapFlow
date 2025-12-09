@@ -486,6 +486,47 @@ const App: React.FC = () => {
     loadDataFromAPI();
   }, [currentUser]); // Executa quando o usuário fizer login
 
+  // Carrega dados das tabelas específicas quando o usuário estiver logado
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const loadSpecificTables = async () => {
+      try {
+        // Carrega dados das tabelas específicas (prioridade sobre storageService)
+        const [
+          departmentsResult,
+          contactsResult,
+          quickRepliesResult,
+          workflowsResult
+        ] = await Promise.all([
+          apiService.getDepartments(),
+          apiService.getContacts(),
+          apiService.getQuickReplies(),
+          apiService.getWorkflows()
+        ]);
+
+        // Atualiza apenas se os dados vieram da API com sucesso
+        if (departmentsResult.success && departmentsResult.data && departmentsResult.data.length > 0) {
+          setDepartments(departmentsResult.data);
+        }
+        if (contactsResult.success && contactsResult.data && contactsResult.data.length > 0) {
+          setContacts(contactsResult.data);
+        }
+        if (quickRepliesResult.success && quickRepliesResult.data && quickRepliesResult.data.length > 0) {
+          setQuickReplies(quickRepliesResult.data);
+        }
+        if (workflowsResult.success && workflowsResult.data && workflowsResult.data.length > 0) {
+          setWorkflows(workflowsResult.data);
+        }
+      } catch (error) {
+        console.error('[App] Erro ao carregar dados das tabelas específicas:', error);
+        // Em caso de erro, os dados do storageService já foram carregados no useEffect anterior
+      }
+    };
+
+    loadSpecificTables();
+  }, [currentUser]); // Executa quando o usuário fizer login
+
   // Refs para armazenar interval e WebSocket
   const intervalIdRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -2093,13 +2134,82 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAddDepartment = (dept: Department) => setDepartments([...departments, dept]);
-  const handleUpdateDepartment = (updatedDept: Department) => {
-    setDepartments(departments.map(d => d.id === updatedDept.id ? updatedDept : d));
+  const handleAddDepartment = async (dept: Department) => {
+    try {
+      const result = await apiService.createDepartment(dept.name, dept.description, dept.color);
+      if (result.success && result.data) {
+        setDepartments([...departments, {
+          id: result.data.id,
+          name: result.data.name,
+          description: result.data.description || '',
+          color: result.data.color
+        }]);
+      } else {
+        console.error('[App] Erro ao criar departamento:', result.error);
+        alert(`Erro ao criar departamento: ${result.error || 'Erro desconhecido'}`);
+        // Fallback: adiciona localmente
+        setDepartments([...departments, dept]);
+      }
+    } catch (error) {
+      console.error('[App] Erro ao criar departamento na API:', error);
+      // Fallback: adiciona localmente
+      setDepartments([...departments, dept]);
+      alert('Erro ao criar departamento no servidor. Adicionado apenas localmente.');
+    }
   };
-  const handleDeleteDepartment = (id: string) => {
-    setDepartments(departments.filter(d => d.id !== id));
-    setChats(chats.map(c => c.departmentId === id ? { ...c, departmentId: null } : c));
+
+  const handleUpdateDepartment = async (updatedDept: Department) => {
+    try {
+      const deptId = parseInt(updatedDept.id);
+      if (!isNaN(deptId)) {
+        const result = await apiService.updateDepartment(deptId, updatedDept.name, updatedDept.description, updatedDept.color);
+        if (result.success && result.data) {
+          setDepartments(departments.map(d => d.id === updatedDept.id ? {
+            id: result.data.id,
+            name: result.data.name,
+            description: result.data.description || '',
+            color: result.data.color
+          } : d));
+        } else {
+          console.error('[App] Erro ao atualizar departamento:', result.error);
+          // Fallback: atualiza localmente
+          setDepartments(departments.map(d => d.id === updatedDept.id ? updatedDept : d));
+        }
+      } else {
+        // Se não for um ID numérico, apenas atualiza localmente
+        setDepartments(departments.map(d => d.id === updatedDept.id ? updatedDept : d));
+      }
+    } catch (error) {
+      console.error('[App] Erro ao atualizar departamento na API:', error);
+      // Fallback: atualiza localmente
+      setDepartments(departments.map(d => d.id === updatedDept.id ? updatedDept : d));
+    }
+  };
+
+  const handleDeleteDepartment = async (id: string) => {
+    try {
+      const deptId = parseInt(id);
+      if (!isNaN(deptId)) {
+        const result = await apiService.deleteDepartment(deptId);
+        if (result.success) {
+          setDepartments(departments.filter(d => d.id !== id));
+          setChats(chats.map(c => c.departmentId === id ? { ...c, departmentId: null } : c));
+        } else {
+          console.error('[App] Erro ao deletar departamento:', result.error);
+          alert(`Erro ao deletar departamento: ${result.error || 'Erro desconhecido'}`);
+        }
+      } else {
+        // Se não for um ID numérico, apenas remove localmente
+        setDepartments(departments.filter(d => d.id !== id));
+        setChats(chats.map(c => c.departmentId === id ? { ...c, departmentId: null } : c));
+      }
+    } catch (error) {
+      console.error('[App] Erro ao deletar departamento na API:', error);
+      // Fallback: remove localmente
+      setDepartments(departments.filter(d => d.id !== id));
+      setChats(chats.map(c => c.departmentId === id ? { ...c, departmentId: null } : c));
+      alert('Erro ao deletar departamento no servidor. Removido apenas localmente.');
+    }
   };
 
   const handleSaveConfig = (newConfig: ApiConfig) => {
@@ -2236,30 +2346,232 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAddQuickReply = (qr: QuickReply) => setQuickReplies([...quickReplies, qr]);
-  const handleUpdateQuickReply = (updatedQr: QuickReply) => setQuickReplies(quickReplies.map(q => q.id === updatedQr.id ? updatedQr : q));
-  const handleDeleteQuickReply = (id: string) => setQuickReplies(quickReplies.filter(q => q.id !== id));
+  const handleAddQuickReply = async (qr: QuickReply) => {
+    try {
+      const result = await apiService.createQuickReply(qr.title, qr.content);
+      if (result.success && result.data) {
+        setQuickReplies([...quickReplies, {
+          id: result.data.id,
+          title: result.data.title,
+          content: result.data.content
+        }]);
+      } else {
+        console.error('[App] Erro ao criar resposta rápida:', result.error);
+        // Fallback: adiciona localmente
+        setQuickReplies([...quickReplies, qr]);
+      }
+    } catch (error) {
+      console.error('[App] Erro ao criar resposta rápida na API:', error);
+      // Fallback: adiciona localmente
+      setQuickReplies([...quickReplies, qr]);
+    }
+  };
 
-  const handleAddWorkflow = (wf: Workflow) => setWorkflows([...workflows, wf]);
-  const handleUpdateWorkflow = (updatedWf: Workflow) => setWorkflows(workflows.map(w => w.id === updatedWf.id ? updatedWf : w));
-  const handleDeleteWorkflow = (id: string) => setWorkflows(workflows.filter(w => w.id !== id));
+  const handleUpdateQuickReply = async (updatedQr: QuickReply) => {
+    try {
+      const qrId = parseInt(updatedQr.id);
+      if (!isNaN(qrId)) {
+        const result = await apiService.updateQuickReply(qrId, updatedQr.title, updatedQr.content);
+        if (result.success && result.data) {
+          setQuickReplies(quickReplies.map(q => q.id === updatedQr.id ? {
+            id: result.data.id,
+            title: result.data.title,
+            content: result.data.content
+          } : q));
+        } else {
+          // Fallback: atualiza localmente
+          setQuickReplies(quickReplies.map(q => q.id === updatedQr.id ? updatedQr : q));
+        }
+      } else {
+        // Se não for um ID numérico, apenas atualiza localmente
+        setQuickReplies(quickReplies.map(q => q.id === updatedQr.id ? updatedQr : q));
+      }
+    } catch (error) {
+      console.error('[App] Erro ao atualizar resposta rápida na API:', error);
+      // Fallback: atualiza localmente
+      setQuickReplies(quickReplies.map(q => q.id === updatedQr.id ? updatedQr : q));
+    }
+  };
+
+  const handleDeleteQuickReply = async (id: string) => {
+    try {
+      const qrId = parseInt(id);
+      if (!isNaN(qrId)) {
+        const result = await apiService.deleteQuickReply(qrId);
+        if (result.success) {
+          setQuickReplies(quickReplies.filter(q => q.id !== id));
+        } else {
+          console.error('[App] Erro ao deletar resposta rápida:', result.error);
+        }
+      } else {
+        // Se não for um ID numérico, apenas remove localmente
+        setQuickReplies(quickReplies.filter(q => q.id !== id));
+      }
+    } catch (error) {
+      console.error('[App] Erro ao deletar resposta rápida na API:', error);
+      // Fallback: remove localmente
+      setQuickReplies(quickReplies.filter(q => q.id !== id));
+    }
+  };
+
+  const handleAddWorkflow = async (wf: Workflow) => {
+    try {
+      const result = await apiService.createWorkflow(
+        wf.title,
+        wf.steps,
+        (wf as any).description,
+        (wf as any).triggerKeywords,
+        (wf as any).targetDepartmentId
+      );
+      if (result.success && result.data) {
+        setWorkflows([...workflows, {
+          id: result.data.id,
+          title: result.data.title,
+          steps: result.data.steps,
+          ...(result.data.description && { description: result.data.description }),
+          ...(result.data.triggerKeywords && { triggerKeywords: result.data.triggerKeywords }),
+          ...(result.data.targetDepartmentId && { targetDepartmentId: result.data.targetDepartmentId })
+        }]);
+      } else {
+        console.error('[App] Erro ao criar workflow:', result.error);
+        // Fallback: adiciona localmente
+        setWorkflows([...workflows, wf]);
+      }
+    } catch (error) {
+      console.error('[App] Erro ao criar workflow na API:', error);
+      // Fallback: adiciona localmente
+      setWorkflows([...workflows, wf]);
+    }
+  };
+
+  const handleUpdateWorkflow = async (updatedWf: Workflow) => {
+    try {
+      const wfId = parseInt(updatedWf.id);
+      if (!isNaN(wfId)) {
+        const result = await apiService.updateWorkflow(
+          wfId,
+          updatedWf.title,
+          updatedWf.steps,
+          (updatedWf as any).description,
+          (updatedWf as any).triggerKeywords,
+          (updatedWf as any).targetDepartmentId
+        );
+        if (result.success && result.data) {
+          setWorkflows(workflows.map(w => w.id === updatedWf.id ? {
+            id: result.data.id,
+            title: result.data.title,
+            steps: result.data.steps,
+            ...(result.data.description && { description: result.data.description }),
+            ...(result.data.triggerKeywords && { triggerKeywords: result.data.triggerKeywords }),
+            ...(result.data.targetDepartmentId && { targetDepartmentId: result.data.targetDepartmentId })
+          } : w));
+        } else {
+          // Fallback: atualiza localmente
+          setWorkflows(workflows.map(w => w.id === updatedWf.id ? updatedWf : w));
+        }
+      } else {
+        // Se não for um ID numérico, apenas atualiza localmente
+        setWorkflows(workflows.map(w => w.id === updatedWf.id ? updatedWf : w));
+      }
+    } catch (error) {
+      console.error('[App] Erro ao atualizar workflow na API:', error);
+      // Fallback: atualiza localmente
+      setWorkflows(workflows.map(w => w.id === updatedWf.id ? updatedWf : w));
+    }
+  };
+
+  const handleDeleteWorkflow = async (id: string) => {
+    try {
+      const wfId = parseInt(id);
+      if (!isNaN(wfId)) {
+        const result = await apiService.deleteWorkflow(wfId);
+        if (result.success) {
+          setWorkflows(workflows.filter(w => w.id !== id));
+        } else {
+          console.error('[App] Erro ao deletar workflow:', result.error);
+        }
+      } else {
+        // Se não for um ID numérico, apenas remove localmente
+        setWorkflows(workflows.filter(w => w.id !== id));
+      }
+    } catch (error) {
+      console.error('[App] Erro ao deletar workflow na API:', error);
+      // Fallback: remove localmente
+      setWorkflows(workflows.filter(w => w.id !== id));
+    }
+  };
 
   // Adiciona novo contato manualmente
-  const handleAddContact = (contact: Contact) => {
-    setContacts(currentContacts => {
-      // Verifica se já existe contato com o mesmo telefone
-      const existingIndex = currentContacts.findIndex(c => 
-        normalizePhoneForMatch(c.phone) === normalizePhoneForMatch(contact.phone)
+  const handleAddContact = async (contact: Contact) => {
+    try {
+      const result = await apiService.createContact(
+        contact.name,
+        contact.phone,
+        contact.email,
+        contact.avatar,
+        contact.source || 'manual'
       );
-      if (existingIndex >= 0) {
-        // Atualiza contato existente
-        const updated = [...currentContacts];
-        updated[existingIndex] = { ...contact, source: 'manual' as const };
-        return updated;
+      if (result.success && result.data) {
+        setContacts(currentContacts => {
+          // Verifica se já existe contato com o mesmo telefone
+          const existingIndex = currentContacts.findIndex(c => 
+            normalizePhoneForMatch(c.phone) === normalizePhoneForMatch(contact.phone)
+          );
+          if (existingIndex >= 0) {
+            // Atualiza contato existente
+            const updated = [...currentContacts];
+            updated[existingIndex] = {
+              id: result.data.id,
+              name: result.data.name,
+              phone: result.data.phone,
+              email: result.data.email,
+              avatar: result.data.avatar,
+              source: result.data.source as 'manual' | 'google' | 'csv',
+              lastSync: result.data.lastSync ? new Date(result.data.lastSync) : undefined
+            };
+            return updated;
+          }
+          // Adiciona novo contato
+          return [...currentContacts, {
+            id: result.data.id,
+            name: result.data.name,
+            phone: result.data.phone,
+            email: result.data.email,
+            avatar: result.data.avatar,
+            source: result.data.source as 'manual' | 'google' | 'csv',
+            lastSync: result.data.lastSync ? new Date(result.data.lastSync) : undefined
+          }];
+        });
+      } else {
+        console.error('[App] Erro ao criar contato:', result.error);
+        // Fallback: adiciona localmente
+        setContacts(currentContacts => {
+          const existingIndex = currentContacts.findIndex(c => 
+            normalizePhoneForMatch(c.phone) === normalizePhoneForMatch(contact.phone)
+          );
+          if (existingIndex >= 0) {
+            const updated = [...currentContacts];
+            updated[existingIndex] = { ...contact, source: 'manual' as const };
+            return updated;
+          }
+          return [...currentContacts, { ...contact, source: 'manual' as const }];
+        });
       }
-      // Adiciona novo contato
-      return [...currentContacts, { ...contact, source: 'manual' as const }];
-    });
+    } catch (error) {
+      console.error('[App] Erro ao criar contato na API:', error);
+      // Fallback: adiciona localmente
+      setContacts(currentContacts => {
+        const existingIndex = currentContacts.findIndex(c => 
+          normalizePhoneForMatch(c.phone) === normalizePhoneForMatch(contact.phone)
+        );
+        if (existingIndex >= 0) {
+          const updated = [...currentContacts];
+          updated[existingIndex] = { ...contact, source: 'manual' as const };
+          return updated;
+        }
+        return [...currentContacts, { ...contact, source: 'manual' as const }];
+      });
+    }
   };
 
   // Inicia chat a partir de um contato

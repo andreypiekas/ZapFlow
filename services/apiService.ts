@@ -233,6 +233,210 @@ class ApiService {
     }
   }
 
+  // ============================================================================
+  // DEPARTMENTS
+  // ============================================================================
+  async getDepartments(): Promise<{ success: boolean; data?: any[]; error?: string }> {
+    try {
+      const response = await this.request<any[]>('/api/departments');
+      return { success: true, data: response };
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao listar departamentos:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async createDepartment(name: string, description?: string, color?: string): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      const response = await this.request<any>('/api/departments', {
+        method: 'POST',
+        body: JSON.stringify({ name, description, color }),
+      });
+      return { success: true, data: response };
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao criar departamento:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async updateDepartment(id: string | number, name?: string, description?: string, color?: string): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      const response = await this.request<any>(`/api/departments/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name, description, color }),
+      });
+      return { success: true, data: response };
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao atualizar departamento:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async deleteDepartment(id: string | number): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.request<{ success: boolean }>(`/api/departments/${id}`, {
+        method: 'DELETE',
+      });
+      return { success: true };
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao deletar departamento:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ============================================================================
+  // CONTACTS
+  // ============================================================================
+  async getContacts(): Promise<{ success: boolean; data?: any[]; error?: string }> {
+    try {
+      const response = await this.request<any[]>('/api/contacts');
+      return { success: true, data: response };
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao listar contatos:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async createContact(name: string, phone: string, email?: string, avatar?: string, source?: string): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      const response = await this.request<any>('/api/contacts', {
+        method: 'POST',
+        body: JSON.stringify({ name, phone, email, avatar, source }),
+      });
+      return { success: true, data: response };
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao criar contato:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async updateContact(id: string | number, name?: string, phone?: string, email?: string, avatar?: string, source?: string): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      const response = await this.request<any>(`/api/contacts/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name, phone, email, avatar, source }),
+      });
+      return { success: true, data: response };
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao atualizar contato:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async deleteContact(id: string | number): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.request<{ success: boolean }>(`/api/contacts/${id}`, {
+        method: 'DELETE',
+      });
+      return { success: true };
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao deletar contato:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ============================================================================
+  // QUICK REPLIES
+  // ============================================================================
+  async getQuickReplies(): Promise<{ success: boolean; data?: any[]; error?: string }> {
+    try {
+      const response = await this.request<any[]>('/api/quick-replies');
+      return { success: true, data: response };
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao listar respostas rápidas:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async createQuickReply(title: string, content: string): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      const response = await this.request<any>('/api/quick-replies', {
+        method: 'POST',
+        body: JSON.stringify({ title, content }),
+      });
+      return { success: true, data: response };
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao criar resposta rápida:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async updateQuickReply(id: string | number, title?: string, content?: string): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      const response = await this.request<any>(`/api/quick-replies/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ title, content }),
+      });
+      return { success: true, data: response };
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao atualizar resposta rápida:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async deleteQuickReply(id: string | number): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.request<{ success: boolean }>(`/api/quick-replies/${id}`, {
+        method: 'DELETE',
+      });
+      return { success: true };
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao deletar resposta rápida:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ============================================================================
+  // WORKFLOWS
+  // ============================================================================
+  async getWorkflows(): Promise<{ success: boolean; data?: any[]; error?: string }> {
+    try {
+      const response = await this.request<any[]>('/api/workflows');
+      return { success: true, data: response };
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao listar workflows:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async createWorkflow(title: string, steps: any[], description?: string, triggerKeywords?: string[], targetDepartmentId?: string): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      const response = await this.request<any>('/api/workflows', {
+        method: 'POST',
+        body: JSON.stringify({ title, description, triggerKeywords, steps, targetDepartmentId }),
+      });
+      return { success: true, data: response };
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao criar workflow:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async updateWorkflow(id: string | number, title?: string, steps?: any[], description?: string, triggerKeywords?: string[], targetDepartmentId?: string): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      const response = await this.request<any>(`/api/workflows/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ title, description, triggerKeywords, steps, targetDepartmentId }),
+      });
+      return { success: true, data: response };
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao atualizar workflow:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async deleteWorkflow(id: string | number): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.request<{ success: boolean }>(`/api/workflows/${id}`, {
+        method: 'DELETE',
+      });
+      return { success: true };
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao deletar workflow:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
   // Health check
   async healthCheck(): Promise<boolean> {
     try {

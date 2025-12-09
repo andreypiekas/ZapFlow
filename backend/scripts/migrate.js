@@ -54,6 +54,73 @@ async function migrate() {
       CREATE INDEX IF NOT EXISTS idx_user_data_key ON user_data(data_key);
     `);
 
+    // Criar tabela de departamentos
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS departments (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        color VARCHAR(50) NOT NULL DEFAULT 'bg-indigo-500',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, name)
+      )
+    `);
+
+    // Criar tabela de contatos
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS contacts (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        phone VARCHAR(50) NOT NULL,
+        email VARCHAR(255),
+        avatar TEXT,
+        source VARCHAR(50) NOT NULL DEFAULT 'manual',
+        last_sync TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, phone)
+      )
+    `);
+
+    // Criar tabela de respostas rápidas
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS quick_replies (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Criar tabela de workflows
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS workflows (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        trigger_keywords TEXT[],
+        steps JSONB NOT NULL,
+        target_department_id VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Criar índices para melhor performance
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_departments_user_id ON departments(user_id);
+      CREATE INDEX IF NOT EXISTS idx_contacts_user_id ON contacts(user_id);
+      CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts(phone);
+      CREATE INDEX IF NOT EXISTS idx_quick_replies_user_id ON quick_replies(user_id);
+      CREATE INDEX IF NOT EXISTS idx_workflows_user_id ON workflows(user_id);
+    `);
+
     // Criar usuário admin padrão se não existir
     const bcrypt = await import('bcryptjs');
     const adminUsername = 'admin@piekas.com';
