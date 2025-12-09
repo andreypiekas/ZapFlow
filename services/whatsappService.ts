@@ -1909,7 +1909,8 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         });
         // Log apenas se não encontrou mensagens (para não poluir quando funciona)
         if (sortedMessages.length === 0) {
-            console.warn(`[fetchChatMessages] ⚠️ Nenhuma mensagem encontrada para ${chatId}`);
+            // Log removido para produção - muito verboso
+            // console.warn(`[fetchChatMessages] ⚠️ Nenhuma mensagem encontrada para ${chatId}`);
         }
         return sortedMessages;
     } catch (error) {
