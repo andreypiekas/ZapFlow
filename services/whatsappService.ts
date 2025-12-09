@@ -34,11 +34,24 @@ const formatPhoneForApi = (phone: string): string => {
     return clean;
 };
 
-// Função para limpar número de contato SEM adicionar código do país
-// Usado quando queremos preservar o formato exato do número fornecido
+// Função para limpar número de contato e garantir formato internacional
+// WhatsApp precisa do número com código do país para reconhecer o contato
 const cleanContactPhone = (phone: string): string => {
-    // Apenas remove caracteres não numéricos, mantém o número como está
-    return phone.replace(/\D/g, '');
+    let clean = phone.replace(/\D/g, '');
+    
+    // Se já tem código do país (12-13 dígitos), mantém como está
+    if (clean.length >= 12) {
+        return clean;
+    }
+    
+    // Se tem 10-11 dígitos (número brasileiro sem código), adiciona 55
+    // Isso garante formato internacional correto para o WhatsApp reconhecer
+    if (clean.length === 10 || clean.length === 11) {
+        return '55' + clean;
+    }
+    
+    // Para outros casos, retorna como está
+    return clean;
 };
 
 // --- CORE SERVICE ---
