@@ -1,5 +1,5 @@
 
-# ⚡ ZapFlow Manager v1.2.0
+# ⚡ ZapFlow Manager v1.3.0
 
 **Plataforma Enterprise de Gestão de Atendimento para WhatsApp**
 
@@ -55,10 +55,12 @@ graph TD
 ```
 
 ### Stack Tecnológica
-*   **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, Lucide Icons.
+*   **Frontend:** React 19, TypeScript, Vite 6, Tailwind CSS 3 (PostCSS), Socket.IO Client 4, Lucide Icons.
 *   **Backend (Core):** Evolution API latest (Node.js/Baileys).
+*   **Backend API:** Node.js/Express, PostgreSQL, JWT Authentication.
 *   **Infraestrutura:** Docker, Docker Compose, PM2, Nginx.
 *   **Banco de Dados:** PostgreSQL 15, Redis.
+*   **Tempo Real:** Socket.IO (WebSocket com fallback para polling HTTP).
 
 ---
 
@@ -155,6 +157,26 @@ Com o backend configurado, os seguintes dados são salvos no PostgreSQL:
 
 ## 📞 Suporte e Créditos
 
-**Desenvolvido por:** Andrey Gheno Piekas
-**Versão Atual:** 1.2.0 (Stable)
+## 🔄 Atualizações Recentes (v1.3.0)
+
+### ✨ Novidades
+- ✅ **Socket.IO Client** implementado para mensagens em tempo real
+- ✅ **Tailwind CSS** configurado para produção (PostCSS)
+- ✅ **Criptografia de dados sensíveis** no localStorage
+- ✅ **Opção de usar apenas PostgreSQL** (sem localStorage)
+- ✅ **CRUD completo** para Departamentos, Contatos, Respostas Rápidas e Workflows
+- ✅ **Chatbot funcional** com marcação de mensagens enviadas
+- ✅ **Melhorias de segurança** e performance
+
+### 🔧 Melhorias Técnicas
+- **Socket.IO:** Substituído WebSocket nativo por `socket.io-client` para conexão estável
+- **Tailwind CSS:** Migrado de CDN para build local com PostCSS e Autoprefixer
+- **Segurança:** Dados sensíveis (API keys, tokens, usuários) criptografados no localStorage
+- **Performance:** CSS otimizado e minificado no build de produção
+- **Logs:** Filtros inteligentes para reduzir poluição do console
+
+---
+
+**Desenvolvido por:** Andrey Gheno Piekas  
+**Versão Atual:** 1.3.0 (Stable)  
 **Licença:** Proprietária
