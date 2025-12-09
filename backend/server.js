@@ -301,11 +301,12 @@ app.post('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res)
       return res.status(400).json({ error: 'key e value são obrigatórios' });
     }
 
-    // Usa o nome do índice funcional no ON CONFLICT
+    // Usa a expressão do índice funcional no ON CONFLICT
+    // O índice é: (COALESCE(user_id, 0), data_type, data_key)
     await pool.query(
       `INSERT INTO user_data (user_id, data_type, data_key, data_value)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT ON CONSTRAINT user_data_user_id_data_type_data_key_unique_idx
+       ON CONFLICT (COALESCE(user_id, 0), data_type, data_key)
        DO UPDATE SET data_value = $4, updated_at = CURRENT_TIMESTAMP`,
       [req.user.id, dataType, key, JSON.stringify(value)]
     );
@@ -1133,7 +1134,7 @@ app.post('/api/data/:dataType/batch', authenticateToken, dataLimiter, async (req
         await client.query(
           `INSERT INTO user_data (user_id, data_type, data_key, data_value)
            VALUES ($1, $2, $3, $4)
-           ON CONFLICT ON CONSTRAINT user_data_user_id_data_type_data_key_unique_idx
+           ON CONFLICT (COALESCE(user_id, 0), data_type, data_key)
            DO UPDATE SET data_value = $4, updated_at = CURRENT_TIMESTAMP`,
           [req.user.id, dataType, key, JSON.stringify(value)]
         );
@@ -1252,7 +1253,7 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
     await pool.query(
       `INSERT INTO user_data (user_id, data_type, data_key, data_value)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT ON CONSTRAINT user_data_user_id_data_type_data_key_unique_idx
+       ON CONFLICT (COALESCE(user_id, 0), data_type, data_key)
        DO UPDATE SET data_value = $4, updated_at = CURRENT_TIMESTAMP`,
       [req.user.id, 'chats', decodedChatId, JSON.stringify(chatData)]
     );
