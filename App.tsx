@@ -15,7 +15,7 @@ import Contacts from './components/Contacts';
 import ChatbotSettings from './components/ChatbotSettings';
 import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot, ChevronLeft, ChevronRight } from 'lucide-react';
 import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance, sendDepartmentSelectionMessage, processDepartmentSelection } from './services/whatsappService';
-import { processChatbotMessages } from './services/chatbotService';
+import { processChatbotMessages } from './services/chatbotService'; 
 import { storageService } from './services/storageService';
 import { apiService, getBackendUrl } from './services/apiService';
 import { SecurityService } from './services/securityService';
@@ -76,7 +76,7 @@ const loadUserSession = (): User | null => {
     
     // TODO: Remover este bloco - backend é obrigatório
     // Fallback temporário para localStorage (será removido)
-    const saved = localStorage.getItem('zapflow_user');
+  const saved = localStorage.getItem('zapflow_user');
     if (saved) {
       // Tenta descriptografar se estiver criptografado
       let decrypted = saved;
@@ -326,9 +326,9 @@ const App: React.FC = () => {
         if (!storageService.getUseOnlyPostgreSQL()) {
           localStorage.setItem('zapflow_user', SecurityService.encrypt(JSON.stringify(currentUser)));
         }
-      } catch (e) {
+    } catch (e) {
         console.error('[App] Erro ao salvar sessão do usuário:', e);
-      }
+    }
     } else {
       localStorage.removeItem('zapflow_user');
     }
@@ -713,21 +713,21 @@ const App: React.FC = () => {
                         // Detecta qualquer ID gerado (cmin*, cmid*, cmio*, cmip*, cmit*, chat_*)
                         const existingIdIsGenerated = existingChat.id && typeof existingChat.id === 'string' && (
                             existingChat.id.includes('cmin') || 
-                            existingChat.id.includes('cmid') || 
-                            existingChat.id.includes('cmio') ||
-                            existingChat.id.includes('cmip') ||
-                            existingChat.id.includes('cmit') ||
+                                                       existingChat.id.includes('cmid') || 
+                                                       existingChat.id.includes('cmio') ||
+                                                       existingChat.id.includes('cmip') ||
+                                                       existingChat.id.includes('cmit') ||
                             existingChat.id.startsWith('chat_')
                         );
                         // ID válido: tem @, não é grupo, não é gerado
                         const realIdIsValid = realChat.id && typeof realChat.id === 'string' && (
                             realChat.id.includes('@') && 
-                            !realChat.id.includes('@g.us') && 
-                            !realChat.id.includes('cmin') && 
-                            !realChat.id.includes('cmid') && 
-                            !realChat.id.includes('cmio') &&
-                            !realChat.id.includes('cmip') &&
-                            !realChat.id.includes('cmit') &&
+                                              !realChat.id.includes('@g.us') && 
+                                              !realChat.id.includes('cmin') && 
+                                              !realChat.id.includes('cmid') && 
+                                              !realChat.id.includes('cmio') &&
+                                              !realChat.id.includes('cmip') &&
+                                              !realChat.id.includes('cmit') &&
                             !realChat.id.startsWith('chat_')
                         );
                         const shouldUpdateId = existingIdIsGenerated && realIdIsValid;
@@ -1110,7 +1110,7 @@ const App: React.FC = () => {
                             finalStatus = existingChat.status;
                             finalAssignedTo = existingChat.assignedTo;
                             finalDepartmentId = existingChat.departmentId;
-                        } else {
+                                } else {
                             // Novo chat sem status: usa status da API (pending para novos chats)
                             finalStatus = realChat.status || 'pending';
                             finalAssignedTo = undefined;
@@ -1279,8 +1279,10 @@ const App: React.FC = () => {
                 });
                 // console.log(`[App] Merge concluído: ${mergedChats.length} chats no total`);
                 // VERIFICAÇÃO FINAL: Garante que status do banco seja SEMPRE preservado
-                const finalMergedChats = mergedChats.map(chat => {
-                    const dbChat = dbChatsMap.get(chat.id);
+                const finalMergedChats = mergedChats
+                    .filter(chat => chat && chat.id) // Filtra chats inválidos
+                    .map(chat => {
+                    const dbChat = chat && chat.id ? dbChatsMap.get(chat.id) : undefined;
                     if (dbChat) {
                         // Chat existe no banco: usa status, assignedTo e departmentId do banco SEMPRE
                         return {
@@ -1368,7 +1370,7 @@ const App: React.FC = () => {
     // Carrega chats do banco primeiro, depois sincroniza
     loadChatsFromDatabase().then(() => {
       // Primeira sincronização após carregar do banco
-      syncChats();
+    syncChats();
     });
     
     // Polling a cada 5 segundos para evitar atualizações excessivas (era 2s)
@@ -1468,7 +1470,7 @@ const App: React.FC = () => {
                     console.warn('[App] ⚠️ Socket.IO desconectado pelo servidor. Tentando reconectar...');
                     setWsStatus('connecting');
                     socket.connect();
-                } else {
+                            } else {
                     // Desconexão normal ou erro de transporte
                     console.log(`[App] ℹ️ Socket.IO desconectado: ${reason}`);
                     setWsStatus('disconnected');
@@ -1481,12 +1483,12 @@ const App: React.FC = () => {
                 if (wsReconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
                     console.warn('[App] ⚠️ Socket.IO: Erro ao conectar. Sistema funcionando via polling (sincronização periódica).');
                     setWsStatus('failed');
-                } else {
+                    } else {
                     setWsStatus('connecting');
                     console.warn(`[App] ⚠️ Socket.IO: Erro de conexão (tentativa ${wsReconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS}):`, error.message);
-                }
+                    }
             });
-            
+                    
             // Event: messages.upsert - mensagens novas ou atualizadas
             socket.on('messages.upsert', (data: any) => {
                 try {
@@ -1502,36 +1504,36 @@ const App: React.FC = () => {
                     } else {
                         messageData = data;
                     }
-                    
-                    if (messageData && messageData.key && messageData.key.remoteJid) {
-                        const remoteJid = normalizeJid(messageData.key.remoteJid);
-                        const mapped = mapApiMessageToInternal(messageData);
                         
-                        if (mapped) {
-                            setChats(currentChats => {
-                                let chatUpdated = false;
-                                const updatedChats = currentChats.map(chat => {
-                                    // Encontra o chat pelo JID
-                                    const chatJid = normalizeJid(chat.id);
-                                    const messageJid = normalizeJid(remoteJid);
-                                    
-                                    // Comparação mais flexível de JIDs
-                                    const chatNumber = chat.contactNumber?.replace(/\D/g, '') || '';
-                                    const messageNumber = messageJid.split('@')[0].replace(/\D/g, '');
-                                    const chatNumberMatch = chatNumber && messageNumber && (
-                                        chatNumber === messageNumber || 
-                                        chatNumber.endsWith(messageNumber.slice(-8)) ||
-                                        messageNumber.endsWith(chatNumber.slice(-8))
-                                    );
-                                    
-                                    if (chatJid === messageJid || chatNumberMatch) {
-                                        // Para mensagens enviadas (fromMe: true), tenta atualizar mensagem local existente
-                                        // ao invés de adicionar uma nova (evita duplicação)
-                                        let messageIndex = -1;
-                                        let shouldUpdate = false;
+                        if (messageData && messageData.key && messageData.key.remoteJid) {
+                            const remoteJid = normalizeJid(messageData.key.remoteJid);
+                            const mapped = mapApiMessageToInternal(messageData);
+                            
+                            if (mapped) {
+                                setChats(currentChats => {
+                                    let chatUpdated = false;
+                                    const updatedChats = currentChats.map(chat => {
+                                        // Encontra o chat pelo JID
+                                        const chatJid = normalizeJid(chat.id);
+                                        const messageJid = normalizeJid(remoteJid);
                                         
-                                        // Para mensagens enviadas (agent), tenta encontrar mensagem local para atualizar
-                                        if (mapped.sender === 'agent') {
+                                        // Comparação mais flexível de JIDs
+                                        const chatNumber = chat.contactNumber?.replace(/\D/g, '') || '';
+                                        const messageNumber = messageJid.split('@')[0].replace(/\D/g, '');
+                                        const chatNumberMatch = chatNumber && messageNumber && (
+                                            chatNumber === messageNumber || 
+                                            chatNumber.endsWith(messageNumber.slice(-8)) ||
+                                            messageNumber.endsWith(chatNumber.slice(-8))
+                                        );
+                                        
+                                        if (chatJid === messageJid || chatNumberMatch) {
+                                            // Para mensagens enviadas (fromMe: true), tenta atualizar mensagem local existente
+                                            // ao invés de adicionar uma nova (evita duplicação)
+                                            let messageIndex = -1;
+                                            let shouldUpdate = false;
+                                            
+                                            // Para mensagens enviadas (agent), tenta encontrar mensagem local para atualizar
+                                            if (mapped.sender === 'agent') {
                                                 // Procura mensagem local sem whatsappMessageId mas com mesmo conteúdo e timestamp próximo
                                                 messageIndex = chat.messages.findIndex(m => {
                                                     // Se já tem whatsappMessageId, verifica por ele (mais confiável)
@@ -1591,112 +1593,112 @@ const App: React.FC = () => {
                                             });
                                             
                                             if (shouldUpdate && messageIndex >= 0) {
-                                            // Atualiza mensagem local existente com dados da API (inclui whatsappMessageId)
-                                            chatUpdated = true;
+                                                // Atualiza mensagem local existente com dados da API (inclui whatsappMessageId)
+                                                chatUpdated = true;
                                             // Log removido para produção - muito verboso
                                             // console.log(`[App] 🔄 Mensagem enviada atualizada com ID do WhatsApp no chat ${chat.contactName}`);
-                                            const updatedMessages = [...chat.messages];
-                                            updatedMessages[messageIndex] = {
-                                                ...updatedMessages[messageIndex],
-                                                whatsappMessageId: mapped.whatsappMessageId,
-                                                id: mapped.whatsappMessageId || updatedMessages[messageIndex].id, // Usa ID do WhatsApp se disponível
-                                                rawMessage: mapped.rawMessage,
-                                                status: mapped.status // Atualiza status (pode ter mudado)
-                                            };
-                                            
-                                            // Reordena após atualização
-                                            const sortedMessages = updatedMessages.sort((a, b) => {
+                                                const updatedMessages = [...chat.messages];
+                                                updatedMessages[messageIndex] = {
+                                                    ...updatedMessages[messageIndex],
+                                                    whatsappMessageId: mapped.whatsappMessageId,
+                                                    id: mapped.whatsappMessageId || updatedMessages[messageIndex].id, // Usa ID do WhatsApp se disponível
+                                                    rawMessage: mapped.rawMessage,
+                                                    status: mapped.status // Atualiza status (pode ter mudado)
+                                                };
+                                                
+                                                // Reordena após atualização
+                                                const sortedMessages = updatedMessages.sort((a, b) => {
                                                     const timeA = a.timestamp?.getTime() || 0;
                                                     const timeB = b.timestamp?.getTime() || 0;
                                                     const timeDiff = timeA - timeB;
                                                     const absTimeDiff = Math.abs(timeDiff);
                                                     
-                                                // PRIORIDADE 1: Se timestamps são muito próximos (< 10 segundos) e senders diferentes
-                                                // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
-                                                // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
-                                                // independentemente de pequenas diferenças de sincronização de relógio
-                                                if (absTimeDiff < 10000 && a.sender !== b.sender) {
-                                                    // Agente sempre vem antes do usuário quando timestamps estão próximos
-                                                    if (a.sender === 'agent' && b.sender === 'user') {
-                                                        return -1; // Agente antes
+                                                    // PRIORIDADE 1: Se timestamps são muito próximos (< 10 segundos) e senders diferentes
+                                                    // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
+                                                    // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
+                                                    // independentemente de pequenas diferenças de sincronização de relógio
+                                                    if (absTimeDiff < 10000 && a.sender !== b.sender) {
+                                                        // Agente sempre vem antes do usuário quando timestamps estão próximos
+                                                        if (a.sender === 'agent' && b.sender === 'user') {
+                                                            return -1; // Agente antes
+                                                        }
+                                                        // Usuário sempre vem depois do agente quando timestamps estão próximos
+                                                        if (a.sender === 'user' && b.sender === 'agent') {
+                                                            return 1; // Usuário depois
+                                                        }
                                                     }
-                                                    // Usuário sempre vem depois do agente quando timestamps estão próximos
-                                                    if (a.sender === 'user' && b.sender === 'agent') {
-                                                        return 1; // Usuário depois
+                                                    
+                                                    // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
+                                                    if (absTimeDiff >= 10000) {
+                                                        return timeDiff;
                                                     }
-                                                }
+                                                    
+                                                    // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, mantém ordem de inserção
+                                                    // (retorna 0 para manter ordem estável quando senders são iguais)
+                                                    return 0;
+                                                });
                                                 
-                                                // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
-                                                if (absTimeDiff >= 10000) {
-                                                    return timeDiff;
-                                                }
+                                                // Lógica para processar mensagens de clientes finalizados
+                                                let updatedChat = { ...chat };
                                                 
-                                                // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, mantém ordem de inserção
-                                                // (retorna 0 para manter ordem estável quando senders são iguais)
-                                                return 0;
-                                            });
-                                            
-                                            // Lógica para processar mensagens de clientes finalizados
-                                            let updatedChat = { ...chat };
-                                            
-                                            return {
-                                                ...updatedChat,
-                                                messages: sortedMessages,
-                                                lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
-                                                lastMessageTime: mapped.timestamp,
-                                                unreadCount: updatedChat.unreadCount
-                                            };
-                                        } else if (!exists) {
-                                            // Nova mensagem (não existe e não é atualização)
-                                            chatUpdated = true;
+                                                return {
+                                                    ...updatedChat,
+                                                    messages: sortedMessages,
+                                                    lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
+                                                    lastMessageTime: mapped.timestamp,
+                                                    unreadCount: updatedChat.unreadCount
+                                                };
+                                            } else if (!exists) {
+                                                // Nova mensagem (não existe e não é atualização)
+                                                chatUpdated = true;
                                             // Log removido para produção - muito verboso
                                             // console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}`);
-                                            let updatedMessages = [...chat.messages, mapped].sort((a, b) => {
-                                                const timeA = a.timestamp?.getTime() || 0;
-                                                const timeB = b.timestamp?.getTime() || 0;
-                                                const timeDiff = timeA - timeB;
-                                                const absTimeDiff = Math.abs(timeDiff);
-                                                
-                                                // PRIORIDADE 1: Se timestamps são muito próximos (< 10 segundos) e senders diferentes
-                                                // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
-                                                // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
-                                                // independentemente de pequenas diferenças de sincronização de relógio
-                                                if (absTimeDiff < 10000 && a.sender !== b.sender) {
-                                                    // Agente sempre vem antes do usuário quando timestamps estão próximos
-                                                    if (a.sender === 'agent' && b.sender === 'user') {
-                                                        return -1; // Agente antes
+                                                let updatedMessages = [...chat.messages, mapped].sort((a, b) => {
+                                                    const timeA = a.timestamp?.getTime() || 0;
+                                                    const timeB = b.timestamp?.getTime() || 0;
+                                                    const timeDiff = timeA - timeB;
+                                                    const absTimeDiff = Math.abs(timeDiff);
+                                                    
+                                                    // PRIORIDADE 1: Se timestamps são muito próximos (< 10 segundos) e senders diferentes
+                                                    // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
+                                                    // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
+                                                    // independentemente de pequenas diferenças de sincronização de relógio
+                                                    if (absTimeDiff < 10000 && a.sender !== b.sender) {
+                                                        // Agente sempre vem antes do usuário quando timestamps estão próximos
+                                                        if (a.sender === 'agent' && b.sender === 'user') {
+                                                            return -1; // Agente antes
+                                                        }
+                                                        // Usuário sempre vem depois do agente quando timestamps estão próximos
+                                                        if (a.sender === 'user' && b.sender === 'agent') {
+                                                            return 1; // Usuário depois
+                                                        }
                                                     }
-                                                    // Usuário sempre vem depois do agente quando timestamps estão próximos
-                                                    if (a.sender === 'user' && b.sender === 'agent') {
-                                                        return 1; // Usuário depois
+                                                    
+                                                    // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
+                                                    if (absTimeDiff >= 10000) {
+                                                        return timeDiff;
                                                     }
-                                                }
+                                                    
+                                                    // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, mantém ordem de inserção
+                                                    // (retorna 0 para manter ordem estável quando senders são iguais)
+                                                    return 0;
+                                                });
                                                 
-                                                // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
-                                                if (absTimeDiff >= 10000) {
-                                                    return timeDiff;
-                                                }
-                                                
-                                                // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, mantém ordem de inserção
-                                                // (retorna 0 para manter ordem estável quando senders são iguais)
-                                                return 0;
-                                            });
-                                            
                                             // PRIORIDADE ABSOLUTA: Status do banco NUNCA é alterado via Socket.IO
                                             // Apenas adiciona mensagens, não altera status
-                                            let updatedChat = { ...chat };
-                                            
+                                                let updatedChat = { ...chat };
+                                                
                                             // Processa avaliação se chat está fechado e aguardando avaliação
                                             if (chat.status === 'closed' && mapped.sender === 'user' && chat.awaitingRating) {
-                                                const messageContent = mapped.content.trim();
-                                                const isRatingResponse = /^[1-5]$/.test(messageContent);
-                                                
+                                                    const messageContent = mapped.content.trim();
+                                                    const isRatingResponse = /^[1-5]$/.test(messageContent);
+                                                    
                                                 if (isRatingResponse) {
                                                     // Cliente respondeu com avaliação (1-5) - atualiza via handleUpdateChat para persistir no banco
-                                                    const rating = parseInt(messageContent);
+                                                        const rating = parseInt(messageContent);
                                                     handleUpdateChat({
-                                                        ...chat,
-                                                        rating: rating,
+                                                            ...chat,
+                                                            rating: rating,
                                                         awaitingRating: false,
                                                         status: 'closed' // Mantém fechado
                                                     });
@@ -1707,16 +1709,16 @@ const App: React.FC = () => {
                                             // Processa seleção de setores apenas se não estiver no banco (novos chats)
                                             // Chats no banco já têm departmentId fixo e não devem ser alterados via Socket.IO
                                             if (mapped.sender === 'user' && !updatedChat.departmentId && departments.length > 0) {
-                                                const messageContent = mapped.content.trim();
-                                                const selectedDeptId = processDepartmentSelection(messageContent, departments);
-                                                
-                                                if (selectedDeptId) {
+                                                    const messageContent = mapped.content.trim();
+                                                        const selectedDeptId = processDepartmentSelection(messageContent, departments);
+                                                        
+                                                        if (selectedDeptId) {
                                                     // Usuário selecionou setor - atualiza via handleUpdateChat para persistir no banco
-                                                    const filteredMessages = updatedMessages.filter(m => m.id !== mapped.id);
-                                                    updatedMessages = filteredMessages;
-                                                    
+                                                            const filteredMessages = updatedMessages.filter(m => m.id !== mapped.id);
+                                                            updatedMessages = filteredMessages;
+                                                            
                                                     handleUpdateChat({
-                                                        ...updatedChat,
+                                                                        ...updatedChat,
                                                         departmentId: selectedDeptId,
                                                         status: updatedChat.assignedTo ? 'open' : 'pending',
                                                         awaitingDepartmentSelection: false
@@ -1725,30 +1727,30 @@ const App: React.FC = () => {
                                                     // Primeira mensagem sem departamento: envia seleção
                                                     sendDepartmentSelectionMessage(apiConfig, updatedChat.contactNumber, departments)
                                                         .then(sent => {
-                                                            if (sent) {
-                                                                handleUpdateChat({
-                                                                    ...updatedChat,
-                                                                    awaitingDepartmentSelection: true,
-                                                                    departmentSelectionSent: true
-                                                                });
+                                                                    if (sent) {
+                                                                        handleUpdateChat({
+                                                                            ...updatedChat,
+                                                                            awaitingDepartmentSelection: true,
+                                                                            departmentSelectionSent: true
+                                                                        });
                                                             }
                                                         }).catch(err => console.error('[App] Erro ao enviar seleção de setores:', err));
+                                                    }
                                                 }
-                                            }
-                                            
-                                            // Notifica se for mensagem recebida
-                                            if (mapped.sender === 'user' && currentUser) {
-                                                // Notifica se estiver atribuído ao usuário atual ou se não estiver atribuído a ninguém (triagem)
-                                                if (updatedChat.assignedTo === currentUser.id || !updatedChat.assignedTo) {
-                                                    addNotification(
-                                                        `Nova mensagem de ${updatedChat.contactName}`,
-                                                        mapped.content && mapped.content.length > 50 ? mapped.content.substring(0, 50) + '...' : (mapped.content || 'Nova mensagem'),
-                                                        'info',
-                                                        true, // Toca som
-                                                        true  // Mostra notificação do navegador
-                                                    );
+                                                
+                                                // Notifica se for mensagem recebida
+                                                if (mapped.sender === 'user' && currentUser) {
+                                                    // Notifica se estiver atribuído ao usuário atual ou se não estiver atribuído a ninguém (triagem)
+                                                    if (updatedChat.assignedTo === currentUser.id || !updatedChat.assignedTo) {
+                                                        addNotification(
+                                                            `Nova mensagem de ${updatedChat.contactName}`,
+                                                            mapped.content && mapped.content.length > 50 ? mapped.content.substring(0, 50) + '...' : (mapped.content || 'Nova mensagem'),
+                                                            'info',
+                                                            true, // Toca som
+                                                            true  // Mostra notificação do navegador
+                                                        );
+                                                    }
                                                 }
-                                            }
                                             
                                             // PRIORIDADE ABSOLUTA: Status do banco NUNCA é alterado via Socket.IO
                                             // Carrega status do banco antes de retornar
@@ -1759,33 +1761,33 @@ const App: React.FC = () => {
                                             // Tenta carregar do banco (síncrono - usa estado atual)
                                             // Nota: Para garantir 100%, seria necessário buscar do banco, mas isso seria muito custoso
                                             // Por isso, confiamos que o status já está correto no estado atual (carregado do banco)
-                                            
-                                            return {
-                                                ...updatedChat,
-                                                messages: updatedMessages,
-                                                lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
-                                                lastMessageTime: mapped.timestamp,
-                                                unreadCount: mapped.sender === 'user' ? (updatedChat.unreadCount || 0) + 1 : updatedChat.unreadCount,
+                                                
+                                                return {
+                                                    ...updatedChat,
+                                                    messages: updatedMessages,
+                                                    lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
+                                                    lastMessageTime: mapped.timestamp,
+                                                    unreadCount: mapped.sender === 'user' ? (updatedChat.unreadCount || 0) + 1 : updatedChat.unreadCount,
                                                 // Status NUNCA é alterado via Socket.IO - apenas via handleUpdateChat
                                                 status: finalStatus,
                                                 assignedTo: finalAssignedTo,
                                                 departmentId: finalDepartmentId
-                                            };
-                                        } else {
+                                                };
+                                            } else {
                                             // Log removido para produção - muito verboso (mantém apenas warnings importantes)
                                             // console.log(`[App] ⚠️ Mensagem já existe no chat ${chat.contactName}`);
+                                            }
                                         }
-                                    }
-                                    return chat;
-                                });
-                                
-                                if (chatUpdated) {
+                                        return chat;
+                                    });
+                                    
+                                    if (chatUpdated) {
                                     console.log('[App] ✅ Chats atualizados com nova mensagem via Socket.IO');
-                                }
-                                
-                                return updatedChats;
-                            });
-                        }
+                                    }
+                                    
+                                    return updatedChats;
+                                });
+                            }
                     }
                 } catch (err) {
                     console.error('[App] ❌ Erro ao processar mensagem Socket.IO:', err);
@@ -1848,9 +1850,9 @@ const App: React.FC = () => {
             setWsStatus('failed');
             // Se não for reconexão, tenta uma vez após 5 segundos
             if (!isReconnect && wsReconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-                wsReconnectAttemptsRef.current += 1;
-                wsReconnectTimeoutRef.current = setTimeout(() => {
-                    if (currentUser && apiConfig.baseUrl && !apiConfig.isDemo) {
+                    wsReconnectAttemptsRef.current += 1;
+                        wsReconnectTimeoutRef.current = setTimeout(() => {
+                            if (currentUser && apiConfig.baseUrl && !apiConfig.isDemo) {
                         initWebSocket(true).catch(e => {
                             console.error('[App] ❌ Erro ao reconectar Socket.IO:', e);
                         });
@@ -2283,7 +2285,7 @@ const App: React.FC = () => {
         } else {
           console.error('[App] Erro ao atualizar departamento:', result.error);
           // Fallback: atualiza localmente
-          setDepartments(departments.map(d => d.id === updatedDept.id ? updatedDept : d));
+    setDepartments(departments.map(d => d.id === updatedDept.id ? updatedDept : d));
         }
       } else {
         // Se não for um ID numérico, apenas atualiza localmente
@@ -2302,8 +2304,8 @@ const App: React.FC = () => {
       if (!isNaN(deptId)) {
         const result = await apiService.deleteDepartment(deptId);
         if (result.success) {
-          setDepartments(departments.filter(d => d.id !== id));
-          setChats(chats.map(c => c.departmentId === id ? { ...c, departmentId: null } : c));
+    setDepartments(departments.filter(d => d.id !== id));
+    setChats(chats.map(c => c.departmentId === id ? { ...c, departmentId: null } : c));
         } else {
           console.error('[App] Erro ao deletar departamento:', result.error);
           alert(`Erro ao deletar departamento: ${result.error || 'Erro desconhecido'}`);
@@ -2632,14 +2634,14 @@ const App: React.FC = () => {
         contact.source || 'manual'
       );
       if (result.success && result.data) {
-        setContacts(currentContacts => {
-          // Verifica se já existe contato com o mesmo telefone
-          const existingIndex = currentContacts.findIndex(c => 
-            normalizePhoneForMatch(c.phone) === normalizePhoneForMatch(contact.phone)
-          );
-          if (existingIndex >= 0) {
-            // Atualiza contato existente
-            const updated = [...currentContacts];
+    setContacts(currentContacts => {
+      // Verifica se já existe contato com o mesmo telefone
+      const existingIndex = currentContacts.findIndex(c => 
+        normalizePhoneForMatch(c.phone) === normalizePhoneForMatch(contact.phone)
+      );
+      if (existingIndex >= 0) {
+        // Atualiza contato existente
+        const updated = [...currentContacts];
             updated[existingIndex] = {
               id: result.data.id,
               name: result.data.name,
@@ -2649,9 +2651,9 @@ const App: React.FC = () => {
               source: result.data.source as 'manual' | 'google' | 'csv',
               lastSync: result.data.lastSync ? new Date(result.data.lastSync) : undefined
             };
-            return updated;
-          }
-          // Adiciona novo contato
+        return updated;
+      }
+      // Adiciona novo contato
           return [...currentContacts, {
             id: result.data.id,
             name: result.data.name,
@@ -2674,8 +2676,8 @@ const App: React.FC = () => {
             updated[existingIndex] = { ...contact, source: 'manual' as const };
             return updated;
           }
-          return [...currentContacts, { ...contact, source: 'manual' as const }];
-        });
+      return [...currentContacts, { ...contact, source: 'manual' as const }];
+    });
       }
     } catch (error) {
       console.error('[App] Erro ao criar contato na API:', error);
