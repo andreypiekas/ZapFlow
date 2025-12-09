@@ -1105,52 +1105,89 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
     const { chatId } = req.params;
     const { status, assignedTo, departmentId } = req.body;
 
-    // Busca o chat no user_data
-    const chatResult = await pool.query(
+    // Decodifica o chatId (pode vir URL encoded)
+    const decodedChatId = decodeURIComponent(chatId);
+
+    // Tenta buscar o chat individual primeiro (estrutura nova)
+    let chatResult = await pool.query(
       `SELECT data_value FROM user_data 
-       WHERE user_id = $1 AND data_type = 'chats' AND data_key = 'default'`,
-      [req.user.id]
+       WHERE user_id = $1 AND data_type = 'chats' AND data_key = $2`,
+      [req.user.id, decodedChatId]
     );
 
-    if (chatResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Chats não encontrados' });
-    }
+    let chatData = null;
+    let isIndividualChat = false;
 
-    const chats = JSON.parse(chatResult.rows[0].data_value);
-    const chatIndex = chats.findIndex((c) => c.id === chatId);
+    if (chatResult.rows.length > 0) {
+      // Chat encontrado como registro individual
+      chatData = JSON.parse(chatResult.rows[0].data_value);
+      isIndividualChat = true;
+    } else {
+      // Tenta buscar no array de chats (estrutura antiga/legacy)
+      chatResult = await pool.query(
+        `SELECT data_value FROM user_data 
+         WHERE user_id = $1 AND data_type = 'chats' AND data_key = 'default'`,
+        [req.user.id]
+      );
 
-    if (chatIndex === -1) {
-      return res.status(404).json({ error: 'Chat não encontrado' });
+      if (chatResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Chat não encontrado' });
+      }
+
+      const chats = JSON.parse(chatResult.rows[0].data_value);
+      const chatIndex = chats.findIndex((c) => c.id === decodedChatId);
+
+      if (chatIndex === -1) {
+        return res.status(404).json({ error: 'Chat não encontrado' });
+      }
+
+      chatData = chats[chatIndex];
     }
 
     // Atualiza apenas status, assignedTo e departmentId (preserva outros campos)
     if (status !== undefined) {
-      chats[chatIndex].status = status;
+      chatData.status = status;
     }
     if (assignedTo !== undefined) {
-      chats[chatIndex].assignedTo = assignedTo;
+      chatData.assignedTo = assignedTo;
     }
     if (departmentId !== undefined) {
-      chats[chatIndex].departmentId = departmentId;
+      chatData.departmentId = departmentId;
     }
     if (status === 'closed') {
-      chats[chatIndex].endedAt = new Date().toISOString();
-    } else if (status === 'open' && chats[chatIndex].endedAt) {
-      chats[chatIndex].endedAt = undefined;
+      chatData.endedAt = new Date().toISOString();
+    } else if (status === 'open' && chatData.endedAt) {
+      chatData.endedAt = undefined;
     }
 
     // Salva de volta no banco
-    await pool.query(
-      `UPDATE user_data 
-       SET data_value = $1, updated_at = CURRENT_TIMESTAMP
-       WHERE user_id = $2 AND data_type = 'chats' AND data_key = 'default'`,
-      [JSON.stringify(chats), req.user.id]
-    );
+    if (isIndividualChat) {
+      // Atualiza o registro individual
+      await pool.query(
+        `UPDATE user_data 
+         SET data_value = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $2 AND data_type = 'chats' AND data_key = $3`,
+        [JSON.stringify(chatData), req.user.id, decodedChatId]
+      );
+    } else {
+      // Atualiza no array (estrutura legacy)
+      const chats = JSON.parse(chatResult.rows[0].data_value);
+      const chatIndex = chats.findIndex((c) => c.id === decodedChatId);
+      chats[chatIndex] = chatData;
 
-    res.json({ success: true, chat: chats[chatIndex] });
+      await pool.query(
+        `UPDATE user_data 
+         SET data_value = $1, updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $2 AND data_type = 'chats' AND data_key = 'default'`,
+        [JSON.stringify(chats), req.user.id]
+      );
+    }
+
+    res.json({ success: true, chat: chatData });
   } catch (error) {
     console.error('Erro ao atualizar chat:', error);
-    res.status(500).json({ error: 'Erro ao atualizar chat' });
+    console.error('Stack:', error.stack);
+    res.status(500).json({ error: 'Erro ao atualizar chat', details: error.message });
   }
 });
 
