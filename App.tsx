@@ -721,8 +721,65 @@ const App: React.FC = () => {
                         const newMsgCount = realChat.messages.length;
                         const oldMsgCount = existingChat.messages.length;
                         
+                        // Verifica se há novas mensagens do usuário em chat fechado
                         if (newMsgCount > oldMsgCount) {
                             const lastMsg = realChat.messages[realChat.messages.length - 1];
+                            const dbChatStatus = dbChat?.status;
+                            
+                            // Se o chat está fechado no banco e recebeu nova mensagem do usuário, reabre
+                            if (dbChatStatus === 'closed' && lastMsg.sender === 'user') {
+                                console.log(`[App] 🔄 [DEBUG] syncChats: Chat fechado ${realChat.id} recebeu nova mensagem do usuário, reabrindo...`);
+                                
+                                // Atualiza status para pending e limpa assignedTo/departmentId
+                                // Isso será salvo no banco via handleUpdateChat abaixo
+                                setTimeout(async () => {
+                                    try {
+                                        await apiService.updateChatStatus(realChat.id, 'pending', undefined, null);
+                                        console.log(`[App] ✅ [DEBUG] syncChats: Chat ${realChat.id} reaberto e salvo no banco`);
+                                        
+                                        // Envia mensagem de saudação padrão
+                                        const chatbotConfig = await storageService.load<ChatbotConfig>('chatbotConfig');
+                                        if (chatbotConfig && chatbotConfig.isEnabled && chatbotConfig.greetingMessage) {
+                                            // Verifica se já foi enviada (para evitar reenvio)
+                                            const hasGreeting = realChat.messages.some((msg: Message) =>
+                                                msg.sender === 'system' && msg.content?.includes('greeting_sent')
+                                            );
+                                            
+                                            if (!hasGreeting) {
+                                                const { sendGreetingMessage } = await import('./services/chatbotService');
+                                                const success = await sendGreetingMessage(apiConfig, chatbotConfig, {
+                                                    ...realChat,
+                                                    status: 'pending'
+                                                });
+                                                
+                                                if (success) {
+                                                    // Adiciona mensagem de sistema
+                                                    const systemMessage: Message = {
+                                                        id: `sys_chatbot_reopen_sync_${Date.now()}`,
+                                                        content: 'greeting_sent - Saudação automática enviada (chat reaberto)',
+                                                        sender: 'system',
+                                                        timestamp: new Date(),
+                                                        status: MessageStatus.READ,
+                                                        type: 'text'
+                                                    };
+                                                    
+                                                    handleUpdateChat({
+                                                        ...realChat,
+                                                        status: 'pending',
+                                                        assignedTo: undefined,
+                                                        departmentId: null,
+                                                        endedAt: undefined,
+                                                        messages: [...realChat.messages, systemMessage]
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    } catch (error) {
+                                        console.error('[App] ❌ Erro ao reabrir chat fechado no syncChats:', error);
+                                    }
+                                }, 500);
+                            }
+                            
                             if (lastMsg.sender === 'user') {
                                 if (existingChat.assignedTo === currentUser.id) {
                                     // Play sound or notify
