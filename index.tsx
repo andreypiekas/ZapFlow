@@ -28,6 +28,14 @@ if (typeof console !== 'undefined') {
             return true;
         }
         
+        // Filtra erros esperados do Socket.IO durante tentativa de conexão WebSocket
+        // Socket.IO tenta WebSocket primeiro e faz fallback para polling - esses erros são normais
+        if (fullText.includes('WebSocket connection to') && 
+            (fullText.includes('socket.io') || fullText.includes('/socket.io/')) &&
+            (fullText.includes('failed') || fullText.includes('closed before the connection'))) {
+            return true;
+        }
+        
         // Filtra strings que contêm padrões de base64/imagens longas
         // Especialmente aquelas que começam com :5173/ (porta de dev)
         if (fullText.length > 500) {
