@@ -20,11 +20,13 @@ import { apiService } from './services/apiService';
 import { SecurityService } from './services/securityService';
 import { io, Socket } from 'socket.io-client'; 
 
+// TODO: Remover localStorage - backend é obrigatório
 const loadConfig = (): ApiConfig => {
   try {
     // Verifica se deve usar apenas PostgreSQL
     if (storageService.getUseOnlyPostgreSQL()) {
       // Se configurado para usar apenas PostgreSQL, não carrega do localStorage
+      // Backend é obrigatório - configuração deve vir do backend
       return {
         baseUrl: '', 
         apiKey: '',
@@ -35,6 +37,8 @@ const loadConfig = (): ApiConfig => {
       };
     }
     
+    // TODO: Remover este bloco - backend é obrigatório
+    // Fallback temporário para localStorage (será removido)
     const saved = localStorage.getItem('zapflow_config');
     if (saved) {
       // Tenta descriptografar se estiver criptografado
@@ -61,6 +65,7 @@ const loadConfig = (): ApiConfig => {
   };
 };
 
+// TODO: Remover localStorage - backend é obrigatório
 const loadUserSession = (): User | null => {
   try {
     // Verifica se deve usar apenas PostgreSQL
@@ -68,6 +73,8 @@ const loadUserSession = (): User | null => {
       return null; // Não carrega do localStorage se usar apenas PostgreSQL
     }
     
+    // TODO: Remover este bloco - backend é obrigatório
+    // Fallback temporário para localStorage (será removido)
     const saved = localStorage.getItem('zapflow_user');
     if (saved) {
       // Tenta descriptografar se estiver criptografado

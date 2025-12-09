@@ -1,4 +1,6 @@
-// Serviço de persistência híbrido: API primeiro, localStorage como fallback
+// Serviço de persistência - Backend obrigatório
+// TODO: Remover localStorage completamente nos próximos passos do projeto
+// Backend PostgreSQL é obrigatório para o funcionamento do sistema
 import { apiService } from './apiService';
 import { SecurityService } from './securityService';
 
@@ -135,6 +137,7 @@ class StorageService {
     return null;
   }
 
+  // TODO: Remover fallback para localStorage - backend é obrigatório
   async save<T>(dataType: DataType, value: T, key?: string): Promise<boolean> {
     const storageKey = key || 'default';
 
@@ -157,14 +160,18 @@ class StorageService {
         // Erro 413 (Payload Too Large) não deve desabilitar permanentemente a API
         // Pode ser temporário ou resolvido após reiniciar o backend
         if (error?.message?.includes('413') || error?.message?.includes('Payload Too Large')) {
-          console.warn(`[StorageService] ⚠️ Payload muito grande para ${dataType}/${storageKey}, usando localStorage. Reinicie o backend para aplicar o limite de 50MB.`);
+          console.error(`[StorageService] ❌ Payload muito grande para ${dataType}/${storageKey}. Backend é obrigatório.`);
+          console.error(`[StorageService] ⚠️ Usando localStorage temporariamente. Reinicie o backend para aplicar o limite de 50MB.`);
           // Não desabilita a API para erros 413, pois pode ser resolvido
         } else {
-          console.warn(`[StorageService] Erro ao salvar ${dataType} na API, usando localStorage:`, error);
+          // Erro de conexão já foi logado no apiService como crítico
+          // Backend é obrigatório - localStorage é apenas temporário
+          console.error(`[StorageService] ❌ Erro ao salvar ${dataType} na API. Backend é obrigatório.`);
+          console.error(`[StorageService] ⚠️ Usando localStorage temporariamente (será removido nos próximos passos).`);
           this.consecutiveFailures++;
           if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
             this.useAPI = false;
-            console.warn('[StorageService] Muitas falhas, desabilitando API temporariamente');
+            console.error('[StorageService] ❌ Backend indisponível após múltiplas tentativas. Sistema requer backend para funcionar.');
           }
         }
       }
@@ -220,34 +227,39 @@ class StorageService {
     return sensitiveTypes.includes(dataType);
   }
 
+  // TODO: Remover fallback para localStorage - backend é obrigatório
   async saveBatch<T>(dataType: DataType, data: { [key: string]: T }): Promise<boolean> {
-    // Sempre salva no localStorage primeiro (backup imediato)
+    // TODO: Remover localStorage - backend é obrigatório
+    // Salva no localStorage temporariamente (será removido)
     const localStorageSuccess = this.saveToLocalStorage(dataType, data);
 
-    // Se API está disponível, tenta salvar em lote
+    // Backend é obrigatório - sempre tenta salvar na API
     if (this.useAPI && this.apiAvailable) {
       try {
         const success = await apiService.saveBatchData(dataType, data);
         if (success) {
           this.consecutiveFailures = 0;
-          // Log removido para produção - muito verboso
-          // console.log(`[StorageService] ✅ Lote de ${dataType} salvo na API`);
           return true;
         }
       } catch (error: any) {
         if (error?.message?.includes('413') || error?.message?.includes('Payload Too Large')) {
-          console.warn(`[StorageService] ⚠️ Payload muito grande para lote de ${dataType}, usando localStorage. Reinicie o backend.`);
+          console.error(`[StorageService] ❌ Payload muito grande para lote de ${dataType}. Backend é obrigatório.`);
+          console.error(`[StorageService] ⚠️ Usando localStorage temporariamente. Reinicie o backend.`);
         } else {
-          console.warn(`[StorageService] Erro ao salvar lote de ${dataType} na API, usando localStorage:`, error);
+          // Erro de conexão já foi logado no apiService como crítico
+          console.error(`[StorageService] ❌ Erro ao salvar lote de ${dataType} na API. Backend é obrigatório.`);
+          console.error(`[StorageService] ⚠️ Usando localStorage temporariamente (será removido nos próximos passos).`);
           this.consecutiveFailures++;
           if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
             this.useAPI = false;
+            console.error('[StorageService] ❌ Backend indisponível após múltiplas tentativas. Sistema requer backend para funcionar.');
           }
         }
       }
     }
 
-    // Retorna sucesso se salvou no localStorage
+    // TODO: Remover este retorno - backend é obrigatório
+    // Retorna sucesso se salvou no localStorage (temporário)
     return localStorageSuccess;
   }
 

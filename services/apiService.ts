@@ -25,6 +25,7 @@ export interface ApiResponse<T> {
 
 class ApiService {
   // Verifica se o erro é de conexão (backend não disponível)
+  // IMPORTANTE: Backend é obrigatório - erros de conexão são críticos
   private isConnectionError(error: any): boolean {
     return error?.message?.includes('Failed to fetch') || 
            error?.message?.includes('ERR_CONNECTION_REFUSED') ||
@@ -73,12 +74,15 @@ class ApiService {
 
       return await response.json();
     } catch (error: any) {
-      // Filtra erros de conexão (backend não disponível) - não loga como erro crítico
-      if (!this.isConnectionError(error)) {
+      // Backend é obrigatório - erros de conexão são críticos e devem ser logados
+      if (this.isConnectionError(error)) {
+        console.error(`[ApiService] ❌ ERRO CRÍTICO: Backend não está disponível (${endpoint})`);
+        console.error(`[ApiService] ⚠️ O backend é obrigatório para o funcionamento do sistema.`);
+        console.error(`[ApiService] Verifique se o servidor está rodando em ${API_BASE_URL}`);
+      } else {
         // Erro real (não é de conexão) - loga como erro
         console.error(`[ApiService] Erro na requisição ${endpoint}:`, error);
       }
-      // Backend não disponível - sistema funcionará via localStorage (silencioso)
       throw error;
     }
   }
