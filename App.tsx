@@ -1466,14 +1466,17 @@ const App: React.FC = () => {
         
         if (allChatsData && Object.keys(allChatsData).length > 0) {
           // Converte o objeto de chats em array
-          const chatsArray = Object.values(allChatsData).map((chat: any) => ({
-            ...chat,
-            lastMessageTime: chat.lastMessageTime ? new Date(chat.lastMessageTime) : new Date(),
-            messages: chat.messages?.map((msg: Message) => ({
-              ...msg,
-              timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date()
-            })) || []
-          }));
+          const chatsArray = Object.values(allChatsData)
+            .filter((chat: any) => chat && chat.id) // Filtra chats inválidos (sem id)
+            .map((chat: any) => ({
+              ...chat,
+              id: chat.id || String(Date.now()), // Garante que sempre tem id
+              lastMessageTime: chat.lastMessageTime ? new Date(chat.lastMessageTime) : new Date(),
+              messages: chat.messages?.map((msg: Message) => ({
+                ...msg,
+                timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date()
+              })) || []
+            }));
           
           // Atualiza os chats com dados do banco (preserva status, assignedTo, departmentId)
           setChats(currentChats => {
