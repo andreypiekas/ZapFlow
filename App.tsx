@@ -1386,18 +1386,26 @@ const App: React.FC = () => {
             }
             
             // Tenta múltiplos formatos de URL do WebSocket
+            // IMPORTANTE: Evolution API requer apiKey na URL como query parameter
             const baseWsUrl = apiConfig.baseUrl.replace(/^http/, 'ws');
+            const apiKey = apiConfig.apiKey || apiConfig.authenticationApiKey || '';
+            
+            // Constrói URLs com apiKey como query parameter
             const wsUrls = [
-                `${baseWsUrl}/chat/${instanceName}`,
-                `${baseWsUrl}/socket.io/?instance=${instanceName}`,
-                `${baseWsUrl}/socket.io/?EIO=4&transport=websocket&instance=${instanceName}`,
-                `${baseWsUrl}/ws/${instanceName}`
+                // Formato 1: Socket.IO com EIO e apiKey
+                `${baseWsUrl}/socket.io/?EIO=4&transport=websocket&instance=${instanceName}${apiKey ? `&apikey=${encodeURIComponent(apiKey)}` : ''}`,
+                // Formato 2: Socket.IO simples com apiKey
+                `${baseWsUrl}/socket.io/?instance=${instanceName}${apiKey ? `&apikey=${encodeURIComponent(apiKey)}` : ''}`,
+                // Formato 3: WebSocket direto com apiKey
+                `${baseWsUrl}/ws/${instanceName}${apiKey ? `?apikey=${encodeURIComponent(apiKey)}` : ''}`,
+                // Formato 4: Chat endpoint com apiKey (fallback)
+                `${baseWsUrl}/chat/${instanceName}${apiKey ? `?apikey=${encodeURIComponent(apiKey)}` : ''}`
             ];
             
             // Log removido para produção - muito verboso
             // console.log(`[App] Tentando conectar WebSocket para instância: ${instanceName}`);
             
-            // Tenta o primeiro formato (mais comum)
+            // Tenta o primeiro formato (mais comum - Socket.IO)
             const wsUrl = wsUrls[0];
             // Log removido para produção - muito verboso
             // console.log(`[App] Conectando WebSocket: ${wsUrl}`);
@@ -1405,6 +1413,13 @@ const App: React.FC = () => {
             // Fecha WebSocket anterior se existir
             if (wsRef.current) {
                 wsRef.current.close();
+            }
+            
+            // Verifica se tem apiKey antes de tentar conectar
+            if (!apiKey) {
+                console.warn('[App] ⚠️ WebSocket: apiKey não configurada. Conexão pode ser rejeitada.');
+                setWsStatus('failed');
+                return;
             }
             
             wsRef.current = new WebSocket(wsUrl);
@@ -1415,11 +1430,7 @@ const App: React.FC = () => {
                 // Reset contador de tentativas ao conectar com sucesso
                 wsReconnectAttemptsRef.current = 0;
                 setWsStatus('connected');
-                // Envia autenticação se necessário
-                if (apiConfig.apiKey && wsRef.current) {
-                    wsRef.current.send(JSON.stringify({ apikey: apiConfig.apiKey }));
-                    console.log('[App] Autenticação enviada ao WebSocket');
-                }
+                // Nota: apiKey já foi enviada na URL, não precisa enviar como mensagem
             };
             
             ws.onmessage = (event) => {
