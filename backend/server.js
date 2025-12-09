@@ -237,11 +237,26 @@ app.get('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res) 
     const result = await pool.query(query, params);
 
     if (key && result.rows.length > 0) {
-      res.json(result.rows[0].data_value);
+      // Se há key, retorna o valor parseado
+      try {
+        const parsed = typeof result.rows[0].data_value === 'string' 
+          ? JSON.parse(result.rows[0].data_value) 
+          : result.rows[0].data_value;
+        res.json(parsed);
+      } catch (e) {
+        res.json(result.rows[0].data_value);
+      }
     } else if (!key) {
+      // Se não há key, retorna objeto com todos os valores parseados
       const data = {};
       result.rows.forEach(row => {
-        data[row.data_key] = row.data_value;
+        try {
+          data[row.data_key] = typeof row.data_value === 'string' 
+            ? JSON.parse(row.data_value) 
+            : row.data_value;
+        } catch (e) {
+          data[row.data_key] = row.data_value;
+        }
       });
       res.json(data);
     } else {
