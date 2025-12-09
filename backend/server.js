@@ -1117,7 +1117,7 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
     }
 
     const chats = JSON.parse(chatResult.rows[0].data_value);
-    const chatIndex = chats.findIndex((c: any) => c.id === chatId);
+    const chatIndex = chats.findIndex((c) => c.id === chatId);
 
     if (chatIndex === -1) {
       return res.status(404).json({ error: 'Chat não encontrado' });
