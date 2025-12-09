@@ -1489,13 +1489,13 @@ const App: React.FC = () => {
                                     );
                                     
                                     if (chatJid === messageJid || chatNumberMatch) {
-                                            // Para mensagens enviadas (fromMe: true), tenta atualizar mensagem local existente
-                                            // ao invés de adicionar uma nova (evita duplicação)
-                                            let messageIndex = -1;
-                                            let shouldUpdate = false;
-                                            
-                                            // Para mensagens enviadas (agent), tenta encontrar mensagem local para atualizar
-                                            if (mapped.sender === 'agent') {
+                                        // Para mensagens enviadas (fromMe: true), tenta atualizar mensagem local existente
+                                        // ao invés de adicionar uma nova (evita duplicação)
+                                        let messageIndex = -1;
+                                        let shouldUpdate = false;
+                                        
+                                        // Para mensagens enviadas (agent), tenta encontrar mensagem local para atualizar
+                                        if (mapped.sender === 'agent') {
                                                 // Procura mensagem local sem whatsappMessageId mas com mesmo conteúdo e timestamp próximo
                                                 messageIndex = chat.messages.findIndex(m => {
                                                     // Se já tem whatsappMessageId, verifica por ele (mais confiável)
@@ -1555,228 +1555,228 @@ const App: React.FC = () => {
                                             });
                                             
                                             if (shouldUpdate && messageIndex >= 0) {
-                                                // Atualiza mensagem local existente com dados da API (inclui whatsappMessageId)
-                                                chatUpdated = true;
-                                                // Log removido para produção - muito verboso
-                                                // console.log(`[App] 🔄 Mensagem enviada atualizada com ID do WhatsApp no chat ${chat.contactName}`);
-                                                const updatedMessages = [...chat.messages];
-                                                updatedMessages[messageIndex] = {
-                                                    ...updatedMessages[messageIndex],
-                                                    whatsappMessageId: mapped.whatsappMessageId,
-                                                    id: mapped.whatsappMessageId || updatedMessages[messageIndex].id, // Usa ID do WhatsApp se disponível
-                                                    rawMessage: mapped.rawMessage,
-                                                    status: mapped.status // Atualiza status (pode ter mudado)
-                                                };
-                                                
-                                                // Reordena após atualização
-                                                const sortedMessages = updatedMessages.sort((a, b) => {
+                                            // Atualiza mensagem local existente com dados da API (inclui whatsappMessageId)
+                                            chatUpdated = true;
+                                            // Log removido para produção - muito verboso
+                                            // console.log(`[App] 🔄 Mensagem enviada atualizada com ID do WhatsApp no chat ${chat.contactName}`);
+                                            const updatedMessages = [...chat.messages];
+                                            updatedMessages[messageIndex] = {
+                                                ...updatedMessages[messageIndex],
+                                                whatsappMessageId: mapped.whatsappMessageId,
+                                                id: mapped.whatsappMessageId || updatedMessages[messageIndex].id, // Usa ID do WhatsApp se disponível
+                                                rawMessage: mapped.rawMessage,
+                                                status: mapped.status // Atualiza status (pode ter mudado)
+                                            };
+                                            
+                                            // Reordena após atualização
+                                            const sortedMessages = updatedMessages.sort((a, b) => {
                                                     const timeA = a.timestamp?.getTime() || 0;
                                                     const timeB = b.timestamp?.getTime() || 0;
                                                     const timeDiff = timeA - timeB;
                                                     const absTimeDiff = Math.abs(timeDiff);
                                                     
-                                                    // PRIORIDADE 1: Se timestamps são muito próximos (< 10 segundos) e senders diferentes
-                                                    // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
-                                                    // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
-                                                    // independentemente de pequenas diferenças de sincronização de relógio
-                                                    if (absTimeDiff < 10000 && a.sender !== b.sender) {
-                                                        // Agente sempre vem antes do usuário quando timestamps estão próximos
-                                                        if (a.sender === 'agent' && b.sender === 'user') {
-                                                            return -1; // Agente antes
-                                                        }
-                                                        // Usuário sempre vem depois do agente quando timestamps estão próximos
-                                                        if (a.sender === 'user' && b.sender === 'agent') {
-                                                            return 1; // Usuário depois
-                                                        }
+                                                // PRIORIDADE 1: Se timestamps são muito próximos (< 10 segundos) e senders diferentes
+                                                // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
+                                                // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
+                                                // independentemente de pequenas diferenças de sincronização de relógio
+                                                if (absTimeDiff < 10000 && a.sender !== b.sender) {
+                                                    // Agente sempre vem antes do usuário quando timestamps estão próximos
+                                                    if (a.sender === 'agent' && b.sender === 'user') {
+                                                        return -1; // Agente antes
                                                     }
-                                                    
-                                                    // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
-                                                    if (absTimeDiff >= 10000) {
-                                                        return timeDiff;
-                                                    }
-                                                    
-                                                    // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, mantém ordem de inserção
-                                                    // (retorna 0 para manter ordem estável quando senders são iguais)
-                                                    return 0;
-                                                });
-                                                
-                                                // Lógica para processar mensagens de clientes finalizados
-                                                let updatedChat = { ...chat };
-                                                
-                                                return {
-                                                    ...updatedChat,
-                                                    messages: sortedMessages,
-                                                    lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
-                                                    lastMessageTime: mapped.timestamp,
-                                                    unreadCount: updatedChat.unreadCount
-                                                };
-                                            } else if (!exists) {
-                                                // Nova mensagem (não existe e não é atualização)
-                                                chatUpdated = true;
-                                                // Log removido para produção - muito verboso
-                                                // console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}`);
-                                                let updatedMessages = [...chat.messages, mapped].sort((a, b) => {
-                                                    const timeA = a.timestamp?.getTime() || 0;
-                                                    const timeB = b.timestamp?.getTime() || 0;
-                                                    const timeDiff = timeA - timeB;
-                                                    const absTimeDiff = Math.abs(timeDiff);
-                                                    
-                                                    // PRIORIDADE 1: Se timestamps são muito próximos (< 10 segundos) e senders diferentes
-                                                    // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
-                                                    // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
-                                                    // independentemente de pequenas diferenças de sincronização de relógio
-                                                    if (absTimeDiff < 10000 && a.sender !== b.sender) {
-                                                        // Agente sempre vem antes do usuário quando timestamps estão próximos
-                                                        if (a.sender === 'agent' && b.sender === 'user') {
-                                                            return -1; // Agente antes
-                                                        }
-                                                        // Usuário sempre vem depois do agente quando timestamps estão próximos
-                                                        if (a.sender === 'user' && b.sender === 'agent') {
-                                                            return 1; // Usuário depois
-                                                        }
-                                                    }
-                                                    
-                                                    // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
-                                                    if (absTimeDiff >= 10000) {
-                                                        return timeDiff;
-                                                    }
-                                                    
-                                                    // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, mantém ordem de inserção
-                                                    // (retorna 0 para manter ordem estável quando senders são iguais)
-                                                    return 0;
-                                                });
-                                                
-                                                // Lógica para processar mensagens de clientes finalizados
-                                                let updatedChat = { ...chat };
-                                                
-                                                // Se o chat está finalizado e recebeu mensagem do cliente
-                                                if (chat.status === 'closed' && mapped.sender === 'user') {
-                                                    const messageContent = mapped.content.trim();
-                                                    const isRatingResponse = /^[1-5]$/.test(messageContent);
-                                                    
-                                                    if (isRatingResponse && chat.awaitingRating) {
-                                                        // Cliente respondeu com avaliação (1-5)
-                                                        const rating = parseInt(messageContent);
-                                                        updatedChat = {
-                                                            ...chat,
-                                                            rating: rating,
-                                                            awaitingRating: false, // Não está mais aguardando
-                                                            status: 'closed' // Mantém finalizado
-                                                        };
-                                                        // Log removido para produção - muito verboso
-                                                        // console.log(`[App] ✅ Avaliação recebida: ${rating} estrelas para chat ${chat.contactName}`);
-                                                    } else if (!isRatingResponse) {
-                                                        // Cliente enviou nova mensagem (não é avaliação) - reabre o chat
-                                                        updatedChat = {
-                                                            ...chat,
-                                                            status: 'open',
-                                                            awaitingRating: false, // Cancela aguardo de avaliação
-                                                            departmentId: null, // Remove do departamento para ir para triagem
-                                                            assignedTo: undefined, // Remove atribuição
-                                                            endedAt: undefined // Remove data de finalização
-                                                        };
-                                                        // Log removido para produção - muito verboso
-                                                        // console.log(`[App] 🔄 Chat ${chat.contactName} reaberto - cliente enviou nova mensagem`);
+                                                    // Usuário sempre vem depois do agente quando timestamps estão próximos
+                                                    if (a.sender === 'user' && b.sender === 'agent') {
+                                                        return 1; // Usuário depois
                                                     }
                                                 }
                                                 
-                                                // Lógica de seleção de setores para novos contatos
-                                                if (mapped.sender === 'user') {
-                                                    const messageContent = mapped.content.trim();
+                                                // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
+                                                if (absTimeDiff >= 10000) {
+                                                    return timeDiff;
+                                                }
+                                                
+                                                // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, mantém ordem de inserção
+                                                // (retorna 0 para manter ordem estável quando senders são iguais)
+                                                return 0;
+                                            });
+                                            
+                                            // Lógica para processar mensagens de clientes finalizados
+                                            let updatedChat = { ...chat };
+                                            
+                                            return {
+                                                ...updatedChat,
+                                                messages: sortedMessages,
+                                                lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
+                                                lastMessageTime: mapped.timestamp,
+                                                unreadCount: updatedChat.unreadCount
+                                            };
+                                        } else if (!exists) {
+                                            // Nova mensagem (não existe e não é atualização)
+                                            chatUpdated = true;
+                                            // Log removido para produção - muito verboso
+                                            // console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}`);
+                                            let updatedMessages = [...chat.messages, mapped].sort((a, b) => {
+                                                const timeA = a.timestamp?.getTime() || 0;
+                                                const timeB = b.timestamp?.getTime() || 0;
+                                                const timeDiff = timeA - timeB;
+                                                const absTimeDiff = Math.abs(timeDiff);
+                                                
+                                                // PRIORIDADE 1: Se timestamps são muito próximos (< 10 segundos) e senders diferentes
+                                                // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
+                                                // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
+                                                // independentemente de pequenas diferenças de sincronização de relógio
+                                                if (absTimeDiff < 10000 && a.sender !== b.sender) {
+                                                    // Agente sempre vem antes do usuário quando timestamps estão próximos
+                                                    if (a.sender === 'agent' && b.sender === 'user') {
+                                                        return -1; // Agente antes
+                                                    }
+                                                    // Usuário sempre vem depois do agente quando timestamps estão próximos
+                                                    if (a.sender === 'user' && b.sender === 'agent') {
+                                                        return 1; // Usuário depois
+                                                    }
+                                                }
+                                                
+                                                // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
+                                                if (absTimeDiff >= 10000) {
+                                                    return timeDiff;
+                                                }
+                                                
+                                                // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, mantém ordem de inserção
+                                                // (retorna 0 para manter ordem estável quando senders são iguais)
+                                                return 0;
+                                            });
+                                            
+                                            // Lógica para processar mensagens de clientes finalizados
+                                            let updatedChat = { ...chat };
+                                            
+                                            // Se o chat está finalizado e recebeu mensagem do cliente
+                                            if (chat.status === 'closed' && mapped.sender === 'user') {
+                                                const messageContent = mapped.content.trim();
+                                                const isRatingResponse = /^[1-5]$/.test(messageContent);
+                                                
+                                                if (isRatingResponse && chat.awaitingRating) {
+                                                    // Cliente respondeu com avaliação (1-5)
+                                                    const rating = parseInt(messageContent);
+                                                    updatedChat = {
+                                                        ...chat,
+                                                        rating: rating,
+                                                        awaitingRating: false, // Não está mais aguardando
+                                                        status: 'closed' // Mantém finalizado
+                                                    };
+                                                    // Log removido para produção - muito verboso
+                                                    // console.log(`[App] ✅ Avaliação recebida: ${rating} estrelas para chat ${chat.contactName}`);
+                                                } else if (!isRatingResponse) {
+                                                    // Cliente enviou nova mensagem (não é avaliação) - reabre o chat
+                                                    updatedChat = {
+                                                        ...chat,
+                                                        status: 'open',
+                                                        awaitingRating: false, // Cancela aguardo de avaliação
+                                                        departmentId: null, // Remove do departamento para ir para triagem
+                                                        assignedTo: undefined, // Remove atribuição
+                                                        endedAt: undefined // Remove data de finalização
+                                                    };
+                                                    // Log removido para produção - muito verboso
+                                                    // console.log(`[App] 🔄 Chat ${chat.contactName} reaberto - cliente enviou nova mensagem`);
+                                                }
+                                            }
+                                            
+                                            // Lógica de seleção de setores para novos contatos
+                                            if (mapped.sender === 'user') {
+                                                const messageContent = mapped.content.trim();
+                                                
+                                                // Verifica se é resposta numérica para seleção de setor
+                                                if (updatedChat.departmentId === null && departments.length > 0) {
+                                                    const selectedDeptId = processDepartmentSelection(messageContent, departments);
                                                     
-                                                    // Verifica se é resposta numérica para seleção de setor
-                                                    if (updatedChat.departmentId === null && departments.length > 0) {
-                                                        const selectedDeptId = processDepartmentSelection(messageContent, departments);
+                                                    if (selectedDeptId) {
+                                                        // Usuário selecionou um setor válido
+                                                        updatedChat = {
+                                                            ...updatedChat,
+                                                            departmentId: selectedDeptId,
+                                                            status: 'pending', // Vai para triagem do setor
+                                                            awaitingDepartmentSelection: false // Não está mais aguardando seleção
+                                                        };
+                                                        // Log removido para produção - muito verboso
+                                                        // console.log(`[App] ✅ Setor selecionado pelo usuário: ${departments.find(d => d.id === selectedDeptId)?.name}`);
                                                         
-                                                        if (selectedDeptId) {
-                                                            // Usuário selecionou um setor válido
-                                                            updatedChat = {
-                                                                ...updatedChat,
-                                                                departmentId: selectedDeptId,
-                                                                status: 'pending', // Vai para triagem do setor
-                                                                awaitingDepartmentSelection: false // Não está mais aguardando seleção
-                                                            };
-                                                            // Log removido para produção - muito verboso
-                                                            // console.log(`[App] ✅ Setor selecionado pelo usuário: ${departments.find(d => d.id === selectedDeptId)?.name}`);
+                                                        // Remove a mensagem numérica da lista (é apenas uma resposta de seleção)
+                                                        const filteredMessages = updatedMessages.filter(m => m.id !== mapped.id);
+                                                        updatedMessages = filteredMessages;
+                                                    } else {
+                                                        // É primeira mensagem do usuário e ainda não tem departamento - envia mensagem de seleção
+                                                        const isFirstUserMessage = updatedChat.messages.filter(m => m.sender === 'user').length === 1;
+                                                        
+                                                        if (isFirstUserMessage) {
+                                                            // Garante que o status seja 'open' quando enviar mensagem de seleção (não 'closed')
+                                                            if (updatedChat.status === 'closed') {
+                                                                updatedChat = {
+                                                                    ...updatedChat,
+                                                                    status: 'open',
+                                                                    awaitingDepartmentSelection: true,
+                                                                    departmentSelectionSent: true
+                                                                };
+                                                            } else {
+                                                                updatedChat = {
+                                                                    ...updatedChat,
+                                                                    awaitingDepartmentSelection: true,
+                                                                    departmentSelectionSent: true
+                                                                };
+                                                            }
                                                             
-                                                            // Remove a mensagem numérica da lista (é apenas uma resposta de seleção)
-                                                            const filteredMessages = updatedMessages.filter(m => m.id !== mapped.id);
-                                                            updatedMessages = filteredMessages;
-                                                        } else {
-                                                            // É primeira mensagem do usuário e ainda não tem departamento - envia mensagem de seleção
-                                                            const isFirstUserMessage = updatedChat.messages.filter(m => m.sender === 'user').length === 1;
-                                                            
-                                                            if (isFirstUserMessage) {
-                                                                // Garante que o status seja 'open' quando enviar mensagem de seleção (não 'closed')
-                                                                if (updatedChat.status === 'closed') {
-                                                                    updatedChat = {
+                                                            // Envia mensagem de seleção de setores de forma assíncrona
+                                                            sendDepartmentSelectionMessage(
+                                                                apiConfig,
+                                                                updatedChat.contactNumber,
+                                                                departments
+                                                            ).then(sent => {
+                                                                if (sent) {
+                                                                    // Log removido para produção - muito verboso
+                                                                    // console.log(`[App] ✅ Mensagem de seleção de setores enviada para ${updatedChat.contactName}`);
+                                                                    // Atualiza o chat para garantir que o status seja mantido
+                                                                    handleUpdateChat({
                                                                         ...updatedChat,
                                                                         status: 'open',
                                                                         awaitingDepartmentSelection: true,
                                                                         departmentSelectionSent: true
-                                                                    };
+                                                                    });
                                                                 } else {
-                                                                    updatedChat = {
-                                                                        ...updatedChat,
-                                                                        awaitingDepartmentSelection: true,
-                                                                        departmentSelectionSent: true
-                                                                    };
+                                                                    console.error(`[App] ❌ Falha ao enviar mensagem de seleção de setores para ${updatedChat.contactName}`);
                                                                 }
-                                                                
-                                                                // Envia mensagem de seleção de setores de forma assíncrona
-                                                                sendDepartmentSelectionMessage(
-                                                                    apiConfig,
-                                                                    updatedChat.contactNumber,
-                                                                    departments
-                                                                ).then(sent => {
-                                                                    if (sent) {
-                                                                        // Log removido para produção - muito verboso
-                                                                        // console.log(`[App] ✅ Mensagem de seleção de setores enviada para ${updatedChat.contactName}`);
-                                                                        // Atualiza o chat para garantir que o status seja mantido
-                                                                        handleUpdateChat({
-                                                                            ...updatedChat,
-                                                                            status: 'open',
-                                                                            awaitingDepartmentSelection: true,
-                                                                            departmentSelectionSent: true
-                                                                        });
-                                                                    } else {
-                                                                        console.error(`[App] ❌ Falha ao enviar mensagem de seleção de setores para ${updatedChat.contactName}`);
-                                                                    }
-                                                                }).catch(err => {
-                                                                    console.error(`[App] ❌ Erro ao enviar mensagem de seleção de setores:`, err);
-                                                                });
-                                                            }
+                                                            }).catch(err => {
+                                                                console.error(`[App] ❌ Erro ao enviar mensagem de seleção de setores:`, err);
+                                                            });
                                                         }
                                                     }
                                                 }
-                                                
-                                                // Notifica se for mensagem recebida
-                                                if (mapped.sender === 'user' && currentUser) {
-                                                    // Notifica se estiver atribuído ao usuário atual ou se não estiver atribuído a ninguém (triagem)
-                                                    if (updatedChat.assignedTo === currentUser.id || !updatedChat.assignedTo) {
-                                                        addNotification(
-                                                            `Nova mensagem de ${updatedChat.contactName}`,
-                                                            mapped.content && mapped.content.length > 50 ? mapped.content.substring(0, 50) + '...' : (mapped.content || 'Nova mensagem'),
-                                                            'info',
-                                                            true, // Toca som
-                                                            true  // Mostra notificação do navegador
-                                                        );
-                                                    }
-                                                }
-                                                
-                                                return {
-                                                    ...updatedChat,
-                                                    messages: updatedMessages,
-                                                    lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
-                                                    lastMessageTime: mapped.timestamp,
-                                                    unreadCount: mapped.sender === 'user' ? (updatedChat.unreadCount || 0) + 1 : updatedChat.unreadCount,
-                                                    // Status já foi atualizado corretamente acima (pode ser 'open', 'pending', ou 'closed')
-                                                    status: updatedChat.status
-                                                };
-                                            } else {
-                                                // Log removido para produção - muito verboso (mantém apenas warnings importantes)
-                                                // console.log(`[App] ⚠️ Mensagem já existe no chat ${chat.contactName}`);
                                             }
+                                            
+                                            // Notifica se for mensagem recebida
+                                            if (mapped.sender === 'user' && currentUser) {
+                                                // Notifica se estiver atribuído ao usuário atual ou se não estiver atribuído a ninguém (triagem)
+                                                if (updatedChat.assignedTo === currentUser.id || !updatedChat.assignedTo) {
+                                                    addNotification(
+                                                        `Nova mensagem de ${updatedChat.contactName}`,
+                                                        mapped.content && mapped.content.length > 50 ? mapped.content.substring(0, 50) + '...' : (mapped.content || 'Nova mensagem'),
+                                                        'info',
+                                                        true, // Toca som
+                                                        true  // Mostra notificação do navegador
+                                                    );
+                                                }
+                                            }
+                                            
+                                            return {
+                                                ...updatedChat,
+                                                messages: updatedMessages,
+                                                lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
+                                                lastMessageTime: mapped.timestamp,
+                                                unreadCount: mapped.sender === 'user' ? (updatedChat.unreadCount || 0) + 1 : updatedChat.unreadCount,
+                                                // Status já foi atualizado corretamente acima (pode ser 'open', 'pending', ou 'closed')
+                                                status: updatedChat.status
+                                            };
+                                        } else {
+                                            // Log removido para produção - muito verboso (mantém apenas warnings importantes)
+                                            // console.log(`[App] ⚠️ Mensagem já existe no chat ${chat.contactName}`);
+                                        }
                                     }
                                     return chat;
                                 });
