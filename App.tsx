@@ -626,24 +626,32 @@ const App: React.FC = () => {
                 keys: dbChatsData ? Object.keys(dbChatsData).slice(0, 5) : []
             });
             if (dbChatsData && Object.keys(dbChatsData).length > 0) {
-                Object.values(dbChatsData).forEach((chat: any) => {
-                    if (chat && chat.id) {
+                // Processa cada entrada do objeto { "chatId": {...chat} }
+                Object.entries(dbChatsData).forEach(([key, chat]: [string, any]) => {
+                    // Se o chat é um objeto com id, usa diretamente
+                    // Se não, pode ser que a key seja o id
+                    const chatObj = chat && typeof chat === 'object' ? chat : { id: key };
+                    
+                    if (chatObj && chatObj.id) {
                         console.log('[App] 🔍 [DEBUG] syncChats - Adicionando chat ao Map:', {
-                            id: chat.id,
-                            status: chat.status,
-                            assignedTo: chat.assignedTo
+                            id: chatObj.id,
+                            status: chatObj.status,
+                            assignedTo: chatObj.assignedTo
                         });
-                        dbChatsMap.set(chat.id, {
-                            ...chat,
-                            lastMessageTime: chat.lastMessageTime ? new Date(chat.lastMessageTime) : new Date(),
-                            messages: chat.messages?.map((msg: Message) => ({
+                        dbChatsMap.set(chatObj.id, {
+                            ...chatObj,
+                            id: chatObj.id || key,
+                            lastMessageTime: chatObj.lastMessageTime ? new Date(chatObj.lastMessageTime) : new Date(),
+                            messages: chatObj.messages?.map((msg: Message) => ({
                                 ...msg,
                                 timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date()
                             })) || []
                         });
+                    } else {
+                        console.log('[App] 🔍 [DEBUG] syncChats - Chat inválido ignorado:', { key, chat, chatObj });
                     }
                 });
-                console.log('[App] 🔍 [DEBUG] syncChats - dbChatsMap criado com', dbChatsMap.size, 'chats');
+                console.log(`[App] 🔍 [DEBUG] syncChats - dbChatsMap criado com ${dbChatsMap.size} chats.`);
             } else {
                 console.log('[App] ⚠️ [DEBUG] syncChats - Nenhum chat no banco para criar Map');
             }
