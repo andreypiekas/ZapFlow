@@ -558,6 +558,9 @@ const App: React.FC = () => {
   const wsReconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const MAX_RECONNECT_ATTEMPTS = 5;
   const INITIAL_RECONNECT_DELAY = 5000; // 5 segundos
+  
+  // Estado para rastrear status do WebSocket (para feedback visual)
+  const [wsStatus, setWsStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'failed'>('disconnected');
 
   useEffect(() => {
     if (!currentUser || apiConfig.isDemo || !apiConfig.baseUrl) {
@@ -570,6 +573,7 @@ const App: React.FC = () => {
         wsRef.current.close();
         wsRef.current = null;
       }
+      setWsStatus('disconnected');
       return;
     }
 
@@ -1355,6 +1359,11 @@ const App: React.FC = () => {
         }
         
         try {
+            // Atualiza status para "connecting" quando inicia tentativa
+            if (!isReconnect) {
+                setWsStatus('connecting');
+            }
+            
             // Verifica se instância está ativa antes de tentar conectar
             const active = await findActiveInstance(apiConfig);
             const instanceName = active?.instanceName || apiConfig.instanceName;
@@ -1362,6 +1371,7 @@ const App: React.FC = () => {
             if (!instanceName) {
                 if (!isReconnect) {
                     console.log('[App] WebSocket desabilitado: instância não encontrada');
+                    setWsStatus('failed');
                 }
                 return;
             }
@@ -1370,6 +1380,7 @@ const App: React.FC = () => {
             if (active && active.status && active.status !== 'open' && active.status !== 'unknown') {
                 if (!isReconnect) {
                     console.warn(`[App] WebSocket desabilitado: instância ${instanceName} não está conectada (status: ${active.status})`);
+                    setWsStatus('failed');
                 }
                 return;
             }
@@ -1403,6 +1414,7 @@ const App: React.FC = () => {
                 console.log('[App] ✅ WebSocket conectado com sucesso!');
                 // Reset contador de tentativas ao conectar com sucesso
                 wsReconnectAttemptsRef.current = 0;
+                setWsStatus('connected');
                 // Envia autenticação se necessário
                 if (apiConfig.apiKey && wsRef.current) {
                     wsRef.current.send(JSON.stringify({ apikey: apiConfig.apiKey }));
@@ -1791,14 +1803,20 @@ const App: React.FC = () => {
             };
             
             ws.onerror = (error) => {
-                // Log removido para produção - muito verboso
-                // console.error('[App] ❌ Erro no WebSocket:', error);
+                // Log apenas quando atingir limite de tentativas ou erro crítico
+                if (wsReconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+                    console.warn('[App] ⚠️ WebSocket: Erro ao conectar. Sistema funcionando via polling (sincronização periódica).');
+                    setWsStatus('failed');
+                } else {
+                    setWsStatus('disconnected');
+                }
                 // Não tenta reconectar imediatamente, deixa o onclose tratar
             };
             
             ws.onclose = (event) => {
-                // Log removido para produção - muito verboso
-                // console.log(`[App] WebSocket desconectado (code: ${event.code}, reason: ${event.reason || 'sem motivo'})`);
+                // Code 1006 = conexão anormal (sem handshake de fechamento)
+                // Code 1000 = fechamento normal
+                const isAbnormalClose = event.code === 1006 || (event.code !== 1000 && event.code !== 1001);
                 
                 // Só reconecta se não foi fechado intencionalmente (code 1000)
                 if (event.code !== 1000) {
@@ -1812,8 +1830,11 @@ const App: React.FC = () => {
                     );
                     
                     if (wsReconnectAttemptsRef.current <= MAX_RECONNECT_ATTEMPTS) {
-                        // Log removido para produção - muito verboso
-                        // console.log(`[App] Tentando reconectar WebSocket em ${delay/1000}s... (tentativa ${wsReconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`);
+                        setWsStatus('connecting');
+                        // Log apenas na primeira tentativa e quando atingir limite
+                        if (wsReconnectAttemptsRef.current === 1) {
+                            console.warn(`[App] ⚠️ WebSocket desconectado (code: ${event.code}). Tentando reconectar... (sistema funcionando via polling)`);
+                        }
                         
                         wsReconnectTimeoutRef.current = setTimeout(() => {
                             if (currentUser && apiConfig.baseUrl && !apiConfig.isDemo) {
@@ -1821,15 +1842,29 @@ const App: React.FC = () => {
                             }
                         }, delay);
                     } else {
-                        console.warn(`[App] ⚠️ Limite de ${MAX_RECONNECT_ATTEMPTS} tentativas de reconexão atingido. WebSocket não será reconectado automaticamente.`);
+                        console.warn(`[App] ⚠️ Limite de ${MAX_RECONNECT_ATTEMPTS} tentativas de reconexão WebSocket atingido. Sistema continuará funcionando via polling (sincronização periódica).`);
+                        setWsStatus('failed');
                     }
                 } else {
                     // Reset contador se foi fechado intencionalmente
                     wsReconnectAttemptsRef.current = 0;
+                    setWsStatus('disconnected');
                 }
             };
         } catch (err) {
             console.error('[App] Erro ao criar WebSocket:', err);
+            setWsStatus('failed');
+            // Se não for reconexão, tenta uma vez após 5 segundos
+            if (!isReconnect && wsReconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+                wsReconnectAttemptsRef.current += 1;
+                wsReconnectTimeoutRef.current = setTimeout(() => {
+                    if (currentUser && apiConfig.baseUrl && !apiConfig.isDemo) {
+                        initWebSocket(true).catch(e => {
+                            console.error('[App] ❌ Erro ao reconectar WebSocket:', e);
+                        });
+                    }
+                }, INITIAL_RECONNECT_DELAY);
+            }
         }
     };
     
@@ -2882,6 +2917,58 @@ const App: React.FC = () => {
                     <div><p className="text-slate-500 text-sm">Status Conexão</p><h3 className="text-2xl font-bold text-emerald-600">{apiConfig.isDemo ? 'Modo Simulação' : 'Modo Real'}</h3></div>
                 </div>
                 </div>
+                {!apiConfig.isDemo && (
+                <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+                <div className="flex items-center gap-4 mb-2">
+                    <div className={`p-3 rounded-lg ${
+                        wsStatus === 'connected' ? 'bg-emerald-100 text-emerald-600' :
+                        wsStatus === 'connecting' ? 'bg-amber-100 text-amber-600' :
+                        wsStatus === 'failed' ? 'bg-red-100 text-red-600' :
+                        'bg-slate-100 text-slate-600'
+                    }`}>
+                        {wsStatus === 'connected' ? <MessageSquare /> :
+                         wsStatus === 'connecting' ? <MessageSquare className="animate-pulse" /> :
+                         <MessageSquare />}
+                    </div>
+                    <div className="flex-1">
+                        <p className="text-slate-500 text-sm">Tempo Real (WebSocket)</p>
+                        <div className="flex items-center gap-2">
+                            <h3 className={`text-lg font-bold ${
+                                wsStatus === 'connected' ? 'text-emerald-600' :
+                                wsStatus === 'connecting' ? 'text-amber-600' :
+                                wsStatus === 'failed' ? 'text-red-600' :
+                                'text-slate-600'
+                            }`}>
+                                {wsStatus === 'connected' ? 'Conectado' :
+                                 wsStatus === 'connecting' ? 'Conectando...' :
+                                 wsStatus === 'failed' ? 'Desconectado' :
+                                 'Desconectado'}
+                            </h3>
+                            {wsStatus === 'failed' && (
+                                <button
+                                    onClick={() => {
+                                        wsReconnectAttemptsRef.current = 0;
+                                        setWsStatus('connecting');
+                                        initWebSocket(false).catch(err => {
+                                            console.error('[App] ❌ Erro ao reconectar WebSocket:', err);
+                                        });
+                                    }}
+                                    className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                    title="Tentar reconectar"
+                                >
+                                    Reconectar
+                                </button>
+                            )}
+                        </div>
+                        {wsStatus === 'failed' && (
+                            <p className="text-xs text-slate-500 mt-1">
+                                Sistema funcionando via sincronização periódica
+                            </p>
+                        )}
+                    </div>
+                </div>
+                </div>
+                )}
                 </>
             )}
             <div className="col-span-1 md:col-span-3 bg-white p-6 rounded-lg shadow-sm border border-slate-200 mt-4">
