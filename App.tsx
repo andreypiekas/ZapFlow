@@ -616,13 +616,23 @@ const App: React.FC = () => {
     }
 
     const syncChats = async () => {
+        console.log('[App] 🔍 [DEBUG] Iniciando syncChats...');
         // PASSO 1: Carrega chats do banco PRIMEIRO para ter status fixo
         let dbChatsMap = new Map<string, Chat>();
         try {
             const dbChatsData = await apiService.getAllData<Chat>('chats');
+            console.log('[App] 🔍 [DEBUG] syncChats - getAllData retornou:', {
+                count: dbChatsData ? Object.keys(dbChatsData).length : 0,
+                keys: dbChatsData ? Object.keys(dbChatsData).slice(0, 5) : []
+            });
             if (dbChatsData && Object.keys(dbChatsData).length > 0) {
                 Object.values(dbChatsData).forEach((chat: any) => {
                     if (chat && chat.id) {
+                        console.log('[App] 🔍 [DEBUG] syncChats - Adicionando chat ao Map:', {
+                            id: chat.id,
+                            status: chat.status,
+                            assignedTo: chat.assignedTo
+                        });
                         dbChatsMap.set(chat.id, {
                             ...chat,
                             lastMessageTime: chat.lastMessageTime ? new Date(chat.lastMessageTime) : new Date(),
@@ -633,9 +643,12 @@ const App: React.FC = () => {
                         });
                     }
                 });
+                console.log('[App] 🔍 [DEBUG] syncChats - dbChatsMap criado com', dbChatsMap.size, 'chats');
+            } else {
+                console.log('[App] ⚠️ [DEBUG] syncChats - Nenhum chat no banco para criar Map');
             }
         } catch (error) {
-            console.error('[App] Erro ao carregar chats do banco antes da sincronização:', error);
+            console.error('[App] ❌ [DEBUG] Erro ao carregar chats do banco antes da sincronização:', error);
         }
 
         // PASSO 2: Busca chats da API
@@ -684,6 +697,17 @@ const App: React.FC = () => {
                     const dbChat = existingChat && existingChat.id 
                         ? dbChatsMap.get(existingChat.id) 
                         : (realChat && realChat.id ? dbChatsMap.get(realChat.id) : undefined);
+                    
+                    console.log('[App] 🔍 [DEBUG] syncChats - Processando chat:', {
+                        realChatId: realChat?.id,
+                        existingChatId: existingChat?.id,
+                        existingChatStatus: existingChat?.status,
+                        existingChatAssignedTo: existingChat?.assignedTo,
+                        dbChatExists: !!dbChat,
+                        dbChatStatus: dbChat?.status,
+                        dbChatAssignedTo: dbChat?.assignedTo,
+                        dbChatsMapSize: dbChatsMap.size
+                    });
                     
                     if (existingChat && realChat) {
                         const newMsgCount = realChat.messages.length;
@@ -1105,16 +1129,31 @@ const App: React.FC = () => {
                             finalStatus = dbChat.status || 'pending'; // Se não tem status no banco, usa pending
                             finalAssignedTo = dbChat.assignedTo;
                             finalDepartmentId = dbChat.departmentId !== undefined ? dbChat.departmentId : null;
+                            console.log('[App] 🔍 [DEBUG] syncChats - Usando dados do BANCO:', {
+                                id: realChat.id,
+                                status: finalStatus,
+                                assignedTo: finalAssignedTo,
+                                departmentId: finalDepartmentId
+                            });
                         } else if (existingChat && existingChat.status) {
                             // Chat não está no banco mas tem status local: preserva status local
                             finalStatus = existingChat.status;
                             finalAssignedTo = existingChat.assignedTo;
                             finalDepartmentId = existingChat.departmentId;
+                            console.log('[App] 🔍 [DEBUG] syncChats - Usando dados LOCAIS (não está no banco):', {
+                                id: realChat.id,
+                                status: finalStatus,
+                                assignedTo: finalAssignedTo
+                            });
                         } else {
                             // Novo chat sem status: usa status da API (pending para novos chats)
                             finalStatus = realChat.status || 'pending';
                             finalAssignedTo = undefined;
                             finalDepartmentId = null;
+                            console.log('[App] 🔍 [DEBUG] syncChats - NOVO CHAT (sem status):', {
+                                id: realChat.id,
+                                status: finalStatus
+                            });
                         }
                         
                         // NUNCA reabre chats fechados automaticamente - apenas via interface
@@ -2110,17 +2149,33 @@ const App: React.FC = () => {
         // Salva no banco se status, assignedTo ou departmentId mudaram
         if (currentUser && (statusChanged || assignedToChanged || departmentIdChanged)) {
           try {
+            console.log('[App] 🔍 [DEBUG] handleUpdateChat - Salvando no banco:', {
+              chatId: updatedChat.id,
+              status: updatedChat.status,
+              assignedTo: updatedChat.assignedTo,
+              departmentId: updatedChat.departmentId,
+              statusChanged,
+              assignedToChanged,
+              departmentIdChanged
+            });
             await apiService.updateChatStatus(
               updatedChat.id,
               updatedChat.status,
               updatedChat.assignedTo,
               updatedChat.departmentId || null
             );
-            // Log removido para produção - muito verboso
-            // console.log(`[App] ✅ Status do chat ${updatedChat.contactName} salvo no banco: status=${updatedChat.status}, assignedTo=${updatedChat.assignedTo}`);
+            console.log(`[App] ✅ [DEBUG] Status do chat ${updatedChat.contactName} salvo no banco: status=${updatedChat.status}, assignedTo=${updatedChat.assignedTo}`);
           } catch (error) {
-            console.error(`[App] ❌ Erro ao salvar status do chat no banco:`, error);
+            console.error(`[App] ❌ [DEBUG] Erro ao salvar status do chat no banco:`, error);
           }
+        } else {
+          console.log('[App] 🔍 [DEBUG] handleUpdateChat - NÃO salvou no banco:', {
+            chatId: updatedChat.id,
+            hasUser: !!currentUser,
+            statusChanged,
+            assignedToChanged,
+            departmentIdChanged
+          });
         }
         
         if (oldChat && currentUser) {
