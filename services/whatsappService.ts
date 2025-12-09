@@ -1508,7 +1508,8 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             // Prioridade 3: Número do ID do chat se for válido
             else if (chat.id.includes('@') && !chat.id.includes('@g.us') && !chat.id.includes('@lid')) {
                 const idNumber = chat.id.split('@')[0].replace(/\D/g, '');
-                if (idNumber.length >= 10 && /^\d+$/.test(idNumber)) {
+                // Validação mais rigorosa: números brasileiros devem ter pelo menos 11 dígitos
+                if (idNumber.length >= 11 && idNumber.length <= 14 && /^\d+$/.test(idNumber)) {
                     chatKey = idNumber;
                 } else {
                     chatKey = chat.id; // Fallback: usa ID completo
