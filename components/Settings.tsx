@@ -23,6 +23,8 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
   const [storageStatus, setStorageStatus] = useState<'api' | 'localstorage' | 'checking'>('checking');
   const [apiUrl, setApiUrl] = useState<string>('');
   const [useOnlyPostgreSQL, setUseOnlyPostgreSQL] = useState<boolean>(storageService.getUseOnlyPostgreSQL());
+  const [isCleaningChats, setIsCleaningChats] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState<{ success: boolean; summary?: any; message?: string } | null>(null);
 
   // Sincroniza formData quando config muda (importante para carregar dados salvos)
   useEffect(() => {
@@ -195,6 +197,38 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
     onSave(formData);
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 3000);
+  };
+
+  const handleCleanupInvalidChats = async () => {
+    if (!isAdmin) return;
+    
+    if (!confirm('Tem certeza que deseja limpar os chats inválidos? Esta ação não pode ser desfeita.')) {
+      return;
+    }
+
+    setIsCleaningChats(true);
+    setCleanupResult(null);
+
+    try {
+      const result = await cleanupInvalidChats();
+      setCleanupResult(result);
+      
+      if (result.success) {
+        console.log('[Settings] ✅ Limpeza de chats inválidos concluída:', result.summary);
+      } else {
+        console.error('[Settings] ❌ Erro na limpeza:', result.message);
+      }
+    } catch (error) {
+      console.error('[Settings] ❌ Erro ao executar limpeza:', error);
+      setCleanupResult({ 
+        success: false, 
+        message: 'Erro ao executar limpeza de chats inválidos' 
+      });
+    } finally {
+      setIsCleaningChats(false);
+      // Limpa o resultado após 5 segundos
+      setTimeout(() => setCleanupResult(null), 5000);
+    }
   };
 
   return (
@@ -463,6 +497,80 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
                     </button>
                   )}
                 </div>
+              </div>
+            </div>
+
+            {/* Limpeza de Chats Inválidos - Apenas Admin */}
+            <div className="pt-6 border-t border-slate-200">
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">Manutenção do Banco de Dados</h3>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex items-start gap-3 mb-4">
+                  <AlertTriangle className="text-amber-600 mt-0.5 flex-shrink-0" size={20} />
+                  <div>
+                    <h4 className="font-semibold text-amber-800 text-sm">Limpar Chats Inválidos</h4>
+                    <p className="text-amber-700 text-xs mt-1 leading-relaxed">
+                      Remove chats com números inválidos (menos de 11 dígitos) e corrige data_keys de chats com contactNumber válido.
+                      Esta ação é executada automaticamente a cada 6 horas, mas você pode executá-la manualmente aqui.
+                    </p>
+                  </div>
+                </div>
+                
+                {cleanupResult && (
+                  <div className={`mb-4 p-3 rounded-md flex items-start gap-2 ${
+                    cleanupResult.success 
+                      ? 'bg-emerald-50 border border-emerald-200' 
+                      : 'bg-red-50 border border-red-200'
+                  }`}>
+                    {cleanupResult.success ? (
+                      <>
+                        <CheckCircle className="text-emerald-600 mt-0.5 flex-shrink-0" size={18} />
+                        <div className="flex-1">
+                          <p className="text-emerald-800 font-semibold text-sm">Limpeza concluída com sucesso!</p>
+                          {cleanupResult.summary && (
+                            <div className="text-emerald-700 text-xs mt-1">
+                              <p>• Total de chats: {cleanupResult.summary.total}</p>
+                              <p>• Chats inválidos encontrados: {cleanupResult.summary.invalid}</p>
+                              <p>• Chats deletados: {cleanupResult.summary.deleted}</p>
+                              <p>• Chats corrigidos: {cleanupResult.summary.fixed}</p>
+                              <p>• Chats válidos mantidos: {cleanupResult.summary.valid}</p>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="text-red-600 mt-0.5 flex-shrink-0" size={18} />
+                        <div className="flex-1">
+                          <p className="text-red-800 font-semibold text-sm">Erro na limpeza</p>
+                          <p className="text-red-700 text-xs mt-1">{cleanupResult.message || 'Erro desconhecido'}</p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleCleanupInvalidChats}
+                  disabled={isCleaningChats}
+                  className={`font-medium py-2 px-4 rounded-md transition-colors flex items-center gap-2 text-sm ${
+                    isCleaningChats
+                      ? 'bg-slate-400 text-white cursor-not-allowed'
+                      : 'bg-amber-600 hover:bg-amber-700 text-white'
+                  }`}
+                >
+                  {isCleaningChats ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      Limpando...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={16} />
+                      Limpar Chats Inválidos
+                    </>
+                  )}
+                </button>
               </div>
             </div>
 
