@@ -1999,29 +1999,32 @@ const App: React.FC = () => {
                                                 finalAssignedTo = undefined;
                                                 finalDepartmentId = null;
                                                 
-                                                // Envia mensagem de saudação padrão
+                                                // Quando chat fechado é reaberto, SEMPRE envia mensagem de seleção de departamento
+                                                // pois o departamento foi desatribuído ao fechar o chat
                                                 setTimeout(async () => {
                                                     try {
-                                                        const chatbotConfig = await storageService.load<ChatbotConfig>('chatbotConfig');
-                                                        if (chatbotConfig && chatbotConfig.isEnabled && chatbotConfig.greetingMessage) {
-                                                            // Verifica se já foi enviada (para evitar reenvio)
-                                                            const hasGreeting = updatedMessages.some((msg: Message) =>
-                                                                msg.sender === 'system' && msg.content?.includes('greeting_sent')
-                                                            );
+                                                        // Verifica se precisa enviar mensagem de seleção de departamento
+                                                        const chatHasDepartment = updatedChat.departmentId;
+                                                        
+                                                        console.log(`[App] 🔍 [DEBUG] Socket.IO: Verificando envio de mensagem de seleção - chatHasDepartment: ${chatHasDepartment}, departments.length: ${departments.length}, chat.id: ${chat.id}`);
+                                                        
+                                                        // Se não tem departamento (foi desatribuído ao fechar), SEMPRE envia mensagem de seleção
+                                                        if (!chatHasDepartment && departments.length > 0) {
+                                                            // Tenta obter número de várias fontes
+                                                            const contactNumber = updatedChat.contactNumber || 
+                                                                                  (chat.id ? chat.id.split('@')[0] : null);
                                                             
-                                                            if (!hasGreeting) {
-                                                                const { sendGreetingMessage } = await import('./services/chatbotService');
-                                                                const success = await sendGreetingMessage(apiConfig, chatbotConfig, {
-                                                                    ...updatedChat,
-                                                                    status: 'pending',
-                                                                    messages: updatedMessages
-                                                                });
+                                                            console.log(`[App] 🔍 [DEBUG] Socket.IO: Tentando enviar mensagem - contactNumber: ${contactNumber}, updatedChat.contactNumber: ${updatedChat.contactNumber}`);
+                                                            
+                                                            if (contactNumber && contactNumber.length >= 10) {
+                                                                console.log(`[App] 📤 [DEBUG] Socket.IO: Chat reaberto sem departamento - Enviando mensagem de seleção de departamento para ${chat.id} (número: ${contactNumber})`);
+                                                                const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, departments);
                                                                 
-                                                                if (success) {
+                                                                if (sent) {
                                                                     // Adiciona mensagem de sistema
                                                                     const systemMessage: Message = {
-                                                                        id: `sys_chatbot_reopen_${Date.now()}`,
-                                                                        content: 'greeting_sent - Saudação automática enviada (chat reaberto)',
+                                                                        id: `sys_dept_selection_reopen_socket_${Date.now()}`,
+                                                                        content: 'department_selection_sent - Mensagem de seleção de departamento enviada (chat reaberto)',
                                                                         sender: 'system',
                                                                         timestamp: new Date(),
                                                                         status: MessageStatus.READ,
@@ -2034,13 +2037,61 @@ const App: React.FC = () => {
                                                                         assignedTo: undefined,
                                                                         departmentId: null,
                                                                         endedAt: undefined,
+                                                                        departmentSelectionSent: true,
+                                                                        awaitingDepartmentSelection: true,
                                                                         messages: [...updatedMessages, systemMessage]
                                                                     });
+                                                                    console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada para ${chat.id}`);
+                                                                } else {
+                                                                    console.error(`[App] ❌ [DEBUG] Socket.IO: Falha ao enviar mensagem de seleção de departamento para ${chat.id}`);
+                                                                }
+                                                            } else {
+                                                                console.warn(`[App] ⚠️ [DEBUG] Socket.IO: Não foi possível enviar mensagem de seleção - número de contato inválido para ${chat.id} (contactNumber: ${contactNumber})`);
+                                                            }
+                                                        } else {
+                                                            console.log(`[App] ⚠️ [DEBUG] Socket.IO: Não enviando mensagem de seleção - chatHasDepartment: ${chatHasDepartment}, departments.length: ${departments.length}`);
+                                                            
+                                                            // Se já tem departamento, pode enviar mensagem de saudação se configurado
+                                                            const chatbotConfig = await storageService.load<ChatbotConfig>('chatbotConfig');
+                                                            if (chatbotConfig && chatbotConfig.isEnabled && chatbotConfig.greetingMessage) {
+                                                                // Verifica se já foi enviada (para evitar reenvio)
+                                                                const hasGreeting = updatedMessages.some((msg: Message) =>
+                                                                    msg.sender === 'system' && msg.content?.includes('greeting_sent')
+                                                                );
+                                                                
+                                                                if (!hasGreeting) {
+                                                                    const { sendGreetingMessage } = await import('./services/chatbotService');
+                                                                    const success = await sendGreetingMessage(apiConfig, chatbotConfig, {
+                                                                        ...updatedChat,
+                                                                        status: 'pending',
+                                                                        messages: updatedMessages
+                                                                    });
+                                                                    
+                                                                    if (success) {
+                                                                        // Adiciona mensagem de sistema
+                                                                        const systemMessage: Message = {
+                                                                            id: `sys_chatbot_reopen_${Date.now()}`,
+                                                                            content: 'greeting_sent - Saudação automática enviada (chat reaberto)',
+                                                                            sender: 'system',
+                                                                            timestamp: new Date(),
+                                                                            status: MessageStatus.READ,
+                                                                            type: 'text'
+                                                                        };
+                                                                        
+                                                                        handleUpdateChat({
+                                                                            ...updatedChat,
+                                                                            status: 'pending',
+                                                                            assignedTo: undefined,
+                                                                            departmentId: chatHasDepartment, // Mantém o departamento existente
+                                                                            endedAt: undefined,
+                                                                            messages: [...updatedMessages, systemMessage]
+                                                                        });
+                                                                    }
                                                                 }
                                                             }
                                                         }
                                                     } catch (error) {
-                                                        console.error('[App] ❌ Erro ao enviar mensagem de saudação para chat reaberto:', error);
+                                                        console.error('[App] ❌ Erro ao processar reabertura de chat via Socket.IO:', error);
                                                     }
                                                 }, 500);
                                                 
