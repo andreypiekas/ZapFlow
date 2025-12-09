@@ -201,31 +201,6 @@ const findAvailableUserForDepartment = (
   return userChatCounts[0]?.user || null;
 };
 
-// Função auxiliar para encontrar todos os usuários que devem receber notificação
-// (usuário atribuído + administradores)
-const getUsersToNotify = (
-  assignedUserId: string | undefined,
-  users: User[],
-  departmentId: string | null
-): User[] => {
-  const usersToNotify: User[] = [];
-  
-  // Adiciona o usuário atribuído se existir
-  if (assignedUserId) {
-    const assignedUser = users.find(u => u.id === assignedUserId);
-    if (assignedUser) {
-      usersToNotify.push(assignedUser);
-    }
-  }
-  
-  // Adiciona todos os administradores (recebem notificação de todos os departamentos)
-  const admins = users.filter(u => u.role === UserRole.ADMIN);
-  usersToNotify.push(...admins);
-  
-  // Remove duplicatas (caso o usuário atribuído seja admin)
-  return Array.from(new Map(usersToNotify.map(u => [u.id, u])).values());
-};
-
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(loadUserSession());
   const [currentView, setCurrentView] = useState<ViewState>(loadViewStateFromStorage());
@@ -1394,37 +1369,42 @@ const App: React.FC = () => {
                                         finalStatus = 'open';
                                         
                                         // Envia notificações
-                                        const usersToNotify = getUsersToNotify(assignedUser.id, users, selectedDeptId);
-                                        usersToNotify.forEach(user => {
-                                            // Só envia notificação se for o usuário atual ou se for admin
-                                            if (user.id === currentUser?.id || user.role === UserRole.ADMIN) {
-                                                addNotification(
-                                                    `Novo chat atribuído - ${departmentName}`,
-                                                    `Chat de ${existingChat.contactName} foi atribuído ao departamento ${departmentName}${user.id === assignedUser.id ? ' e está na sua fila' : ''}`,
-                                                    'info',
-                                                    true,
-                                                    true
-                                                );
-                                            }
-                                        });
+                                        // Notifica o usuário atribuído se for o currentUser
+                                        if (assignedUser.id === currentUser?.id) {
+                                            addNotification(
+                                                `Novo chat atribuído - ${departmentName}`,
+                                                `Chat de ${existingChat.contactName} foi atribuído ao departamento ${departmentName} e está na sua fila`,
+                                                'info',
+                                                true,
+                                                true
+                                            );
+                                        }
+                                        
+                                        // Notifica administradores (se currentUser for admin)
+                                        if (currentUser?.role === UserRole.ADMIN) {
+                                            addNotification(
+                                                `Novo chat atribuído - ${departmentName}`,
+                                                `Chat de ${existingChat.contactName} foi atribuído ao departamento ${departmentName}${assignedUser.id === currentUser?.id ? ' (atribuído a você)' : ` (atribuído a ${assignedUser.name})`}`,
+                                                'info',
+                                                true,
+                                                true
+                                            );
+                                        }
                                     } else {
                                         // Se não há usuário disponível, deixa como 'pending' para triagem
                                         finalAssignedTo = undefined;
                                         finalStatus = 'pending';
                                         
-                                        // Notifica administradores que não há usuário disponível
-                                        const admins = users.filter(u => u.role === UserRole.ADMIN);
-                                        admins.forEach(admin => {
-                                            if (admin.id === currentUser?.id) {
-                                                addNotification(
-                                                    `Chat aguardando atendimento - ${departmentName}`,
-                                                    `Chat de ${existingChat.contactName} foi direcionado para ${departmentName}, mas não há operadores disponíveis`,
-                                                    'warning',
-                                                    true,
-                                                    true
-                                                );
-                                            }
-                                        });
+                                        // Notifica administradores que não há usuário disponível (se currentUser for admin)
+                                        if (currentUser?.role === UserRole.ADMIN) {
+                                            addNotification(
+                                                `Chat aguardando atendimento - ${departmentName}`,
+                                                `Chat de ${existingChat.contactName} foi direcionado para ${departmentName}, mas não há operadores disponíveis`,
+                                                'warning',
+                                                true,
+                                                true
+                                            );
+                                        }
                                     }
                                 } else if (!existingChat.departmentSelectionSent) {
                                     // Primeira mensagem sem departamento: envia seleção
@@ -2122,33 +2102,38 @@ const App: React.FC = () => {
                                                             
                                                             // Envia notificações
                                                             if (assignedUser) {
-                                                                const usersToNotify = getUsersToNotify(assignedUser.id, users, selectedDeptId);
-                                                                usersToNotify.forEach(user => {
-                                                                    // Só envia notificação se for o usuário atual ou se for admin
-                                                                    if (user.id === currentUser?.id || user.role === UserRole.ADMIN) {
-                                                                        addNotification(
-                                                                            `Novo chat atribuído - ${departmentName}`,
-                                                                            `Chat de ${updatedChat.contactName} foi atribuído ao departamento ${departmentName}${user.id === assignedUser.id ? ' e está na sua fila' : ''}`,
-                                                                            'info',
-                                                                            true,
-                                                                            true
-                                                                        );
-                                                                    }
-                                                                });
+                                                                // Notifica o usuário atribuído se for o currentUser
+                                                                if (assignedUser.id === currentUser?.id) {
+                                                                    addNotification(
+                                                                        `Novo chat atribuído - ${departmentName}`,
+                                                                        `Chat de ${updatedChat.contactName} foi atribuído ao departamento ${departmentName} e está na sua fila`,
+                                                                        'info',
+                                                                        true,
+                                                                        true
+                                                                    );
+                                                                }
+                                                                
+                                                                // Notifica administradores (se currentUser for admin)
+                                                                if (currentUser?.role === UserRole.ADMIN) {
+                                                                    addNotification(
+                                                                        `Novo chat atribuído - ${departmentName}`,
+                                                                        `Chat de ${updatedChat.contactName} foi atribuído ao departamento ${departmentName}${assignedUser.id === currentUser?.id ? ' (atribuído a você)' : ` (atribuído a ${assignedUser.name})`}`,
+                                                                        'info',
+                                                                        true,
+                                                                        true
+                                                                    );
+                                                                }
                                                             } else {
-                                                                // Se não há usuário disponível, notifica administradores
-                                                                const admins = users.filter(u => u.role === UserRole.ADMIN);
-                                                                admins.forEach(admin => {
-                                                                    if (admin.id === currentUser?.id) {
-                                                                        addNotification(
-                                                                            `Chat aguardando atendimento - ${departmentName}`,
-                                                                            `Chat de ${updatedChat.contactName} foi direcionado para ${departmentName}, mas não há operadores disponíveis`,
-                                                                            'warning',
-                                                                            true,
-                                                                            true
-                                                                        );
-                                                                    }
-                                                                });
+                                                                // Se não há usuário disponível, notifica administradores (se currentUser for admin)
+                                                                if (currentUser?.role === UserRole.ADMIN) {
+                                                                    addNotification(
+                                                                        `Chat aguardando atendimento - ${departmentName}`,
+                                                                        `Chat de ${updatedChat.contactName} foi direcionado para ${departmentName}, mas não há operadores disponíveis`,
+                                                                        'warning',
+                                                                        true,
+                                                                        true
+                                                                    );
+                                                                }
                                                             }
                                                 } else if (updatedChat.messages.filter(m => m.sender === 'user').length === 1 && !updatedChat.departmentSelectionSent) {
                                                     // Primeira mensagem sem departamento: envia seleção
