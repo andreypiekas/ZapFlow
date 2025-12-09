@@ -2584,12 +2584,26 @@ const App: React.FC = () => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
-  const handleLogin = (user: User) => {
+  const handleLogin = async (user: User) => {
     setCurrentUser(user);
     // Salva usuário apenas se não estiver configurado para usar apenas PostgreSQL
     if (!storageService.getUseOnlyPostgreSQL()) {
       localStorage.setItem('zapflow_user', SecurityService.encrypt(JSON.stringify(user)));
     }
+    
+    // Carrega configurações do backend após login
+    try {
+      const backendConfig = await loadConfigFromBackend();
+      if (backendConfig) {
+        setApiConfig(backendConfig);
+        console.log('[App] ✅ Configurações carregadas do banco de dados');
+      } else {
+        console.log('[App] ℹ️ Nenhuma configuração encontrada no banco de dados, usando padrão');
+      }
+    } catch (error) {
+      console.error('[App] ❌ Erro ao carregar configurações do backend:', error);
+    }
+    
     if (user.role === UserRole.AGENT) {
         setCurrentView('chat');
     } else {
