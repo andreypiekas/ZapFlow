@@ -1189,6 +1189,12 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE') {
     console.error(`❌ Porta ${PORT} já está em uso`);
+    console.error(`💡 Para encontrar e encerrar o processo usando a porta ${PORT}, execute:`);
+    console.error(`   lsof -ti:${PORT} | xargs kill -9`);
+    console.error(`   ou`);
+    console.error(`   fuser -k ${PORT}/tcp`);
+    console.error(`   ou`);
+    console.error(`   netstat -tulpn | grep :${PORT}`);
   } else {
     console.error('❌ Erro no servidor:', error);
   }
