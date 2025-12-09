@@ -1314,17 +1314,27 @@ server.on('error', (error) => {
 });
 
 // ============================================================================
-// Endpoints específicos para configurações (ApiConfig)
+// Endpoints específicos para configurações globais do sistema (ApiConfig)
+// Configurações são compartilhadas entre todos os usuários
 // ============================================================================
 
-// Carregar configurações do usuário
+// Carregar configurações globais do sistema
 app.get('/api/config', authenticateToken, dataLimiter, async (req, res) => {
   try {
-    const result = await pool.query(
+    // Busca configurações globais (user_id = NULL ou user_id = 0)
+    // Primeiro tenta com user_id = NULL, depois com user_id = 0
+    let result = await pool.query(
       `SELECT data_value FROM user_data 
-       WHERE user_id = $1 AND data_type = 'config' AND data_key = 'apiConfig'`,
-      [req.user.id]
+       WHERE user_id IS NULL AND data_type = 'config' AND data_key = 'apiConfig'`
     );
+
+    // Se não encontrou com NULL, tenta com 0
+    if (result.rows.length === 0) {
+      result = await pool.query(
+        `SELECT data_value FROM user_data 
+         WHERE user_id = 0 AND data_type = 'config' AND data_key = 'apiConfig'`
+      );
+    }
 
     if (result.rows.length > 0) {
       // Parse do JSON armazenado
@@ -1352,22 +1362,49 @@ app.get('/api/config', authenticateToken, dataLimiter, async (req, res) => {
   }
 });
 
-// Salvar configurações do usuário
+// Salvar configurações globais do sistema (apenas ADMIN pode salvar)
 app.put('/api/config', authenticateToken, dataLimiter, async (req, res) => {
   try {
+    // Verifica se o usuário é ADMIN
+    const userResult = await pool.query(
+      'SELECT role FROM users WHERE id = $1',
+      [req.user.id]
+    );
+
+    if (userResult.rows.length === 0 || userResult.rows[0].role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Apenas administradores podem salvar configurações do sistema' });
+    }
+
     const { config } = req.body;
 
     if (!config || typeof config !== 'object') {
       return res.status(400).json({ error: 'config é obrigatório e deve ser um objeto' });
     }
 
-    await pool.query(
-      `INSERT INTO user_data (user_id, data_type, data_key, data_value)
-       VALUES ($1, 'config', 'apiConfig', $2)
-       ON CONFLICT (user_id, data_type, data_key)
-       DO UPDATE SET data_value = $2, updated_at = CURRENT_TIMESTAMP`,
-      [req.user.id, JSON.stringify(config)]
-    );
+    // Tenta inserir com user_id = NULL primeiro
+    try {
+      await pool.query(
+        `INSERT INTO user_data (user_id, data_type, data_key, data_value)
+         VALUES (NULL, 'config', 'apiConfig', $1)
+         ON CONFLICT (COALESCE(user_id, 0), data_type, data_key)
+         DO UPDATE SET data_value = $1, updated_at = CURRENT_TIMESTAMP`,
+        [JSON.stringify(config)]
+      );
+    } catch (nullError) {
+      // Se falhar com NULL (por causa da constraint), tenta com user_id = 0
+      // Primeiro remove qualquer registro existente com NULL ou 0
+      await pool.query(
+        `DELETE FROM user_data 
+         WHERE (user_id IS NULL OR user_id = 0) AND data_type = 'config' AND data_key = 'apiConfig'`
+      );
+      
+      // Insere com user_id = 0
+      await pool.query(
+        `INSERT INTO user_data (user_id, data_type, data_key, data_value)
+         VALUES (0, 'config', 'apiConfig', $1)`,
+        [JSON.stringify(config)]
+      );
+    }
 
     res.json({ success: true });
   } catch (error) {

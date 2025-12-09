@@ -41,17 +41,46 @@ async function migrate() {
     `);
 
     // Criar tabela de dados do usuário (configurações, contatos, etc)
+    // user_id pode ser NULL para configurações globais do sistema
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_data (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
         data_type VARCHAR(100) NOT NULL,
         data_key VARCHAR(255) NOT NULL,
         data_value JSONB NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, data_type, data_key)
+        UNIQUE(COALESCE(user_id, 0), data_type, data_key)
       )
+    `);
+    
+    // Modificar constraint para permitir user_id NULL (para configurações globais)
+    // Remove a constraint antiga se existir e cria uma nova que permite NULL
+    await client.query(`
+      DO $$ 
+      BEGIN
+        -- Remove constraint única antiga se existir
+        IF EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'user_data_user_id_data_type_data_key_key'
+        ) THEN
+          ALTER TABLE user_data DROP CONSTRAINT user_data_user_id_data_type_data_key_key;
+        END IF;
+        
+        -- Cria nova constraint que permite NULL (tratando NULL como 0 para unicidade)
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'user_data_user_id_data_type_data_key_key'
+        ) THEN
+          ALTER TABLE user_data ADD CONSTRAINT user_data_user_id_data_type_data_key_key 
+          UNIQUE (COALESCE(user_id, 0), data_type, data_key);
+        END IF;
+      END $$;
+    `);
+    
+    // Modifica coluna user_id para permitir NULL
+    await client.query(`
+      ALTER TABLE user_data 
+      ALTER COLUMN user_id DROP NOT NULL
     `);
 
     // Criar índices para melhor performance
