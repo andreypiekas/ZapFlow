@@ -80,7 +80,7 @@
 #### Segurança
 
 - [ ] **JWT_SECRET forte** em produção (não usar fallback)
-- [ ] **Rate limiting** no backend (prevenir brute force)
+- [x] **Rate limiting** no backend (prevenir brute force) ✅ IMPLEMENTADO
 - [ ] **Validação de input** robusta (sanitização, validação de tipos)
 - [ ] **HTTPS obrigatório** (certificado SSL válido)
 - [ ] **Headers de segurança** (HSTS, CSP, X-Frame-Options, etc.)

@@ -88,6 +88,14 @@ PORT=3001
 
 # CORS - URLs permitidas (use o IP do servidor, não localhost)
 CORS_ORIGIN=http://SEU_IP_SERVIDOR:5173,http://localhost:5173
+
+# Rate Limiting - Prevenção de Brute Force e DDoS
+RATE_LIMIT_WINDOW_MS=15        # Janela geral (minutos)
+RATE_LIMIT_MAX=100              # Máximo de requisições gerais
+LOGIN_RATE_LIMIT_WINDOW_MS=15  # Janela para login (minutos)
+LOGIN_RATE_LIMIT_MAX=5         # Máximo de tentativas de login
+DATA_RATE_LIMIT_WINDOW_MS=1    # Janela para dados (minutos)
+DATA_RATE_LIMIT_MAX=60         # Máximo de requisições de dados
 ```
 
 **Nota:** O `DB_HOST=localhost` está correto porque o PostgreSQL roda no mesmo servidor. Mas o `CORS_ORIGIN` deve usar o IP do servidor para permitir acesso do frontend.
@@ -177,6 +185,11 @@ Resposta:
 - Senhas são hasheadas com bcrypt
 - Tokens JWT expiram em 7 dias
 - CORS configurável por ambiente
+- **Rate Limiting** implementado para prevenir brute force e DDoS:
+  - **Login**: Máximo 5 tentativas por 15 minutos por IP/username
+  - **Rotas de dados**: Máximo 60 requisições por minuto por usuário
+  - **Geral**: Máximo 100 requisições por 15 minutos por IP
+  - Configurável via variáveis de ambiente (ver `.env`)
 
 ## Troubleshooting
 
@@ -191,4 +204,10 @@ Resposta:
 
 **Erro de CORS:**
 - Adicione a URL do frontend em `CORS_ORIGIN` no .env
+
+**Erro 429 (Too Many Requests):**
+- Você atingiu o limite de requisições (rate limiting)
+- Para login: Aguarde 15 minutos ou ajuste `LOGIN_RATE_LIMIT_MAX` no .env
+- Para dados: Aguarde 1 minuto ou ajuste `DATA_RATE_LIMIT_MAX` no .env
+- Em produção, considere aumentar os limites se necessário
 

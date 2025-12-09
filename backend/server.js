@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
 
 dotenv.config();
 
@@ -45,6 +46,110 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// ============================================================================
+// RATE LIMITING - Prevenção de Brute Force e DDoS
+// ============================================================================
+
+// Rate limiter geral para todas as rotas (proteção básica)
+const generalLimiter = rateLimit({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '15') * 60 * 1000, // 15 minutos por padrão
+  max: parseInt(process.env.RATE_LIMIT_MAX || '100'), // 100 requisições por janela
+  message: {
+    error: 'Muitas requisições deste IP, tente novamente mais tarde.',
+    retryAfter: '15 minutos'
+  },
+  standardHeaders: true, // Retorna informações de rate limit nos headers `RateLimit-*`
+  legacyHeaders: false, // Desabilita headers `X-RateLimit-*`
+  // Função para obter o IP do cliente (considera proxies/load balancers)
+  keyGenerator: (req) => {
+    return req.ip || 
+           req.headers['x-forwarded-for']?.split(',')[0] || 
+           req.headers['x-real-ip'] || 
+           req.connection.remoteAddress || 
+           'unknown';
+  },
+  // Handler customizado para erros
+  handler: (req, res) => {
+    res.status(429).json({
+      error: 'Muitas requisições deste IP, tente novamente mais tarde.',
+      retryAfter: Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000) + ' segundos'
+    });
+  },
+  // Skip rate limiting para health checks (não conta no limite)
+  skip: (req) => {
+    return req.path === '/api/health' || req.path === '/';
+  }
+});
+
+// Rate limiter RESTRITIVO para login (prevenção de brute force)
+const loginLimiter = rateLimit({
+  windowMs: parseInt(process.env.LOGIN_RATE_LIMIT_WINDOW_MS || '15') * 60 * 1000, // 15 minutos
+  max: parseInt(process.env.LOGIN_RATE_LIMIT_MAX || '5'), // Apenas 5 tentativas de login por 15 minutos
+  message: {
+    error: 'Muitas tentativas de login. Por segurança, tente novamente em alguns minutos.',
+    retryAfter: '15 minutos'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Para login, também considerar o username para rate limiting mais inteligente
+    const username = req.body?.username || 'unknown';
+    const ip = req.ip || 
+               req.headers['x-forwarded-for']?.split(',')[0] || 
+               req.headers['x-real-ip'] || 
+               req.connection.remoteAddress || 
+               'unknown';
+    return `login:${ip}:${username}`;
+  },
+  handler: (req, res) => {
+    const retryAfter = Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000);
+    res.status(429).json({
+      error: 'Muitas tentativas de login. Por segurança, sua conta foi temporariamente bloqueada.',
+      retryAfter: `${Math.ceil(retryAfter / 60)} minutos`,
+      message: 'Por favor, aguarde antes de tentar novamente. Se você esqueceu sua senha, entre em contato com o administrador.'
+    });
+  },
+  // Log de tentativas bloqueadas para auditoria
+  onLimitReached: (req, res, options) => {
+    const ip = req.ip || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
+    const username = req.body?.username || 'unknown';
+    console.warn(`[SECURITY] Rate limit atingido para login - IP: ${ip}, Username: ${username}, Tentativas: ${req.rateLimit.totalHits}`);
+  }
+});
+
+// Rate limiter para rotas de dados (proteção contra abuso de API)
+const dataLimiter = rateLimit({
+  windowMs: parseInt(process.env.DATA_RATE_LIMIT_WINDOW_MS || '1') * 60 * 1000, // 1 minuto
+  max: parseInt(process.env.DATA_RATE_LIMIT_MAX || '60'), // 60 requisições por minuto
+  message: {
+    error: 'Muitas requisições de dados. Aguarde um momento antes de continuar.',
+    retryAfter: '1 minuto'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Para rotas autenticadas, usar user ID se disponível
+    if (req.user?.id) {
+      return `data:user:${req.user.id}`;
+    }
+    return req.ip || 
+           req.headers['x-forwarded-for']?.split(',')[0] || 
+           req.headers['x-real-ip'] || 
+           req.connection.remoteAddress || 
+           'unknown';
+  },
+  handler: (req, res) => {
+    const retryAfter = Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000);
+    res.status(429).json({
+      error: 'Muitas requisições. Aguarde um momento antes de continuar.',
+      retryAfter: `${retryAfter} segundos`
+    });
+  }
+});
+
+// Aplicar rate limiting geral em todas as rotas
+app.use(generalLimiter);
+
 // Middleware de autenticação
 const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -70,7 +175,8 @@ const authenticateToken = async (req, res, next) => {
 };
 
 // Rotas de autenticação
-app.post('/api/auth/login', async (req, res) => {
+// Aplicar rate limiting restritivo na rota de login
+app.post('/api/auth/login', loginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
 
@@ -114,7 +220,8 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // Rotas de dados do usuário
-app.get('/api/data/:dataType', authenticateToken, async (req, res) => {
+// Aplicar rate limiting nas rotas de dados (após autenticação)
+app.get('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res) => {
   try {
     const { dataType } = req.params;
     const { key } = req.query;
@@ -146,7 +253,7 @@ app.get('/api/data/:dataType', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/data/:dataType', authenticateToken, async (req, res) => {
+app.post('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res) => {
   try {
     const { dataType } = req.params;
     const { key, value } = req.body;
@@ -170,7 +277,7 @@ app.post('/api/data/:dataType', authenticateToken, async (req, res) => {
   }
 });
 
-app.put('/api/data/:dataType/:key', authenticateToken, async (req, res) => {
+app.put('/api/data/:dataType/:key', authenticateToken, dataLimiter, async (req, res) => {
   try {
     const { dataType, key } = req.params;
     const { value } = req.body;
@@ -193,7 +300,7 @@ app.put('/api/data/:dataType/:key', authenticateToken, async (req, res) => {
   }
 });
 
-app.delete('/api/data/:dataType/:key', authenticateToken, async (req, res) => {
+app.delete('/api/data/:dataType/:key', authenticateToken, dataLimiter, async (req, res) => {
   try {
     const { dataType, key } = req.params;
 
@@ -210,7 +317,7 @@ app.delete('/api/data/:dataType/:key', authenticateToken, async (req, res) => {
 });
 
 // Rota para salvar múltiplos dados de uma vez
-app.post('/api/data/:dataType/batch', authenticateToken, async (req, res) => {
+app.post('/api/data/:dataType/batch', authenticateToken, dataLimiter, async (req, res) => {
   try {
     const { dataType } = req.params;
     const { data } = req.body; // { key1: value1, key2: value2, ... }
