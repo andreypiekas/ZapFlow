@@ -1329,48 +1329,24 @@ const App: React.FC = () => {
               })) || []
             }));
           
-          // Atualiza os chats com dados do banco (preserva status, assignedTo, departmentId)
-          setChats(currentChats => {
-            const chatsMap = new Map<string, Chat>();
-            
-            // Primeiro, adiciona todos os chats do banco (apenas se tiverem id válido)
-            chatsArray.forEach(chat => {
-              if (chat && chat.id) {
-                chatsMap.set(chat.id, chat);
-              }
-            });
-            
-            // Depois, adiciona chats atuais que não estão no banco (preserva dados locais)
-            currentChats.forEach(chat => {
-              if (!chat || !chat.id) return; // Ignora chats sem id válido
-              if (!chatsMap.has(chat.id)) {
-                chatsMap.set(chat.id, chat);
-              } else {
-                // Se o chat existe no banco, preserva status, assignedTo e departmentId do banco
-                const dbChat = chatsMap.get(chat.id);
-                if (dbChat) {
-                  chatsMap.set(chat.id, {
-                    ...chat,
-                    status: dbChat.status || chat.status,
-                    assignedTo: dbChat.assignedTo || chat.assignedTo,
-                    departmentId: dbChat.departmentId !== undefined ? dbChat.departmentId : chat.departmentId
-                  });
-                }
-              }
-            });
-            
-            return Array.from(chatsMap.values());
-          });
+          // PRIORIDADE ABSOLUTA: Define chats do banco diretamente no estado
+          // Isso garante que status, assignedTo e departmentId do banco sejam preservados
+          // Não faz merge com currentChats - banco é a fonte da verdade
+          setChats(chatsArray);
+          
+          console.log(`[App] ✅ Carregados ${chatsArray.length} chats do banco com status fixo`);
         }
       } catch (error) {
         console.error('[App] Erro ao carregar chats do banco:', error);
       }
     };
 
-    // Carrega chats do banco primeiro, depois sincroniza
+    // Carrega chats do banco PRIMEIRO, depois sincroniza
     loadChatsFromDatabase().then(() => {
-      // Primeira sincronização após carregar do banco
-    syncChats();
+      // Aguarda um pouco para garantir que o estado foi atualizado
+      setTimeout(() => {
+        syncChats();
+      }, 100);
     });
     
     // Polling a cada 5 segundos para evitar atualizações excessivas (era 2s)
