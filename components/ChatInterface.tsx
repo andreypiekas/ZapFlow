@@ -1294,7 +1294,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 </div>
                 <div className="text-right">
                   <span className="text-xs text-slate-400 block whitespace-nowrap">
-                    {chat.lastMessageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {chat.lastMessageTime && chat.lastMessageTime instanceof Date ? chat.lastMessageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                   {chat.unreadCount > 0 && (
                     <span className="inline-block bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full mt-1">
@@ -1312,11 +1312,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
               {/* TAGS PREVIEW */}
               {chat.tags && Array.isArray(chat.tags) && chat.tags.length > 0 && (
                   <div className="flex gap-1 mt-1">
-                      {chat.tags.map(tag => {
+                    {(chat.tags && Array.isArray(chat.tags) ? chat.tags : []).map(tag => {
+                          if (!tag || typeof tag !== 'string') return null;
                           const tagDef = AVAILABLE_TAGS.find(t => t.name === tag);
                           return (
                             <span key={tag} className={`text-[10px] px-1.5 py-0.5 rounded-full ${tagDef ? tagDef.color : 'bg-slate-200'}`}>
-                                {tag}
+                              {tag}
                             </span>
                           );
                       })}
