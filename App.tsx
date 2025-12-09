@@ -16,14 +16,12 @@ import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashb
 import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance, sendDepartmentSelectionMessage, processDepartmentSelection } from './services/whatsappService';
 import { processChatbotMessages } from './services/chatbotService';
 import { storageService } from './services/storageService';
-import { apiService } from './services/apiService'; 
+import { apiService } from './services/apiService';
+import { SecurityService } from './services/securityService'; 
 
 const loadConfig = (): ApiConfig => {
   try {
     // Verifica se deve usar apenas PostgreSQL
-    const { SecurityService } = require('./services/securityService');
-    const { storageService } = require('./services/storageService');
-    
     if (storageService.getUseOnlyPostgreSQL()) {
       // Se configurado para usar apenas PostgreSQL, não carrega do localStorage
       return {
@@ -63,7 +61,6 @@ const loadConfig = (): ApiConfig => {
 const loadUserSession = (): User | null => {
   try {
     // Verifica se deve usar apenas PostgreSQL
-    const { storageService } = require('./services/storageService');
     if (storageService.getUseOnlyPostgreSQL()) {
       return null; // Não carrega do localStorage se usar apenas PostgreSQL
     }
@@ -71,7 +68,6 @@ const loadUserSession = (): User | null => {
     const saved = localStorage.getItem('zapflow_user');
     if (saved) {
       // Tenta descriptografar se estiver criptografado
-      const { SecurityService } = require('./services/securityService');
       let decrypted = saved;
       try {
         decrypted = SecurityService.decrypt(saved);
@@ -1973,8 +1969,6 @@ const App: React.FC = () => {
   const handleLogin = (user: User) => {
     setCurrentUser(user);
     // Salva usuário apenas se não estiver configurado para usar apenas PostgreSQL
-    const { SecurityService } = require('./services/securityService');
-    const { storageService } = require('./services/storageService');
     if (!storageService.getUseOnlyPostgreSQL()) {
       localStorage.setItem('zapflow_user', SecurityService.encrypt(JSON.stringify(user)));
     }
@@ -2151,8 +2145,6 @@ const App: React.FC = () => {
           };
           setCurrentUser(updatedCurrentUser);
           // Salva no localStorage apenas se não estiver configurado para usar apenas PostgreSQL
-          const { SecurityService } = require('./services/securityService');
-          const { storageService } = require('./services/storageService');
           if (!storageService.getUseOnlyPostgreSQL()) {
             localStorage.setItem('zapflow_user', SecurityService.encrypt(JSON.stringify(updatedCurrentUser)));
           }

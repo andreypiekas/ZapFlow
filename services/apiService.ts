@@ -1,5 +1,8 @@
 // Serviço para comunicação com a API backend
 // Remove /api do final da URL se presente, pois os endpoints já incluem /api
+import { SecurityService } from './securityService';
+import { storageService } from './storageService';
+
 const getApiBaseUrl = () => {
   const envUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
   // Remove /api do final se presente
@@ -66,9 +69,6 @@ class ApiService {
     
     if (response.token) {
       // Salva token e usuário apenas se não estiver configurado para usar apenas PostgreSQL
-      const { SecurityService } = await import('./securityService');
-      const { storageService } = await import('./storageService');
-      
       if (!storageService.getUseOnlyPostgreSQL()) {
         // Criptografa dados sensíveis antes de salvar
         localStorage.setItem('zapflow_auth_token', SecurityService.encrypt(response.token));
