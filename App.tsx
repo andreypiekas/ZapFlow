@@ -737,15 +737,16 @@ const App: React.FC = () => {
                                         await apiService.updateChatStatus(realChat.id, 'pending', undefined, null);
                                         console.log(`[App] ✅ [DEBUG] syncChats: Chat ${realChat.id} reaberto e salvo no banco`);
                                         
-                                        // Verifica se precisa enviar mensagem de seleção de departamento
+                                        // Quando chat fechado é reaberto, SEMPRE envia mensagem de seleção de departamento
+                                        // pois o departamento foi desatribuído ao fechar o chat
                                         const chatHasDepartment = dbChat?.departmentId || existingChat?.departmentId;
-                                        const departmentSelectionSent = dbChat?.departmentSelectionSent || existingChat?.departmentSelectionSent;
                                         
-                                        if (!chatHasDepartment && !departmentSelectionSent && departments.length > 0) {
+                                        // Se não tem departamento (foi desatribuído ao fechar), SEMPRE envia mensagem de seleção
+                                        if (!chatHasDepartment && departments.length > 0) {
                                             // Envia mensagem de seleção de departamento
                                             const contactNumber = realChat.contactNumber || existingChat.contactNumber;
                                             if (contactNumber) {
-                                                console.log(`[App] 📤 [DEBUG] syncChats: Enviando mensagem de seleção de departamento para ${realChat.id}`);
+                                                console.log(`[App] 📤 [DEBUG] syncChats: Chat reaberto sem departamento - Enviando mensagem de seleção de departamento para ${realChat.id}`);
                                                 const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, departments);
                                                 
                                                 if (sent) {
