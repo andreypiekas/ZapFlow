@@ -1610,11 +1610,10 @@ const App: React.FC = () => {
                                         
                                         const chatNumberMatch = exactMatch || fullNumberMatch || partialMatch;
                                         
-                                        if (chatNumberMatch) {
+                                        if (chatJid === messageJid || chatNumberMatch) {
                                             foundChat = true;
                                             console.log(`[App] 🔍 [DEBUG] Chat encontrado: chatId=${chat.id}, chatJid=${chatJid}, messageJid=${messageJid}, matchType=${exactMatch ? 'exato' : fullNumberMatch ? 'número completo' : 'parcial'}`);
                                         
-                                        if (chatJid === messageJid || chatNumberMatch) {
                                             // Para mensagens enviadas (fromMe: true), tenta atualizar mensagem local existente
                                             // ao invés de adicionar uma nova (evita duplicação)
                                             let messageIndex = -1;
