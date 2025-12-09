@@ -1574,30 +1574,6 @@ const App: React.FC = () => {
                             const mapped = mapApiMessageToInternal(messageData);
                             
                             if (mapped) {
-                                // Verifica se é mensagem do cliente ANTES de processar
-                                const isUserMessage = mapped.sender === 'user';
-                                let wasClosed = false;
-                                
-                                if (isUserMessage) {
-                                    // Verifica se o chat estava fechado antes de receber a mensagem
-                                    setChats(currentChats => {
-                                        const chatIndex = currentChats.findIndex(c => {
-                                            if (!c || !c.id) return false;
-                                            const chatJid = normalizeJid(c.id);
-                                            const messageJid = normalizeJid(remoteJid);
-                                            return chatJid === messageJid;
-                                        });
-                                        
-                                        if (chatIndex !== -1) {
-                                            const existingChat = currentChats[chatIndex];
-                                            wasClosed = existingChat.status === 'closed';
-                                        }
-                                        
-                                        return currentChats;
-                                    });
-                                }
-                            
-                            if (mapped) {
                                 setChats(currentChats => {
                                     let chatUpdated = false;
                                     const updatedChats = currentChats.map(chat => {
