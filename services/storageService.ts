@@ -31,20 +31,21 @@ class StorageService {
       this.apiAvailable = isAvailable;
       this.useAPI = isAvailable;
       
-      if (isAvailable) {
-        if (this.consecutiveFailures > 0) {
-          console.log('[StorageService] ✅ API reconectada, voltando a usar backend');
+        if (isAvailable) {
+          if (this.consecutiveFailures > 0) {
+            // Log removido para produção - muito verboso
+            // console.log('[StorageService] ✅ API reconectada, voltando a usar backend');
+          }
+          this.consecutiveFailures = 0;
+        } else {
+          console.warn('[StorageService] ⚠️ API indisponível, usando localStorage');
         }
-        this.consecutiveFailures = 0;
-      } else {
-        console.log('[StorageService] ⚠️ API indisponível, usando localStorage');
-      }
     } catch (error) {
       this.consecutiveFailures++;
       if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
         this.apiAvailable = false;
         this.useAPI = false;
-        console.log('[StorageService] ⚠️ Muitas falhas consecutivas, desabilitando API temporariamente');
+        console.warn('[StorageService] ⚠️ Muitas falhas consecutivas, desabilitando API temporariamente');
       }
     }
   }
@@ -72,7 +73,8 @@ class StorageService {
         const data = await apiService.getData<T>(dataType, key || 'default');
         if (data !== null) {
           this.consecutiveFailures = 0;
-          console.log(`[StorageService] ✅ ${dataType}/${key || 'default'} carregado da API`);
+          // Log removido para produção - muito verboso
+          // console.log(`[StorageService] ✅ ${dataType}/${key || 'default'} carregado da API`);
           return data;
         }
       } catch (error) {
@@ -114,7 +116,8 @@ class StorageService {
         const success = await apiService.saveData(dataType, storageKey, value);
         if (success) {
           this.consecutiveFailures = 0;
-          console.log(`[StorageService] ✅ ${dataType}/${storageKey} salvo na API`);
+          // Log removido para produção - muito verboso
+          // console.log(`[StorageService] ✅ ${dataType}/${storageKey} salvo na API`);
           return true;
         }
       } catch (error: any) {
@@ -168,7 +171,8 @@ class StorageService {
         const success = await apiService.saveBatchData(dataType, data);
         if (success) {
           this.consecutiveFailures = 0;
-          console.log(`[StorageService] ✅ Lote de ${dataType} salvo na API`);
+          // Log removido para produção - muito verboso
+          // console.log(`[StorageService] ✅ Lote de ${dataType} salvo na API`);
           return true;
         }
       } catch (error: any) {
@@ -198,7 +202,8 @@ class StorageService {
         const success = await apiService.deleteData(dataType, key);
         if (success) {
           this.consecutiveFailures = 0;
-          console.log(`[StorageService] ✅ ${dataType}/${key} deletado da API`);
+          // Log removido para produção - muito verboso
+          // console.log(`[StorageService] ✅ ${dataType}/${key} deletado da API`);
           return true;
         }
       } catch (error) {
@@ -238,7 +243,8 @@ class StorageService {
   // Método para forçar uso de localStorage (útil quando API não está disponível)
   forceLocalStorage(): void {
     this.useAPI = false;
-    console.log('[StorageService] Modo localStorage forçado');
+    // Log removido para produção - muito verboso
+    // console.log('[StorageService] Modo localStorage forçado');
   }
 
   // Método para tentar reconectar à API

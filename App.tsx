@@ -660,7 +660,8 @@ const App: React.FC = () => {
                             
                             fetchChatMessages(apiConfig, chatId, 100).then(apiMessages => {
                                 if (apiMessages.length > 0) {
-                                    console.log(`[App] 🔄 Buscou ${apiMessages.length} mensagens da API para ${chatId}`);
+                                    // Log removido para produção - muito verboso
+                                    // console.log(`[App] 🔄 Buscou ${apiMessages.length} mensagens da API para ${chatId}`);
                                     setChats(currentChats => {
                                         return currentChats.map(c => {
                                             if (c.id === chatId || normalizeJid(c.id) === normalizeJid(chatId)) {
@@ -784,7 +785,8 @@ const App: React.FC = () => {
                                                 }
                                                 
                                                 if (uniqueMessages.length > c.messages.length) {
-                                                    console.log(`[App] ✅ Adicionadas ${uniqueMessages.length - c.messages.length} novas mensagens ao chat ${c.contactName}`);
+                                                    // Log removido para produção - muito verboso
+                                                    // console.log(`[App] ✅ Adicionadas ${uniqueMessages.length - c.messages.length} novas mensagens ao chat ${c.contactName}`);
                                                 }
                                                 
                                                 // Lógica para processar mensagens de clientes finalizados
@@ -805,7 +807,8 @@ const App: React.FC = () => {
                                                             awaitingRating: false, // Não está mais aguardando
                                                             status: 'closed' // Mantém finalizado
                                                         };
-                                                        console.log(`[App] ✅ Avaliação recebida: ${rating} estrelas para chat ${c.contactName}`);
+                                                        // Log removido para produção - muito verboso
+                                                        // console.log(`[App] ✅ Avaliação recebida: ${rating} estrelas para chat ${c.contactName}`);
                                                     } else if (!isRatingResponse) {
                                                         // Cliente enviou nova mensagem (não é avaliação) - reabre o chat
                                                         updatedChat = {
@@ -816,7 +819,8 @@ const App: React.FC = () => {
                                                             assignedTo: undefined, // Remove atribuição
                                                             endedAt: undefined // Remove data de finalização
                                                         };
-                                                        console.log(`[App] 🔄 Chat ${c.contactName} reaberto - cliente enviou nova mensagem`);
+                                                        // Log removido para produção - muito verboso
+                                                        // console.log(`[App] 🔄 Chat ${c.contactName} reaberto - cliente enviou nova mensagem`);
                                                     }
                                                 }
                                                 
@@ -962,7 +966,8 @@ const App: React.FC = () => {
                                 // Se não é avaliação, reabre o chat
                                 if (!isRatingResponse || !existingChat.awaitingRating) {
                                     finalStatus = 'open';
-                                    console.log(`[App] 🔄 Chat ${existingChat.contactName} reaberto via sync - cliente enviou nova mensagem`);
+                                    // Log removido para produção - muito verboso
+                                    // console.log(`[App] 🔄 Chat ${existingChat.contactName} reaberto via sync - cliente enviou nova mensagem`);
                                 } else {
                                     // É avaliação, mantém fechado
                                     finalStatus = 'closed';
@@ -1020,7 +1025,8 @@ const App: React.FC = () => {
                                     // Usuário selecionou um setor válido
                                     finalDepartmentId = selectedDeptId;
                                     finalStatusForDept = 'pending'; // Vai para triagem do setor
-                                    console.log(`[App] ✅ Setor selecionado pelo usuário via sync: ${departments.find(d => d.id === selectedDeptId)?.name}`);
+                                    // Log removido para produção - muito verboso
+                                    // console.log(`[App] ✅ Setor selecionado pelo usuário via sync: ${departments.find(d => d.id === selectedDeptId)?.name}`);
                                     
                                     // Remove a mensagem numérica da lista (é apenas uma resposta de seleção)
                                     const messageIndex = mergedMessages.findIndex(m => m.id === lastNewUserMessage.id);
@@ -1056,7 +1062,8 @@ const App: React.FC = () => {
                                             departments
                                         ).then(sent => {
                                             if (sent) {
-                                                console.log(`[App] ✅ Mensagem de seleção de setores enviada para ${existingChat.contactName} via sync`);
+                                                // Log removido para produção - muito verboso
+                                                // console.log(`[App] ✅ Mensagem de seleção de setores enviada para ${existingChat.contactName} via sync`);
                                                 // Marca que a mensagem foi enviada e garante status 'open'
                                                 handleUpdateChat({
                                                     ...existingChat,
@@ -1077,7 +1084,8 @@ const App: React.FC = () => {
                                             messages: mergedMessages
                                         }).then(sent => {
                                             if (sent) {
-                                                console.log(`[App] ✅ Chatbot processou mensagem para ${existingChat.contactName}`);
+                                                // Log removido para produção - muito verboso
+                                                // console.log(`[App] ✅ Chatbot processou mensagem para ${existingChat.contactName}`);
                                             }
                                         }).catch(err => {
                                             console.error(`[App] ❌ Erro ao processar chatbot:`, err);
@@ -1139,7 +1147,8 @@ const App: React.FC = () => {
                                 departments
                             ).then(sent => {
                                 if (sent) {
-                                    console.log(`[App] ✅ Mensagem de seleção de setores enviada para novo chat ${realChat.contactName}`);
+                                    // Log removido para produção - muito verboso
+                                    // console.log(`[App] ✅ Mensagem de seleção de setores enviada para novo chat ${realChat.contactName}`);
                                     // Atualiza o chat para marcar que a mensagem foi enviada
                                     setChats(currentChats => {
                                         return currentChats.map(c => 
@@ -1158,7 +1167,8 @@ const App: React.FC = () => {
                             // Se não precisa de seleção de setores mas é novo chat sem departamento, processa chatbot
                             processChatbotMessages(apiConfig, chatbotConfig, realChat).then(sent => {
                                 if (sent) {
-                                    console.log(`[App] ✅ Chatbot processou mensagem para novo chat ${realChat.contactName}`);
+                                    // Log removido para produção - muito verboso
+                                    // console.log(`[App] ✅ Chatbot processou mensagem para novo chat ${realChat.contactName}`);
                                 }
                             }).catch(err => {
                                 console.error(`[App] ❌ Erro ao processar chatbot:`, err);
@@ -1219,7 +1229,7 @@ const App: React.FC = () => {
             // Se instância não está conectada, não tenta WebSocket (mas permite "unknown" para tentar conectar)
             if (active && active.status && active.status !== 'open' && active.status !== 'unknown') {
                 if (!isReconnect) {
-                    console.log(`[App] WebSocket desabilitado: instância ${instanceName} não está conectada (status: ${active.status})`);
+                    console.warn(`[App] WebSocket desabilitado: instância ${instanceName} não está conectada (status: ${active.status})`);
                 }
                 return;
             }
@@ -1233,11 +1243,13 @@ const App: React.FC = () => {
                 `${baseWsUrl}/ws/${instanceName}`
             ];
             
-            console.log(`[App] Tentando conectar WebSocket para instância: ${instanceName}`);
+            // Log removido para produção - muito verboso
+            // console.log(`[App] Tentando conectar WebSocket para instância: ${instanceName}`);
             
             // Tenta o primeiro formato (mais comum)
             const wsUrl = wsUrls[0];
-            console.log(`[App] Conectando WebSocket: ${wsUrl}`);
+            // Log removido para produção - muito verboso
+            // console.log(`[App] Conectando WebSocket: ${wsUrl}`);
             
             // Fecha WebSocket anterior se existir
             if (wsRef.current) {
@@ -1394,7 +1406,8 @@ const App: React.FC = () => {
                                             if (shouldUpdate && messageIndex >= 0) {
                                                 // Atualiza mensagem local existente com dados da API (inclui whatsappMessageId)
                                                 chatUpdated = true;
-                                                console.log(`[App] 🔄 Mensagem enviada atualizada com ID do WhatsApp no chat ${chat.contactName}`);
+                                                // Log removido para produção - muito verboso
+                                                // console.log(`[App] 🔄 Mensagem enviada atualizada com ID do WhatsApp no chat ${chat.contactName}`);
                                                 const updatedMessages = [...chat.messages];
                                                 updatedMessages[messageIndex] = {
                                                     ...updatedMessages[messageIndex],
@@ -1449,7 +1462,8 @@ const App: React.FC = () => {
                                             } else if (!exists) {
                                                 // Nova mensagem (não existe e não é atualização)
                                                 chatUpdated = true;
-                                                console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}`);
+                                                // Log removido para produção - muito verboso
+                                                // console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}`);
                                                 let updatedMessages = [...chat.messages, mapped].sort((a, b) => {
                                                     const timeA = a.timestamp?.getTime() || 0;
                                                     const timeB = b.timestamp?.getTime() || 0;
@@ -1498,7 +1512,8 @@ const App: React.FC = () => {
                                                             awaitingRating: false, // Não está mais aguardando
                                                             status: 'closed' // Mantém finalizado
                                                         };
-                                                        console.log(`[App] ✅ Avaliação recebida: ${rating} estrelas para chat ${chat.contactName}`);
+                                                        // Log removido para produção - muito verboso
+                                                        // console.log(`[App] ✅ Avaliação recebida: ${rating} estrelas para chat ${chat.contactName}`);
                                                     } else if (!isRatingResponse) {
                                                         // Cliente enviou nova mensagem (não é avaliação) - reabre o chat
                                                         updatedChat = {
@@ -1509,7 +1524,8 @@ const App: React.FC = () => {
                                                             assignedTo: undefined, // Remove atribuição
                                                             endedAt: undefined // Remove data de finalização
                                                         };
-                                                        console.log(`[App] 🔄 Chat ${chat.contactName} reaberto - cliente enviou nova mensagem`);
+                                                        // Log removido para produção - muito verboso
+                                                        // console.log(`[App] 🔄 Chat ${chat.contactName} reaberto - cliente enviou nova mensagem`);
                                                     }
                                                 }
                                                 
@@ -1529,7 +1545,8 @@ const App: React.FC = () => {
                                                                 status: 'pending', // Vai para triagem do setor
                                                                 awaitingDepartmentSelection: false // Não está mais aguardando seleção
                                                             };
-                                                            console.log(`[App] ✅ Setor selecionado pelo usuário: ${departments.find(d => d.id === selectedDeptId)?.name}`);
+                                                            // Log removido para produção - muito verboso
+                                                            // console.log(`[App] ✅ Setor selecionado pelo usuário: ${departments.find(d => d.id === selectedDeptId)?.name}`);
                                                             
                                                             // Remove a mensagem numérica da lista (é apenas uma resposta de seleção)
                                                             const filteredMessages = updatedMessages.filter(m => m.id !== mapped.id);
@@ -1562,7 +1579,8 @@ const App: React.FC = () => {
                                                                     departments
                                                                 ).then(sent => {
                                                                     if (sent) {
-                                                                        console.log(`[App] ✅ Mensagem de seleção de setores enviada para ${updatedChat.contactName}`);
+                                                                        // Log removido para produção - muito verboso
+                                                                        // console.log(`[App] ✅ Mensagem de seleção de setores enviada para ${updatedChat.contactName}`);
                                                                         // Atualiza o chat para garantir que o status seja mantido
                                                                         handleUpdateChat({
                                                                             ...updatedChat,
@@ -1605,7 +1623,8 @@ const App: React.FC = () => {
                                                     status: updatedChat.status
                                                 };
                                             } else {
-                                                console.log(`[App] ⚠️ Mensagem já existe no chat ${chat.contactName}`);
+                                                // Log removido para produção - muito verboso (mantém apenas warnings importantes)
+                                                // console.log(`[App] ⚠️ Mensagem já existe no chat ${chat.contactName}`);
                                             }
                                         }
                                         return chat;
@@ -1676,7 +1695,8 @@ const App: React.FC = () => {
     
     // Inicializa WebSocket apenas se não estiver em demo
     if (!apiConfig.isDemo && apiConfig.baseUrl) {
-        console.log('[App] Inicializando WebSocket...');
+        // Log removido para produção - muito verboso
+        // console.log('[App] Inicializando WebSocket...');
         initWebSocket().catch(err => {
             console.error('[App] ❌ Erro ao inicializar WebSocket:', err);
         });

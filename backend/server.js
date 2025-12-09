@@ -53,7 +53,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Rate limiter geral para todas as rotas (proteção básica)
 const generalLimiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '15') * 60 * 1000, // 15 minutos por padrão
-  max: parseInt(process.env.RATE_LIMIT_MAX || '100'), // 100 requisições por janela
+  max: parseInt(process.env.RATE_LIMIT_MAX || '1000'), // 100 requisições por janela
   message: {
     error: 'Muitas requisições deste IP, tente novamente mais tarde.',
     retryAfter: '15 minutos'

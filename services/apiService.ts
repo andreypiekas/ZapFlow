@@ -4,11 +4,11 @@ const getApiBaseUrl = () => {
   const envUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
   // Remove /api do final se presente
   const baseUrl = envUrl.replace(/\/api\/?$/, '');
-  // Log apenas uma vez no carregamento
-  if (!(window as any).__API_BASE_URL_LOGGED) {
-    console.log(`[ApiService] URL da API configurada: ${baseUrl}`);
-    (window as any).__API_BASE_URL_LOGGED = true;
-  }
+  // Log removido para produção - muito verboso
+  // if (!(window as any).__API_BASE_URL_LOGGED) {
+  //   console.log(`[ApiService] URL da API configurada: ${baseUrl}`);
+  //   (window as any).__API_BASE_URL_LOGGED = true;
+  // }
   return baseUrl;
 };
 

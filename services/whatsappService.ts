@@ -799,7 +799,8 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
         if (jid.includes('@') && !jid.includes('status@broadcast')) {
             if (!collectedChats.has(jid)) {
                 collectedChats.set(jid, { id: jid, raw: data, messages: [] });
-                console.log(`[ExtractChats] Chat criado: ${jid}, messages no raw: ${data.messages?.length || 0}, keys: ${Object.keys(data).join(', ')}`);
+                // Log removido para produção - muito verboso
+                // console.log(`[ExtractChats] Chat criado: ${jid}, messages no raw: ${data.messages?.length || 0}, keys: ${Object.keys(data).join(', ')}`);
             }
             const chat = collectedChats.get(jid);
             // Atualiza metadata
@@ -809,7 +810,8 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
             
             // Se tiver mensagens dentro do chat
             if (data.messages && Array.isArray(data.messages)) {
-                console.log(`[ExtractChats] Processando ${data.messages.length} mensagens do chat ${jid}`);
+                // Log removido para produção - muito verboso
+                // console.log(`[ExtractChats] Processando ${data.messages.length} mensagens do chat ${jid}`);
                 extractChatsRecursively(data.messages, collectedChats, depth + 1);
             }
             
@@ -817,11 +819,13 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
             const possibleMessageFields = ['message', 'lastMessage', 'messages', 'conversation'];
             for (const field of possibleMessageFields) {
                 if (data[field] && Array.isArray(data[field]) && data[field].length > 0) {
-                    console.log(`[ExtractChats] Encontrado campo ${field} com ${data[field].length} itens no chat ${jid}`);
+                    // Log removido para produção - muito verboso
+                    // console.log(`[ExtractChats] Encontrado campo ${field} com ${data[field].length} itens no chat ${jid}`);
                     extractChatsRecursively(data[field], collectedChats, depth + 1);
                 } else if (data[field] && typeof data[field] === 'object' && !Array.isArray(data[field])) {
                     // Pode ser uma única mensagem
-                    console.log(`[ExtractChats] Encontrado campo ${field} como objeto único no chat ${jid}`);
+                    // Log removido para produção - muito verboso
+                    // console.log(`[ExtractChats] Encontrado campo ${field} como objeto único no chat ${jid}`);
                     extractChatsRecursively(data[field], collectedChats, depth + 1);
                 }
             }
@@ -837,7 +841,8 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
         if (jid.includes('@lid') && data.key.remoteJidAlt) {
             const altJid = normalizeJid(data.key.remoteJidAlt);
             if (altJid.includes('@s.whatsapp.net')) {
-                console.log(`[ExtractChats] Usando remoteJidAlt para @lid: ${altJid} (original: ${jid})`);
+                // Log removido para produção - muito verboso
+                // console.log(`[ExtractChats] Usando remoteJidAlt para @lid: ${altJid} (original: ${jid})`);
                 actualJid = altJid;
             }
         }
@@ -846,7 +851,8 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
             if (!collectedChats.has(actualJid)) {
                 // Cria chat placeholder se encontrarmos uma mensagem solta
                 collectedChats.set(actualJid, { id: actualJid, raw: {}, messages: [] });
-                console.log(`[ExtractChats] Criado chat para JID: ${actualJid}${jid !== actualJid ? ` (substituiu ${jid})` : ''}`);
+                // Log removido para produção - muito verboso
+                // console.log(`[ExtractChats] Criado chat para JID: ${actualJid}${jid !== actualJid ? ` (substituiu ${jid})` : ''}`);
             }
             const chat = collectedChats.get(actualJid);
             
@@ -857,13 +863,14 @@ const extractChatsRecursively = (data: any, collectedChats = new Map<string, any
                 chat.messages.push(data);
                 // Tenta pescar o nome do contato da mensagem se não tivermos
                 if (data.pushName && !chat.raw.pushName) chat.raw.pushName = data.pushName;
-                console.log(`[ExtractChats] Mensagem adicionada ao chat ${actualJid}:`, {
-                    msgId: msgId,
-                    remoteJid: data.key.remoteJid,
-                    remoteJidAlt: data.key.remoteJidAlt, // Inclui para debug
-                    fromMe: data.key.fromMe,
-                    hasMessage: !!data.message
-                });
+                // Log removido para produção - muito verboso
+                // console.log(`[ExtractChats] Mensagem adicionada ao chat ${actualJid}:`, {
+                //     msgId: msgId,
+                //     remoteJid: data.key.remoteJid,
+                //     remoteJidAlt: data.key.remoteJidAlt,
+                //     fromMe: data.key.fromMe,
+                //     hasMessage: !!data.message
+                // });
             }
         }
     }
@@ -940,7 +947,8 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     if (remoteJid && remoteJid.includes('@lid')) {
         const remoteJidAlt = key?.remoteJidAlt || apiMsg?.remoteJidAlt;
         if (remoteJidAlt) {
-            console.log(`[MessageAuthor] Usando remoteJidAlt para @lid: ${remoteJidAlt} (original: ${remoteJid})`);
+            // Log removido para produção - muito verboso
+            // console.log(`[MessageAuthor] Usando remoteJidAlt para @lid: ${remoteJidAlt} (original: ${remoteJid})`);
             remoteJid = remoteJidAlt;
         }
     }
@@ -1009,7 +1017,8 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
                 whatsappMessageId: quotedMessageId
             };
             
-            console.log(`[mapApiMessageToInternal] ✅ Mensagem detectada como resposta: ID=${quotedMessageId}, conteúdo="${quotedContent.substring(0, 50)}", sender original=${quotedSender}`);
+            // Log removido para produção - muito verboso
+            // console.log(`[mapApiMessageToInternal] ✅ Mensagem detectada como resposta: ID=${quotedMessageId}, conteúdo="${quotedContent.substring(0, 50)}", sender original=${quotedSender}`);
         }
     }
 
@@ -1103,30 +1112,31 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         const chatsMap = new Map<string, any>();
         extractChatsRecursively(rawData, chatsMap);
         
-        console.log(`[ExtractChats] Total de chats após extração: ${chatsMap.size}`);
+        // Logs removidos para produção - muito verbosos
+        // console.log(`[ExtractChats] Total de chats após extração: ${chatsMap.size}`);
         
         const chatsArray = Array.from(chatsMap.values());
-        console.log(`[FetchChats] Total de chats extraídos: ${chatsArray.length}`);
-        chatsArray.forEach((chat: any, idx: number) => {
-            const msgCount = chat.messages?.length || 0;
-            const hasValidId = !chat.id?.includes('cmin') && !chat.id?.includes('cmid') && !chat.id?.includes('cmio') && !chat.id?.includes('cmip') && !chat.id?.includes('cmit');
-            console.log(`[FetchChats] Chat ${idx + 1}: ID=${chat.id}, Messages=${msgCount}, ValidID=${hasValidId}`);
-            if (msgCount > 0) {
-                const firstMsg = chat.messages[0];
-                console.log(`[FetchChats] Primeira mensagem:`, {
-                    hasKey: !!firstMsg?.key,
-                    keyRemoteJid: firstMsg?.key?.remoteJid,
-                    remoteJid: firstMsg?.remoteJid,
-                    jid: firstMsg?.jid,
-                    keys: firstMsg ? Object.keys(firstMsg).slice(0, 10) : []
-                });
-            }
-        });
+        // console.log(`[FetchChats] Total de chats extraídos: ${chatsArray.length}`);
+        // chatsArray.forEach((chat: any, idx: number) => {
+        //     const msgCount = chat.messages?.length || 0;
+        //     const hasValidId = !chat.id?.includes('cmin') && !chat.id?.includes('cmid') && !chat.id?.includes('cmio') && !chat.id?.includes('cmip') && !chat.id?.includes('cmit');
+        //     console.log(`[FetchChats] Chat ${idx + 1}: ID=${chat.id}, Messages=${msgCount}, ValidID=${hasValidId}`);
+        //     if (msgCount > 0) {
+        //         const firstMsg = chat.messages[0];
+        //         console.log(`[FetchChats] Primeira mensagem:`, {
+        //             hasKey: !!firstMsg?.key,
+        //             keyRemoteJid: firstMsg?.key?.remoteJid,
+        //             remoteJid: firstMsg?.remoteJid,
+        //             jid: firstMsg?.jid,
+        //             keys: firstMsg ? Object.keys(firstMsg).slice(0, 10) : []
+        //         });
+        //     }
+        // });
 
         // 4. Mapeia para o formato interno do Frontend
         const mappedChats = chatsArray.map((item: any) => {
-            console.log(`[MapChat] Processando chat: ID=${item.id}, Messages=${item.messages?.length || 0}`);
-            console.log(`[MapChat] Processando chat: ID=${item.id}, Messages=${item.messages?.length || 0}`);
+            // Logs removidos para produção - muito verbosos
+            // console.log(`[MapChat] Processando chat: ID=${item.id}, Messages=${item.messages?.length || 0}`);
             
             // Detecta se o ID é gerado (inclui todos os padrões: cmin*, cmid*, cmio*, cmip*, cmit*)
             const idIsGenerated = item.id.includes('cmin') || 
@@ -1137,7 +1147,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                                   !/^\d+@/.test(item.id) ||
                                   (item.id.split('@')[0].replace(/\D/g, '').length < 10 && !item.id.includes('@g.us'));
             
-            console.log(`[MapChat] ID gerado: ${idIsGenerated}, ID: ${item.id}`);
+            // console.log(`[MapChat] ID gerado: ${idIsGenerated}, ID: ${item.id}`);
             
             // SOLUÇÃO DIRETA: Procura número válido PRIMEIRO no remoteJid do objeto raw
             let validJid: string | null = null;
@@ -1150,20 +1160,23 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                     const jidNum = rawRemoteJid.split('@')[0];
                     const digits = jidNum.replace(/\D/g, '');
                     
-                    console.log(`[MapChat] remoteJid do raw: ${rawRemoteJid}, número: ${jidNum}, dígitos: ${digits.length}`);
+                    // Log removido para produção - muito verboso
+                    // console.log(`[MapChat] remoteJid do raw: ${rawRemoteJid}, número: ${jidNum}, dígitos: ${digits.length}`);
                     
                     // Se é um número válido (>=10 dígitos)
                     if (/^\d+$/.test(digits) && digits.length >= 10) {
                         validJid = rawRemoteJid;
                         validNumber = jidNum;
-                        console.log(`[MapChat] ✅ Número válido encontrado no remoteJid do raw: ${validNumber} (${validJid})`);
+                        // Log removido - apenas números válidos (não é necessário para análise)
+                        // console.log(`[MapChat] ✅ Número válido encontrado no remoteJid do raw: ${validNumber} (${validJid})`);
                     }
                 }
             }
             
             // SEGUNDO: Procura em TODAS as mensagens brutas pelo remoteJid válido
             if (!validNumber && item.messages && Array.isArray(item.messages)) {
-                console.log(`[MapChat] Procurando número válido em ${item.messages.length} mensagens brutas`);
+                // Log removido para produção - muito verboso
+                // console.log(`[MapChat] Procurando número válido em ${item.messages.length} mensagens brutas`);
                 for (let i = 0; i < item.messages.length; i++) {
                     const rawMsg = item.messages[i];
                     // Tenta múltiplas formas de acessar o remoteJid
@@ -1176,20 +1189,22 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                     if (remoteJid && remoteJid.includes('@lid')) {
                         const remoteJidAlt = rawMsg?.key?.remoteJidAlt || rawMsg?.remoteJidAlt;
                         if (remoteJidAlt) {
-                            console.log(`[MapChat] Encontrado remoteJidAlt para @lid: ${remoteJidAlt} (original: ${remoteJid})`);
+                            // Log removido para produção - muito verboso
+                            // console.log(`[MapChat] Encontrado remoteJidAlt para @lid: ${remoteJidAlt} (original: ${remoteJid})`);
                             remoteJid = remoteJidAlt;
                         }
                     }
                     
-                    console.log(`[MapChat] Mensagem ${i + 1}:`, {
-                        hasKey: !!rawMsg?.key,
-                        keyRemoteJid: rawMsg?.key?.remoteJid,
-                        remoteJidAlt: rawMsg?.key?.remoteJidAlt,
-                        remoteJid: rawMsg?.remoteJid,
-                        jid: rawMsg?.jid,
-                        participant: rawMsg?.key?.participant,
-                        foundRemoteJid: remoteJid
-                    });
+                    // Log removido para produção - muito verboso
+                    // console.log(`[MapChat] Mensagem ${i + 1}:`, {
+                    //     hasKey: !!rawMsg?.key,
+                    //     keyRemoteJid: rawMsg?.key?.remoteJid,
+                    //     remoteJidAlt: rawMsg?.key?.remoteJidAlt,
+                    //     remoteJid: rawMsg?.remoteJid,
+                    //     jid: rawMsg?.jid,
+                    //     participant: rawMsg?.key?.participant,
+                    //     foundRemoteJid: remoteJid
+                    // });
                     
                     if (remoteJid) {
                         const normalized = normalizeJid(remoteJid);
@@ -1197,7 +1212,8 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                             const jidNum = normalized.split('@')[0];
                             const digits = jidNum.replace(/\D/g, '');
                             
-                            console.log(`[MapChat] JID normalizado: ${normalized}, número: ${jidNum}, dígitos: ${digits.length}`);
+                            // Log removido para produção - muito verboso
+                            // console.log(`[MapChat] JID normalizado: ${normalized}, número: ${jidNum}, dígitos: ${digits.length}`);
                             
                             // Se é um número válido (10-14 dígitos)
                             // Aceita números com 10-14 dígitos (formatPhoneForApi adiciona DDI 55 se necessário)
@@ -1205,18 +1221,20 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                             if (/^\d+$/.test(digits) && digits.length >= 10 && digits.length <= 14) {
                                 validJid = normalized;
                                 validNumber = jidNum;
-                                console.log(`[MapChat] ✅ Número válido encontrado: ${validNumber} (${validJid})`);
+                                // Log removido - apenas números válidos (não é necessário para análise)
+                                // console.log(`[MapChat] ✅ Número válido encontrado: ${validNumber} (${validJid})`);
                                 break; // Usa o primeiro número válido encontrado
                             } else if (digits.length > 14) {
-                                console.log(`[MapChat] ⚠️ Número muito longo (provavelmente ID de lista): ${jidNum} (${digits.length} dígitos)`);
+                                console.warn(`[MapChat] ⚠️ Número muito longo (provavelmente ID de lista): ${jidNum} (${digits.length} dígitos)`);
                             } else {
-                                console.log(`[MapChat] ⚠️ Número inválido: ${jidNum} (${digits.length} dígitos, só números: ${/^\d+$/.test(digits)})`);
+                                console.warn(`[MapChat] ⚠️ Número inválido: ${jidNum} (${digits.length} dígitos, só números: ${/^\d+$/.test(digits)})`);
                             }
                         }
                     }
                 }
             } else {
-                console.log(`[MapChat] ⚠️ Sem mensagens brutas para processar`);
+                // Log removido para produção - muito verboso
+                // console.log(`[MapChat] ⚠️ Sem mensagens brutas para processar`);
             }
             
             // TERCEIRO: Tenta extrair do lastMessage se não encontrou nas mensagens do array
@@ -1228,7 +1246,8 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                 if (lastMsgRemoteJid && lastMsgRemoteJid.includes('@lid')) {
                     const remoteJidAlt = lastMsg?.key?.remoteJidAlt || lastMsg?.remoteJidAlt;
                     if (remoteJidAlt) {
-                        console.log(`[MapChat] Encontrado remoteJidAlt no lastMessage: ${remoteJidAlt} (original: ${lastMsgRemoteJid})`);
+                        // Log removido para produção - muito verboso
+                        // console.log(`[MapChat] Encontrado remoteJidAlt no lastMessage: ${remoteJidAlt} (original: ${lastMsgRemoteJid})`);
                         lastMsgRemoteJid = remoteJidAlt;
                     }
                 }
@@ -1242,9 +1261,10 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                         if (/^\d+$/.test(digits) && digits.length >= 10 && digits.length <= 14) {
                             validJid = normalized;
                             validNumber = jidNum;
-                            console.log(`[MapChat] ✅ Número válido encontrado no lastMessage: ${validNumber} (${validJid})`);
+                            // Log removido - apenas números válidos (não é necessário para análise)
+                            // console.log(`[MapChat] ✅ Número válido encontrado no lastMessage: ${validNumber} (${validJid})`);
                         } else if (digits.length > 14) {
-                            console.log(`[MapChat] ⚠️ Número muito longo no lastMessage (provavelmente ID de lista): ${jidNum} (${digits.length} dígitos)`);
+                            console.warn(`[MapChat] ⚠️ Número muito longo no lastMessage (provavelmente ID de lista): ${jidNum} (${digits.length} dígitos)`);
                         }
                     }
                 }
@@ -1259,7 +1279,8 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                 if (msgRemoteJid && msgRemoteJid.includes('@lid')) {
                     const remoteJidAlt = msg?.key?.remoteJidAlt || msg?.remoteJidAlt;
                     if (remoteJidAlt) {
-                        console.log(`[MapChat] Encontrado remoteJidAlt no campo message: ${remoteJidAlt} (original: ${msgRemoteJid})`);
+                        // Log removido para produção - muito verboso
+                        // console.log(`[MapChat] Encontrado remoteJidAlt no campo message: ${remoteJidAlt} (original: ${msgRemoteJid})`);
                         msgRemoteJid = remoteJidAlt;
                     }
                 }
@@ -1273,9 +1294,10 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                         if (/^\d+$/.test(digits) && digits.length >= 10 && digits.length <= 14) {
                             validJid = normalized;
                             validNumber = jidNum;
-                            console.log(`[MapChat] ✅ Número válido encontrado no campo message: ${validNumber} (${validJid})`);
+                            // Log removido - apenas números válidos (não é necessário para análise)
+                            // console.log(`[MapChat] ✅ Número válido encontrado no campo message: ${validNumber} (${validJid})`);
                         } else if (digits.length > 14) {
-                            console.log(`[MapChat] ⚠️ Número muito longo no campo message (provavelmente ID de lista): ${jidNum} (${digits.length} dígitos)`);
+                            console.warn(`[MapChat] ⚠️ Número muito longo no campo message (provavelmente ID de lista): ${jidNum} (${digits.length} dígitos)`);
                         }
                     }
                 }
@@ -1291,9 +1313,10 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                 if (/^\d+$/.test(idDigits) && idDigits.length >= 10 && idDigits.length <= 14) {
                     validJid = item.id;
                     validNumber = idNum;
-                    console.log(`[MapChat] ✅ Número válido encontrado no ID original: ${validNumber} (${validJid})`);
+                    // Log removido - apenas números válidos (não é necessário para análise)
+                    // console.log(`[MapChat] ✅ Número válido encontrado no ID original: ${validNumber} (${validJid})`);
                 } else if (idDigits.length > 14) {
-                    console.log(`[MapChat] ⚠️ ID original muito longo (provavelmente ID de lista): ${idNum} (${idDigits.length} dígitos)`);
+                    console.warn(`[MapChat] ⚠️ ID original muito longo (provavelmente ID de lista): ${idNum} (${idDigits.length} dígitos)`);
                 }
             }
             
@@ -1315,16 +1338,19 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                         
                         if (msgRemoteJid) {
                             mapped.author = normalizeJid(msgRemoteJid);
-                            console.log(`[MessageAuthorFix] Author adicionado: ${mapped.author} de ${msgRemoteJid}`);
+                            // Log removido para produção - muito verboso
+                            // console.log(`[MessageAuthorFix] Author adicionado: ${mapped.author} de ${msgRemoteJid}`);
                         } else if (validJid) {
                             // Se não tem na mensagem, usa o JID válido encontrado nas mensagens
                             mapped.author = validJid;
-                            console.log(`[MessageAuthorFix] Author adicionado do validJid: ${mapped.author}`);
+                            // Log removido para produção - muito verboso
+                            // console.log(`[MessageAuthorFix] Author adicionado do validJid: ${mapped.author}`);
                         } else {
                             // Último recurso: usa o ID do chat se for válido
                             if (!item.id.includes('cmin') && !item.id.includes('cmid') && !item.id.includes('cmio') && !item.id.includes('cmip') && !item.id.includes('cmit') && !item.id.includes('@g.us')) {
                                 mapped.author = item.id;
-                                console.log(`[MessageAuthorFix] Author adicionado do chat ID: ${mapped.author}`);
+                                // Log removido para produção - muito verboso
+                                // console.log(`[MessageAuthorFix] Author adicionado do chat ID: ${mapped.author}`);
                             }
                         }
                     }
@@ -1350,7 +1376,8 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                 chatId = validJid;
                 contactNumber = validNumber;
                 if (idIsGenerated) {
-                    console.log(`[ChatFix] Chat corrigido: ${item.id} -> ${chatId} (número: ${validNumber})`);
+                    // Log removido para produção - muito verboso
+                    // console.log(`[ChatFix] Chat corrigido: ${item.id} -> ${chatId} (número: ${validNumber})`);
                 }
             } else {
                 // Não encontrou número válido: mantém original (mesmo que gerado)
@@ -1408,7 +1435,8 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             return isValid;
         });
         
-        console.log(`[ChatFilter] Filtrados ${mappedChats.length} -> ${validChats.length} chats válidos`);
+        // Log removido para produção - muito verboso
+        // console.log(`[ChatFilter] Filtrados ${mappedChats.length} -> ${validChats.length} chats válidos`);
         
         // 6. Consolida chats duplicados (mesmo número = mesmo chat)
         const consolidatedChatsMap = new Map<string, Chat>();
@@ -1442,7 +1470,8 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                                 const otherNumber = otherChat.contactNumber.replace(/\D/g, '');
                                 if (otherNumber.length >= 10 && /^\d+$/.test(otherNumber)) {
                                     chatNumberMap.set(chat.id, otherNumber);
-                                    console.log(`[ChatMerge] LID ${chat.id} mapeado para número ${otherNumber} via mensagem`);
+                                    // Log removido para produção - muito verboso
+                                    // console.log(`[ChatMerge] LID ${chat.id} mapeado para número ${otherNumber} via mensagem`);
                                 }
                             }
                         }
@@ -1463,7 +1492,8 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             // Prioridade 2: Número encontrado no mapeamento (para LIDs e IDs gerados)
             else if (chatNumberMap.has(chat.id)) {
                 chatKey = chatNumberMap.get(chat.id)!;
-                console.log(`[ChatMerge] Usando número mapeado para ${chat.id}: ${chatKey}`);
+                // Log removido para produção - muito verboso
+                // console.log(`[ChatMerge] Usando número mapeado para ${chat.id}: ${chatKey}`);
             }
             // Prioridade 3: Número do ID do chat se for válido
             else if (chat.id.includes('@') && !chat.id.includes('@g.us') && !chat.id.includes('@lid')) {
@@ -1570,7 +1600,8 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             return true;
         });
         
-        console.log(`[ChatMerge] Total de chats: ${validChats.length} -> ${finalChats.length} (após consolidação e filtragem)`);
+        // Log removido para produção - muito verboso
+        // console.log(`[ChatMerge] Total de chats: ${validChats.length} -> ${finalChats.length} (após consolidação e filtragem)`);
         
         return finalChats;
 
@@ -1585,7 +1616,8 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
     // Logs de debug reduzidos
     
     if (config.isDemo || !config.baseUrl || !config.apiKey) {
-        console.log(`[fetchChatMessages] ❌ Retornando vazio: isDemo=${config.isDemo}, baseUrl=${!!config.baseUrl}, apiKey=${!!config.apiKey}`);
+        // Log removido para produção - muito verboso (mantém apenas erros críticos)
+        // console.log(`[fetchChatMessages] ❌ Retornando vazio: isDemo=${config.isDemo}, baseUrl=${!!config.baseUrl}, apiKey=${!!config.apiKey}`);
         return [];
     }
 
@@ -1826,7 +1858,8 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                     
                     // Se encontrou mensagens, para de tentar outros endpoints
                     if (messages.length > 0) {
-                        console.log(`[fetchChatMessages] ✅ ${messages.length} mensagens encontradas`);
+                        // Log removido para produção - muito verboso
+                        // console.log(`[fetchChatMessages] ✅ ${messages.length} mensagens encontradas`);
                         break;
                     }
                 } else {
