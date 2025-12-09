@@ -1526,11 +1526,31 @@ const App: React.FC = () => {
               };
             })
             .filter((chat: any) => {
-              const isValid = chat && chat.id;
-              if (!isValid) {
+              // Valida se o chat tem ID
+              if (!chat || !chat.id) {
                 console.log('[App] 🔍 [DEBUG] Chat filtrado (sem id):', chat);
+                return false;
               }
-              return isValid;
+              
+              // Valida número do chat antes de adicionar
+              const chatIdNumber = chat.id.split('@')[0].replace(/\D/g, '');
+              const contactNumber = chat.contactNumber?.replace(/\D/g, '') || '';
+              
+              // Validação rigorosa: números brasileiros devem ter pelo menos 11 dígitos
+              const isValidChatIdNumber = chatIdNumber.length >= 11 && chatIdNumber.length <= 14 && /^\d+$/.test(chatIdNumber);
+              const isValidContactNumber = contactNumber.length >= 11 && contactNumber.length <= 14 && /^\d+$/.test(contactNumber);
+              const hasValidNumber = isValidChatIdNumber || isValidContactNumber;
+              
+              // Verifica se é grupo (grupos são válidos mesmo sem número de telefone)
+              const isGroup = chat.id.includes('@g.us');
+              
+              // Chat é válido se: é grupo OU tem número válido
+              if (!isGroup && !hasValidNumber) {
+                console.warn(`[App] ⚠️ [DEBUG] Chat inválido ignorado ao carregar do banco: ${chat.id} (número: ${chatIdNumber || contactNumber || 'N/A'}, dígitos: ${chatIdNumber.length || contactNumber.length || 0})`);
+                return false;
+              }
+              
+              return true;
             });
           
           console.log('[App] 🔍 [DEBUG] Chats processados:', {
