@@ -1454,13 +1454,15 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         validChats.forEach((chat: Chat) => {
             // Extrai número do ID do chat se for válido
             const chatIdNumber = chat.id.split('@')[0].replace(/\D/g, '');
-            if (chatIdNumber.length >= 10 && /^\d+$/.test(chatIdNumber)) {
+            // Validação mais rigorosa: números brasileiros devem ter pelo menos 11 dígitos
+            if (chatIdNumber.length >= 11 && chatIdNumber.length <= 14 && /^\d+$/.test(chatIdNumber)) {
                 chatNumberMap.set(chat.id, chatIdNumber);
             }
             
             // Extrai número do contactNumber
             const contactNumber = chat.contactNumber.replace(/\D/g, '');
-            if (contactNumber.length >= 10 && /^\d+$/.test(contactNumber)) {
+            // Validação mais rigorosa: números brasileiros devem ter pelo menos 11 dígitos
+            if (contactNumber.length >= 11 && contactNumber.length <= 14 && /^\d+$/.test(contactNumber)) {
                 chatNumberMap.set(chat.id, contactNumber);
             }
             
@@ -1475,7 +1477,8 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                             if (msgAuthor.includes(chat.id.split('@')[0])) {
                                 // Encontrou correspondência - usa o número do outro chat
                                 const otherNumber = otherChat.contactNumber.replace(/\D/g, '');
-                                if (otherNumber.length >= 10 && /^\d+$/.test(otherNumber)) {
+                                // Validação mais rigorosa: números brasileiros devem ter pelo menos 11 dígitos
+                                if (otherNumber.length >= 11 && otherNumber.length <= 14 && /^\d+$/.test(otherNumber)) {
                                     chatNumberMap.set(chat.id, otherNumber);
                                     // Log removido para produção - muito verboso
                                     // console.log(`[ChatMerge] LID ${chat.id} mapeado para número ${otherNumber} via mensagem`);
