@@ -2111,7 +2111,40 @@ const App: React.FC = () => {
     });
   };
 
-  const handleAddUser = (user: User) => setUsers(prevUsers => [...prevUsers, user]);
+  const handleAddUser = async (user: User) => {
+    // Tenta criar o usuário no banco de dados via API
+    try {
+      const result = await apiService.createUser(
+        user.email, // username é o email
+        user.password || '', // senha
+        user.name,
+        user.email,
+        user.role
+      );
+      
+      if (result.success && result.data) {
+        // Converte o usuário retornado da API para o formato interno
+        const newUser: User = {
+          id: result.data.id.toString(),
+          name: result.data.name,
+          email: result.data.email || result.data.username,
+          role: result.data.role as UserRole,
+          avatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(result.data.name)}&background=0D9488&color=fff`,
+          departmentId: user.departmentId,
+          allowGeneralConnection: user.allowGeneralConnection
+        };
+        setUsers(prevUsers => [...prevUsers, newUser]);
+      } else {
+        console.error('[App] Erro ao criar usuário:', result.error);
+        alert(`Erro ao criar usuário: ${result.error || 'Erro desconhecido'}`);
+      }
+    } catch (error) {
+      console.error('[App] Erro ao criar usuário na API:', error);
+      // Em caso de erro, ainda adiciona localmente como fallback
+      setUsers(prevUsers => [...prevUsers, user]);
+      alert('Erro ao criar usuário no servidor. Usuário adicionado apenas localmente.');
+    }
+  };
   const handleUpdateUser = async (updatedUser: User) => {
     // Atualiza o estado local
     setUsers(prevUsers => prevUsers.map(u => u.id === updatedUser.id ? updatedUser : u));

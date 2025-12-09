@@ -316,6 +316,48 @@ app.delete('/api/data/:dataType/:key', authenticateToken, dataLimiter, async (re
   }
 });
 
+// Rota para criar novo usuário (apenas ADMIN)
+app.post('/api/users', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    // Verificar se o usuário é ADMIN
+    const currentUserResult = await pool.query('SELECT role FROM users WHERE id = $1', [req.user.id]);
+    if (currentUserResult.rows.length === 0 || currentUserResult.rows[0].role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Apenas administradores podem criar usuários' });
+    }
+
+    const { username, password, name, email, role } = req.body;
+
+    if (!username || !password || !name) {
+      return res.status(400).json({ error: 'username, password e name são obrigatórios' });
+    }
+
+    // Verificar se o username já existe
+    const existingUser = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({ error: 'Username já existe' });
+    }
+
+    // Hash da senha
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Criar usuário
+    const result = await pool.query(
+      `INSERT INTO users (username, password_hash, name, email, role) 
+       VALUES ($1, $2, $3, $4, $5) 
+       RETURNING id, username, name, email, role`,
+      [username, hashedPassword, name, email || username, role || 'AGENT']
+    );
+
+    res.status(201).json({
+      success: true,
+      user: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Erro ao criar usuário:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
 // Rota para atualizar informações do próprio usuário (nome, email)
 app.put('/api/user/profile', authenticateToken, dataLimiter, async (req, res) => {
   try {
