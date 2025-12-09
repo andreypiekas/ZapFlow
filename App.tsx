@@ -1472,7 +1472,7 @@ const App: React.FC = () => {
                         const mapped = mapApiMessageToInternal(messageData);
                         
                         if (mapped) {
-                                setChats(currentChats => {
+                            setChats(currentChats => {
                                     let chatUpdated = false;
                                     const updatedChats = currentChats.map(chat => {
                                         // Encontra o chat pelo JID
