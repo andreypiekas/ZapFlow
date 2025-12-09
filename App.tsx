@@ -1351,22 +1351,43 @@ const App: React.FC = () => {
     // Isso garante que status, assignedTo e departmentId do banco tenham prioridade
     const loadChatsFromDatabase = async () => {
       try {
+        console.log('[App] 🔍 [DEBUG] Iniciando loadChatsFromDatabase...');
         // Carrega todos os chats individuais do banco (data_key = chatId)
         const allChatsData = await apiService.getAllData<Chat>('chats');
+        console.log('[App] 🔍 [DEBUG] getAllData retornou:', {
+          isNull: allChatsData === null,
+          isUndefined: allChatsData === undefined,
+          keys: allChatsData ? Object.keys(allChatsData) : [],
+          count: allChatsData ? Object.keys(allChatsData).length : 0,
+          sample: allChatsData ? Object.values(allChatsData).slice(0, 2) : []
+        });
         
         if (allChatsData && Object.keys(allChatsData).length > 0) {
           // Converte o objeto de chats em array
           const chatsArray = Object.values(allChatsData)
             .filter((chat: any) => chat && chat.id) // Filtra chats inválidos (sem id)
-            .map((chat: any) => ({
-              ...chat,
-              id: chat.id || String(Date.now()), // Garante que sempre tem id
-              lastMessageTime: chat.lastMessageTime ? new Date(chat.lastMessageTime) : new Date(),
-              messages: chat.messages?.map((msg: Message) => ({
-                ...msg,
-                timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date()
-              })) || []
-            }));
+            .map((chat: any) => {
+              console.log('[App] 🔍 [DEBUG] Processando chat do banco:', {
+                id: chat.id,
+                status: chat.status,
+                assignedTo: chat.assignedTo,
+                departmentId: chat.departmentId
+              });
+              return {
+                ...chat,
+                id: chat.id || String(Date.now()), // Garante que sempre tem id
+                lastMessageTime: chat.lastMessageTime ? new Date(chat.lastMessageTime) : new Date(),
+                messages: chat.messages?.map((msg: Message) => ({
+                  ...msg,
+                  timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date()
+                })) || []
+              };
+            });
+          
+          console.log('[App] 🔍 [DEBUG] Chats processados:', {
+            total: chatsArray.length,
+            statuses: chatsArray.map(c => ({ id: c.id, status: c.status, assignedTo: c.assignedTo }))
+          });
           
           // PRIORIDADE ABSOLUTA: Define chats do banco diretamente no estado
           // Isso garante que status, assignedTo e departmentId do banco sejam preservados
@@ -1374,9 +1395,11 @@ const App: React.FC = () => {
           setChats(chatsArray);
           
           console.log(`[App] ✅ Carregados ${chatsArray.length} chats do banco com status fixo`);
+        } else {
+          console.log('[App] ⚠️ [DEBUG] Nenhum chat encontrado no banco - allChatsData:', allChatsData);
         }
       } catch (error) {
-        console.error('[App] Erro ao carregar chats do banco:', error);
+        console.error('[App] ❌ [DEBUG] Erro ao carregar chats do banco:', error);
       }
     };
 
