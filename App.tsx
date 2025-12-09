@@ -1787,7 +1787,6 @@ const App: React.FC = () => {
                                 
                                 return updatedChats;
                             });
-                            }
                         }
                     }
                 } catch (err) {
