@@ -24,6 +24,15 @@ export interface ApiResponse<T> {
 }
 
 class ApiService {
+  // Verifica se o erro é de conexão (backend não disponível)
+  private isConnectionError(error: any): boolean {
+    return error?.message?.includes('Failed to fetch') || 
+           error?.message?.includes('ERR_CONNECTION_REFUSED') ||
+           error?.message?.includes('NetworkError') ||
+           error?.name === 'TypeError' ||
+           (error instanceof TypeError && error.message.includes('fetch'));
+  }
+
   private getToken(): string | null {
     const encrypted = localStorage.getItem('zapflow_auth_token');
     if (!encrypted) return null;
@@ -63,8 +72,13 @@ class ApiService {
       }
 
       return await response.json();
-    } catch (error) {
-      console.error(`[ApiService] Erro na requisição ${endpoint}:`, error);
+    } catch (error: any) {
+      // Filtra erros de conexão (backend não disponível) - não loga como erro crítico
+      if (!this.isConnectionError(error)) {
+        // Erro real (não é de conexão) - loga como erro
+        console.error(`[ApiService] Erro na requisição ${endpoint}:`, error);
+      }
+      // Backend não disponível - sistema funcionará via localStorage (silencioso)
       throw error;
     }
   }
@@ -111,8 +125,11 @@ class ApiService {
         const keys = Object.keys(data);
         return keys.length > 0 ? data[keys[0]] : null;
       }
-    } catch (error) {
-      console.error(`[ApiService] Erro ao buscar ${dataType}:`, error);
+    } catch (error: any) {
+      // Erro de conexão é tratado no request() - não precisa logar novamente
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao buscar ${dataType}:`, error);
+      }
       return null;
     }
   }
@@ -121,8 +138,10 @@ class ApiService {
     try {
       const response = await this.request<{ [key: string]: T }>(`/api/data/${dataType}`);
       return response;
-    } catch (error) {
-      console.error(`[ApiService] Erro ao buscar todos os dados de ${dataType}:`, error);
+    } catch (error: any) {
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao buscar todos os dados de ${dataType}:`, error);
+      }
       return {};
     }
   }
@@ -134,8 +153,10 @@ class ApiService {
         body: JSON.stringify({ key, value }),
       });
       return true;
-    } catch (error) {
-      console.error(`[ApiService] Erro ao salvar ${dataType}/${key}:`, error);
+    } catch (error: any) {
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao salvar ${dataType}/${key}:`, error);
+      }
       return false;
     }
   }
@@ -147,8 +168,10 @@ class ApiService {
         body: JSON.stringify({ data }),
       });
       return true;
-    } catch (error) {
-      console.error(`[ApiService] Erro ao salvar lote de ${dataType}:`, error);
+    } catch (error: any) {
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao salvar lote de ${dataType}:`, error);
+      }
       return false;
     }
   }
@@ -160,8 +183,10 @@ class ApiService {
         body: JSON.stringify({ value }),
       });
       return true;
-    } catch (error) {
-      console.error(`[ApiService] Erro ao atualizar ${dataType}/${key}:`, error);
+    } catch (error: any) {
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao atualizar ${dataType}/${key}:`, error);
+      }
       return false;
     }
   }
@@ -172,8 +197,10 @@ class ApiService {
         method: 'DELETE',
       });
       return true;
-    } catch (error) {
-      console.error(`[ApiService] Erro ao deletar ${dataType}/${key}:`, error);
+    } catch (error: any) {
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao deletar ${dataType}/${key}:`, error);
+      }
       return false;
     }
   }
@@ -186,8 +213,10 @@ class ApiService {
         body: JSON.stringify({ status, assignedTo, departmentId }),
       });
       return true;
-    } catch (error) {
-      console.error(`[ApiService] Erro ao atualizar status do chat ${chatId}:`, error);
+    } catch (error: any) {
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao atualizar status do chat ${chatId}:`, error);
+      }
       return false;
     }
   }
@@ -200,8 +229,10 @@ class ApiService {
         body: JSON.stringify({ name, email }),
       });
       return response;
-    } catch (error) {
-      console.error(`[ApiService] Erro ao atualizar perfil do usuário:`, error);
+    } catch (error: any) {
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao atualizar perfil do usuário:`, error);
+      }
       return { success: false };
     }
   }
@@ -212,7 +243,9 @@ class ApiService {
       const response = await this.request<any[]>('/api/users');
       return { success: true, data: response };
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao listar usuários:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao listar usuários:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -226,7 +259,9 @@ class ApiService {
       });
       return response;
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao criar usuário:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao criar usuário:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -239,7 +274,9 @@ class ApiService {
       });
       return response;
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao deletar usuário:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao deletar usuário:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -253,7 +290,9 @@ class ApiService {
       });
       return response;
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao atualizar usuário:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao atualizar usuário:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -266,7 +305,9 @@ class ApiService {
       const response = await this.request<any[]>('/api/departments');
       return { success: true, data: response };
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao listar departamentos:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao listar departamentos:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -279,7 +320,9 @@ class ApiService {
       });
       return { success: true, data: response };
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao criar departamento:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao criar departamento:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -292,7 +335,9 @@ class ApiService {
       });
       return { success: true, data: response };
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao atualizar departamento:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao atualizar departamento:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -304,7 +349,9 @@ class ApiService {
       });
       return { success: true };
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao deletar departamento:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao deletar departamento:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -317,7 +364,9 @@ class ApiService {
       const response = await this.request<any[]>('/api/contacts');
       return { success: true, data: response };
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao listar contatos:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao listar contatos:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -330,7 +379,9 @@ class ApiService {
       });
       return { success: true, data: response };
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao criar contato:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao criar contato:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -343,7 +394,9 @@ class ApiService {
       });
       return { success: true, data: response };
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao atualizar contato:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao atualizar contato:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -355,7 +408,9 @@ class ApiService {
       });
       return { success: true };
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao deletar contato:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao deletar contato:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -368,7 +423,9 @@ class ApiService {
       const response = await this.request<any[]>('/api/quick-replies');
       return { success: true, data: response };
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao listar respostas rápidas:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao listar respostas rápidas:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -381,7 +438,9 @@ class ApiService {
       });
       return { success: true, data: response };
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao criar resposta rápida:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao criar resposta rápida:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -394,7 +453,9 @@ class ApiService {
       });
       return { success: true, data: response };
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao atualizar resposta rápida:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao atualizar resposta rápida:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -406,7 +467,9 @@ class ApiService {
       });
       return { success: true };
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao deletar resposta rápida:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao deletar resposta rápida:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -419,7 +482,9 @@ class ApiService {
       const response = await this.request<any[]>('/api/workflows');
       return { success: true, data: response };
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao listar workflows:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao listar workflows:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -432,7 +497,9 @@ class ApiService {
       });
       return { success: true, data: response };
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao criar workflow:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao criar workflow:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -445,7 +512,9 @@ class ApiService {
       });
       return { success: true, data: response };
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao atualizar workflow:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao atualizar workflow:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
@@ -457,7 +526,9 @@ class ApiService {
       });
       return { success: true };
     } catch (error: any) {
-      console.error(`[ApiService] Erro ao deletar workflow:`, error);
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao deletar workflow:`, error);
+      }
       return { success: false, error: error.message };
     }
   }
