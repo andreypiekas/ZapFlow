@@ -9,6 +9,7 @@
     "start": "node server.js",
     "migrate": "node scripts/migrate.js",
     "create-admin": "node scripts/create-admin.js",
+    "update-user-name": "node scripts/update-user-name.js",
     "validate-users": "node scripts/validate-users.js"
   },
   "dependencies": {

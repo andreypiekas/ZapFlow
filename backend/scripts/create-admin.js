@@ -23,26 +23,27 @@ async function createAdmin() {
     
     if (adminExists.rows.length > 0) {
       console.log(`⚠️  Usuário ${adminUsername} já existe.`);
-      // Atualizar senha e garantir que o role seja 'ADMIN'
+      // Atualizar senha, nome e garantir que o role seja 'ADMIN'
       const hashedPassword = await bcrypt.hash(adminPassword, 10);
       await client.query(
-        `UPDATE users SET password_hash = $1, role = $2, updated_at = CURRENT_TIMESTAMP WHERE username = $3`,
-        [hashedPassword, 'ADMIN', adminUsername]
+        `UPDATE users SET password_hash = $1, role = $2, name = $4, updated_at = CURRENT_TIMESTAMP WHERE username = $3`,
+        [hashedPassword, 'ADMIN', adminUsername, 'Andrey']
       );
-      console.log(`✅ Senha e role do usuário ${adminUsername} atualizados (role: ADMIN)`);
+      console.log(`✅ Senha, nome e role do usuário ${adminUsername} atualizados (name: Andrey, role: ADMIN)`);
     } else {
       // Criar novo usuário
       const hashedPassword = await bcrypt.hash(adminPassword, 10);
       await client.query(
         `INSERT INTO users (username, password_hash, name, email, role) 
          VALUES ($1, $2, $3, $4, $5)`,
-        [adminUsername, hashedPassword, 'Administrador', adminUsername, 'ADMIN']
+        [adminUsername, hashedPassword, 'Andrey', adminUsername, 'ADMIN']
       );
       console.log(`✅ Usuário admin criado com sucesso!`);
     }
     
     console.log(`   Username: ${adminUsername}`);
     console.log(`   Password: ${adminPassword}`);
+    console.log(`   Name: Andrey`);
     console.log(`   Role: ADMIN`);
     
   } catch (error) {
