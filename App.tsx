@@ -599,6 +599,7 @@ const App: React.FC = () => {
                 // console.log(`[App] Fazendo merge: ${currentChats.length} chats atuais com ${realChats.length} chats novos`);
                 const mergedChats = realChats.map(realChat => {
                     // Tenta encontrar chat existente por ID ou por contactNumber
+                    // IMPORTANTE: Preserva chats existentes que estão atribuídos e em 'open'
                     let existingChat = currentChats.find(c => c.id === realChat.id);
                     
                     // Se não encontrou por ID, tenta encontrar por contactNumber (para casos de IDs gerados)
@@ -1245,7 +1246,12 @@ const App: React.FC = () => {
                         
                         // Garante que chats atribuídos e em 'open' não voltem para 'pending' durante sync
                         // Isso previne que chats em "A Fazer" voltem para "Aguardando"
-                        if (isAssignedAndOpen && finalStatusForDept === 'pending') {
+                        // IMPORTANTE: Preserva status 'open' se chat está atribuído, mesmo após reload
+                        if (isAssignedAndOpen) {
+                            // Se o chat está atribuído e em 'open', sempre mantém 'open'
+                            finalStatusForDept = 'open';
+                        } else if (existingChat.status === 'open' && existingChat.assignedTo && finalStatusForDept === 'pending') {
+                            // Fallback: se por algum motivo o status foi alterado para 'pending' mas o chat está atribuído, corrige
                             finalStatusForDept = 'open';
                         }
                         
