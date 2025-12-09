@@ -741,12 +741,21 @@ const App: React.FC = () => {
                                         // pois o departamento foi desatribuído ao fechar o chat
                                         const chatHasDepartment = dbChat?.departmentId || existingChat?.departmentId;
                                         
+                                        console.log(`[App] 🔍 [DEBUG] syncChats: Verificando envio de mensagem de seleção - chatHasDepartment: ${chatHasDepartment}, departments.length: ${departments.length}, realChat.id: ${realChat.id}`);
+                                        
                                         // Se não tem departamento (foi desatribuído ao fechar), SEMPRE envia mensagem de seleção
                                         if (!chatHasDepartment && departments.length > 0) {
                                             // Envia mensagem de seleção de departamento
-                                            const contactNumber = realChat.contactNumber || existingChat.contactNumber;
-                                            if (contactNumber) {
-                                                console.log(`[App] 📤 [DEBUG] syncChats: Chat reaberto sem departamento - Enviando mensagem de seleção de departamento para ${realChat.id}`);
+                                            // Tenta obter número de várias fontes
+                                            const contactNumber = realChat.contactNumber || 
+                                                                  existingChat?.contactNumber || 
+                                                                  (realChat.id ? realChat.id.split('@')[0] : null) ||
+                                                                  (existingChat?.id ? existingChat.id.split('@')[0] : null);
+                                            
+                                            console.log(`[App] 🔍 [DEBUG] syncChats: Tentando enviar mensagem - contactNumber: ${contactNumber}, realChat.contactNumber: ${realChat.contactNumber}, existingChat?.contactNumber: ${existingChat?.contactNumber}`);
+                                            
+                                            if (contactNumber && contactNumber.length >= 10) {
+                                                console.log(`[App] 📤 [DEBUG] syncChats: Chat reaberto sem departamento - Enviando mensagem de seleção de departamento para ${realChat.id} (número: ${contactNumber})`);
                                                 const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, departments);
                                                 
                                                 if (sent) {
@@ -775,9 +784,13 @@ const App: React.FC = () => {
                                                     console.error(`[App] ❌ [DEBUG] syncChats: Falha ao enviar mensagem de seleção de departamento para ${realChat.id}`);
                                                 }
                                             } else {
-                                                console.warn(`[App] ⚠️ [DEBUG] syncChats: Não foi possível enviar mensagem de seleção - número de contato não encontrado para ${realChat.id}`);
+                                                console.warn(`[App] ⚠️ [DEBUG] syncChats: Não foi possível enviar mensagem de seleção - número de contato inválido para ${realChat.id} (contactNumber: ${contactNumber})`);
                                             }
-                                        } else if (chatHasDepartment) {
+                                        } else {
+                                            console.log(`[App] ⚠️ [DEBUG] syncChats: Não enviando mensagem de seleção - chatHasDepartment: ${chatHasDepartment}, departments.length: ${departments.length}`);
+                                        }
+                                        
+                                        if (chatHasDepartment) {
                                             // Se já tem departamento, pode enviar mensagem de saudação se configurado
                                             const chatbotConfig = await storageService.load<ChatbotConfig>('chatbotConfig');
                                             if (chatbotConfig && chatbotConfig.isEnabled && chatbotConfig.greetingMessage) {
