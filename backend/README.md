@@ -42,11 +42,33 @@ npm run migrate
 ```
 
 Isso criará as tabelas necessárias e um usuário admin padrão:
-- Username: `admin@piekas.com`
-- Password: `123`
-- Role: `ADMIN`
+- ✅ Tabela `users` (com campo `department_id`)
+- ✅ Tabela `user_data` (dados genéricos)
+- ✅ Tabela `departments`
+- ✅ Tabela `contacts`
+- ✅ Tabela `quick_replies`
+- ✅ Tabela `workflows`
+- ✅ Usuário admin padrão:
+  - **Username:** `admin@piekas.com`
+  - **Password:** `123`
+  - **Role:** `ADMIN`
 
 **⚠️ IMPORTANTE: Altere a senha do admin em produção!**
+
+### Migrações Adicionais
+
+Se você está atualizando um banco existente, execute:
+
+```bash
+# Adicionar campo department_id na tabela users (se não existir)
+node scripts/add-department-id-to-users.js
+
+# Corrigir data_keys de chats (se necessário)
+node scripts/fix-chat-data-keys.js
+
+# Limpar chats inválidos (números com menos de 11 dígitos)
+node scripts/clean-invalid-chats.js
+```
 
 5. **Inicie o servidor:**
 ```bash
@@ -146,6 +168,7 @@ Resposta:
 **GET /api/users**
 - Lista todos os usuários
 - Requer role ADMIN
+- Retorna `departmentId` para cada usuário
 
 **POST /api/users**
 - Cria novo usuário
@@ -164,6 +187,17 @@ Resposta:
 **PUT /api/users/:id**
 - Atualiza usuário existente
 - Requer role ADMIN
+- Suporta `departmentId` para atribuir usuário a departamento
+
+```json
+{
+  "name": "Nome do Usuário",
+  "email": "usuario@exemplo.com",
+  "role": "AGENT",
+  "departmentId": "dept_1",
+  "password": "nova_senha"  // Opcional
+}
+```
 
 **DELETE /api/users/:id**
 - Remove usuário

@@ -72,10 +72,33 @@ npm run migrate
 ```
 
 Isso criará:
-- Tabelas necessárias
-- Usuário admin padrão (username: `admin`, password: `admin123`)
+- ✅ Tabela `users` (com campo `department_id`)
+- ✅ Tabela `user_data` (dados genéricos)
+- ✅ Tabela `departments`
+- ✅ Tabela `contacts`
+- ✅ Tabela `quick_replies`
+- ✅ Tabela `workflows`
+- ✅ Usuário admin padrão:
+  - **Username:** `admin@piekas.com`
+  - **Password:** `123`
+  - **Role:** `ADMIN`
 
 **⚠️ IMPORTANTE: Altere a senha do admin em produção!**
+
+### 4.1. Executar Migrações Adicionais (se necessário)
+
+Se você está atualizando um banco existente ou precisa corrigir dados:
+
+```bash
+# Adicionar campo department_id na tabela users (se não existir)
+node scripts/add-department-id-to-users.js
+
+# Corrigir data_keys de chats (se necessário)
+node scripts/fix-chat-data-keys.js
+
+# Limpar chats inválidos (números com menos de 11 dígitos)
+node scripts/clean-invalid-chats.js
+```
 
 ### 5. Iniciar Servidor
 
@@ -124,12 +147,17 @@ Deve retornar:
 
 2. **Teste de Login:**
 ```bash
-curl -X POST http://SEU_IP_SERVIDOR:3001/api/login \
+curl -X POST http://SEU_IP_SERVIDOR:3001/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin","password":"admin123"}'
+  -d '{"username":"admin@piekas.com","password":"123"}'
 ```
 
 **Substitua `SEU_IP_SERVIDOR` pelo IP real do seu servidor.**
+
+**Credenciais padrão:**
+- Username: `admin@piekas.com`
+- Password: `123`
+- ⚠️ **ALTERE A SENHA EM PRODUÇÃO!**
 ```
 
 ## Produção

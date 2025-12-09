@@ -66,29 +66,36 @@ graph TD
 
 ## 📚 Manuais de Implantação
 
-Este repositório contém guias específicos para diferentes cenários de infraestrutura. Escolha o adequado para você:
+### 🚀 Instalação Completa (Recomendado)
+**📄 [INSTALACAO_COMPLETA.md](./INSTALACAO_COMPLETA.md)** - Guia completo com TODAS as funcionalidades implementadas
 
-### 🚀 0. Instalação Automática (Recomendado)
-Use o script mágico para instalar tudo (Docker, Node, API, App) em 5 minutos em uma VPS limpa.
-1. Crie o arquivo: `nano autoinstall.sh`
-2. Cole o conteúdo de **[install/autoinstall.txt](./install/autoinstall.txt)**
-3. Execute: `bash autoinstall.sh`
+Este é o guia mais completo e atualizado, incluindo:
+- ✅ Instalação passo a passo do backend (PostgreSQL + API)
+- ✅ Instalação do frontend
+- ✅ Configuração do Evolution API
+- ✅ Todas as migrações do banco de dados
+- ✅ Configurações avançadas (Gemini AI, Chatbot, etc.)
+- ✅ Troubleshooting completo
+- ✅ Checklist de instalação
 
-### 1. Instalação Manual (Ubuntu/Debian)
-Para servidores VPS limpos (DigitalOcean, AWS, Vultr, Local VM).
-📄 **[install/manual_instalacao_completo.txt](./install/manual_instalacao_completo.txt)**
+### 📋 Outros Manuais Disponíveis
 
-### 2. Instalação HostGator VPS
-Instruções específicas para lidar com as particularidades da HostGator (Firewall, Apache pré-instalado).
-📄 **[install/deploy_hostgator.txt](./install/deploy_hostgator.txt)**
+**Instalação Automática:**
+- **[install/autoinstall.txt](./install/autoinstall.txt)** - Script automático para instalação rápida
 
-### 3. Deploy em Produção (Domínio & HTTPS)
-Como configurar Nginx, Domínio `.com.br` e Certificado SSL Gratuito (Let's Encrypt).
-📄 **[install/deploy.txt](./install/deploy.txt)**
+**Instalação Manual:**
+- **[install/manual_instalacao_completo.txt](./install/manual_instalacao_completo.txt)** - Instalação manual detalhada
 
-### 4. Segurança Avançada
-Como blindar seu servidor contra ataques DDoS e invasões.
-📄 **[install/security_hostgator.txt](./install/security_hostgator.txt)**
+**Backend:**
+- **[INSTALACAO_BACKEND.md](./INSTALACAO_BACKEND.md)** - Guia específico do backend
+- **[backend/README.md](./backend/README.md)** - Documentação da API
+
+**Deploy:**
+- **[install/deploy.txt](./install/deploy.txt)** - Deploy em produção com domínio e HTTPS
+- **[install/deploy_hostgator.txt](./install/deploy_hostgator.txt)** - Deploy específico para HostGator
+
+**Segurança:**
+- **[install/security_hostgator.txt](./install/security_hostgator.txt)** - Segurança avançada
 
 ---
 
@@ -157,23 +164,58 @@ Com o backend configurado, os seguintes dados são salvos no PostgreSQL:
 
 ## 📞 Suporte e Créditos
 
-## 🔄 Atualizações Recentes (v1.3.0)
+## 🔄 Atualizações Recentes (v1.3.0+)
 
-### ✨ Novidades
-- ✅ **Socket.IO Client** implementado para mensagens em tempo real
-- ✅ **Tailwind CSS** configurado para produção (PostCSS)
-- ✅ **Criptografia de dados sensíveis** no localStorage
-- ✅ **Opção de usar apenas PostgreSQL** (sem localStorage)
-- ✅ **CRUD completo** para Departamentos, Contatos, Respostas Rápidas e Workflows
-- ✅ **Chatbot funcional** com marcação de mensagens enviadas
-- ✅ **Melhorias de segurança** e performance
+### ✨ Novidades Principais
+- ✅ **Atribuição Automática de Chats:** Chats são atribuídos automaticamente ao operador do departamento
+- ✅ **Sistema de Notificações:** Notificações para operadores e administradores
+- ✅ **Persistência Completa:** Todos os dados salvos no PostgreSQL (chats, usuários, departamentos, etc.)
+- ✅ **Validação de Números:** Apenas números válidos (11+ dígitos) são processados
+- ✅ **Status Persistente:** Status de chats mantido após reload da página
+- ✅ **Socket.IO Client:** Mensagens em tempo real com reconexão automática
+- ✅ **Google Gemini AI:** Integração completa para respostas inteligentes
+- ✅ **Chatbot Avançado:** Mensagens automáticas de saudação/ausência com horários
+- ✅ **CRUD Completo:** Departamentos, Contatos, Respostas Rápidas, Workflows, Usuários
 
 ### 🔧 Melhorias Técnicas
-- **Socket.IO:** Substituído WebSocket nativo por `socket.io-client` para conexão estável
-- **Tailwind CSS:** Migrado de CDN para build local com PostCSS e Autoprefixer
-- **Segurança:** Dados sensíveis (API keys, tokens, usuários) criptografados no localStorage
-- **Performance:** CSS otimizado e minificado no build de produção
-- **Logs:** Filtros inteligentes para reduzir poluição do console
+- **PostgreSQL:** Persistência completa de dados (sem dependência de localStorage)
+- **Atribuição de Departamentos:** Usuários podem ser atribuídos a departamentos específicos
+- **Distribuição de Chats:** Chats são atribuídos ao operador específico do departamento
+- **Notificações:** Sistema completo de notificações do navegador
+- **Validação:** Validação rigorosa de números de telefone e dados
+- **Segurança:** Criptografia de dados sensíveis, JWT, Rate Limiting
+- **Performance:** Otimizações de build, CSS minificado, logs filtrados
+- **Migrações:** Scripts de migração para atualizar bancos existentes
+
+### 📋 Funcionalidades Implementadas
+
+#### Sistema de Atendimento
+- Multi-agente com departamentalização
+- Atribuição automática ao operador do departamento
+- Transferência entre agentes e departamentos
+- Inbox Zero (A Fazer, Aguardando, Finalizados)
+- Status persistente no banco de dados
+
+#### Inteligência Artificial
+- Google Gemini AI para sugestões inteligentes
+- Chatbot com horários de funcionamento
+- Mensagens automáticas de saudação/ausência
+
+#### Gestão de Dados
+- Persistência PostgreSQL completa
+- CRUD para todas as entidades
+- Validação de números (11+ dígitos)
+- Limpeza automática de chats inválidos
+
+#### Notificações
+- Notificações do navegador (som + visual)
+- Notificação quando chat é atribuído
+- Administradores recebem notificação de todos os departamentos
+
+#### Tempo Real
+- Socket.IO Client com reconexão automática
+- Fallback para HTTP polling se WebSocket falhar
+- Mensagens em tempo real sem delay
 
 ---
 
