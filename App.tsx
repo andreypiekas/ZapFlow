@@ -15,7 +15,8 @@ import ChatbotSettings from './components/ChatbotSettings';
 import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot, ChevronLeft, ChevronRight } from 'lucide-react';
 import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance, sendDepartmentSelectionMessage, processDepartmentSelection } from './services/whatsappService';
 import { processChatbotMessages } from './services/chatbotService';
-import { storageService } from './services/storageService'; 
+import { storageService } from './services/storageService';
+import { apiService } from './services/apiService'; 
 
 const loadConfig = (): ApiConfig => {
   try {
@@ -2071,7 +2072,36 @@ const App: React.FC = () => {
   };
 
   const handleAddUser = (user: User) => setUsers(prevUsers => [...prevUsers, user]);
-  const handleUpdateUser = (updatedUser: User) => setUsers(prevUsers => prevUsers.map(u => u.id === updatedUser.id ? updatedUser : u));
+  const handleUpdateUser = async (updatedUser: User) => {
+    // Atualiza o estado local
+    setUsers(prevUsers => prevUsers.map(u => u.id === updatedUser.id ? updatedUser : u));
+    
+    // Se o usuário atualizado for o currentUser, atualiza também o currentUser e o banco de dados
+    if (currentUser && currentUser.id === updatedUser.id) {
+      // Atualiza o currentUser imediatamente
+      setCurrentUser(updatedUser);
+      
+      // Tenta atualizar no banco de dados via API
+      try {
+        const result = await apiService.updateUserProfile(updatedUser.name, updatedUser.email);
+        if (result.success && result.user) {
+          // Atualiza o currentUser com os dados retornados da API
+          const updatedCurrentUser: User = {
+            ...currentUser,
+            name: result.user.name,
+            email: result.user.email || updatedUser.email,
+            role: result.user.role as UserRole
+          };
+          setCurrentUser(updatedCurrentUser);
+          // Salva no localStorage
+          localStorage.setItem('zapflow_user', JSON.stringify(updatedCurrentUser));
+        }
+      } catch (error) {
+        console.error('[App] Erro ao atualizar perfil do usuário na API:', error);
+        // Continua mesmo se a API falhar, pois já atualizou o estado local
+      }
+    }
+  };
   const handleDeleteUser = (id: string) => setUsers(prevUsers => prevUsers.filter(u => u.id !== id));
 
   const handleAddQuickReply = (qr: QuickReply) => setQuickReplies([...quickReplies, qr]);

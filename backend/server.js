@@ -316,6 +316,51 @@ app.delete('/api/data/:dataType/:key', authenticateToken, dataLimiter, async (re
   }
 });
 
+// Rota para atualizar informações do próprio usuário (nome, email)
+app.put('/api/user/profile', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { name, email } = req.body;
+
+    if (!name) {
+      return res.status(400).json({ error: 'name é obrigatório' });
+    }
+
+    const updateFields = ['name = $1'];
+    const params = [name];
+    let paramIndex = 2;
+
+    if (email) {
+      updateFields.push(`email = $${paramIndex}`);
+      params.push(email);
+      paramIndex++;
+    }
+
+    params.push(req.user.id);
+
+    await pool.query(
+      `UPDATE users 
+       SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $${paramIndex}`,
+      params
+    );
+
+    // Retorna o usuário atualizado
+    const result = await pool.query(
+      'SELECT id, username, name, email, role FROM users WHERE id = $1',
+      [req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    res.json({ success: true, user: result.rows[0] });
+  } catch (error) {
+    console.error('Erro ao atualizar perfil do usuário:', error);
+    res.status(500).json({ error: 'Erro ao atualizar perfil do usuário' });
+  }
+});
+
 // Rota para salvar múltiplos dados de uma vez
 app.post('/api/data/:dataType/batch', authenticateToken, dataLimiter, async (req, res) => {
   try {

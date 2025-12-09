@@ -161,6 +161,20 @@ class ApiService {
     }
   }
 
+  // Atualiza o perfil do usuário (nome, email)
+  async updateUserProfile(name: string, email?: string): Promise<{ success: boolean; user?: any }> {
+    try {
+      const response = await this.request<{ success: boolean; user: any }>('/api/user/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ name, email }),
+      });
+      return response;
+    } catch (error) {
+      console.error(`[ApiService] Erro ao atualizar perfil do usuário:`, error);
+      return { success: false };
+    }
+  }
+
   // Health check
   async healthCheck(): Promise<boolean> {
     try {
