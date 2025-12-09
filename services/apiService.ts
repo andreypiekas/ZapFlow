@@ -192,6 +192,17 @@ class ApiService {
     }
   }
 
+  // Listar usuários (apenas ADMIN)
+  async getUsers(): Promise<{ success: boolean; data?: any[]; error?: string }> {
+    try {
+      const response = await this.request<any[]>('/api/users');
+      return { success: true, data: response };
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao listar usuários:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
   // Criar novo usuário (apenas ADMIN)
   async createUser(username: string, password: string, name: string, email?: string, role?: string): Promise<{ success: boolean; user?: any; error?: string }> {
     try {

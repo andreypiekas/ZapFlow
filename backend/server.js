@@ -316,6 +316,33 @@ app.delete('/api/data/:dataType/:key', authenticateToken, dataLimiter, async (re
   }
 });
 
+// Listar usuários (apenas ADMIN)
+app.get('/api/users', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    // Verificar se o usuário é ADMIN
+    const currentUserResult = await pool.query('SELECT role FROM users WHERE id = $1', [req.user.id]);
+    if (currentUserResult.rows.length === 0 || currentUserResult.rows[0].role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Apenas administradores podem listar usuários' });
+    }
+
+    const result = await pool.query(
+      'SELECT id, username, name, email, role FROM users ORDER BY name',
+      []
+    );
+
+    res.json(result.rows.map(row => ({
+      id: row.id.toString(),
+      username: row.username,
+      name: row.name,
+      email: row.email || row.username,
+      role: row.role
+    })));
+  } catch (error) {
+    console.error('Erro ao listar usuários:', error);
+    res.status(500).json({ error: 'Erro ao listar usuários' });
+  }
+});
+
 // Rota para criar novo usuário (apenas ADMIN)
 app.post('/api/users', authenticateToken, dataLimiter, async (req, res) => {
   try {

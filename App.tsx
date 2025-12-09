@@ -493,17 +493,27 @@ const App: React.FC = () => {
     const loadSpecificTables = async () => {
       try {
         // Carrega dados das tabelas específicas (prioridade sobre storageService)
-        const [
-          departmentsResult,
-          contactsResult,
-          quickRepliesResult,
-          workflowsResult
-        ] = await Promise.all([
+        const loadPromises = [
           apiService.getDepartments(),
           apiService.getContacts(),
           apiService.getQuickReplies(),
           apiService.getWorkflows()
-        ]);
+        ];
+
+        // Se for ADMIN, também carrega usuários
+        if (currentUser.role === UserRole.ADMIN) {
+          loadPromises.push(apiService.getUsers());
+        }
+
+        const results = await Promise.all(loadPromises);
+
+        const [
+          departmentsResult,
+          contactsResult,
+          quickRepliesResult,
+          workflowsResult,
+          usersResult
+        ] = results;
 
         // Atualiza apenas se os dados vieram da API com sucesso
         if (departmentsResult.success && departmentsResult.data && departmentsResult.data.length > 0) {
@@ -517,6 +527,20 @@ const App: React.FC = () => {
         }
         if (workflowsResult.success && workflowsResult.data && workflowsResult.data.length > 0) {
           setWorkflows(workflowsResult.data);
+        }
+        // Atualiza usuários apenas se for ADMIN e tiver sucesso
+        if (currentUser.role === UserRole.ADMIN && usersResult && usersResult.success && usersResult.data && usersResult.data.length > 0) {
+          // Converte os usuários do formato da API para o formato interno
+          const formattedUsers: User[] = usersResult.data.map((u: any) => ({
+            id: u.id.toString(),
+            name: u.name,
+            email: u.email || u.username,
+            role: u.role as UserRole,
+            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=0D9488&color=fff`,
+            departmentId: undefined, // Não está na tabela users, pode vir de user_data se necessário
+            allowGeneralConnection: false // Não está na tabela users, pode vir de user_data se necessário
+          }));
+          setUsers(formattedUsers);
         }
       } catch (error) {
         console.error('[App] Erro ao carregar dados das tabelas específicas:', error);
