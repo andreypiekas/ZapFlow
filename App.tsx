@@ -1852,7 +1852,8 @@ const App: React.FC = () => {
                             }
                         }
                     } else {
-                        console.log('[App] ℹ️ Evento WebSocket não é de mensagem:', eventType || 'sem tipo');
+                        // Log removido para produção - muito verboso
+                        // console.log('[App] ℹ️ Evento WebSocket não é de mensagem:', eventType || 'sem tipo');
                     }
                 } catch (err) {
                     // Não loga event.data completo para evitar poluir console com base64/imagens
