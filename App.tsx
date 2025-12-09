@@ -1815,9 +1815,9 @@ const App: React.FC = () => {
                                         const messageJid = normalizeJid(remoteJid);
                                         
                                         // Comparação mais flexível de JIDs
-                                        const chatNumber = chat.contactNumber?.replace(/\D/g, '') || '';
-                                        const chatIdNumber = chatJid.split('@')[0].replace(/\D/g, '');
-                                        const messageNumber = messageJid.split('@')[0].replace(/\D/g, '');
+                                        const chatNumber = (chat.contactNumber && typeof chat.contactNumber === 'string') ? chat.contactNumber.replace(/\D/g, '') : '';
+                                        const chatIdNumber = (chatJid && typeof chatJid === 'string') ? chatJid.split('@')[0]?.replace(/\D/g, '') || '' : '';
+                                        const messageNumber = (messageJid && typeof messageJid === 'string') ? messageJid.split('@')[0]?.replace(/\D/g, '') || '' : '';
                                         
                                         // Match exato por JID
                                         const exactMatch = chatJid === messageJid;
@@ -3268,10 +3268,10 @@ const App: React.FC = () => {
     
     // Verifica se já existe chat com esse número
     const existingChat = chats.find(c => {
-      const chatNumber = c.contactNumber.replace(/\D/g, '');
-      return chatNumber === contactNumber || 
+      const chatNumber = (c.contactNumber && typeof c.contactNumber === 'string') ? c.contactNumber.replace(/\D/g, '') : '';
+      return chatNumber && (chatNumber === contactNumber || 
              (chatNumber.length >= 8 && contactNumber.length >= 8 && 
-              chatNumber.slice(-8) === contactNumber.slice(-8));
+              chatNumber.slice(-8) === contactNumber.slice(-8)));
     });
     
     let chatIdToSelect: string;
