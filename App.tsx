@@ -721,10 +721,17 @@ const App: React.FC = () => {
                         const newMsgCount = realChat.messages.length;
                         const oldMsgCount = existingChat.messages.length;
                         
+                        // Log para rastrear contagem de mensagens
+                        if (newMsgCount !== oldMsgCount) {
+                            console.log(`[App] 📊 [DEBUG] syncChats: Contagem de mensagens diferente - chatId: ${realChat.id}, oldCount: ${oldMsgCount}, newCount: ${newMsgCount}, dbStatus: ${dbChat?.status}`);
+                        }
+                        
                         // Verifica se há novas mensagens do usuário em chat fechado
                         if (newMsgCount > oldMsgCount) {
                             const lastMsg = realChat.messages[realChat.messages.length - 1];
                             const dbChatStatus = dbChat?.status;
+                            
+                            console.log(`[App] 🔍 [DEBUG] syncChats: Nova mensagem detectada - chatId: ${realChat.id}, dbStatus: ${dbChatStatus}, lastMsgSender: ${lastMsg?.sender}, lastMsgContent: ${lastMsg?.content?.substring(0, 50)}`);
                             
                             // Se o chat está fechado no banco e recebeu nova mensagem do usuário, reabre
                             if (dbChatStatus === 'closed' && lastMsg.sender === 'user') {
