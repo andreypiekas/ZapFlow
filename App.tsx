@@ -1573,9 +1573,14 @@ const App: React.FC = () => {
                             const remoteJid = normalizeJid(messageData.key.remoteJid);
                             const mapped = mapApiMessageToInternal(messageData);
                             
+                            // Debug: log para rastrear remoteJid recebido
+                            console.log(`[App] 🔍 [DEBUG] Mensagem recebida via Socket.IO: remoteJid=${remoteJid}, sender=${mapped?.sender}, content=${mapped?.content?.substring(0, 50)}`);
+                            
                             if (mapped) {
                                 setChats(currentChats => {
                                     let chatUpdated = false;
+                                    let foundChat = false;
+                                    
                                     const updatedChats = currentChats.map(chat => {
                                         // Encontra o chat pelo JID
                                         const chatJid = normalizeJid(chat.id);
@@ -1583,12 +1588,31 @@ const App: React.FC = () => {
                                         
                                         // Comparação mais flexível de JIDs
                                         const chatNumber = chat.contactNumber?.replace(/\D/g, '') || '';
+                                        const chatIdNumber = chatJid.split('@')[0].replace(/\D/g, '');
                                         const messageNumber = messageJid.split('@')[0].replace(/\D/g, '');
-                                        const chatNumberMatch = chatNumber && messageNumber && (
+                                        
+                                        // Match exato por JID
+                                        const exactMatch = chatJid === messageJid;
+                                        
+                                        // Match por número completo (todos os dígitos)
+                                        const fullNumberMatch = chatNumber && messageNumber && (
                                             chatNumber === messageNumber || 
-                                            chatNumber.endsWith(messageNumber.slice(-8)) ||
-                                            messageNumber.endsWith(chatNumber.slice(-8))
+                                            chatIdNumber === messageNumber
                                         );
+                                        
+                                        // Match parcial (últimos 8-10 dígitos) - mais flexível
+                                        const partialMatch = chatNumber && messageNumber && (
+                                            chatNumber.endsWith(messageNumber.slice(-8)) ||
+                                            messageNumber.endsWith(chatNumber.slice(-8)) ||
+                                            chatIdNumber.endsWith(messageNumber.slice(-8)) ||
+                                            messageNumber.endsWith(chatIdNumber.slice(-8))
+                                        );
+                                        
+                                        const chatNumberMatch = exactMatch || fullNumberMatch || partialMatch;
+                                        
+                                        if (chatNumberMatch) {
+                                            foundChat = true;
+                                            console.log(`[App] 🔍 [DEBUG] Chat encontrado: chatId=${chat.id}, chatJid=${chatJid}, messageJid=${messageJid}, matchType=${exactMatch ? 'exato' : fullNumberMatch ? 'número completo' : 'parcial'}`);
                                         
                                         if (chatJid === messageJid || chatNumberMatch) {
                                             // Para mensagens enviadas (fromMe: true), tenta atualizar mensagem local existente
