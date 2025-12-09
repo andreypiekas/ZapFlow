@@ -1252,7 +1252,7 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
     await pool.query(
       `INSERT INTO user_data (user_id, data_type, data_key, data_value)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT (user_id, data_type, data_key)
+       ON CONFLICT ON CONSTRAINT user_data_user_id_data_type_data_key_unique_idx
        DO UPDATE SET data_value = $4, updated_at = CURRENT_TIMESTAMP`,
       [req.user.id, 'chats', decodedChatId, JSON.stringify(chatData)]
     );
