@@ -173,6 +173,59 @@ interface Notification {
   type: 'info' | 'warning' | 'success';
 }
 
+// Função auxiliar para encontrar o usuário disponível de um departamento (distribuição round-robin)
+const findAvailableUserForDepartment = (
+  departmentId: string,
+  users: User[],
+  chats: Chat[]
+): User | null => {
+  // Filtra usuários do departamento (excluindo ADMINs, que não têm departmentId)
+  const departmentUsers = users.filter(
+    user => user.departmentId === departmentId && user.role !== UserRole.ADMIN
+  );
+  
+  if (departmentUsers.length === 0) {
+    return null;
+  }
+  
+  // Conta quantos chats 'open' ou 'pending' cada usuário tem
+  const userChatCounts = departmentUsers.map(user => {
+    const assignedChats = chats.filter(
+      chat => chat.assignedTo === user.id && (chat.status === 'open' || chat.status === 'pending')
+    );
+    return { user, count: assignedChats.length };
+  });
+  
+  // Ordena por quantidade de chats (menos chats primeiro) e retorna o primeiro
+  userChatCounts.sort((a, b) => a.count - b.count);
+  return userChatCounts[0]?.user || null;
+};
+
+// Função auxiliar para encontrar todos os usuários que devem receber notificação
+// (usuário atribuído + administradores)
+const getUsersToNotify = (
+  assignedUserId: string | undefined,
+  users: User[],
+  departmentId: string | null
+): User[] => {
+  const usersToNotify: User[] = [];
+  
+  // Adiciona o usuário atribuído se existir
+  if (assignedUserId) {
+    const assignedUser = users.find(u => u.id === assignedUserId);
+    if (assignedUser) {
+      usersToNotify.push(assignedUser);
+    }
+  }
+  
+  // Adiciona todos os administradores (recebem notificação de todos os departamentos)
+  const admins = users.filter(u => u.role === UserRole.ADMIN);
+  usersToNotify.push(...admins);
+  
+  // Remove duplicatas (caso o usuário atribuído seja admin)
+  return Array.from(new Map(usersToNotify.map(u => [u.id, u])).values());
+};
+
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(loadUserSession());
   const [currentView, setCurrentView] = useState<ViewState>(loadViewStateFromStorage());
@@ -1315,19 +1368,64 @@ const App: React.FC = () => {
                                 
                                 if (selectedDeptId) {
                                     finalDepartmentId = selectedDeptId;
+                                    
+                                    // Encontra usuário disponível do departamento
+                                    const assignedUser = findAvailableUserForDepartment(selectedDeptId, users, currentChats);
+                                    
                                     // Remove mensagem numérica e adiciona confirmação
                                     const messageIndex = mergedMessages.findIndex(m => m.id === lastNewUserMessage.id);
                                     if (messageIndex >= 0) {
                                         mergedMessages.splice(messageIndex, 1);
                                     }
+                                    
+                                    const departmentName = departments.find(d => d.id === selectedDeptId)?.name || 'Departamento';
                                     mergedMessages.push({
                                         id: `sys_dept_${Date.now()}`,
-                                        content: `Atendimento direcionado para ${departments.find(d => d.id === selectedDeptId)?.name}`,
+                                        content: `Atendimento direcionado para ${departmentName}${assignedUser ? ` - Atribuído a ${assignedUser.name}` : ''}`,
                                         sender: 'system',
                                         timestamp: new Date(),
                                         status: MessageStatus.READ,
                                         type: 'text'
                                     });
+                                    
+                                    // Atribui chat ao usuário encontrado (se houver)
+                                    if (assignedUser) {
+                                        finalAssignedTo = assignedUser.id;
+                                        finalStatus = 'open';
+                                        
+                                        // Envia notificações
+                                        const usersToNotify = getUsersToNotify(assignedUser.id, users, selectedDeptId);
+                                        usersToNotify.forEach(user => {
+                                            // Só envia notificação se for o usuário atual ou se for admin
+                                            if (user.id === currentUser?.id || user.role === UserRole.ADMIN) {
+                                                addNotification(
+                                                    `Novo chat atribuído - ${departmentName}`,
+                                                    `Chat de ${existingChat.contactName} foi atribuído ao departamento ${departmentName}${user.id === assignedUser.id ? ' e está na sua fila' : ''}`,
+                                                    'info',
+                                                    true,
+                                                    true
+                                                );
+                                            }
+                                        });
+                                    } else {
+                                        // Se não há usuário disponível, deixa como 'pending' para triagem
+                                        finalAssignedTo = undefined;
+                                        finalStatus = 'pending';
+                                        
+                                        // Notifica administradores que não há usuário disponível
+                                        const admins = users.filter(u => u.role === UserRole.ADMIN);
+                                        admins.forEach(admin => {
+                                            if (admin.id === currentUser?.id) {
+                                                addNotification(
+                                                    `Chat aguardando atendimento - ${departmentName}`,
+                                                    `Chat de ${existingChat.contactName} foi direcionado para ${departmentName}, mas não há operadores disponíveis`,
+                                                    'warning',
+                                                    true,
+                                                    true
+                                                );
+                                            }
+                                        });
+                                    }
                                 } else if (!existingChat.departmentSelectionSent) {
                                     // Primeira mensagem sem departamento: envia seleção
                                     sendDepartmentSelectionMessage(apiConfig, existingChat.contactNumber, departments)
@@ -1992,16 +2090,66 @@ const App: React.FC = () => {
                                                         const selectedDeptId = processDepartmentSelection(messageContent, departments);
                                                         
                                                         if (selectedDeptId) {
-                                                    // Usuário selecionou setor - atualiza via handleUpdateChat para persistir no banco
+                                                    // Usuário selecionou setor - encontra usuário disponível e atribui
                                                             const filteredMessages = updatedMessages.filter(m => m.id !== mapped.id);
                                                             updatedMessages = filteredMessages;
                                                             
-                                                    handleUpdateChat({
-                                                                        ...updatedChat,
-                                                        departmentId: selectedDeptId,
-                                                        status: updatedChat.assignedTo ? 'open' : 'pending',
-                                                        awaitingDepartmentSelection: false
-                                                    });
+                                                            // Encontra usuário disponível do departamento
+                                                            const assignedUser = findAvailableUserForDepartment(selectedDeptId, users, chats);
+                                                            
+                                                            // Adiciona mensagem de sistema
+                                                            const departmentName = departments.find(d => d.id === selectedDeptId)?.name || 'Departamento';
+                                                            updatedMessages.push({
+                                                                id: `sys_dept_${Date.now()}`,
+                                                                content: `Atendimento direcionado para ${departmentName}${assignedUser ? ` - Atribuído a ${assignedUser.name}` : ''}`,
+                                                                sender: 'system',
+                                                                timestamp: new Date(),
+                                                                status: MessageStatus.READ,
+                                                                type: 'text'
+                                                            });
+                                                            
+                                                            // Prepara dados do chat atualizado
+                                                            const updatedChatData: Chat = {
+                                                                ...updatedChat,
+                                                                departmentId: selectedDeptId,
+                                                                status: assignedUser ? 'open' : 'pending',
+                                                                assignedTo: assignedUser?.id,
+                                                                awaitingDepartmentSelection: false,
+                                                                messages: updatedMessages
+                                                            };
+                                                            
+                                                    handleUpdateChat(updatedChatData);
+                                                            
+                                                            // Envia notificações
+                                                            if (assignedUser) {
+                                                                const usersToNotify = getUsersToNotify(assignedUser.id, users, selectedDeptId);
+                                                                usersToNotify.forEach(user => {
+                                                                    // Só envia notificação se for o usuário atual ou se for admin
+                                                                    if (user.id === currentUser?.id || user.role === UserRole.ADMIN) {
+                                                                        addNotification(
+                                                                            `Novo chat atribuído - ${departmentName}`,
+                                                                            `Chat de ${updatedChat.contactName} foi atribuído ao departamento ${departmentName}${user.id === assignedUser.id ? ' e está na sua fila' : ''}`,
+                                                                            'info',
+                                                                            true,
+                                                                            true
+                                                                        );
+                                                                    }
+                                                                });
+                                                            } else {
+                                                                // Se não há usuário disponível, notifica administradores
+                                                                const admins = users.filter(u => u.role === UserRole.ADMIN);
+                                                                admins.forEach(admin => {
+                                                                    if (admin.id === currentUser?.id) {
+                                                                        addNotification(
+                                                                            `Chat aguardando atendimento - ${departmentName}`,
+                                                                            `Chat de ${updatedChat.contactName} foi direcionado para ${departmentName}, mas não há operadores disponíveis`,
+                                                                            'warning',
+                                                                            true,
+                                                                            true
+                                                                        );
+                                                                    }
+                                                                });
+                                                            }
                                                 } else if (updatedChat.messages.filter(m => m.sender === 'user').length === 1 && !updatedChat.departmentSelectionSent) {
                                                     // Primeira mensagem sem departamento: envia seleção
                                                     sendDepartmentSelectionMessage(apiConfig, updatedChat.contactNumber, departments)
