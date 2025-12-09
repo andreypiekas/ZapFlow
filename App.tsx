@@ -20,16 +20,37 @@ import { apiService } from './services/apiService';
 
 const loadConfig = (): ApiConfig => {
   try {
+    // Verifica se deve usar apenas PostgreSQL
+    const { SecurityService } = require('./services/securityService');
+    const { storageService } = require('./services/storageService');
+    
+    if (storageService.getUseOnlyPostgreSQL()) {
+      // Se configurado para usar apenas PostgreSQL, não carrega do localStorage
+      return {
+        baseUrl: '', 
+        apiKey: '',
+        instanceName: 'zapflow',
+        isDemo: false,
+        googleClientId: ''
+      };
+    }
+    
     const saved = localStorage.getItem('zapflow_config');
     if (saved) {
-      const parsed = JSON.parse(saved);
-      // Log removido para produção - não expor informações sensíveis
+      // Tenta descriptografar se estiver criptografado
+      let decrypted = saved;
+      try {
+        decrypted = SecurityService.decrypt(saved);
+      } catch {
+        // Se falhar, usa como está (compatibilidade)
+        decrypted = saved;
+      }
+      const parsed = JSON.parse(decrypted);
       return parsed;
     }
   } catch (e) {
     console.error('[App] ❌ Erro ao carregar configurações do localStorage:', e);
   }
-  // Log removido para produção
   return {
     baseUrl: '', 
     apiKey: '',
@@ -41,8 +62,25 @@ const loadConfig = (): ApiConfig => {
 
 const loadUserSession = (): User | null => {
   try {
+    // Verifica se deve usar apenas PostgreSQL
+    const { storageService } = require('./services/storageService');
+    if (storageService.getUseOnlyPostgreSQL()) {
+      return null; // Não carrega do localStorage se usar apenas PostgreSQL
+    }
+    
     const saved = localStorage.getItem('zapflow_user');
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      // Tenta descriptografar se estiver criptografado
+      const { SecurityService } = require('./services/securityService');
+      let decrypted = saved;
+      try {
+        decrypted = SecurityService.decrypt(saved);
+      } catch {
+        // Se falhar, usa como está (compatibilidade)
+        decrypted = saved;
+      }
+      return JSON.parse(decrypted);
+    }
   } catch (e) {
     console.error('[App] Erro ao carregar sessão do usuário:', e);
   }
@@ -276,7 +314,12 @@ const App: React.FC = () => {
     if (currentUser) {
       // Salva no localStorage para compatibilidade
       try {
-        localStorage.setItem('zapflow_user', JSON.stringify(currentUser));
+        // Salva usuário apenas se não estiver configurado para usar apenas PostgreSQL
+        const { SecurityService } = require('./services/securityService');
+        const { storageService } = require('./services/storageService');
+        if (!storageService.getUseOnlyPostgreSQL()) {
+          localStorage.setItem('zapflow_user', SecurityService.encrypt(JSON.stringify(currentUser)));
+        }
       } catch (e) {
         console.error('[App] Erro ao salvar sessão do usuário:', e);
       }
@@ -2102,8 +2145,12 @@ const App: React.FC = () => {
             role: result.user.role as UserRole
           };
           setCurrentUser(updatedCurrentUser);
-          // Salva no localStorage
-          localStorage.setItem('zapflow_user', JSON.stringify(updatedCurrentUser));
+          // Salva no localStorage apenas se não estiver configurado para usar apenas PostgreSQL
+          const { SecurityService } = require('./services/securityService');
+          const { storageService } = require('./services/storageService');
+          if (!storageService.getUseOnlyPostgreSQL()) {
+            localStorage.setItem('zapflow_user', SecurityService.encrypt(JSON.stringify(updatedCurrentUser)));
+          }
         }
       } catch (error) {
         console.error('[App] Erro ao atualizar perfil do usuário na API:', error);

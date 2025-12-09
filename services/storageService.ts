@@ -1,5 +1,6 @@
 // Serviço de persistência híbrido: API primeiro, localStorage como fallback
 import { apiService } from './apiService';
+import { SecurityService } from './securityService';
 
 type DataType = 
   | 'config'
@@ -18,11 +19,28 @@ class StorageService {
   private apiAvailable: boolean | null = null;
   private consecutiveFailures: number = 0;
   private maxConsecutiveFailures: number = 3;
+  private useOnlyPostgreSQL: boolean = false;
 
   constructor() {
+    this.useOnlyPostgreSQL = SecurityService.shouldUseOnlyPostgreSQL();
     this.checkAPI();
     // Verifica a API periodicamente (a cada 30 segundos)
     setInterval(() => this.checkAPI(), 30000);
+  }
+  
+  // Define se deve usar apenas PostgreSQL (sem localStorage)
+  setUseOnlyPostgreSQL(value: boolean): void {
+    this.useOnlyPostgreSQL = value;
+    SecurityService.setUseOnlyPostgreSQL(value);
+    if (value) {
+      // Se ativou "usar apenas PostgreSQL", limpa dados sensíveis do localStorage
+      SecurityService.clearSensitiveData();
+    }
+  }
+  
+  // Retorna se está configurado para usar apenas PostgreSQL
+  getUseOnlyPostgreSQL(): boolean {
+    return this.useOnlyPostgreSQL;
   }
 
   private async checkAPI(): Promise<void> {
@@ -86,19 +104,32 @@ class StorageService {
       }
     }
 
-    // Fallback para localStorage
-    try {
-      const storageKey = this.getLocalStorageKey(dataType);
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (key && typeof parsed === 'object' && parsed !== null) {
-          return (parsed as any)[key] || null;
+    // Fallback para localStorage (apenas se não estiver configurado para usar apenas PostgreSQL)
+    if (!this.useOnlyPostgreSQL) {
+      try {
+        const storageKey = this.getLocalStorageKey(dataType);
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          // Descriptografa se for um dado sensível
+          let decrypted = saved;
+          if (this.isSensitiveDataType(dataType)) {
+            try {
+              decrypted = SecurityService.decrypt(saved);
+            } catch {
+              // Se falhar ao descriptografar, tenta usar como está (compatibilidade)
+              decrypted = saved;
+            }
+          }
+          
+          const parsed = JSON.parse(decrypted);
+          if (key && typeof parsed === 'object' && parsed !== null) {
+            return (parsed as any)[key] || null;
+          }
+          return parsed as T;
         }
-        return parsed as T;
+      } catch (error) {
+        console.error(`[StorageService] Erro ao carregar ${dataType} do localStorage:`, error);
       }
-    } catch (error) {
-      console.error(`[StorageService] Erro ao carregar ${dataType} do localStorage:`, error);
     }
 
     return null;
@@ -107,8 +138,10 @@ class StorageService {
   async save<T>(dataType: DataType, value: T, key?: string): Promise<boolean> {
     const storageKey = key || 'default';
 
-    // Sempre salva no localStorage primeiro (backup imediato)
-    const localStorageSuccess = this.saveToLocalStorage(dataType, value, key);
+    // Salva no localStorage apenas se não estiver configurado para usar apenas PostgreSQL
+    // OU se for um dado não sensível (mesmo com PostgreSQL apenas)
+    const shouldSaveToLocalStorage = !this.useOnlyPostgreSQL || !this.isSensitiveDataType(dataType);
+    const localStorageSuccess = shouldSaveToLocalStorage ? this.saveToLocalStorage(dataType, value, key) : true;
 
     // Se API está disponível, tenta salvar
     if (this.useAPI && this.apiAvailable) {
@@ -144,21 +177,47 @@ class StorageService {
   private saveToLocalStorage<T>(dataType: DataType, value: T, key?: string): boolean {
     try {
       const storageKey = this.getLocalStorageKey(dataType);
+      const stringValue = JSON.stringify(value);
+      
+      // Criptografa dados sensíveis antes de salvar
+      const finalValue = this.isSensitiveDataType(dataType) 
+        ? SecurityService.encrypt(stringValue)
+        : stringValue;
       
       if (key) {
         // Se há uma key, salva como objeto
         const existing = localStorage.getItem(storageKey);
-        const data = existing ? JSON.parse(existing) : {};
+        let data: any = {};
+        if (existing) {
+          try {
+            const decrypted = this.isSensitiveDataType(dataType) 
+              ? SecurityService.decrypt(existing)
+              : existing;
+            data = JSON.parse(decrypted);
+          } catch {
+            data = {};
+          }
+        }
         data[key] = value;
-        localStorage.setItem(storageKey, JSON.stringify(data));
+        const dataString = JSON.stringify(data);
+        const encryptedData = this.isSensitiveDataType(dataType)
+          ? SecurityService.encrypt(dataString)
+          : dataString;
+        localStorage.setItem(storageKey, encryptedData);
       } else {
-        localStorage.setItem(storageKey, JSON.stringify(value));
+        localStorage.setItem(storageKey, finalValue);
       }
       return true;
     } catch (error) {
       console.error(`[StorageService] Erro ao salvar ${dataType} no localStorage:`, error);
       return false;
     }
+  }
+  
+  // Verifica se um tipo de dado é sensível e deve ser criptografado
+  private isSensitiveDataType(dataType: DataType): boolean {
+    const sensitiveTypes: DataType[] = ['config', 'users'];
+    return sensitiveTypes.includes(dataType);
   }
 
   async saveBatch<T>(dataType: DataType, data: { [key: string]: T }): Promise<boolean> {

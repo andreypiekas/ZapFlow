@@ -4,6 +4,7 @@ import { ApiConfig, User, UserRole } from '../types';
 import { Save, Server, Shield, Globe, User as UserIcon, Bell, Lock, RefreshCw, Database, HardDrive } from 'lucide-react';
 import { fetchAllInstances, fetchInstanceDetails, InstanceInfo } from '../services/whatsappService';
 import { checkApiHealth, getAuthToken } from '../services/apiService';
+import { storageService } from '../services/storageService';
 
 interface SettingsProps {
   config: ApiConfig;
@@ -21,6 +22,7 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
   const [isLoadingInstances, setIsLoadingInstances] = useState(false);
   const [storageStatus, setStorageStatus] = useState<'api' | 'localstorage' | 'checking'>('checking');
   const [apiUrl, setApiUrl] = useState<string>('');
+  const [useOnlyPostgreSQL, setUseOnlyPostgreSQL] = useState<boolean>(storageService.getUseOnlyPostgreSQL());
 
   // Sincroniza formData quando config muda (importante para carregar dados salvos)
   useEffect(() => {

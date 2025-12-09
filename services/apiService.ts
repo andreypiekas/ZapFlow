@@ -65,14 +65,22 @@ class ApiService {
     });
     
     if (response.token) {
-      localStorage.setItem('zapflow_auth_token', response.token);
-      localStorage.setItem('zapflow_user', JSON.stringify(response.user));
+      // Salva token e usuário apenas se não estiver configurado para usar apenas PostgreSQL
+      const { SecurityService } = await import('./securityService');
+      const { storageService } = await import('./storageService');
+      
+      if (!storageService.getUseOnlyPostgreSQL()) {
+        // Criptografa dados sensíveis antes de salvar
+        localStorage.setItem('zapflow_auth_token', SecurityService.encrypt(response.token));
+        localStorage.setItem('zapflow_user', SecurityService.encrypt(JSON.stringify(response.user)));
+      }
     }
     
     return response;
   }
 
   logout(): void {
+    // Remove dados sensíveis do localStorage
     localStorage.removeItem('zapflow_auth_token');
     localStorage.removeItem('zapflow_user');
   }
