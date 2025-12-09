@@ -441,8 +441,17 @@ const App: React.FC = () => {
         ]);
 
         // Atualiza apenas se os dados vieram da API (não são null)
+        // Para config, faz merge completo para preservar valores padrão
         if (apiConfigData) {
-          setApiConfig(prev => ({ ...prev, ...apiConfigData }));
+          setApiConfig({
+            baseUrl: apiConfigData.baseUrl || '',
+            apiKey: apiConfigData.apiKey || '',
+            authenticationApiKey: apiConfigData.authenticationApiKey || '',
+            instanceName: apiConfigData.instanceName || 'zapflow',
+            isDemo: apiConfigData.isDemo || false,
+            googleClientId: apiConfigData.googleClientId || '',
+            geminiApiKey: apiConfigData.geminiApiKey || ''
+          });
         }
         if (departmentsData && departmentsData.length > 0) {
           setDepartments(departmentsData);
@@ -2323,13 +2332,23 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSaveConfig = (newConfig: ApiConfig) => {
-    // Atualiza o estado (o useEffect vai salvar automaticamente via storageService)
+  const handleSaveConfig = async (newConfig: ApiConfig) => {
+    // Atualiza o estado
     setApiConfig(newConfig);
-    // Também salva imediatamente via storageService para garantir persistência
-    storageService.save('config', newConfig).catch(err => {
+    // Salva imediatamente via storageService (que salva na API se disponível)
+    try {
+      const saved = await storageService.save('config', newConfig);
+      if (saved) {
+        // Config salvo com sucesso (na API ou localStorage)
+        addNotification('Configurações salvas', 'As configurações foram salvas com sucesso.', 'success');
+      } else {
+        console.warn('[App] ⚠️ Falha ao salvar configurações');
+        addNotification('Aviso', 'As configurações podem não ter sido salvas completamente.', 'warning');
+      }
+    } catch (err) {
       console.error('[App] Erro ao salvar configurações:', err);
-    });
+      addNotification('Erro', 'Erro ao salvar configurações. Tente novamente.', 'error');
+    }
   };
 
   const handleAddUser = async (user: User) => {
