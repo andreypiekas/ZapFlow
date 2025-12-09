@@ -1721,6 +1721,11 @@ const App: React.FC = () => {
                                                 const wasClosed = chat.status === 'closed';
                                                 const isUserMessage = mapped.sender === 'user';
                                                 
+                                                // Debug: log para rastrear quando chat fechado recebe mensagem
+                                                if (wasClosed && isUserMessage) {
+                                                    console.log(`[App] 🔍 [DEBUG] Chat fechado detectado: ${chat.id}, status: ${chat.status}, sender: ${mapped.sender}`);
+                                                }
+                                                
                                             // Log removido para produção - muito verboso
                                             // console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}`);
                                                 let updatedMessages = [...chat.messages, mapped].sort((a, b) => {
