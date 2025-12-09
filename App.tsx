@@ -1305,6 +1305,33 @@ const App: React.FC = () => {
                              (lastMergedMsg.timestamp && lastExistingMsg.timestamp && 
                               lastMergedMsg.timestamp.getTime() > lastExistingMsg.timestamp.getTime()));
                         
+                        // PRIORIDADE ABSOLUTA: Dados do banco (existingChat) têm precedência sobre API
+                        // Se o chat está atribuído e em 'open' no banco, SEMPRE mantém esses valores
+                        // Isso previne que chats em "A Fazer" voltem para "Aguardando" após reload
+                        let finalAssignedTo = existingChat.assignedTo;
+                        let finalStatus = finalStatusForDept;
+                        let finalDepartmentIdFinal = finalDepartmentId;
+                        
+                        // Se o chat está atribuído no banco, SEMPRE preserva status e assignedTo do banco
+                        // Não permite que a API sobrescreva dados de chats atribuídos
+                        if (existingChat.assignedTo) {
+                            finalAssignedTo = existingChat.assignedTo; // Sempre preserva assignedTo do banco
+                            finalDepartmentIdFinal = existingChat.departmentId || finalDepartmentId; // Preserva departmentId do banco se existir
+                            
+                            // Se está atribuído e em 'open', SEMPRE mantém 'open' (nunca volta para 'pending')
+                            if (existingChat.status === 'open') {
+                                finalStatus = 'open';
+                            } else {
+                                // Se está atribuído mas não é 'open', preserva o status do banco
+                                finalStatus = existingChat.status || finalStatusForDept;
+                            }
+                        }
+                        
+                        // Verificação final: se chat está atribuído e em 'open', força 'open'
+                        if (finalAssignedTo && existingChat.status === 'open') {
+                            finalStatus = 'open';
+                        }
+                        
                         return {
                             ...realChat,
                             messages: mergedMessages, // Usa mensagens mescladas
@@ -1312,14 +1339,14 @@ const App: React.FC = () => {
                             contactName: existingChat.contactName, // Mantém nome editado localmente se houver
                             contactNumber: useRealContactNumber ? realChat.contactNumber : existingChat.contactNumber, // Atualiza se número mais completo
                             clientCode: existingChat.clientCode,
-                            // Se chat foi reaberto ou setor foi selecionado, atualiza departamento
-                            departmentId: finalDepartmentId,
-                            assignedTo: wasReopened ? undefined : existingChat.assignedTo,
+                            // PRIORIDADE ABSOLUTA: Dados do banco têm precedência
+                            departmentId: finalDepartmentIdFinal,
+                            assignedTo: wasReopened ? undefined : finalAssignedTo, // Preserva assignedTo do banco (exceto se reaberto)
                             tags: existingChat.tags,
-                            status: finalStatusForDept,
+                            status: finalStatus, // Status final com prioridade do banco
                             rating: existingChat.rating,
                             awaitingRating: wasReopened ? false : existingChat.awaitingRating, // Cancela aguardo de avaliação se reaberto
-                            awaitingDepartmentSelection: (finalDepartmentId && finalDepartmentId !== existingChat.departmentId) ? false : existingChat.awaitingDepartmentSelection, // Cancela se setor foi selecionado
+                            awaitingDepartmentSelection: (finalDepartmentIdFinal && finalDepartmentIdFinal !== existingChat.departmentId) ? false : existingChat.awaitingDepartmentSelection, // Cancela se setor foi selecionado
                             departmentSelectionSent: existingChat.departmentSelectionSent || false, // Mantém flag de envio
                             activeWorkflow: existingChat.activeWorkflow,
                             endedAt: wasReopened ? undefined : existingChat.endedAt, // Remove endedAt se reaberto
@@ -1400,15 +1427,91 @@ const App: React.FC = () => {
                     }
                 });
                 // console.log(`[App] Merge concluído: ${mergedChats.length} chats no total`);
-                return mergedChats;
+                // VERIFICAÇÃO FINAL: Garante que chats atribuídos e em 'open' nunca voltem para 'pending'
+                // Isso previne que chats em "A Fazer" voltem para "Aguardando" após reload
+                const finalMergedChats = mergedChats.map(chat => {
+                    // Se o chat está atribuído e em 'open', SEMPRE mantém 'open'
+                    if (chat.assignedTo && chat.status === 'open') {
+                        return { ...chat, status: 'open' };
+                    }
+                    // Se o chat está atribuído (mesmo que status não seja 'open'), preserva status do banco
+                    // Busca o chat original do estado atual para garantir que preserva dados do banco
+                    const originalChat = currentChats.find(c => c.id === chat.id);
+                    if (originalChat && originalChat.assignedTo) {
+                        // Preserva status, assignedTo e departmentId do banco
+                        return {
+                            ...chat,
+                            status: originalChat.status || chat.status,
+                            assignedTo: originalChat.assignedTo,
+                            departmentId: originalChat.departmentId || chat.departmentId
+                        };
+                    }
+                    return chat;
+                });
+                
+                return finalMergedChats;
             });
         } else {
             // console.log('[App] Nenhum chat retornado da API, mantendo estado atual');
         }
     };
 
-    // Primeira sincronização
-    syncChats();
+    // Carrega chats individuais do banco ANTES da sincronização
+    // Isso garante que status, assignedTo e departmentId do banco tenham prioridade
+    const loadChatsFromDatabase = async () => {
+      try {
+        // Carrega todos os chats individuais do banco (data_key = chatId)
+        const allChatsData = await apiService.getAllData<Chat>('chats');
+        
+        if (allChatsData && Object.keys(allChatsData).length > 0) {
+          // Converte o objeto de chats em array
+          const chatsArray = Object.values(allChatsData).map((chat: any) => ({
+            ...chat,
+            lastMessageTime: chat.lastMessageTime ? new Date(chat.lastMessageTime) : new Date(),
+            messages: chat.messages?.map((msg: Message) => ({
+              ...msg,
+              timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date()
+            })) || []
+          }));
+          
+          // Atualiza os chats com dados do banco (preserva status, assignedTo, departmentId)
+          setChats(currentChats => {
+            const chatsMap = new Map<string, Chat>();
+            
+            // Primeiro, adiciona todos os chats do banco
+            chatsArray.forEach(chat => {
+              chatsMap.set(chat.id, chat);
+            });
+            
+            // Depois, adiciona chats atuais que não estão no banco (preserva dados locais)
+            currentChats.forEach(chat => {
+              if (!chatsMap.has(chat.id)) {
+                chatsMap.set(chat.id, chat);
+              } else {
+                // Se o chat existe no banco, preserva status, assignedTo e departmentId do banco
+                const dbChat = chatsMap.get(chat.id)!;
+                chatsMap.set(chat.id, {
+                  ...chat,
+                  status: dbChat.status || chat.status,
+                  assignedTo: dbChat.assignedTo || chat.assignedTo,
+                  departmentId: dbChat.departmentId !== undefined ? dbChat.departmentId : chat.departmentId
+                });
+              }
+            });
+            
+            return Array.from(chatsMap.values());
+          });
+        }
+      } catch (error) {
+        console.error('[App] Erro ao carregar chats do banco:', error);
+      }
+    };
+
+    // Carrega chats do banco primeiro, depois sincroniza
+    loadChatsFromDatabase().then(() => {
+      // Primeira sincronização após carregar do banco
+      syncChats();
+    });
     
     // Polling a cada 5 segundos para evitar atualizações excessivas (era 2s)
     intervalIdRef.current = setInterval(syncChats, 5000);
