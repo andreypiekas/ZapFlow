@@ -358,6 +358,103 @@ app.post('/api/users', authenticateToken, dataLimiter, async (req, res) => {
   }
 });
 
+// Rota para deletar usuário (apenas ADMIN)
+app.delete('/api/users/:id', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    // Verificar se o usuário é ADMIN
+    const currentUserResult = await pool.query('SELECT role FROM users WHERE id = $1', [req.user.id]);
+    if (currentUserResult.rows.length === 0 || currentUserResult.rows[0].role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Apenas administradores podem deletar usuários' });
+    }
+
+    const userId = parseInt(req.params.id);
+    if (isNaN(userId)) {
+      return res.status(400).json({ error: 'ID inválido' });
+    }
+
+    // Não permite deletar a si mesmo
+    if (userId === req.user.id) {
+      return res.status(400).json({ error: 'Não é possível deletar seu próprio usuário' });
+    }
+
+    // Deletar dados do usuário primeiro (CASCADE deve cuidar disso, mas vamos garantir)
+    await pool.query('DELETE FROM user_data WHERE user_id = $1', [userId]);
+
+    // Deletar usuário
+    const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [userId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao deletar usuário:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Rota para atualizar qualquer usuário (apenas ADMIN)
+app.put('/api/users/:id', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    // Verificar se o usuário é ADMIN
+    const currentUserResult = await pool.query('SELECT role FROM users WHERE id = $1', [req.user.id]);
+    if (currentUserResult.rows.length === 0 || currentUserResult.rows[0].role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Apenas administradores podem atualizar outros usuários' });
+    }
+
+    const userId = parseInt(req.params.id);
+    if (isNaN(userId)) {
+      return res.status(400).json({ error: 'ID inválido' });
+    }
+
+    const { name, email, role, password } = req.body;
+
+    const updateFields = [];
+    const params = [];
+    let paramIndex = 1;
+
+    if (name) {
+      updateFields.push(`name = $${paramIndex++}`);
+      params.push(name);
+    }
+    if (email) {
+      updateFields.push(`email = $${paramIndex++}`);
+      params.push(email);
+    }
+    if (role) {
+      updateFields.push(`role = $${paramIndex++}`);
+      params.push(role);
+    }
+    if (password) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      updateFields.push(`password_hash = $${paramIndex++}`);
+      params.push(hashedPassword);
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: 'Nenhum campo para atualizar' });
+    }
+
+    updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+    params.push(userId);
+
+    const result = await pool.query(
+      `UPDATE users SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING id, username, name, email, role`,
+      params
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    res.json({ success: true, user: result.rows[0] });
+  } catch (error) {
+    console.error('Erro ao atualizar usuário:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
 // Rota para atualizar informações do próprio usuário (nome, email)
 app.put('/api/user/profile', authenticateToken, dataLimiter, async (req, res) => {
   try {

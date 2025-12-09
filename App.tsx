@@ -2158,18 +2158,17 @@ const App: React.FC = () => {
       (currentUser.email && updatedUser.email && currentUser.email.toLowerCase() === updatedUser.email.toLowerCase())
     );
     
-    if (isCurrentUser) {
-      // Atualiza o currentUser imediatamente
-      setCurrentUser(updatedUser);
-      
-      // Tenta atualizar no banco de dados via API
-      try {
-        const result = await apiService.updateUserProfile(updatedUser.name, updatedUser.email);
+    // Tenta atualizar no banco de dados via API
+    try {
+      let result;
+      if (isCurrentUser) {
+        // Se for o próprio usuário, usa o endpoint de perfil
+        result = await apiService.updateUserProfile(updatedUser.name, updatedUser.email);
         if (result.success && result.user) {
           // Atualiza o currentUser com os dados retornados da API
           const updatedCurrentUser: User = {
             ...currentUser,
-            id: result.user.id.toString(), // Garante que o ID seja string
+            id: result.user.id.toString(),
             name: result.user.name,
             email: result.user.email || updatedUser.email,
             role: result.user.role as UserRole
@@ -2177,16 +2176,65 @@ const App: React.FC = () => {
           setCurrentUser(updatedCurrentUser);
           // Salva no localStorage apenas se não estiver configurado para usar apenas PostgreSQL
           if (!storageService.getUseOnlyPostgreSQL()) {
-            localStorage.setItem('zapflow_user', SecurityService.encrypt(JSON.stringify(updatedCurrentUser)));
+            securityService.saveSensitiveData('user', updatedCurrentUser);
           }
         }
-      } catch (error) {
-        console.error('[App] Erro ao atualizar perfil do usuário na API:', error);
-        // Continua mesmo se a API falhar, pois já atualizou o estado local
+      } else {
+        // Se for outro usuário e o currentUser for ADMIN, usa o endpoint de atualização de usuários
+        if (currentUser?.role === UserRole.ADMIN) {
+          const userId = parseInt(updatedUser.id);
+          if (!isNaN(userId)) {
+            result = await apiService.updateUser(
+              userId,
+              updatedUser.name,
+              updatedUser.email,
+              updatedUser.role,
+              updatedUser.password // Se houver senha, atualiza
+            );
+            if (result.success && result.user) {
+              // Atualiza o estado com os dados retornados da API
+              const updatedUserFromApi: User = {
+                ...updatedUser,
+                id: result.user.id.toString(),
+                name: result.user.name,
+                email: result.user.email || updatedUser.email,
+                role: result.user.role as UserRole
+              };
+              setUsers(prevUsers => prevUsers.map(u => u.id === updatedUser.id ? updatedUserFromApi : u));
+            }
+          }
+        }
       }
+    } catch (error) {
+      console.error('[App] Erro ao atualizar usuário na API:', error);
+      // Continua mesmo se a API falhar, pois já atualizou o estado local
     }
   };
-  const handleDeleteUser = (id: string) => setUsers(prevUsers => prevUsers.filter(u => u.id !== id));
+  
+  const handleDeleteUser = async (id: string) => {
+    // Tenta deletar no banco de dados via API
+    try {
+      const userId = parseInt(id);
+      if (!isNaN(userId) && currentUser?.role === UserRole.ADMIN) {
+        const result = await apiService.deleteUser(userId);
+        if (result.success) {
+          // Remove do estado local apenas se deletou com sucesso no banco
+          setUsers(prevUsers => prevUsers.filter(u => u.id !== id));
+        } else {
+          console.error('[App] Erro ao deletar usuário:', result.error);
+          alert(`Erro ao deletar usuário: ${result.error || 'Erro desconhecido'}`);
+        }
+      } else {
+        // Se não for um ID numérico ou não for ADMIN, apenas remove do estado local
+        setUsers(prevUsers => prevUsers.filter(u => u.id !== id));
+      }
+    } catch (error) {
+      console.error('[App] Erro ao deletar usuário na API:', error);
+      // Em caso de erro, ainda remove localmente como fallback
+      setUsers(prevUsers => prevUsers.filter(u => u.id !== id));
+      alert('Erro ao deletar usuário no servidor. Usuário removido apenas localmente.');
+    }
+  };
 
   const handleAddQuickReply = (qr: QuickReply) => setQuickReplies([...quickReplies, qr]);
   const handleUpdateQuickReply = (updatedQr: QuickReply) => setQuickReplies(quickReplies.map(q => q.id === updatedQr.id ? updatedQr : q));

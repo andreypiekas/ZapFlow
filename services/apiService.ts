@@ -206,6 +206,33 @@ class ApiService {
     }
   }
 
+  // Deletar usuário (apenas ADMIN)
+  async deleteUser(userId: string | number): Promise<{ success: boolean; error?: string }> {
+    try {
+      const response = await this.request<{ success: boolean }>(`/api/users/${userId}`, {
+        method: 'DELETE',
+      });
+      return response;
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao deletar usuário:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Atualizar qualquer usuário (apenas ADMIN)
+  async updateUser(userId: string | number, name?: string, email?: string, role?: string, password?: string): Promise<{ success: boolean; user?: any; error?: string }> {
+    try {
+      const response = await this.request<{ success: boolean; user: any }>(`/api/users/${userId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name, email, role, password }),
+      });
+      return response;
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao atualizar usuário:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
   // Health check
   async healthCheck(): Promise<boolean> {
     try {
