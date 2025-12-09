@@ -1668,6 +1668,15 @@ const App: React.FC = () => {
             // Event: messages.upsert - mensagens novas ou atualizadas
             socket.on('messages.upsert', (data: any) => {
                 try {
+                    // Log inicial para rastrear recebimento de dados
+                    console.log(`[App] 📨 [DEBUG] Socket.IO messages.upsert recebido:`, {
+                        hasData: !!data,
+                        dataKeys: data ? Object.keys(data) : [],
+                        hasDataKey: !!(data?.data),
+                        hasKey: !!(data?.key),
+                        rawData: JSON.stringify(data).substring(0, 200)
+                    });
+                    
                     // Processa mensagens recebidas - múltiplos formatos possíveis
                     // Formato 1: { key: {...}, message: {...} }
                     // Formato 2: { data: { key: {...}, message: {...} } }
