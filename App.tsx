@@ -17,45 +17,12 @@ import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashb
 import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance, sendDepartmentSelectionMessage, processDepartmentSelection } from './services/whatsappService';
 import { processChatbotMessages } from './services/chatbotService'; 
 import { storageService } from './services/storageService';
-import { apiService, getBackendUrl } from './services/apiService';
+import { apiService, getBackendUrl, loadConfig as loadConfigFromBackend, saveConfig as saveConfigToBackend } from './services/apiService';
 import { SecurityService } from './services/securityService';
 import { io, Socket } from 'socket.io-client'; 
 
-// TODO: Remover localStorage - backend é obrigatório
+// Carrega configuração padrão (será substituída quando usuário fizer login)
 const loadConfig = (): ApiConfig => {
-  try {
-    // Verifica se deve usar apenas PostgreSQL
-    if (storageService.getUseOnlyPostgreSQL()) {
-      // Se configurado para usar apenas PostgreSQL, não carrega do localStorage
-      // Backend é obrigatório - configuração deve vir do backend
-      return {
-        baseUrl: '', 
-        apiKey: '',
-        instanceName: 'zapflow',
-        isDemo: false,
-        googleClientId: '',
-        geminiApiKey: ''
-      };
-    }
-    
-    // TODO: Remover este bloco - backend é obrigatório
-    // Fallback temporário para localStorage (será removido)
-    const saved = localStorage.getItem('zapflow_config');
-    if (saved) {
-      // Tenta descriptografar se estiver criptografado
-      let decrypted = saved;
-      try {
-        decrypted = SecurityService.decrypt(saved);
-      } catch {
-        // Se falhar, usa como está (compatibilidade)
-        decrypted = saved;
-      }
-      const parsed = JSON.parse(decrypted);
-      return parsed;
-    }
-  } catch (e) {
-    console.error('[App] ❌ Erro ao carregar configurações do localStorage:', e);
-  }
   return {
     baseUrl: '', 
     apiKey: '',
@@ -2889,19 +2856,35 @@ const App: React.FC = () => {
   const handleSaveConfig = async (newConfig: ApiConfig) => {
     // Atualiza o estado
     setApiConfig(newConfig);
-    // Salva imediatamente via storageService (que salva na API se disponível)
-    try {
-      const saved = await storageService.save('config', newConfig);
-      if (saved) {
-        // Config salvo com sucesso (na API ou localStorage)
-        addNotification('Configurações salvas', 'As configurações foram salvas com sucesso.', 'success');
-      } else {
-        console.warn('[App] ⚠️ Falha ao salvar configurações');
-        addNotification('Aviso', 'As configurações podem não ter sido salvas completamente.', 'warning');
+    
+    // Se usuário está logado, salva no backend
+    if (currentUser) {
+      try {
+        const saved = await saveConfigToBackend(newConfig);
+        if (saved) {
+          addNotification('Configurações salvas', 'As configurações foram salvas com sucesso no banco de dados.', 'success');
+        } else {
+          console.warn('[App] ⚠️ Falha ao salvar configurações no backend');
+          addNotification('Aviso', 'Falha ao salvar configurações no banco de dados.', 'warning');
+        }
+      } catch (err) {
+        console.error('[App] ❌ Erro ao salvar configurações no backend:', err);
+        addNotification('Erro', 'Erro ao salvar configurações no banco de dados.', 'error');
       }
-    } catch (err) {
-      console.error('[App] Erro ao salvar configurações:', err);
-      addNotification('Erro', 'Erro ao salvar configurações. Tente novamente.', 'error');
+    } else {
+      // Fallback para localStorage se não estiver logado (temporário)
+      try {
+        const saved = await storageService.save('config', newConfig);
+        if (saved) {
+          addNotification('Configurações salvas', 'As configurações foram salvas localmente.', 'success');
+        } else {
+          console.warn('[App] ⚠️ Falha ao salvar configurações');
+          addNotification('Aviso', 'As configurações podem não ter sido salvas completamente.', 'warning');
+        }
+      } catch (err) {
+        console.error('[App] Erro ao salvar configurações:', err);
+        addNotification('Erro', 'Erro ao salvar configurações. Tente novamente.', 'error');
+      }
     }
   };
 

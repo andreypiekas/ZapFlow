@@ -579,3 +579,24 @@ export const deleteUserData = (dataType: string, key: string) => {
   return apiService.deleteData(dataType, key);
 };
 
+// Métodos específicos para configurações (ApiConfig)
+export const saveConfig = async (config: any): Promise<boolean> => {
+  return apiService.request<{ success: boolean }>('/api/config', {
+    method: 'PUT',
+    body: JSON.stringify({ config }),
+  }).then(response => response.success || false);
+};
+
+export const loadConfig = async (): Promise<any | null> => {
+  try {
+    const response = await apiService.request<{ success: boolean; config: any }>('/api/config', {
+      method: 'GET',
+    });
+    return response.config || null;
+  } catch (error) {
+    // Se não conseguir carregar do backend, retorna null
+    console.error('[ApiService] Erro ao carregar configurações do backend:', error);
+    return null;
+  }
+};
+

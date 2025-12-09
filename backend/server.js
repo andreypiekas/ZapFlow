@@ -1313,3 +1313,66 @@ server.on('error', (error) => {
   process.exit(1);
 });
 
+// ============================================================================
+// Endpoints específicos para configurações (ApiConfig)
+// ============================================================================
+
+// Carregar configurações do usuário
+app.get('/api/config', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT data_value FROM user_data 
+       WHERE user_id = $1 AND data_type = 'config' AND data_key = 'apiConfig'`,
+      [req.user.id]
+    );
+
+    if (result.rows.length > 0) {
+      // Parse do JSON armazenado
+      const config = typeof result.rows[0].data_value === 'string' 
+        ? JSON.parse(result.rows[0].data_value)
+        : result.rows[0].data_value;
+      res.json({ success: true, config });
+    } else {
+      // Retorna configuração padrão se não existir
+      res.json({ 
+        success: true, 
+        config: {
+          baseUrl: '',
+          apiKey: '',
+          instanceName: 'zapflow',
+          isDemo: false,
+          googleClientId: '',
+          geminiApiKey: ''
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Erro ao carregar configurações:', error);
+    res.status(500).json({ error: 'Erro ao carregar configurações' });
+  }
+});
+
+// Salvar configurações do usuário
+app.put('/api/config', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { config } = req.body;
+
+    if (!config || typeof config !== 'object') {
+      return res.status(400).json({ error: 'config é obrigatório e deve ser um objeto' });
+    }
+
+    await pool.query(
+      `INSERT INTO user_data (user_id, data_type, data_key, data_value)
+       VALUES ($1, 'config', 'apiConfig', $2)
+       ON CONFLICT (user_id, data_type, data_key)
+       DO UPDATE SET data_value = $2, updated_at = CURRENT_TIMESTAMP`,
+      [req.user.id, JSON.stringify(config)]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erro ao salvar configurações:', error);
+    res.status(500).json({ error: 'Erro ao salvar configurações' });
+  }
+});
+
