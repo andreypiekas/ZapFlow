@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ApiConfig, User, UserRole } from '../types';
-import { Save, Server, Shield, Globe, User as UserIcon, Bell, Lock, RefreshCw, Database, HardDrive } from 'lucide-react';
+import { Save, Server, Shield, Globe, User as UserIcon, Bell, Lock, RefreshCw, Database, HardDrive, Sparkles } from 'lucide-react';
 import { fetchAllInstances, fetchInstanceDetails, InstanceInfo } from '../services/whatsappService';
 import { checkApiHealth, getAuthToken } from '../services/apiService';
 import { storageService } from '../services/storageService';
@@ -413,6 +413,22 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
                     />
                     <p className="text-xs text-slate-400 mt-1">
                         Necessário para sincronizar contatos. Crie em <a href="https://console.cloud.google.com/apis/credentials" target="_blank" className="text-blue-500 underline">Google Cloud Console</a>.
+                    </p>
+                  </div>
+
+                  <div className="col-span-1 md:col-span-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                      <Sparkles size={16} /> Google Gemini API Key
+                    </label>
+                    <input 
+                      type="password" 
+                      value={formData.geminiApiKey || ''}
+                      onChange={(e) => setFormData({...formData, geminiApiKey: e.target.value})}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="ex: AIzaSy..."
+                    />
+                    <p className="text-xs text-slate-400 mt-1">
+                        Necessário para respostas inteligentes de IA. Obtenha em <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-blue-500 underline">Google AI Studio</a>.
                     </p>
                   </div>
               </div>

@@ -967,7 +967,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const handleGenerateAI = async () => {
     if (!selectedChat) return;
     setIsGeneratingAI(true);
-    const suggestion = await generateSmartReply(selectedChat.messages, selectedChat.contactName);
+    const suggestion = await generateSmartReply(
+      selectedChat.messages, 
+      selectedChat.contactName,
+      apiConfig.geminiApiKey
+    );
     setInputText(suggestion);
     setIsGeneratingAI(false);
   };

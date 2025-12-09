@@ -1,35 +1,24 @@
 import { GoogleGenAI } from "@google/genai";
 import { Message } from "../types";
 
-// Função segura para acessar variáveis de ambiente sem quebrar o app no navegador
-const getApiKey = () => {
-  try {
-    // Verifica se process existe (Node.js/Webpack)
-    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-      return process.env.API_KEY;
-    }
-    // Verifica import.meta (Vite)
-    // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
-      // @ts-ignore
-      return import.meta.env.VITE_API_KEY;
-    }
-  } catch (error) {
-    // Silently fail
-  }
-  return '';
-};
-
-const apiKey = getApiKey();
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
-
 export const generateSmartReply = async (
   history: Message[],
-  contactName: string
+  contactName: string,
+  apiKey?: string
 ): Promise<string> => {
-  if (!ai) {
-    console.warn("API Key not found for Gemini. AI features disabled.");
-    return "Recurso de IA indisponível (Chave de API não configurada).";
+  // Se não tiver API key, retorna mensagem de erro
+  if (!apiKey || apiKey.trim() === '') {
+    console.warn("[GeminiService] API Key não configurada. Configure em Configurações > Google Gemini API Key.");
+    return "Recurso de IA indisponível (Chave de API não configurada). Configure em Configurações.";
+  }
+
+  // Cria instância do Gemini com a API key fornecida
+  let ai: GoogleGenAI;
+  try {
+    ai = new GoogleGenAI({ apiKey });
+  } catch (error) {
+    console.error("[GeminiService] Erro ao inicializar Gemini:", error);
+    return "Erro ao conectar com a IA. Verifique se a chave de API está correta.";
   }
 
   // Format history for context

@@ -30,7 +30,8 @@ const loadConfig = (): ApiConfig => {
         apiKey: '',
         instanceName: 'zapflow',
         isDemo: false,
-        googleClientId: ''
+        googleClientId: '',
+        geminiApiKey: ''
       };
     }
     
@@ -55,7 +56,8 @@ const loadConfig = (): ApiConfig => {
     apiKey: '',
     instanceName: 'zapflow',
     isDemo: false,
-    googleClientId: ''
+    googleClientId: '',
+    geminiApiKey: ''
   };
 };
 
