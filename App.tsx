@@ -1110,6 +1110,10 @@ const App: React.FC = () => {
                         let finalDepartmentId = wasReopened ? null : existingChat.departmentId;
                         let finalStatusForDept = finalStatus;
                         
+                        // Preserva status 'open' se o chat já está atribuído e em 'open'
+                        // Isso evita que chats em "A Fazer" voltem para "Aguardando" durante sync
+                        const isAssignedAndOpen = existingChat.status === 'open' && existingChat.assignedTo;
+                        
                         if (hasNewUserMessages && existingChat.departmentId === null && departments.length > 0) {
                             // Encontra a última mensagem nova do usuário
                             const newUserMessages = mergedMessages.filter(msg => {
@@ -1132,7 +1136,13 @@ const App: React.FC = () => {
                                 if (selectedDeptId) {
                                     // Usuário selecionou um setor válido
                                     finalDepartmentId = selectedDeptId;
-                                    finalStatusForDept = 'pending'; // Vai para triagem do setor
+                                    // Só muda para 'pending' se o chat não estiver atribuído
+                                    // Se já estiver 'open' e atribuído, mantém 'open' (evita voltar para "Aguardando")
+                                    if (isAssignedAndOpen) {
+                                        finalStatusForDept = 'open'; // Mantém 'open' se já está atribuído
+                                    } else {
+                                        finalStatusForDept = 'pending'; // Vai para triagem do setor
+                                    }
                                     // Log removido para produção - muito verboso
                                     // console.log(`[App] ✅ Setor selecionado pelo usuário via sync: ${departments.find(d => d.id === selectedDeptId)?.name}`);
                                     
@@ -1220,6 +1230,12 @@ const App: React.FC = () => {
                                     }
                                 }
                             }
+                        }
+                        
+                        // Garante que chats atribuídos e em 'open' não voltem para 'pending' durante sync
+                        // Isso previne que chats em "A Fazer" voltem para "Aguardando"
+                        if (isAssignedAndOpen && finalStatusForDept === 'pending') {
+                            finalStatusForDept = 'open';
                         }
                         
                         // Só atualiza lastMessageTime se realmente houver nova mensagem (não apenas reordenação)
@@ -1690,10 +1706,13 @@ const App: React.FC = () => {
                                                     
                                                     if (selectedDeptId) {
                                                         // Usuário selecionou um setor válido
+                                                        // Só muda para 'pending' se o chat não estiver atribuído
+                                                        // Se já estiver 'open' e atribuído, mantém 'open' (evita voltar para "Aguardando")
+                                                        const shouldBePending = !(updatedChat.status === 'open' && updatedChat.assignedTo);
                                                         updatedChat = {
                                                             ...updatedChat,
                                                             departmentId: selectedDeptId,
-                                                            status: 'pending', // Vai para triagem do setor
+                                                            status: shouldBePending ? 'pending' : 'open', // Vai para triagem do setor ou mantém 'open' se atribuído
                                                             awaitingDepartmentSelection: false // Não está mais aguardando seleção
                                                         };
                                                         // Log removido para produção - muito verboso
