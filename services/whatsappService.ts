@@ -673,80 +673,82 @@ export const sendRealContact = async (
   const cleanContactPhoneNumber = cleanContactPhone(contactPhone);
 
   try {
-    // Gera vCard format
+    // Gera vCard format com número no formato internacional (+55...)
+    // WhatsApp precisa do formato internacional com + para reconhecer o contato
+    const vcardPhoneNumber = cleanContactPhoneNumber.startsWith('+') 
+      ? cleanContactPhoneNumber 
+      : `+${cleanContactPhoneNumber}`;
+    
     let vcard = `BEGIN:VCARD\n`;
     vcard += `VERSION:3.0\n`;
     vcard += `FN:${contactName}\n`;
     vcard += `N:${contactName};;;;\n`;
-    vcard += `TEL;TYPE=CELL:${cleanContactPhoneNumber}\n`;
+    vcard += `TEL;TYPE=CELL:${vcardPhoneNumber}\n`;
     if (contactEmail) {
       vcard += `EMAIL:${contactEmail}\n`;
     }
     vcard += `END:VCARD`;
 
-    // Payload para Evolution API - sendContact
-    // Formato 1: contact deve ser um ARRAY com fullName e phoneNumber
-    const payloadContact: any = {
+    // PRIORIDADE 1: Tenta enviar via vCard diretamente (formato mais compatível)
+    // Formato vCard é o padrão do WhatsApp e tem melhor reconhecimento
+    let payloadVCard = {
       number: cleanPhone,
-      contact: [
-        {
-          fullName: contactName,
-          phoneNumber: cleanContactPhoneNumber
-        }
-      ],
+      vcard: vcard,
       delay: 1200
     };
 
-    // Tenta endpoint sendContact primeiro
     let response = await fetch(`${config.baseUrl}/message/sendContact/${target}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'apikey': getAuthKey(config)
       },
-      body: JSON.stringify(payloadContact)
+      body: JSON.stringify(payloadVCard)
     });
 
-    // Se não funcionar, tenta com vCard (formato padrão WhatsApp)
+    // PRIORIDADE 2: Se vCard falhar, tenta formato contact array
     if (!response.ok) {
       const errorText = await response.text();
-      console.log(`[sendRealContact] sendContact falhou (${response.status}), tentando vCard:`, errorText);
+      console.log(`[sendRealContact] sendContact com vCard falhou (${response.status}), tentando formato contact array:`, errorText);
       
-      // Formato 2: Usando vCard diretamente (formato padrão WhatsApp)
-      const payloadVCard = {
+      const payloadContact: any = {
         number: cleanPhone,
-        vcard: vcard,
+        contact: [
+          {
+            fullName: contactName,
+            phoneNumber: cleanContactPhoneNumber
+          }
+        ],
         delay: 1200
       };
 
-      // Tenta endpoint sendContact com vCard
       response = await fetch(`${config.baseUrl}/message/sendContact/${target}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'apikey': getAuthKey(config)
         },
-        body: JSON.stringify(payloadVCard)
+        body: JSON.stringify(payloadContact)
       });
+    }
 
-      // Se ainda não funcionar, tenta sendText com vcard (fallback)
-      // IMPORTANTE: sendText requer campo "text" mesmo com vcard
-      if (!response.ok) {
-        const payloadVCardWithText = {
-          number: cleanPhone,
-          text: `📇 ${contactName}`, // Campo obrigatório para sendText
-          vcard: vcard,
-          delay: 1200
-        };
-        response = await fetch(`${config.baseUrl}/message/sendText/${target}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': getAuthKey(config)
-          },
-          body: JSON.stringify(payloadVCardWithText)
-        });
-      }
+    // PRIORIDADE 3: Fallback final - sendText com vCard (não recomendado, mas pode funcionar)
+    if (!response.ok) {
+      console.log(`[sendRealContact] sendContact falhou, tentando sendText com vCard como último recurso`);
+      const payloadVCardWithText = {
+        number: cleanPhone,
+        text: `📇 ${contactName}`, // Campo obrigatório para sendText
+        vcard: vcard,
+        delay: 1200
+      };
+      response = await fetch(`${config.baseUrl}/message/sendText/${target}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': getAuthKey(config)
+        },
+        body: JSON.stringify(payloadVCardWithText)
+      });
     }
     
     if (!response.ok) {
