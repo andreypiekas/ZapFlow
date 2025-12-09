@@ -103,17 +103,17 @@ const loginLimiter = rateLimit({
   },
   handler: (req, res) => {
     const retryAfter = Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000);
+    const ip = req.ip || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
+    const username = req.body?.username || 'unknown';
+    
+    // Log de tentativas bloqueadas para auditoria (movido para dentro do handler - onLimitReached foi removido no v7)
+    console.warn(`[SECURITY] Rate limit atingido para login - IP: ${ip}, Username: ${username}, Tentativas: ${req.rateLimit.totalHits}`);
+    
     res.status(429).json({
       error: 'Muitas tentativas de login. Por segurança, sua conta foi temporariamente bloqueada.',
       retryAfter: `${Math.ceil(retryAfter / 60)} minutos`,
       message: 'Por favor, aguarde antes de tentar novamente. Se você esqueceu sua senha, entre em contato com o administrador.'
     });
-  },
-  // Log de tentativas bloqueadas para auditoria
-  onLimitReached: (req, res, options) => {
-    const ip = req.ip || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
-    const username = req.body?.username || 'unknown';
-    console.warn(`[SECURITY] Rate limit atingido para login - IP: ${ip}, Username: ${username}, Tentativas: ${req.rateLimit.totalHits}`);
   }
 });
 
