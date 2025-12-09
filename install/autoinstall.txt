@@ -158,7 +158,7 @@ sudo -u postgres PGPORT=54321 psql -c "CREATE USER zapflow_user WITH PASSWORD 'z
 sudo -u postgres PGPORT=54321 psql -c "GRANT ALL PRIVILEGES ON DATABASE zapflow TO zapflow_user;" 2>/dev/null || true
 sudo -u postgres PGPORT=54321 psql -c "ALTER USER zapflow_user CREATEDB;" 2>/dev/null || true
 
-echo -e "${BLUE}[7/8] Configurando Backend API...${NC}"
+echo -e "${BLUE}[7/9] Configurando Backend API...${NC}"
 cd backend 2>/dev/null || mkdir -p backend && cd backend
 
 # Criar package.json se não existir
@@ -181,7 +181,8 @@ if [ ! -f "package.json" ]; then
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "express-rate-limit": "^7.1.5"
   }
 }
 EOL
@@ -225,13 +226,30 @@ else
     BACKEND_AVAILABLE=true
     mkdir -p scripts
     
-    # Executar migração
-    echo "Executando migração do banco de dados..."
+    # Executar migração principal
+    echo "Executando migração principal do banco de dados..."
     npm run migrate || {
-        echo "⚠️  Erro na migração. Verificando conexão com PostgreSQL..."
+        echo "⚠️  Erro na migração principal. Verificando conexão com PostgreSQL..."
         echo "Certifique-se de que o PostgreSQL está rodando e as credenciais estão corretas."
         BACKEND_AVAILABLE=false
     }
+    
+    # Executar migrações adicionais (se os scripts existirem)
+    if [ "$BACKEND_AVAILABLE" = true ]; then
+        echo "Executando migrações adicionais..."
+        
+        # Adicionar campo department_id na tabela users (se não existir)
+        if [ -f "scripts/add-department-id-to-users.js" ]; then
+            echo "  - Adicionando campo department_id..."
+            node scripts/add-department-id-to-users.js 2>/dev/null || echo "    Campo department_id já existe ou erro (pode ignorar)"
+        fi
+        
+        # Corrigir data_keys de chats (opcional)
+        if [ -f "scripts/fix-chat-data-keys.js" ]; then
+            echo "  - Corrigindo data_keys de chats..."
+            node scripts/fix-chat-data-keys.js 2>/dev/null || echo "    Nenhum chat para corrigir ou erro (pode ignorar)"
+        fi
+    fi
 fi
 
 cd ..
@@ -380,9 +398,15 @@ echo -e "🔌 Evolution API: http://${SERVER_IP}:8080"
 echo -e "💾 Backend API: http://${SERVER_IP}:3001"
 echo ""
 echo -e "${BLUE}Credenciais padrão do admin:${NC}"
-echo -e "   Username: ${GREEN}admin${NC}"
-echo -e "   Password: ${GREEN}admin123${NC}"
+echo -e "   Username: ${GREEN}admin@piekas.com${NC}"
+echo -e "   Password: ${GREEN}123${NC}"
 echo -e "   ${BLUE}⚠️  ALTERE A SENHA EM PRODUÇÃO!${NC}"
+echo ""
+echo -e "${BLUE}Próximos passos após login:${NC}"
+echo -e "   1. Criar departamentos em ${YELLOW}Configurações > Departamentos${NC}"
+echo -e "   2. Criar usuários e atribuir a departamentos em ${YELLOW}Configurações > Usuários${NC}"
+echo -e "   3. Configurar Gemini API Key em ${YELLOW}Configurações > Integração Google${NC} (opcional)"
+echo -e "   4. Configurar Chatbot em ${YELLOW}Configurações > Chatbot${NC} (opcional)"
 echo ""
 echo -e "${BLUE}Comandos úteis:${NC}"
 echo -e "   ${YELLOW}pm2 status${NC}                    - Ver status de todos os serviços"
@@ -392,8 +416,8 @@ echo -e "   ${YELLOW}pm2 restart zapflow-backend${NC}  - Reiniciar backend"
 echo -e "   ${YELLOW}pm2 restart zapflow-front${NC}    - Reiniciar frontend"
 echo ""
 echo -e "${BLUE}Testar APIs:${NC}"
-echo -e "   ${YELLOW}curl http://${SERVER_IP}:3001/api/health${NC}     - Backend API"
-echo -e "   ${YELLOW}curl http://${SERVER_IP}:3001/${NC}              - Backend root"
+echo -e "   ${YELLOW}curl http://${SERVER_IP}:3001/api/health${NC}     - Backend API Health Check"
+echo -e "   ${YELLOW}curl -X POST http://${SERVER_IP}:3001/api/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"admin@piekas.com\",\"password\":\"123\"}'${NC} - Teste de Login"
 echo -e "   ${YELLOW}curl http://${SERVER_IP}:8080/instance/fetchInstances${NC} - Evolution API"
 echo ""
 echo -e "${BLUE}Se a API backend não estiver acessível:${NC}"
@@ -401,3 +425,18 @@ echo -e "   1. Verifique o firewall (já configurado acima)"
 echo -e "   2. Verifique logs: ${YELLOW}pm2 logs zapflow-backend${NC}"
 echo -e "   3. Reinicie o backend: ${YELLOW}pm2 restart zapflow-backend${NC}"
 echo -e "   4. Verifique se está escutando no IP correto: ${YELLOW}netstat -tlnp | grep 3001${NC}"
+echo ""
+echo -e "${BLUE}Documentação completa:${NC}"
+echo -e "   📄 ${YELLOW}INSTALACAO_COMPLETA.md${NC} - Guia completo com todas as funcionalidades"
+echo -e "   📄 ${YELLOW}INSTALACAO_BACKEND.md${NC} - Guia específico do backend"
+echo -e "   📄 ${YELLOW}backend/README.md${NC} - Documentação da API"
+echo ""
+echo -e "${BLUE}Funcionalidades implementadas:${NC}"
+echo -e "   ✅ Atribuição automática de chats ao operador do departamento"
+echo -e "   ✅ Sistema de notificações (operadores e administradores)"
+echo -e "   ✅ Persistência completa no PostgreSQL"
+echo -e "   ✅ Validação de números (11+ dígitos)"
+echo -e "   ✅ Status persistente de chats"
+echo -e "   ✅ Socket.IO para mensagens em tempo real"
+echo -e "   ✅ Google Gemini AI para respostas inteligentes"
+echo -e "   ✅ Chatbot com horários de funcionamento"
