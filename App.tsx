@@ -174,10 +174,11 @@ interface Notification {
 }
 
 const App: React.FC = () => {
-  const [currentUser, setCurrentUser] = useState<User | null>(loadUserSession);
+  const [currentUser, setCurrentUser] = useState<User | null>(loadUserSession());
   const [currentView, setCurrentView] = useState<ViewState>(loadViewStateFromStorage());
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(loadSidebarStateFromStorage());
+  const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
   
   // Carrega chats do localStorage se existir, senão usa INITIAL_CHATS
   const loadChatsFromStorage = (): Chat[] => {
