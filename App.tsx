@@ -737,26 +737,22 @@ const App: React.FC = () => {
                                         await apiService.updateChatStatus(realChat.id, 'pending', undefined, null);
                                         console.log(`[App] ✅ [DEBUG] syncChats: Chat ${realChat.id} reaberto e salvo no banco`);
                                         
-                                        // Envia mensagem de saudação padrão
-                                        const chatbotConfig = await storageService.load<ChatbotConfig>('chatbotConfig');
-                                        if (chatbotConfig && chatbotConfig.isEnabled && chatbotConfig.greetingMessage) {
-                                            // Verifica se já foi enviada (para evitar reenvio)
-                                            const hasGreeting = realChat.messages.some((msg: Message) =>
-                                                msg.sender === 'system' && msg.content?.includes('greeting_sent')
-                                            );
-                                            
-                                            if (!hasGreeting) {
-                                                const { sendGreetingMessage } = await import('./services/chatbotService');
-                                                const success = await sendGreetingMessage(apiConfig, chatbotConfig, {
-                                                    ...realChat,
-                                                    status: 'pending'
-                                                });
+                                        // Verifica se precisa enviar mensagem de seleção de departamento
+                                        const chatHasDepartment = dbChat?.departmentId || existingChat?.departmentId;
+                                        const departmentSelectionSent = dbChat?.departmentSelectionSent || existingChat?.departmentSelectionSent;
+                                        
+                                        if (!chatHasDepartment && !departmentSelectionSent && departments.length > 0) {
+                                            // Envia mensagem de seleção de departamento
+                                            const contactNumber = realChat.contactNumber || existingChat.contactNumber;
+                                            if (contactNumber) {
+                                                console.log(`[App] 📤 [DEBUG] syncChats: Enviando mensagem de seleção de departamento para ${realChat.id}`);
+                                                const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, departments);
                                                 
-                                                if (success) {
+                                                if (sent) {
                                                     // Adiciona mensagem de sistema
                                                     const systemMessage: Message = {
-                                                        id: `sys_chatbot_reopen_sync_${Date.now()}`,
-                                                        content: 'greeting_sent - Saudação automática enviada (chat reaberto)',
+                                                        id: `sys_dept_selection_reopen_${Date.now()}`,
+                                                        content: 'department_selection_sent - Mensagem de seleção de departamento enviada (chat reaberto)',
                                                         sender: 'system',
                                                         timestamp: new Date(),
                                                         status: MessageStatus.READ,
@@ -769,8 +765,53 @@ const App: React.FC = () => {
                                                         assignedTo: undefined,
                                                         departmentId: null,
                                                         endedAt: undefined,
+                                                        departmentSelectionSent: true,
+                                                        awaitingDepartmentSelection: true,
                                                         messages: [...realChat.messages, systemMessage]
                                                     });
+                                                    console.log(`[App] ✅ [DEBUG] syncChats: Mensagem de seleção de departamento enviada para ${realChat.id}`);
+                                                } else {
+                                                    console.error(`[App] ❌ [DEBUG] syncChats: Falha ao enviar mensagem de seleção de departamento para ${realChat.id}`);
+                                                }
+                                            } else {
+                                                console.warn(`[App] ⚠️ [DEBUG] syncChats: Não foi possível enviar mensagem de seleção - número de contato não encontrado para ${realChat.id}`);
+                                            }
+                                        } else if (chatHasDepartment) {
+                                            // Se já tem departamento, pode enviar mensagem de saudação se configurado
+                                            const chatbotConfig = await storageService.load<ChatbotConfig>('chatbotConfig');
+                                            if (chatbotConfig && chatbotConfig.isEnabled && chatbotConfig.greetingMessage) {
+                                                // Verifica se já foi enviada (para evitar reenvio)
+                                                const hasGreeting = realChat.messages.some((msg: Message) =>
+                                                    msg.sender === 'system' && msg.content?.includes('greeting_sent')
+                                                );
+                                                
+                                                if (!hasGreeting) {
+                                                    const { sendGreetingMessage } = await import('./services/chatbotService');
+                                                    const success = await sendGreetingMessage(apiConfig, chatbotConfig, {
+                                                        ...realChat,
+                                                        status: 'pending'
+                                                    });
+                                                    
+                                                    if (success) {
+                                                        // Adiciona mensagem de sistema
+                                                        const systemMessage: Message = {
+                                                            id: `sys_chatbot_reopen_sync_${Date.now()}`,
+                                                            content: 'greeting_sent - Saudação automática enviada (chat reaberto)',
+                                                            sender: 'system',
+                                                            timestamp: new Date(),
+                                                            status: MessageStatus.READ,
+                                                            type: 'text'
+                                                        };
+                                                        
+                                                        handleUpdateChat({
+                                                            ...realChat,
+                                                            status: 'pending',
+                                                            assignedTo: undefined,
+                                                            departmentId: dbChat?.departmentId || existingChat?.departmentId || null,
+                                                            endedAt: undefined,
+                                                            messages: [...realChat.messages, systemMessage]
+                                                        });
+                                                    }
                                                 }
                                             }
                                         }
