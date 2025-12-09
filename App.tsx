@@ -2080,11 +2080,20 @@ const App: React.FC = () => {
     // Compara tanto por ID quanto por email (para garantir que funcione mesmo se IDs forem diferentes)
     const isCurrentUser = currentUser && (
       currentUser.id === updatedUser.id || 
-      currentUser.email === updatedUser.email ||
-      currentUser.username === updatedUser.email
+      currentUser.id === updatedUser.id.toString() ||
+      updatedUser.id === currentUser.id.toString() ||
+      (currentUser.email && updatedUser.email && currentUser.email.toLowerCase() === updatedUser.email.toLowerCase())
     );
     
     if (isCurrentUser) {
+      console.log('[handleUpdateUser] ✅ Atualizando currentUser:', { 
+        currentUserId: currentUser.id, 
+        updatedUserId: updatedUser.id, 
+        currentUserEmail: currentUser.email,
+        updatedUserEmail: updatedUser.email,
+        newName: updatedUser.name 
+      });
+      
       // Atualiza o currentUser imediatamente
       setCurrentUser(updatedUser);
       
@@ -2092,6 +2101,7 @@ const App: React.FC = () => {
       try {
         const result = await apiService.updateUserProfile(updatedUser.name, updatedUser.email);
         if (result.success && result.user) {
+          console.log('[handleUpdateUser] ✅ Nome atualizado no banco de dados:', result.user.name);
           // Atualiza o currentUser com os dados retornados da API
           const updatedCurrentUser: User = {
             ...currentUser,
@@ -2103,11 +2113,20 @@ const App: React.FC = () => {
           setCurrentUser(updatedCurrentUser);
           // Salva no localStorage
           localStorage.setItem('zapflow_user', JSON.stringify(updatedCurrentUser));
+        } else {
+          console.warn('[handleUpdateUser] ⚠️ Falha ao atualizar no banco de dados, mas nome foi atualizado localmente');
         }
       } catch (error) {
         console.error('[App] Erro ao atualizar perfil do usuário na API:', error);
         // Continua mesmo se a API falhar, pois já atualizou o estado local
       }
+    } else {
+      console.log('[handleUpdateUser] ⚠️ Usuário atualizado não é o currentUser:', {
+        currentUserId: currentUser?.id,
+        updatedUserId: updatedUser.id,
+        currentUserEmail: currentUser?.email,
+        updatedUserEmail: updatedUser.email
+      });
     }
   };
   const handleDeleteUser = (id: string) => setUsers(prevUsers => prevUsers.filter(u => u.id !== id));
