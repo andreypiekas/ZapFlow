@@ -1812,7 +1812,7 @@ const App: React.FC = () => {
                                                 let updatedChat = { ...chat };
                                                 
                                             // Processa avaliação se chat está fechado e aguardando avaliação
-                                            if (chat.status === 'closed' && mapped.sender === 'user' && chat.awaitingRating) {
+                                            if (wasClosed && isUserMessage && chat.awaitingRating) {
                                                     const messageContent = mapped.content.trim();
                                                     const isRatingResponse = /^[1-5]$/.test(messageContent);
                                                     
@@ -1825,8 +1825,16 @@ const App: React.FC = () => {
                                                         awaitingRating: false,
                                                         status: 'closed' // Mantém fechado
                                                     });
+                                                    // Se é avaliação, não reabre - retorna sem processar reabertura
+                                                    return {
+                                                        ...chat,
+                                                        messages: updatedMessages,
+                                                        lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
+                                                        lastMessageTime: mapped.timestamp,
+                                                        unreadCount: mapped.sender === 'user' ? (chat.unreadCount || 0) + 1 : chat.unreadCount
+                                                    };
                                                 }
-                                                // Se não é avaliação, NÃO reabre automaticamente - apenas adiciona mensagem
+                                                // Se não é avaliação, continua para reabertura (lógica abaixo)
                                             }
                                             
                                             // Processa seleção de setores apenas se não estiver no banco (novos chats)
