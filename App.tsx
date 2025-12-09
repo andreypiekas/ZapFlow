@@ -1876,14 +1876,29 @@ const App: React.FC = () => {
                                                 }
                                             
                                             // PRIORIDADE ABSOLUTA: Status do banco NUNCA é alterado via Socket.IO
-                                            // Carrega status do banco antes de retornar
+                                            // EXCEÇÃO: Se chat estava fechado e recebeu mensagem do cliente, reabre para 'pending'
                                             let finalStatus = updatedChat.status;
                                             let finalAssignedTo = updatedChat.assignedTo;
                                             let finalDepartmentId = updatedChat.departmentId;
                                             
-                                            // Tenta carregar do banco (síncrono - usa estado atual)
-                                            // Nota: Para garantir 100%, seria necessário buscar do banco, mas isso seria muito custoso
-                                            // Por isso, confiamos que o status já está correto no estado atual (carregado do banco)
+                                            // Se chat estava fechado e recebeu mensagem do cliente, atualiza status para pending
+                                            if (wasClosed && isUserMessage) {
+                                                finalStatus = 'pending';
+                                                finalAssignedTo = undefined;
+                                                finalDepartmentId = null;
+                                                
+                                                // Salva no banco via handleUpdateChat (async, não bloqueia retorno)
+                                                setTimeout(() => {
+                                                    handleUpdateChat({
+                                                        ...updatedChat,
+                                                        status: finalStatus,
+                                                        assignedTo: finalAssignedTo,
+                                                        departmentId: finalDepartmentId,
+                                                        endedAt: undefined,
+                                                        messages: updatedMessages
+                                                    });
+                                                }, 100);
+                                            }
                                                 
                                                 return {
                                                     ...updatedChat,
@@ -1891,10 +1906,11 @@ const App: React.FC = () => {
                                                     lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
                                                     lastMessageTime: mapped.timestamp,
                                                     unreadCount: mapped.sender === 'user' ? (updatedChat.unreadCount || 0) + 1 : updatedChat.unreadCount,
-                                                // Status NUNCA é alterado via Socket.IO - apenas via handleUpdateChat
-                                                status: finalStatus,
-                                                assignedTo: finalAssignedTo,
-                                                departmentId: finalDepartmentId
+                                                    // Status: se estava fechado e recebeu mensagem, muda para pending (será salvo no banco)
+                                                    status: finalStatus,
+                                                    assignedTo: finalAssignedTo,
+                                                    departmentId: finalDepartmentId,
+                                                    endedAt: wasClosed && isUserMessage ? undefined : updatedChat.endedAt
                                                 };
                                             } else {
                                             // Log removido para produção - muito verboso (mantém apenas warnings importantes)
