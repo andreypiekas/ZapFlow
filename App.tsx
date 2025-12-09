@@ -311,8 +311,6 @@ const App: React.FC = () => {
       // Salva no localStorage para compatibilidade
       try {
         // Salva usuário apenas se não estiver configurado para usar apenas PostgreSQL
-        const { SecurityService } = require('./services/securityService');
-        const { storageService } = require('./services/storageService');
         if (!storageService.getUseOnlyPostgreSQL()) {
           localStorage.setItem('zapflow_user', SecurityService.encrypt(JSON.stringify(currentUser)));
         }
