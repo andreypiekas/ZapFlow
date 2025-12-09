@@ -129,6 +129,7 @@
 - [ ] **Chats sem mensagens** - API não retorna mensagens mesmo com `include: ['messages']`
 - [ ] **Erro 413 Payload Too Large** - já aumentado para 50MB, mas pode precisar de otimização
 - [ ] **Processamento de mensagens** - melhorar fallback quando API não retorna formato esperado
+- [ ] **Envio de contatos** - Contato está sendo enviado mas WhatsApp mostra "convidar para WhatsApp" ao invés de reconhecer como contato existente. Testar diferentes formatos de número no vCard (com/sem +, com/sem código do país) e verificar se Evolution API requer formato específico para reconhecimento
 
 #### Melhorias de UX
 
