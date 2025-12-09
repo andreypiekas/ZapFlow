@@ -466,10 +466,16 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
   const cleanPhone = formatPhoneForApi(phone);
 
   try {
+    // Valida que o texto não está vazio
+    if (!text || text.trim().length === 0) {
+      console.error(`[sendRealMessage] Erro: texto vazio para ${cleanPhone}`);
+      return false;
+    }
+
     // Payload simplificado para máxima compatibilidade com v2.x
     const payload: any = {
         number: cleanPhone,
-        text: text,
+        text: text.trim(),
         delay: 1200,
         linkPreview: false
     };
@@ -658,8 +664,10 @@ export const sendRealContact = async (
     vcard += `END:VCARD`;
 
     // Payload para Evolution API
+    // IMPORTANTE: A Evolution API exige o campo "text" mesmo para sendContact
     const payload: any = {
       number: cleanPhone,
+      text: `📇 ${contactName}`, // Campo obrigatório pela API
       contacts: {
         displayName: contactName,
         contacts: [
@@ -686,6 +694,7 @@ export const sendRealContact = async (
     if (!response.ok) {
       const payloadVCard = {
         number: cleanPhone,
+        text: `📇 ${contactName}`, // Campo obrigatório pela API
         vcard: vcard,
         delay: 1200
       };
