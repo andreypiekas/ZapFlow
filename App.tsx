@@ -234,12 +234,8 @@ const App: React.FC = () => {
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  // Persiste configurações usando storageService (API + localStorage)
-  useEffect(() => {
-    storageService.save('config', apiConfig).catch(err => {
-      console.error('[App] Erro ao salvar configurações:', err);
-    });
-  }, [apiConfig]);
+  // Configurações são salvas apenas via handleSaveConfig (endpoint /api/config)
+  // Não salvar automaticamente aqui para evitar conflitos com configurações globais
 
   // Persiste chats usando storageService
   useEffect(() => {
@@ -428,7 +424,8 @@ const App: React.FC = () => {
 
     const loadDataFromAPI = async () => {
       try {
-        // Tenta carregar cada tipo de dado da API
+        // Carrega configurações globais do endpoint específico /api/config
+        // Outros dados usam o endpoint genérico /api/data
         const [
           apiConfigData, 
           departmentsData, 
@@ -441,7 +438,7 @@ const App: React.FC = () => {
           contactsData,
           chatsData
         ] = await Promise.all([
-          storageService.load<ApiConfig>('config'),
+          loadConfigFromBackend(), // Usa endpoint específico /api/config
           storageService.load<Department[]>('departments'),
           storageService.load<QuickReply[]>('quickReplies'),
           storageService.load<Workflow[]>('workflows'),
@@ -465,6 +462,7 @@ const App: React.FC = () => {
             googleClientId: apiConfigData.googleClientId || '',
             geminiApiKey: apiConfigData.geminiApiKey || ''
           });
+          console.log('[App] ✅ Configurações carregadas do banco de dados (useEffect)');
         }
         if (departmentsData && departmentsData.length > 0) {
           setDepartments(departmentsData);
