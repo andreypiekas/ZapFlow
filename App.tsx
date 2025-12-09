@@ -2966,7 +2966,11 @@ const App: React.FC = () => {
           setCurrentUser(updatedCurrentUser);
           // Salva no localStorage apenas se não estiver configurado para usar apenas PostgreSQL
           if (!storageService.getUseOnlyPostgreSQL()) {
-            securityService.saveSensitiveData('user', updatedCurrentUser);
+            try {
+              localStorage.setItem('zapflow_user', SecurityService.encrypt(JSON.stringify(updatedCurrentUser)));
+            } catch (e) {
+              console.error('[App] Erro ao salvar usuário no localStorage:', e);
+            }
           }
         }
       } else {

@@ -321,8 +321,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
         // 2. Tab Logic
         const isClosed = chat.status === 'closed';
-        const hasMessages = chat.messages.length > 0;
-        const lastSender = hasMessages ? chat.messages[chat.messages.length - 1].sender : 'system';
+        const hasMessages = chat.messages && Array.isArray(chat.messages) && chat.messages.length > 0;
+        const lastSender = hasMessages && chat.messages ? chat.messages[chat.messages.length - 1].sender : 'system';
         
         // Logic: Agent replied = Waiting. User replied (or new) = To Do.
         const isWaitingForCustomer = lastSender === 'agent' || lastSender === 'system';
@@ -374,7 +374,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   useEffect(() => {
     if (selectedChatId) {
       const updatedChat = chats.find(c => c.id === selectedChatId);
-      if (updatedChat && updatedChat.messages.length !== selectedChat?.messages.length) {
+      const updatedMessages = updatedChat?.messages || [];
+      const selectedMessages = selectedChat?.messages || [];
+      if (updatedChat && updatedMessages.length !== selectedMessages.length) {
         // Chat foi atualizado com novas mensagens - força re-render
         // O selectedChat já é derivado, então isso deve funcionar automaticamente
         // Mas garantimos que o scroll aconteça
