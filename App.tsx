@@ -1473,22 +1473,22 @@ const App: React.FC = () => {
                         
                         if (mapped) {
                             setChats(currentChats => {
-                                    let chatUpdated = false;
-                                    const updatedChats = currentChats.map(chat => {
-                                        // Encontra o chat pelo JID
-                                        const chatJid = normalizeJid(chat.id);
-                                        const messageJid = normalizeJid(remoteJid);
-                                        
-                                        // Comparação mais flexível de JIDs
-                                        const chatNumber = chat.contactNumber?.replace(/\D/g, '') || '';
-                                        const messageNumber = messageJid.split('@')[0].replace(/\D/g, '');
-                                        const chatNumberMatch = chatNumber && messageNumber && (
-                                            chatNumber === messageNumber || 
-                                            chatNumber.endsWith(messageNumber.slice(-8)) ||
-                                            messageNumber.endsWith(chatNumber.slice(-8))
-                                        );
-                                        
-                                        if (chatJid === messageJid || chatNumberMatch) {
+                                let chatUpdated = false;
+                                const updatedChats = currentChats.map(chat => {
+                                    // Encontra o chat pelo JID
+                                    const chatJid = normalizeJid(chat.id);
+                                    const messageJid = normalizeJid(remoteJid);
+                                    
+                                    // Comparação mais flexível de JIDs
+                                    const chatNumber = chat.contactNumber?.replace(/\D/g, '') || '';
+                                    const messageNumber = messageJid.split('@')[0].replace(/\D/g, '');
+                                    const chatNumberMatch = chatNumber && messageNumber && (
+                                        chatNumber === messageNumber || 
+                                        chatNumber.endsWith(messageNumber.slice(-8)) ||
+                                        messageNumber.endsWith(chatNumber.slice(-8))
+                                    );
+                                    
+                                    if (chatJid === messageJid || chatNumberMatch) {
                                             // Para mensagens enviadas (fromMe: true), tenta atualizar mensagem local existente
                                             // ao invés de adicionar uma nova (evita duplicação)
                                             let messageIndex = -1;
@@ -1777,16 +1777,16 @@ const App: React.FC = () => {
                                                 // Log removido para produção - muito verboso (mantém apenas warnings importantes)
                                                 // console.log(`[App] ⚠️ Mensagem já existe no chat ${chat.contactName}`);
                                             }
-                                        }
-                                        return chat;
-                                    });
-                                    
-                                    if (chatUpdated) {
-                                        console.log('[App] ✅ Chats atualizados com nova mensagem via Socket.IO');
                                     }
-                                    
-                                    return updatedChats;
+                                    return chat;
                                 });
+                                
+                                if (chatUpdated) {
+                                    console.log('[App] ✅ Chats atualizados com nova mensagem via Socket.IO');
+                                }
+                                
+                                return updatedChats;
+                            });
                             }
                         }
                     }
