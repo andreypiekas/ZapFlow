@@ -1309,7 +1309,8 @@ const App: React.FC = () => {
                         // Se o chat está atribuído e em 'open' no banco, SEMPRE mantém esses valores
                         // Isso previne que chats em "A Fazer" voltem para "Aguardando" após reload
                         let finalAssignedTo = existingChat.assignedTo;
-                        let finalStatus = finalStatusForDept;
+                        // finalStatus já foi declarado acima, apenas atualiza o valor
+                        finalStatus = finalStatusForDept;
                         let finalDepartmentIdFinal = finalDepartmentId;
                         
                         // Se o chat está atribuído no banco, SEMPRE preserva status e assignedTo do banco
