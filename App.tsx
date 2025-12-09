@@ -1436,22 +1436,72 @@ const App: React.FC = () => {
             ws.onmessage = (event) => {
                 try {
                     let data: any;
+                    let socketIOPacketType: number | null = null;
+                    
                     // Tenta parsear como JSON, se falhar trata como string
                     if (typeof event.data === 'string') {
-                        try {
-                            data = JSON.parse(event.data);
-                        } catch (e) {
-                            // Não loga dados base64 completos (imagens) - apenas preview
-                            // Filtra strings base64 muito longas (imagens) para não poluir console
-                            if (event.data.length > 1000 || event.data.includes('iVBORw0KGgo') || event.data.includes('data:image')) {
-                                console.log('[App] 📨 Mensagem WebSocket não é JSON (dados binários/base64, tamanho:', event.data.length, 'bytes)');
-                            } else {
-                                const preview = event.data.length > 200 
-                                    ? event.data.substring(0, 200) + '...' 
-                                    : event.data.substring(0, 100);
-                                console.log('[App] 📨 Mensagem WebSocket não é JSON:', preview);
+                        // Verifica se é mensagem Socket.IO (começa com número: 0=CONNECT, 2=EVENT, etc.)
+                        const socketIOMatch = event.data.match(/^(\d+)(.*)$/);
+                        if (socketIOMatch) {
+                            socketIOPacketType = parseInt(socketIOMatch[1]);
+                            const jsonPart = socketIOMatch[2];
+                            
+                            // Tipo 0 = CONNECT (handshake inicial) - apenas confirma conexão
+                            if (socketIOPacketType === 0) {
+                                // Log apenas na primeira vez para não poluir
+                                if (wsReconnectAttemptsRef.current === 0) {
+                                    console.log('[App] ✅ WebSocket Socket.IO: Handshake recebido');
+                                }
+                                // Não processa mensagens de CONNECT, apenas confirma que está conectado
+                                return;
                             }
-                            data = { raw: event.data };
+                            
+                            // Tipo 2 = EVENT (eventos de dados) - processa normalmente
+                            if (socketIOPacketType === 2) {
+                                try {
+                                    // Socket.IO EVENT pode ter formato: 2["eventName", {...data}]
+                                    // ou apenas: 2{...data}
+                                    if (jsonPart.startsWith('[')) {
+                                        const eventArray = JSON.parse(jsonPart);
+                                        // eventArray[0] = nome do evento, eventArray[1] = dados
+                                        if (Array.isArray(eventArray) && eventArray.length >= 2) {
+                                            data = {
+                                                event: eventArray[0],
+                                                data: eventArray[1]
+                                            };
+                                        } else {
+                                            data = eventArray;
+                                        }
+                                    } else {
+                                        data = JSON.parse(jsonPart);
+                                    }
+                                } catch (e) {
+                                    // Se falhar, tenta parsear como objeto direto
+                                    try {
+                                        data = JSON.parse(jsonPart);
+                                    } catch (e2) {
+                                        data = { raw: jsonPart };
+                                    }
+                                }
+                            } else {
+                                // Outros tipos de pacote Socket.IO (1=DISCONNECT, 3=ACK, 4=ERROR, etc.)
+                                // Não processa, apenas ignora silenciosamente
+                                return;
+                            }
+                        } else {
+                            // Não é Socket.IO, tenta parsear como JSON normal
+                            try {
+                                data = JSON.parse(event.data);
+                            } catch (e) {
+                                // Não loga dados base64 completos (imagens) - apenas preview
+                                // Filtra strings base64 muito longas (imagens) para não poluir console
+                                if (event.data.length > 1000 || event.data.includes('iVBORw0KGgo') || event.data.includes('data:image')) {
+                                    // Log removido para produção
+                                } else {
+                                    // Log removido para produção - muito verboso
+                                }
+                                data = { raw: event.data };
+                            }
                         }
                     } else {
                         data = event.data;
@@ -1825,12 +1875,23 @@ const App: React.FC = () => {
             };
             
             ws.onclose = (event) => {
-                // Code 1006 = conexão anormal (sem handshake de fechamento)
-                // Code 1000 = fechamento normal
-                const isAbnormalClose = event.code === 1006 || (event.code !== 1000 && event.code !== 1001);
+                // Code 1000 = fechamento normal (não reconecta)
+                // Code 1001 = going away (não reconecta)
+                // Code 1005 = no status code (pode ser reconexão Socket.IO - não é erro)
+                // Code 1006 = conexão anormal (reconecta)
                 
-                // Só reconecta se não foi fechado intencionalmente (code 1000)
-                if (event.code !== 1000) {
+                // Code 1005 pode ocorrer em reconexões Socket.IO normais, não é erro crítico
+                if (event.code === 1005) {
+                    // Socket.IO pode fechar e reconectar automaticamente, não é erro
+                    // Apenas loga se for a primeira vez
+                    if (wsReconnectAttemptsRef.current === 0) {
+                        console.log('[App] ℹ️ WebSocket reconectando (Socket.IO protocol)...');
+                    }
+                    // Reconecta normalmente
+                }
+                
+                // Só reconecta se não foi fechado intencionalmente (code 1000 ou 1001)
+                if (event.code !== 1000 && event.code !== 1001) {
                     // Incrementa contador de tentativas
                     wsReconnectAttemptsRef.current += 1;
                     
