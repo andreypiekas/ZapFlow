@@ -301,10 +301,11 @@ app.post('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res)
       return res.status(400).json({ error: 'key e value são obrigatórios' });
     }
 
+    // Usa o nome do índice funcional no ON CONFLICT
     await pool.query(
       `INSERT INTO user_data (user_id, data_type, data_key, data_value)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT (user_id, data_type, data_key)
+       ON CONFLICT ON CONSTRAINT user_data_user_id_data_type_data_key_unique_idx
        DO UPDATE SET data_value = $4, updated_at = CURRENT_TIMESTAMP`,
       [req.user.id, dataType, key, JSON.stringify(value)]
     );
@@ -312,7 +313,8 @@ app.post('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res)
     res.json({ success: true });
   } catch (error) {
     console.error('Erro ao salvar dados:', error);
-    res.status(500).json({ error: 'Erro ao salvar dados' });
+    console.error('Detalhes do erro:', error.message, error.code);
+    res.status(500).json({ error: 'Erro ao salvar dados', details: error.message });
   }
 });
 
@@ -1131,7 +1133,7 @@ app.post('/api/data/:dataType/batch', authenticateToken, dataLimiter, async (req
         await client.query(
           `INSERT INTO user_data (user_id, data_type, data_key, data_value)
            VALUES ($1, $2, $3, $4)
-           ON CONFLICT (user_id, data_type, data_key)
+           ON CONFLICT ON CONSTRAINT user_data_user_id_data_type_data_key_unique_idx
            DO UPDATE SET data_value = $4, updated_at = CURRENT_TIMESTAMP`,
           [req.user.id, dataType, key, JSON.stringify(value)]
         );
