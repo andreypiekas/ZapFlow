@@ -645,9 +645,9 @@ const App: React.FC = () => {
                             // Se ainda não encontrou, tenta pelo ID do chat (extraindo número do ID)
                             if (!existingChat) {
                                 existingChat = currentChats.find(c => {
-                                    if (c.id.includes('@') && !c.id.includes('@g.us')) {
+                                    if (c.id && typeof c.id === 'string' && c.id.includes('@') && !c.id.includes('@g.us')) {
                                         const idNumber = c.id.split('@')[0].replace(/\D/g, '');
-                                        const realNumber = realChat.contactNumber.replace(/\D/g, '');
+                                        const realNumber = (realChat.contactNumber || '').replace(/\D/g, '');
                                         return idNumber === realNumber || 
                                                (idNumber.length >= 8 && realNumber.length >= 8 && 
                                                 idNumber.slice(-Math.min(idNumber.length, 11)) === realNumber.slice(-Math.min(realNumber.length, 11)));
@@ -685,21 +685,25 @@ const App: React.FC = () => {
 
                         // Se o chat existente tem ID gerado mas o realChat tem ID válido, atualiza o ID também
                         // Detecta qualquer ID gerado (cmin*, cmid*, cmio*, cmip*, cmit*, chat_*)
-                        const existingIdIsGenerated = existingChat.id.includes('cmin') || 
-                                                       existingChat.id.includes('cmid') || 
-                                                       existingChat.id.includes('cmio') ||
-                                                       existingChat.id.includes('cmip') ||
-                                                       existingChat.id.includes('cmit') ||
-                                                       existingChat.id.startsWith('chat_');
+                        const existingIdIsGenerated = existingChat.id && typeof existingChat.id === 'string' && (
+                            existingChat.id.includes('cmin') || 
+                            existingChat.id.includes('cmid') || 
+                            existingChat.id.includes('cmio') ||
+                            existingChat.id.includes('cmip') ||
+                            existingChat.id.includes('cmit') ||
+                            existingChat.id.startsWith('chat_')
+                        );
                         // ID válido: tem @, não é grupo, não é gerado
-                        const realIdIsValid = realChat.id.includes('@') && 
-                                              !realChat.id.includes('@g.us') && 
-                                              !realChat.id.includes('cmin') && 
-                                              !realChat.id.includes('cmid') && 
-                                              !realChat.id.includes('cmio') &&
-                                              !realChat.id.includes('cmip') &&
-                                              !realChat.id.includes('cmit') &&
-                                              !realChat.id.startsWith('chat_');
+                        const realIdIsValid = realChat.id && typeof realChat.id === 'string' && (
+                            realChat.id.includes('@') && 
+                            !realChat.id.includes('@g.us') && 
+                            !realChat.id.includes('cmin') && 
+                            !realChat.id.includes('cmid') && 
+                            !realChat.id.includes('cmio') &&
+                            !realChat.id.includes('cmip') &&
+                            !realChat.id.includes('cmit') &&
+                            !realChat.id.startsWith('chat_')
+                        );
                         const shouldUpdateId = existingIdIsGenerated && realIdIsValid;
 
                         // Merge inteligente de mensagens: combina mensagens locais e da API, removendo duplicatas
