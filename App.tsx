@@ -1631,7 +1631,11 @@ const App: React.FC = () => {
           
           console.log('[App] 🔍 [DEBUG] Chats processados:', {
             total: chatsArray.length,
-            statuses: chatsArray.map(c => ({ id: c.id, status: c.status, assignedTo: c.assignedTo }))
+            statuses: chatsArray.map(c => ({ 
+              id: c?.id || 'unknown', 
+              status: c?.status || 'unknown', 
+              assignedTo: c?.assignedTo || undefined 
+            }))
           });
           
           // PRIORIDADE ABSOLUTA: Define chats do banco diretamente no estado

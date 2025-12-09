@@ -441,7 +441,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       }
 
       // Check if chat exists
-      const existingChat = chats.find(c => c.contactNumber.replace(/\D/g, '') === contactNumber);
+      const existingChat = chats.find(c => {
+        if (!c.contactNumber || typeof c.contactNumber !== 'string') return false;
+        return c.contactNumber.replace(/\D/g, '') === contactNumber;
+      });
       
       if (existingChat) {
           setSelectedChatId(existingChat.id);
