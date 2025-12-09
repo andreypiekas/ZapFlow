@@ -17,6 +17,9 @@ const getApiBaseUrl = () => {
 
 const API_BASE_URL = getApiBaseUrl();
 
+// Exportar URL base para uso em componentes
+export const getBackendUrl = () => API_BASE_URL;
+
 export interface ApiResponse<T> {
   success?: boolean;
   data?: T;

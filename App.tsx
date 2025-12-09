@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Chat, Department, ViewState, ApiConfig, User, UserRole, QuickReply, Workflow, Contact, ChatbotConfig, MessageStatus, Message } from './types';
 import { INITIAL_CHATS, INITIAL_DEPARTMENTS, INITIAL_USERS, INITIAL_QUICK_REPLIES, INITIAL_WORKFLOWS, MOCK_GOOGLE_CONTACTS, INITIAL_CHATBOT_CONFIG } from './constants';
 import Login from './components/Login';
+import BackendConnectionError from './components/BackendConnectionError';
 import ChatInterface from './components/ChatInterface';
 import Connection from './components/Connection';
 import DepartmentSettings from './components/DepartmentSettings';
@@ -16,7 +17,7 @@ import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashb
 import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance, sendDepartmentSelectionMessage, processDepartmentSelection } from './services/whatsappService';
 import { processChatbotMessages } from './services/chatbotService';
 import { storageService } from './services/storageService';
-import { apiService } from './services/apiService';
+import { apiService, getBackendUrl } from './services/apiService';
 import { SecurityService } from './services/securityService';
 import { io, Socket } from 'socket.io-client'; 
 
@@ -2967,6 +2968,23 @@ const App: React.FC = () => {
     if (['settings', 'users', 'connections', 'departments', 'reports', 'workflows', 'chatbot'].includes(view)) return false;
     return true;
   };
+
+  // Se o backend não estiver disponível, mostra tela de erro
+  if (backendAvailable === false) {
+    return <BackendConnectionError backendUrl={getBackendUrl()} />;
+  }
+
+  // Se ainda está verificando o backend, mostra loading
+  if (backendAvailable === null) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-300">Verificando conexão com o backend...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!currentUser) {
     return <Login users={users} onLogin={handleLogin} />;
