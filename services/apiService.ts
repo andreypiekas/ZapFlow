@@ -192,6 +192,20 @@ class ApiService {
     }
   }
 
+  // Criar novo usuário (apenas ADMIN)
+  async createUser(username: string, password: string, name: string, email?: string, role?: string): Promise<{ success: boolean; user?: any; error?: string }> {
+    try {
+      const response = await this.request<{ success: boolean; user: any }>('/api/users', {
+        method: 'POST',
+        body: JSON.stringify({ username, password, name, email, role }),
+      });
+      return response;
+    } catch (error: any) {
+      console.error(`[ApiService] Erro ao criar usuário:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
   // Health check
   async healthCheck(): Promise<boolean> {
     try {
