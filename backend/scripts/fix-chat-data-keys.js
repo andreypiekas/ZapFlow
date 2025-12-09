@@ -9,8 +9,17 @@
  * Uso: node backend/scripts/fix-chat-data-keys.js
  */
 
-const { Pool } = require('pg');
-require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+import pg from 'pg';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const { Pool } = pg;
+
+// Configura dotenv usando o caminho correto para ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+dotenv.config({ path: join(__dirname, '../.env') });
 
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
