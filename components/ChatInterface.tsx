@@ -1310,7 +1310,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
               </div>
               
               {/* TAGS PREVIEW */}
-              {chat.tags && chat.tags.length > 0 && (
+              {chat.tags && Array.isArray(chat.tags) && chat.tags.length > 0 && (
                   <div className="flex gap-1 mt-1">
                       {chat.tags.map(tag => {
                           const tagDef = AVAILABLE_TAGS.find(t => t.name === tag);
