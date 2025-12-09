@@ -673,12 +673,13 @@ const App: React.FC = () => {
                     
                     // Se não encontrou por ID, tenta encontrar por contactNumber (para casos de IDs gerados)
                     if (!existingChat && realChat.contactNumber) {
-                        const realContactDigits = realChat.contactNumber.replace(/\D/g, '').length;
+                        const realContactNumber = (realChat.contactNumber && typeof realChat.contactNumber === 'string') ? realChat.contactNumber : '';
+                        const realContactDigits = realContactNumber.replace(/\D/g, '').length;
                         if (realContactDigits >= 10) {
                             // Busca exata primeiro
                             existingChat = currentChats.find(c => {
-                                const existingNumber = c.contactNumber?.replace(/\D/g, '') || '';
-                                const realNumber = realChat.contactNumber.replace(/\D/g, '');
+                                const existingNumber = (c.contactNumber && typeof c.contactNumber === 'string') ? c.contactNumber.replace(/\D/g, '') : '';
+                                const realNumber = realContactNumber.replace(/\D/g, '');
                                 // Busca exata ou pelos últimos dígitos (para casos onde um tem DDI e outro não)
                                 return existingNumber === realNumber || 
                                        (existingNumber.length >= 8 && realNumber.length >= 8 && 
@@ -689,8 +690,8 @@ const App: React.FC = () => {
                             if (!existingChat) {
                                 existingChat = currentChats.find(c => {
                                     if (c.id && typeof c.id === 'string' && c.id.includes('@') && !c.id.includes('@g.us')) {
-                                        const idNumber = c.id.split('@')[0].replace(/\D/g, '');
-                                        const realNumber = (realChat.contactNumber || '').replace(/\D/g, '');
+                                        const idNumber = (c.id && typeof c.id === 'string') ? c.id.split('@')[0].replace(/\D/g, '') : '';
+                                        const realNumber = realContactNumber.replace(/\D/g, '');
                                         return idNumber === realNumber || 
                                                (idNumber.length >= 8 && realNumber.length >= 8 && 
                                                 idNumber.slice(-Math.min(idNumber.length, 11)) === realNumber.slice(-Math.min(realNumber.length, 11)));
@@ -1531,14 +1532,15 @@ const App: React.FC = () => {
             })
             .filter((chat: any) => {
               // Valida se o chat tem ID
-              if (!chat || !chat.id) {
-                console.log('[App] 🔍 [DEBUG] Chat filtrado (sem id):', chat);
+              if (!chat || !chat.id || typeof chat.id !== 'string') {
+                console.log('[App] 🔍 [DEBUG] Chat filtrado (sem id válido):', chat);
                 return false;
               }
               
               // Valida número do chat antes de adicionar
-              const chatIdNumber = chat.id.split('@')[0].replace(/\D/g, '');
-              const contactNumber = chat.contactNumber?.replace(/\D/g, '') || '';
+              const chatIdStr = chat.id && typeof chat.id === 'string' ? chat.id : '';
+              const chatIdNumber = chatIdStr ? chatIdStr.split('@')[0].replace(/\D/g, '') : '';
+              const contactNumber = (chat.contactNumber && typeof chat.contactNumber === 'string') ? chat.contactNumber.replace(/\D/g, '') : '';
               
               // Validação rigorosa: números brasileiros devem ter pelo menos 11 dígitos
               const isValidChatIdNumber = chatIdNumber.length >= 11 && chatIdNumber.length <= 14 && /^\d+$/.test(chatIdNumber);
