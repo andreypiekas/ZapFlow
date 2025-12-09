@@ -1132,33 +1132,27 @@ const App: React.FC = () => {
                         let finalAssignedTo: string | undefined;
                         let finalDepartmentId: string | null;
                         
+                        // PRIORIDADE ABSOLUTA: Status do banco SEMPRE tem prioridade
+                        // Se o chat está no banco, usa APENAS os dados do banco (status, assignedTo, departmentId)
+                        // Ignora completamente status da API e dados locais se o chat está no banco
                         if (dbChat) {
                             // Chat existe no banco: usa status, assignedTo e departmentId do banco SEMPRE (PRIORIDADE ABSOLUTA)
                             finalStatus = dbChat.status || 'pending'; // Se não tem status no banco, usa pending
                             finalAssignedTo = dbChat.assignedTo;
                             finalDepartmentId = dbChat.departmentId !== undefined ? dbChat.departmentId : null;
-                            console.log('[App] 🔍 [DEBUG] syncChats - Usando dados do BANCO:', {
+                            console.log('[App] 🔍 [DEBUG] syncChats - Usando dados do BANCO (PRIORIDADE ABSOLUTA):', {
                                 id: realChat.id,
                                 status: finalStatus,
                                 assignedTo: finalAssignedTo,
                                 departmentId: finalDepartmentId
                             });
-                        } else if (existingChat && existingChat.status) {
-                            // Chat não está no banco mas tem status local: preserva status local
-                            finalStatus = existingChat.status;
-                            finalAssignedTo = existingChat.assignedTo;
-                            finalDepartmentId = existingChat.departmentId;
-                            console.log('[App] 🔍 [DEBUG] syncChats - Usando dados LOCAIS (não está no banco):', {
-                                id: realChat.id,
-                                status: finalStatus,
-                                assignedTo: finalAssignedTo
-                            });
                         } else {
-                            // Novo chat sem status: usa status da API (pending para novos chats)
+                            // Chat NÃO está no banco: usa status da API (pending para novos chats)
+                            // NÃO preserva status local - apenas banco tem prioridade
                             finalStatus = realChat.status || 'pending';
                             finalAssignedTo = undefined;
                             finalDepartmentId = null;
-                            console.log('[App] 🔍 [DEBUG] syncChats - NOVO CHAT (sem status):', {
+                            console.log('[App] 🔍 [DEBUG] syncChats - Chat NÃO está no banco, usando status da API:', {
                                 id: realChat.id,
                                 status: finalStatus
                             });

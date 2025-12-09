@@ -226,7 +226,7 @@ app.get('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res) 
     const { dataType } = req.params;
     const { key } = req.query;
 
-    let query = 'SELECT data_value FROM user_data WHERE user_id = $1 AND data_type = $2';
+    let query = 'SELECT data_value, data_key FROM user_data WHERE user_id = $1 AND data_type = $2';
     const params = [req.user.id, dataType];
 
     if (key) {
@@ -248,14 +248,38 @@ app.get('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res) 
       }
     } else if (!key) {
       // Se não há key, retorna objeto com todos os valores parseados
+      // IMPORTANTE: Para chats, usa o id do chat como chave se data_key for null/undefined
       const data = {};
       result.rows.forEach(row => {
         try {
-          data[row.data_key] = typeof row.data_value === 'string' 
+          const parsedValue = typeof row.data_value === 'string' 
             ? JSON.parse(row.data_value) 
             : row.data_value;
+          
+          // Para chats, se data_key for null/undefined, usa o id do chat como chave
+          let dataKey = row.data_key;
+          if (!dataKey && dataType === 'chats' && parsedValue && parsedValue.id) {
+            dataKey = parsedValue.id;
+            console.log(`[GET /api/data/:dataType] Corrigindo data_key null/undefined para chat ${parsedValue.id}`);
+          }
+          
+          // Se ainda não tem chave válida, ignora este registro
+          if (!dataKey) {
+            console.warn(`[GET /api/data/:dataType] Ignorando registro sem data_key válido para ${dataType}`);
+            return;
+          }
+          
+          data[dataKey] = parsedValue;
         } catch (e) {
-          data[row.data_key] = row.data_value;
+          // Se não conseguiu parsear, tenta usar data_key diretamente
+          let dataKey = row.data_key;
+          if (!dataKey && dataType === 'chats') {
+            console.warn(`[GET /api/data/:dataType] Ignorando registro de chat sem data_key e sem JSON válido`);
+            return;
+          }
+          if (dataKey) {
+            data[dataKey] = row.data_value;
+          }
         }
       });
       res.json(data);
@@ -1200,7 +1224,14 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
       chatData.endedAt = undefined;
     }
 
+    // Garante que decodedChatId não é null/undefined
+    if (!decodedChatId || decodedChatId === 'undefined' || decodedChatId === 'null') {
+      console.error(`[PUT /api/chats/:chatId] ERRO: decodedChatId inválido: ${decodedChatId}`);
+      return res.status(400).json({ error: 'chatId inválido' });
+    }
+
     // Salva de volta no banco (sempre como registro individual para consistência)
+    // IMPORTANTE: data_key DEVE ser o chatId (decodedChatId), nunca null/undefined
     await pool.query(
       `INSERT INTO user_data (user_id, data_type, data_key, data_value)
        VALUES ($1, $2, $3, $4)
@@ -1209,7 +1240,7 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
       [req.user.id, 'chats', decodedChatId, JSON.stringify(chatData)]
     );
 
-    console.log(`[PUT /api/chats/:chatId] Chat atualizado com sucesso`);
+    console.log(`[PUT /api/chats/:chatId] Chat atualizado com sucesso: chatId=${decodedChatId}, status=${chatData.status}, assignedTo=${chatData.assignedTo}`);
     res.json({ success: true, chat: chatData });
   } catch (error) {
     console.error('[PUT /api/chats/:chatId] Erro ao atualizar chat:', error);
