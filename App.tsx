@@ -17,7 +17,8 @@ import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, f
 import { processChatbotMessages } from './services/chatbotService';
 import { storageService } from './services/storageService';
 import { apiService } from './services/apiService';
-import { SecurityService } from './services/securityService'; 
+import { SecurityService } from './services/securityService';
+import { io, Socket } from 'socket.io-client'; 
 
 const loadConfig = (): ApiConfig => {
   try {
@@ -551,9 +552,9 @@ const App: React.FC = () => {
     loadSpecificTables();
   }, [currentUser]); // Executa quando o usuário fizer login
 
-  // Refs para armazenar interval e WebSocket
+  // Refs para armazenar interval e Socket.IO
   const intervalIdRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const socketRef = useRef<Socket | null>(null);
   const wsReconnectAttemptsRef = useRef<number>(0);
   const wsReconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const MAX_RECONNECT_ATTEMPTS = 5;
@@ -569,9 +570,9 @@ const App: React.FC = () => {
         clearInterval(intervalIdRef.current);
         intervalIdRef.current = null;
       }
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
       }
       setWsStatus('disconnected');
       return;
@@ -755,7 +756,7 @@ const App: React.FC = () => {
                         // Se não há mensagens na API, tenta buscar mensagens do chat (mesmo sem mensagens locais)
                         // Isso garante que mensagens recebidas apareçam mesmo quando a API não retorna no findChats
                         // SEMPRE tenta buscar mensagens via fetchChatMessages (mesmo que já tenha algumas)
-                        // Isso garante que mensagens recebidas apareçam mesmo se o WebSocket não funcionar
+                        // Isso garante que mensagens recebidas apareçam mesmo se o Socket.IO não funcionar
                         const chatId = realChat.id || existingChat.id;
                         const lastFetchKey = `last_fetch_${chatId}`;
                         const lastFetch = sessionStorage.getItem(lastFetchKey);
@@ -1337,7 +1338,7 @@ const App: React.FC = () => {
     // Polling a cada 5 segundos para evitar atualizações excessivas (era 2s)
     intervalIdRef.current = setInterval(syncChats, 5000);
     
-    // Inicializa WebSocket de forma assíncrona
+    // Inicializa Socket.IO de forma assíncrona
     const initWebSocket = async (isReconnect: boolean = false) => {
         // Limpa timeout anterior se existir
         if (wsReconnectTimeoutRef.current) {
@@ -1347,14 +1348,14 @@ const App: React.FC = () => {
         
         if (apiConfig.isDemo || !apiConfig.baseUrl) {
             if (!isReconnect) {
-                console.log('[App] WebSocket desabilitado: isDemo ou baseUrl vazio');
+                console.log('[App] Socket.IO desabilitado: isDemo ou baseUrl vazio');
             }
             return;
         }
         
         // Verifica limite de tentativas
         if (isReconnect && wsReconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
-            console.warn(`[App] ⚠️ Limite de ${MAX_RECONNECT_ATTEMPTS} tentativas de reconexão WebSocket atingido. Parando tentativas.`);
+            console.warn(`[App] ⚠️ Limite de ${MAX_RECONNECT_ATTEMPTS} tentativas de reconexão Socket.IO atingido. Parando tentativas.`);
             return;
         }
         
@@ -1370,171 +1371,103 @@ const App: React.FC = () => {
             
             if (!instanceName) {
                 if (!isReconnect) {
-                    console.log('[App] WebSocket desabilitado: instância não encontrada');
+                    console.log('[App] Socket.IO desabilitado: instância não encontrada');
                     setWsStatus('failed');
                 }
                 return;
             }
             
-            // Se instância não está conectada, não tenta WebSocket (mas permite "unknown" para tentar conectar)
+            // Se instância não está conectada, não tenta Socket.IO (mas permite "unknown" para tentar conectar)
             if (active && active.status && active.status !== 'open' && active.status !== 'unknown') {
                 if (!isReconnect) {
-                    console.warn(`[App] WebSocket desabilitado: instância ${instanceName} não está conectada (status: ${active.status})`);
+                    console.warn(`[App] Socket.IO desabilitado: instância ${instanceName} não está conectada (status: ${active.status})`);
                     setWsStatus('failed');
                 }
                 return;
             }
             
-            // Tenta múltiplos formatos de URL do WebSocket
-            // IMPORTANTE: Evolution API requer apiKey na URL como query parameter
-            const baseWsUrl = apiConfig.baseUrl.replace(/^http/, 'ws');
             const apiKey = apiConfig.apiKey || apiConfig.authenticationApiKey || '';
-            
-            // Constrói URLs com apiKey como query parameter
-            const wsUrls = [
-                // Formato 1: Socket.IO com EIO e apiKey
-                `${baseWsUrl}/socket.io/?EIO=4&transport=websocket&instance=${instanceName}${apiKey ? `&apikey=${encodeURIComponent(apiKey)}` : ''}`,
-                // Formato 2: Socket.IO simples com apiKey
-                `${baseWsUrl}/socket.io/?instance=${instanceName}${apiKey ? `&apikey=${encodeURIComponent(apiKey)}` : ''}`,
-                // Formato 3: WebSocket direto com apiKey
-                `${baseWsUrl}/ws/${instanceName}${apiKey ? `?apikey=${encodeURIComponent(apiKey)}` : ''}`,
-                // Formato 4: Chat endpoint com apiKey (fallback)
-                `${baseWsUrl}/chat/${instanceName}${apiKey ? `?apikey=${encodeURIComponent(apiKey)}` : ''}`
-            ];
-            
-            // Log removido para produção - muito verboso
-            // console.log(`[App] Tentando conectar WebSocket para instância: ${instanceName}`);
-            
-            // Tenta o primeiro formato (mais comum - Socket.IO)
-            const wsUrl = wsUrls[0];
-            // Log removido para produção - muito verboso
-            // console.log(`[App] Conectando WebSocket: ${wsUrl}`);
-            
-            // Fecha WebSocket anterior se existir
-            if (wsRef.current) {
-                wsRef.current.close();
-            }
             
             // Verifica se tem apiKey antes de tentar conectar
             if (!apiKey) {
-                console.warn('[App] ⚠️ WebSocket: apiKey não configurada. Conexão pode ser rejeitada.');
+                console.warn('[App] ⚠️ Socket.IO: apiKey não configurada. Conexão pode ser rejeitada.');
                 setWsStatus('failed');
                 return;
             }
             
-            wsRef.current = new WebSocket(wsUrl);
-            const ws = wsRef.current;
+            // Desconecta socket anterior se existir
+            if (socketRef.current) {
+                socketRef.current.disconnect();
+                socketRef.current = null;
+            }
             
-            let handshakeReceived = false;
+            // Cria conexão Socket.IO com autenticação
+            const socket = io(apiConfig.baseUrl, {
+                path: '/socket.io/',
+                transports: ['websocket', 'polling'], // Tenta WebSocket primeiro, fallback para polling
+                query: {
+                    instance: instanceName,
+                    apikey: apiKey
+                },
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                reconnectionAttempts: MAX_RECONNECT_ATTEMPTS,
+                timeout: 20000
+            });
             
-            ws.onopen = () => {
-                console.log('[App] ✅ WebSocket conectado com sucesso!');
-                // Reset contador de tentativas ao conectar com sucesso
+            socketRef.current = socket;
+            
+            // Event: connect
+            socket.on('connect', () => {
+                console.log('[App] ✅ Socket.IO conectado com sucesso!');
                 wsReconnectAttemptsRef.current = 0;
                 setWsStatus('connected');
-                handshakeReceived = false; // Reset flag
-                // Nota: apiKey já foi enviada na URL, não precisa enviar como mensagem
-            };
+            });
             
-            ws.onmessage = (event) => {
+            // Event: disconnect
+            socket.on('disconnect', (reason: string) => {
+                if (reason === 'io server disconnect') {
+                    // Servidor desconectou, precisa reconectar manualmente
+                    console.warn('[App] ⚠️ Socket.IO desconectado pelo servidor. Tentando reconectar...');
+                    setWsStatus('connecting');
+                    socket.connect();
+                } else {
+                    // Desconexão normal ou erro de transporte
+                    console.log(`[App] ℹ️ Socket.IO desconectado: ${reason}`);
+                    setWsStatus('disconnected');
+                }
+            });
+            
+            // Event: connect_error
+            socket.on('connect_error', (error: Error) => {
+                wsReconnectAttemptsRef.current += 1;
+                if (wsReconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+                    console.warn('[App] ⚠️ Socket.IO: Erro ao conectar. Sistema funcionando via polling (sincronização periódica).');
+                    setWsStatus('failed');
+                } else {
+                    setWsStatus('connecting');
+                    console.warn(`[App] ⚠️ Socket.IO: Erro de conexão (tentativa ${wsReconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS}):`, error.message);
+                }
+            });
+            
+            // Event: messages.upsert - mensagens novas ou atualizadas
+            socket.on('messages.upsert', (data: any) => {
                 try {
-                    let data: any;
-                    let socketIOPacketType: number | null = null;
-                    
-                    // Tenta parsear como JSON, se falhar trata como string
-                    if (typeof event.data === 'string') {
-                        // Verifica se é mensagem Socket.IO (começa com número: 0=CONNECT, 2=EVENT, etc.)
-                        const socketIOMatch = event.data.match(/^(\d+)(.*)$/);
-                        if (socketIOMatch) {
-                            socketIOPacketType = parseInt(socketIOMatch[1]);
-                            const jsonPart = socketIOMatch[2];
-                            
-                            // Tipo 0 = CONNECT (handshake inicial) - apenas confirma conexão
-                            if (socketIOPacketType === 0) {
-                                handshakeReceived = true;
-                                // Log apenas na primeira vez para não poluir
-                                if (wsReconnectAttemptsRef.current === 0) {
-                                    console.log('[App] ✅ WebSocket Socket.IO: Handshake recebido');
-                                }
-                                // Não processa mensagens de CONNECT, apenas confirma que está conectado
-                                // Socket.IO pode manter conexão aberta ou fechar e reconectar - ambos são normais
-                                return;
-                            }
-                            
-                            // Tipo 2 = EVENT (eventos de dados) - processa normalmente
-                            if (socketIOPacketType === 2) {
-                                try {
-                                    // Socket.IO EVENT pode ter formato: 2["eventName", {...data}]
-                                    // ou apenas: 2{...data}
-                                    if (jsonPart.startsWith('[')) {
-                                        const eventArray = JSON.parse(jsonPart);
-                                        // eventArray[0] = nome do evento, eventArray[1] = dados
-                                        if (Array.isArray(eventArray) && eventArray.length >= 2) {
-                                            data = {
-                                                event: eventArray[0],
-                                                data: eventArray[1]
-                                            };
-                                        } else {
-                                            data = eventArray;
-                                        }
-                                    } else {
-                                        data = JSON.parse(jsonPart);
-                                    }
-                                } catch (e) {
-                                    // Se falhar, tenta parsear como objeto direto
-                                    try {
-                                        data = JSON.parse(jsonPart);
-                                    } catch (e2) {
-                                        data = { raw: jsonPart };
-                                    }
-                                }
-                            } else {
-                                // Outros tipos de pacote Socket.IO (1=DISCONNECT, 3=ACK, 4=ERROR, etc.)
-                                // Não processa, apenas ignora silenciosamente
-                                return;
-                            }
-                        } else {
-                            // Não é Socket.IO, tenta parsear como JSON normal
-                            try {
-                                data = JSON.parse(event.data);
-                            } catch (e) {
-                                // Não loga dados base64 completos (imagens) - apenas preview
-                                // Filtra strings base64 muito longas (imagens) para não poluir console
-                                if (event.data.length > 1000 || event.data.includes('iVBORw0KGgo') || event.data.includes('data:image')) {
-                                    // Log removido para produção
-                                } else {
-                                    // Log removido para produção - muito verboso
-                                }
-                                data = { raw: event.data };
-                            }
-                        }
-                    } else {
-                        data = event.data;
-                    }
-                    
-                    // Log reduzido de mensagens WebSocket
-                    
                     // Processa mensagens recebidas - múltiplos formatos possíveis
-                    // Formato 1: { event: 'messages.upsert', data: { key: {...}, message: {...} } }
-                    // Formato 2: { key: {...}, message: {...} }
-                    // Formato 3: { type: 'message', data: {...} }
+                    // Formato 1: { key: {...}, message: {...} }
+                    // Formato 2: { data: { key: {...}, message: {...} } }
                     let messageData: any = null;
                     
                     if (data.data && data.data.key) {
                         messageData = data.data;
                     } else if (data.key) {
                         messageData = data;
-                    } else if (data.data) {
-                        messageData = data.data;
+                    } else {
+                        messageData = data;
                     }
                     
-                    const eventType = data.event || data.type || '';
-                    
-                    // Processa se for evento de mensagem ou se tiver estrutura de mensagem
-                    if (eventType.includes('message') || eventType.includes('upsert') || eventType.includes('update') ||
-                        (messageData && messageData.key && messageData.key.remoteJid)) {
-                        
-                        if (messageData && messageData.key && messageData.key.remoteJid) {
+                    if (messageData && messageData.key && messageData.key.remoteJid) {
                             const remoteJid = normalizeJid(messageData.key.remoteJid);
                             const mapped = mapApiMessageToInternal(messageData);
                             
@@ -1849,115 +1782,72 @@ const App: React.FC = () => {
                                     });
                                     
                                     if (chatUpdated) {
-                                        console.log('[App] ✅ Chats atualizados com nova mensagem via WebSocket');
+                                        console.log('[App] ✅ Chats atualizados com nova mensagem via Socket.IO');
                                     }
                                     
                                     return updatedChats;
                                 });
                             }
                         }
-                    } else {
-                        // Log removido para produção - muito verboso
-                        // console.log('[App] ℹ️ Evento WebSocket não é de mensagem:', eventType || 'sem tipo');
                     }
                 } catch (err) {
-                    // Não loga event.data completo para evitar poluir console com base64/imagens
-                    const dataPreview = typeof event.data === 'string' 
-                        ? (event.data.length > 200 ? event.data.substring(0, 200) + '...' : event.data)
-                        : '[objeto]';
-                    console.error('[App] ❌ Erro ao processar mensagem WebSocket:', err, dataPreview);
+                    console.error('[App] ❌ Erro ao processar mensagem Socket.IO:', err);
                 }
-            };
+            });
             
-            ws.onerror = (error) => {
-                // Log apenas quando atingir limite de tentativas ou erro crítico
-                if (wsReconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
-                    console.warn('[App] ⚠️ WebSocket: Erro ao conectar. Sistema funcionando via polling (sincronização periódica).');
-                    setWsStatus('failed');
-                } else {
-                    setWsStatus('disconnected');
-                }
-                // Não tenta reconectar imediatamente, deixa o onclose tratar
-            };
-            
-            ws.onclose = (event) => {
-                // Code 1000 = fechamento normal (não reconecta)
-                // Code 1001 = going away (não reconecta)
-                // Code 1005 = no status code (pode ser reconexão Socket.IO - não é erro)
-                // Code 1006 = conexão anormal (reconecta)
-                
-                // Code 1005 após handshake recebido pode indicar que Socket.IO não funciona com WebSocket nativo
-                // Socket.IO pode precisar da biblioteca socket.io-client para funcionar corretamente
-                // Por enquanto, não reconecta automaticamente para evitar loop infinito
-                if (event.code === 1005 && handshakeReceived) {
-                    // Handshake foi recebido, mas conexão fecha imediatamente
-                    // Isso pode indicar que Socket.IO precisa da biblioteca cliente, não WebSocket nativo
-                    // Não reconecta automaticamente para evitar loop
-                    if (wsReconnectAttemptsRef.current === 0) {
-                        console.warn('[App] ⚠️ WebSocket Socket.IO: Conexão fecha após handshake. Socket.IO pode precisar da biblioteca socket.io-client. Sistema continuará funcionando via polling.');
-                        setWsStatus('failed');
-                    }
-                    // Não reconecta - Socket.IO com WebSocket nativo pode não funcionar corretamente
-                    // O sistema continuará funcionando via polling (sincronização periódica)
-                    return;
-                }
-                
-                // Code 1005 sem handshake pode ser erro real
-                if (event.code === 1005 && !handshakeReceived) {
-                    // Não recebeu handshake, pode ser erro
-                    wsReconnectAttemptsRef.current += 1;
-                    const delay = Math.min(
-                        INITIAL_RECONNECT_DELAY * Math.pow(2, wsReconnectAttemptsRef.current - 1),
-                        80000
-                    );
-                    if (wsReconnectAttemptsRef.current <= MAX_RECONNECT_ATTEMPTS) {
-                        setWsStatus('connecting');
-                        wsReconnectTimeoutRef.current = setTimeout(() => {
-                            if (currentUser && apiConfig.baseUrl && !apiConfig.isDemo) {
-                                initWebSocket(true);
-                            }
-                        }, delay);
-                    } else {
-                        setWsStatus('failed');
-                    }
-                    return;
-                }
-                
-                // Só reconecta se não foi fechado intencionalmente (code 1000 ou 1001)
-                if (event.code !== 1000 && event.code !== 1001) {
-                    // Incrementa contador de tentativas
-                    wsReconnectAttemptsRef.current += 1;
-                    
-                    // Calcula delay com backoff exponencial (5s, 10s, 20s, 40s, 80s)
-                    const delay = Math.min(
-                        INITIAL_RECONNECT_DELAY * Math.pow(2, wsReconnectAttemptsRef.current - 1),
-                        80000 // Máximo de 80 segundos
-                    );
-                    
-                    if (wsReconnectAttemptsRef.current <= MAX_RECONNECT_ATTEMPTS) {
-                        setWsStatus('connecting');
-                        // Log apenas na primeira tentativa e quando atingir limite
-                        if (wsReconnectAttemptsRef.current === 1) {
-                            console.warn(`[App] ⚠️ WebSocket desconectado (code: ${event.code}). Tentando reconectar... (sistema funcionando via polling)`);
-                        }
+            // Event: messages.update - atualizações de status de mensagens
+            socket.on('messages.update', (data: any) => {
+                try {
+                    // Processa atualizações de status (entregue, lida, etc.)
+                    if (data && data.key && data.update) {
+                        const remoteJid = normalizeJid(data.key.remoteJid);
+                        const updateStatus = data.update.status;
                         
-                        wsReconnectTimeoutRef.current = setTimeout(() => {
-                            if (currentUser && apiConfig.baseUrl && !apiConfig.isDemo) {
-                                initWebSocket(true);
-                            }
-                        }, delay);
-                    } else {
-                        console.warn(`[App] ⚠️ Limite de ${MAX_RECONNECT_ATTEMPTS} tentativas de reconexão WebSocket atingido. Sistema continuará funcionando via polling (sincronização periódica).`);
-                        setWsStatus('failed');
+                        if (remoteJid && updateStatus) {
+                            setChats(currentChats => {
+                                return currentChats.map(chat => {
+                                    const chatJid = normalizeJid(chat.id);
+                                    if (chatJid === remoteJid) {
+                                        // Atualiza status da mensagem correspondente
+                                        const updatedMessages = chat.messages.map(msg => {
+                                            if (msg.whatsappMessageId === data.key.id) {
+                                                return {
+                                                    ...msg,
+                                                    status: updateStatus === 'READ' ? MessageStatus.READ :
+                                                            updateStatus === 'DELIVERED' ? MessageStatus.DELIVERED :
+                                                            updateStatus === 'SENT' ? MessageStatus.SENT :
+                                                            msg.status
+                                                };
+                                            }
+                                            return msg;
+                                        });
+                                        
+                                        return {
+                                            ...chat,
+                                            messages: updatedMessages
+                                        };
+                                    }
+                                    return chat;
+                                });
+                            });
+                        }
                     }
-                } else {
-                    // Reset contador se foi fechado intencionalmente
-                    wsReconnectAttemptsRef.current = 0;
-                    setWsStatus('disconnected');
+                } catch (err) {
+                    console.error('[App] ❌ Erro ao processar atualização de mensagem Socket.IO:', err);
                 }
-            };
+            });
+            
+            // Event: qrcode.updated - QR Code atualizado
+            socket.on('qrcode.updated', (data: any) => {
+                // QR Code atualizado - pode ser usado para mostrar QR Code na interface
+                // Por enquanto, apenas loga
+                if (data && data.qrcode) {
+                    console.log('[App] 📱 QR Code atualizado via Socket.IO');
+                }
+            });
+            
         } catch (err) {
-            console.error('[App] Erro ao criar WebSocket:', err);
+            console.error('[App] Erro ao criar Socket.IO:', err);
             setWsStatus('failed');
             // Se não for reconexão, tenta uma vez após 5 segundos
             if (!isReconnect && wsReconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
@@ -1965,7 +1855,7 @@ const App: React.FC = () => {
                 wsReconnectTimeoutRef.current = setTimeout(() => {
                     if (currentUser && apiConfig.baseUrl && !apiConfig.isDemo) {
                         initWebSocket(true).catch(e => {
-                            console.error('[App] ❌ Erro ao reconectar WebSocket:', e);
+                            console.error('[App] ❌ Erro ao reconectar Socket.IO:', e);
                         });
                     }
                 }, INITIAL_RECONNECT_DELAY);
@@ -1973,16 +1863,14 @@ const App: React.FC = () => {
         }
     };
     
-    // Inicializa WebSocket apenas se não estiver em demo
+    // Inicializa Socket.IO apenas se não estiver em demo
     if (!apiConfig.isDemo && apiConfig.baseUrl) {
-        // Log removido para produção - muito verboso
-        // console.log('[App] Inicializando WebSocket...');
         initWebSocket().catch(err => {
-            console.error('[App] ❌ Erro ao inicializar WebSocket:', err);
+            console.error('[App] ❌ Erro ao inicializar Socket.IO:', err);
         });
     }
 
-    // Cleanup: fecha interval e WebSocket quando dependências mudam ou componente desmonta
+    // Cleanup: fecha interval e Socket.IO quando dependências mudam ou componente desmonta
     return () => {
       if (intervalIdRef.current) {
         clearInterval(intervalIdRef.current);
@@ -1992,13 +1880,15 @@ const App: React.FC = () => {
         clearTimeout(wsReconnectTimeoutRef.current);
         wsReconnectTimeoutRef.current = null;
       }
-      if (wsRef.current) {
-        console.log('[App] Fechando WebSocket...');
+      if (socketRef.current) {
+        console.log('[App] Desconectando Socket.IO...');
         // Reset contador ao fechar intencionalmente
         wsReconnectAttemptsRef.current = 0;
-        wsRef.current.close();
-        wsRef.current = null;
+        socketRef.current.disconnect();
+        socketRef.current = null;
       }
+      // Reset status quando componente desmonta
+      setWsStatus('disconnected');
     };
   }, [currentUser, apiConfig]);
 
@@ -3036,7 +2926,7 @@ const App: React.FC = () => {
                          <MessageSquare />}
                     </div>
                     <div className="flex-1">
-                        <p className="text-slate-500 text-sm">Tempo Real (WebSocket)</p>
+                        <p className="text-slate-500 text-sm">Tempo Real (Socket.IO)</p>
                         <div className="flex items-center gap-2">
                             <h3 className={`text-lg font-bold ${
                                 wsStatus === 'connected' ? 'text-emerald-600' :
@@ -3055,7 +2945,7 @@ const App: React.FC = () => {
                                         wsReconnectAttemptsRef.current = 0;
                                         setWsStatus('connecting');
                                         initWebSocket(false).catch(err => {
-                                            console.error('[App] ❌ Erro ao reconectar WebSocket:', err);
+                                            console.error('[App] ❌ Erro ao reconectar Socket.IO:', err);
                                         });
                                     }}
                                     className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
