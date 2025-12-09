@@ -310,8 +310,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   }, [selectedChatId, selectedChat]); // Inclui selectedChat para detectar quando o objeto é atualizado
 
   // Logic: Filter by Tab AND Search + SORTING
-  const filteredChats = chats
+  const filteredChats = (chats && Array.isArray(chats) ? chats : [])
     .filter(chat => {
+        // Garante que o chat existe e é válido
+        if (!chat || !chat.id) return false;
         // 1. Common Search Filter (Applied to all tabs)
         const matchesSearch = (chat.contactName || '').toLowerCase().includes(filterText.toLowerCase()) ||
                               (chat.contactNumber || '').includes(filterText) ||
