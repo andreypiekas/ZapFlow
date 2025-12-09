@@ -1511,8 +1511,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 {( (selectedChat.tags && selectedChat.tags.length > 0) || showSearch ) && (
                     <div className="px-4 pb-2 flex items-center justify-between gap-4">
                         <div className="flex gap-1 overflow-x-auto scrollbar-hide">
-                            {selectedChat.tags?.map(tag => {
-                                const tagDef = AVAILABLE_TAGS.find(t => t.name === tag);
+                            {(selectedChat.tags && Array.isArray(selectedChat.tags) ? selectedChat.tags : []).map(tag => {
+                                if (!tag || typeof tag !== 'string') return null;
+                                const tagDef = (AVAILABLE_TAGS && Array.isArray(AVAILABLE_TAGS)) ? AVAILABLE_TAGS.find(t => t && t.name === tag) : undefined;
                                 return (
                                     <span key={tag} className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 ${tagDef ? tagDef.color : 'bg-slate-200'}`}>
                                         {tag}
