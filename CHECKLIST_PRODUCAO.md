@@ -118,7 +118,7 @@
 
 - [ ] **Exibir nome e setor** nas mensagens enviadas (ROTEIRO_IMPLANTACAO.md)
 - [ ] **Mensagem automática** de seleção de setores para novos contatos
-- [ ] **Corrigir chatbot** (não está funcionando conforme configurado)
+- [x] **Corrigir chatbot** (marcação de mensagens enviadas implementada) ✅ CORRIGIDO
 - [ ] **Ajustar relatórios** (contagem de avaliações não funciona)
 - [ ] **Enviar contato** da lista de contatos pelo chat
 - [ ] **Reformular aba Conexão** (integração completa com Evolution API)
@@ -206,7 +206,7 @@
 
 1. ✅ Exibir nome e setor nas mensagens
 2. ✅ Mensagem automática de seleção de setores
-3. ✅ Corrigir chatbot
+3. ✅ Corrigir chatbot (marcação de mensagens enviadas)
 4. ✅ Ajustar relatórios
 5. ✅ Reformular aba Conexão
 
@@ -259,6 +259,15 @@ Antes de colocar em produção, verificar:
 - [ ] Chat funciona (envio/recebimento)
 - [ ] WebSocket conecta corretamente
 - [ ] Health check responde
+- [ ] **Chatbot funciona corretamente:**
+  - [ ] Chatbot está habilitado nas configurações
+  - [ ] Mensagem de saudação configurada
+  - [ ] Mensagem de ausência configurada
+  - [ ] Horários de funcionamento configurados
+  - [ ] Teste: Enviar primeira mensagem de número novo → Bot envia saudação (dentro do horário)
+  - [ ] Teste: Enviar primeira mensagem fora do horário → Bot envia mensagem de ausência
+  - [ ] Teste: Verificar que bot não reenvia mensagem (verificar mensagem de sistema no chat)
+  - [ ] Teste: Verificar logs do console para confirmar envio (`[Chatbot] ✅ Mensagem enviada`)
 
 ### Monitoramento
 
@@ -275,7 +284,7 @@ Antes de colocar em produção, verificar:
 
 1. **WebSocket instável**: Pode causar perda de mensagens em tempo real
 2. **Chats sem mensagens**: Usuários podem ver conversas vazias
-3. **Chatbot não funcional**: Automação não está operacional
+3. ~~**Chatbot não funcional**: Automação não está operacional~~ ✅ CORRIGIDO - Agora marca mensagens como enviadas
 4. **Relatórios incompletos**: Avaliações não são contabilizadas
 5. **Sem testes automatizados**: Mudanças podem quebrar funcionalidades existentes
 
