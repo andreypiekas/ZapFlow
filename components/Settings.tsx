@@ -37,6 +37,41 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
     }
   }, [isAdmin, config.isDemo, config.baseUrl, config.authenticationApiKey, config.apiKey]);
 
+  // Busca automaticamente o token da instância configurada quando a página carrega
+  useEffect(() => {
+    const fetchTokenForConfiguredInstance = async () => {
+      // Se já tem instância configurada mas não tem token (ou token está vazio), busca automaticamente
+      if (
+        isAdmin && 
+        !config.isDemo && 
+        config.baseUrl && 
+        config.instanceName && 
+        (!config.apiKey || config.apiKey.trim() === '') &&
+        (config.authenticationApiKey || config.apiKey)
+      ) {
+        try {
+          const details = await fetchInstanceDetails(config, config.instanceName);
+          if (details && details.token) {
+            // Atualiza o formData com o token encontrado
+            setFormData(prev => ({
+              ...prev,
+              apiKey: details.token
+            }));
+            // Salva automaticamente nas configurações
+            onSave({
+              ...config,
+              apiKey: details.token
+            });
+          }
+        } catch (error) {
+          console.error('[Settings] Erro ao buscar token automaticamente:', error);
+        }
+      }
+    };
+
+    fetchTokenForConfiguredInstance();
+  }, [isAdmin, config.isDemo, config.baseUrl, config.instanceName, config.authenticationApiKey]);
+
   const loadInstances = async () => {
     if (config.isDemo || !config.baseUrl) return;
     
