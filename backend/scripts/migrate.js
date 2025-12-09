@@ -50,8 +50,7 @@ async function migrate() {
         data_key VARCHAR(255) NOT NULL,
         data_value JSONB NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(COALESCE(user_id, 0), data_type, data_key)
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     
