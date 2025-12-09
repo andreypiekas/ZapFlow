@@ -1107,8 +1107,11 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
 
     // Decodifica o chatId (pode vir URL encoded)
     const decodedChatId = decodeURIComponent(chatId);
+    
+    console.log(`[PUT /api/chats/:chatId] Atualizando chat: ${decodedChatId}, user_id: ${req.user.id}, status: ${status}, assignedTo: ${assignedTo}, departmentId: ${departmentId}`);
 
-    // Tenta buscar o chat individual primeiro (estrutura nova)
+    // Se o chat não existe, cria um novo registro com apenas os campos fornecidos
+    // Isso permite atualizar chats que ainda não foram salvos no banco
     let chatResult = await pool.query(
       `SELECT data_value FROM user_data 
        WHERE user_id = $1 AND data_type = 'chats' AND data_key = $2`,
@@ -1120,8 +1123,15 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
 
     if (chatResult.rows.length > 0) {
       // Chat encontrado como registro individual
-      chatData = JSON.parse(chatResult.rows[0].data_value);
-      isIndividualChat = true;
+      try {
+        chatData = JSON.parse(chatResult.rows[0].data_value);
+        isIndividualChat = true;
+        console.log(`[PUT /api/chats/:chatId] Chat encontrado como registro individual`);
+      } catch (parseError) {
+        console.error(`[PUT /api/chats/:chatId] Erro ao fazer parse do chat individual:`, parseError);
+        // Se o parse falhar, cria um novo objeto
+        chatData = { id: decodedChatId };
+      }
     } else {
       // Tenta buscar no array de chats (estrutura antiga/legacy)
       chatResult = await pool.query(
@@ -1130,18 +1140,33 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
         [req.user.id]
       );
 
-      if (chatResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Chat não encontrado' });
+      if (chatResult.rows.length > 0) {
+        try {
+          const chats = JSON.parse(chatResult.rows[0].data_value);
+          const chatIndex = chats.findIndex((c) => c && c.id === decodedChatId);
+
+          if (chatIndex !== -1) {
+            chatData = chats[chatIndex];
+            console.log(`[PUT /api/chats/:chatId] Chat encontrado no array (legacy)`);
+          } else {
+            // Chat não encontrado no array, cria novo
+            chatData = { id: decodedChatId };
+            console.log(`[PUT /api/chats/:chatId] Chat não encontrado no array, criando novo`);
+          }
+        } catch (parseError) {
+          console.error(`[PUT /api/chats/:chatId] Erro ao fazer parse do array de chats:`, parseError);
+          chatData = { id: decodedChatId };
+        }
+      } else {
+        // Nenhum chat encontrado, cria novo
+        chatData = { id: decodedChatId };
+        console.log(`[PUT /api/chats/:chatId] Nenhum chat encontrado, criando novo`);
       }
+    }
 
-      const chats = JSON.parse(chatResult.rows[0].data_value);
-      const chatIndex = chats.findIndex((c) => c.id === decodedChatId);
-
-      if (chatIndex === -1) {
-        return res.status(404).json({ error: 'Chat não encontrado' });
-      }
-
-      chatData = chats[chatIndex];
+    // Garante que o chat tem um ID
+    if (!chatData.id) {
+      chatData.id = decodedChatId;
     }
 
     // Atualiza apenas status, assignedTo e departmentId (preserva outros campos)
@@ -1160,33 +1185,22 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
       chatData.endedAt = undefined;
     }
 
-    // Salva de volta no banco
-    if (isIndividualChat) {
-      // Atualiza o registro individual
-      await pool.query(
-        `UPDATE user_data 
-         SET data_value = $1, updated_at = CURRENT_TIMESTAMP
-         WHERE user_id = $2 AND data_type = 'chats' AND data_key = $3`,
-        [JSON.stringify(chatData), req.user.id, decodedChatId]
-      );
-    } else {
-      // Atualiza no array (estrutura legacy)
-      const chats = JSON.parse(chatResult.rows[0].data_value);
-      const chatIndex = chats.findIndex((c) => c.id === decodedChatId);
-      chats[chatIndex] = chatData;
+    // Salva de volta no banco (sempre como registro individual para consistência)
+    await pool.query(
+      `INSERT INTO user_data (user_id, data_type, data_key, data_value)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, data_type, data_key)
+       DO UPDATE SET data_value = $4, updated_at = CURRENT_TIMESTAMP`,
+      [req.user.id, 'chats', decodedChatId, JSON.stringify(chatData)]
+    );
 
-      await pool.query(
-        `UPDATE user_data 
-         SET data_value = $1, updated_at = CURRENT_TIMESTAMP
-         WHERE user_id = $2 AND data_type = 'chats' AND data_key = 'default'`,
-        [JSON.stringify(chats), req.user.id]
-      );
-    }
-
+    console.log(`[PUT /api/chats/:chatId] Chat atualizado com sucesso`);
     res.json({ success: true, chat: chatData });
   } catch (error) {
-    console.error('Erro ao atualizar chat:', error);
-    console.error('Stack:', error.stack);
+    console.error('[PUT /api/chats/:chatId] Erro ao atualizar chat:', error);
+    console.error('[PUT /api/chats/:chatId] Stack:', error.stack);
+    console.error('[PUT /api/chats/:chatId] Params:', req.params);
+    console.error('[PUT /api/chats/:chatId] Body:', req.body);
     res.status(500).json({ error: 'Erro ao atualizar chat', details: error.message });
   }
 });
