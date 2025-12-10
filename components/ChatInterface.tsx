@@ -1685,7 +1685,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                   ) : (
                     <div 
                       className={`max-w-[85%] md:max-w-[70%] rounded-lg px-3 py-2 shadow-lg relative group ${
-                        msg.sender === 'user' ? 'bg-[#16191F] text-slate-200 rounded-tl-none neon-border' : 'bg-gradient-to-r from-[#0074FF] to-[#00C3FF] text-white rounded-tr-none glow-blue'
+                        msg.sender === 'user' ? 'bg-[#1E293B] text-white rounded-tl-none border border-[#334155]' : 'bg-gradient-to-r from-[#0074FF] to-[#00C3FF] text-white rounded-tr-none glow-blue'
                       }`}
                       onDoubleClick={() => msg.sender !== 'system' && handleReplyToMessage(msg)}
                     >
@@ -1694,10 +1694,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         <div className={`mb-1 px-2 py-1 border-l-2 ${
                           msg.replyTo.sender === 'user' ? 'border-[#00E0D1] bg-[#00E0D1]/10' : 'border-[#0074FF] bg-[#0074FF]/20'
                         } rounded text-xs`}>
-                          <div className="font-medium text-slate-600">
+                          <div className={`font-medium ${msg.sender === 'user' ? 'text-slate-300' : 'text-slate-600'}`}>
                             {msg.replyTo.sender === 'user' ? selectedChat?.contactName : currentUser.name}
                           </div>
-                          <div className="text-slate-500 truncate">
+                          <div className={msg.sender === 'user' ? 'text-slate-200' : 'text-slate-500 truncate'}>
                             {msg.replyTo.content.length > 50 ? msg.replyTo.content.substring(0, 50) + '...' : msg.replyTo.content}
                           </div>
                         </div>
