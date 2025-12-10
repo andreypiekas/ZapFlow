@@ -1532,11 +1532,33 @@ const App: React.FC = () => {
                           }
                         }
                         
-                        return {
+                        let finalContactAvatar = existingChat.contactAvatar || realChat.contactAvatar;
+                        
+                        // Se encontrou contato e o chat não tem avatar ou tem avatar padrão, usa o avatar do contato
+                        if (contacts.length > 0) {
+                          const chatPhone = normalizePhoneForMatch(useRealContactNumber ? realChat.contactNumber : existingChat.contactNumber);
+                          const contactMatch = contacts.find(c => {
+                            if (!c.phone) return false;
+                            const cPhone = normalizePhoneForMatch(c.phone);
+                            return cPhone === chatPhone || 
+                                   (cPhone.length >= 8 && chatPhone.length >= 8 && 
+                                    (cPhone.slice(-8) === chatPhone.slice(-8) || 
+                                     cPhone.slice(-9) === chatPhone.slice(-9) ||
+                                     cPhone.slice(-10) === chatPhone.slice(-10) ||
+                                     cPhone.slice(-11) === chatPhone.slice(-11)));
+                          });
+                          
+                          if (contactMatch && contactMatch.avatar && (!finalContactAvatar || finalContactAvatar.includes('ui-avatars.com'))) {
+                            finalContactAvatar = contactMatch.avatar;
+                          }
+                        }
+                        
+                        const mergedChat = {
                             ...realChat,
                             messages: mergedMessages, // Usa mensagens mescladas
                             id: shouldUpdateId ? realChat.id : existingChat.id, // Atualiza ID se existente for gerado e real for válido
                             contactName: finalContactName, // Usa nome do contato se encontrado, senão mantém o existente
+                            contactAvatar: finalContactAvatar, // Preserva avatar existente ou usa da API ou do contato
                             contactNumber: useRealContactNumber ? realChat.contactNumber : existingChat.contactNumber, // Atualiza se número mais completo
                             clientCode: dbChat?.clientCode || existingChat.clientCode,
                             // PRIORIDADE ABSOLUTA: Dados do banco têm precedência
@@ -1560,6 +1582,16 @@ const App: React.FC = () => {
                                 lastMergedMsg.timestamp : 
                                 existingChat.lastMessageTime
                         };
+                        
+                        // Se o nome ou avatar foi atualizado do contato, salva no banco
+                        if (finalContactName !== existingChat.contactName || finalContactAvatar !== (existingChat.contactAvatar || realChat.contactAvatar)) {
+                          // Salva assincronamente para não bloquear
+                          setTimeout(() => {
+                            handleUpdateChat(mergedChat);
+                          }, 100);
+                        }
+                        
+                        return mergedChat;
                     } else {
                         // Novo chat encontrado - verifica se precisa enviar mensagem de seleção de setores
                         const hasUserMessages = realChat.messages.some(m => m.sender === 'user');
