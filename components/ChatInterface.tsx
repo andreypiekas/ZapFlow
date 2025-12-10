@@ -1398,7 +1398,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                           if (!tag || typeof tag !== 'string') return null;
                           const tagDef = AVAILABLE_TAGS.find(t => t.name === tag);
                           return (
-                            <span key={tag} className={`text-[10px] px-1.5 py-0.5 rounded-full ${tagDef ? tagDef.color : 'bg-slate-200'}`}>
+                            <span key={tag} className={`text-[10px] px-1.5 py-0.5 rounded-full border ${tagDef ? tagDef.color : 'bg-slate-500/20 text-slate-300 border-slate-500/30'}`}>
                               {tag}
                             </span>
                           );
