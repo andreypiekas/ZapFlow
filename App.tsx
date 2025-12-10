@@ -1294,17 +1294,17 @@ const App: React.FC = () => {
                         }
                         
                         // Detecta se há novas mensagens reais (não apenas reordenação)
-                        const hasNewMessages = mergedMessages.length > existingChat.messages.length;
+                        const hasNewMessagesAfterMerge = mergedMessages.length > existingChat.messages.length;
                         const lastMergedMsg = mergedMessages.length > 0 ? mergedMessages[mergedMessages.length - 1] : null;
                         const lastExistingMsg = existingChat.messages.length > 0 ? existingChat.messages[existingChat.messages.length - 1] : null;
                         
                         // Verifica se chat estava fechado e recebeu nova mensagem do usuário
                         // Se sim, reabre para 'pending' (isso já foi tratado acima na verificação de dbChat)
-                        const wasReopened = dbChat?.status === 'closed' && hasNewMessages && lastMergedMsg?.sender === 'user';
+                        const wasReopened = dbChat?.status === 'closed' && hasNewMessagesAfterMerge && lastMergedMsg?.sender === 'user';
                         
                         // Processa seleção de setores apenas se não estiver no banco (novos chats)
                         // Chats no banco já têm departmentId fixo
-                        if (!dbChat && hasNewMessages) {
+                        if (!dbChat && hasNewMessagesAfterMerge) {
                             const newUserMessages = mergedMessages.filter(msg => {
                                 const isNew = !existingChat.messages.some(existingMsg => 
                                     existingMsg.id === msg.id || 
@@ -1402,7 +1402,7 @@ const App: React.FC = () => {
                         }
                         
                         // Só atualiza lastMessageTime se realmente houver nova mensagem
-                        const shouldUpdateLastMessageTime = hasNewMessages && lastMergedMsg && 
+                        const shouldUpdateLastMessageTime = hasNewMessagesAfterMerge && lastMergedMsg && 
                             (!lastExistingMsg || 
                              !lastMergedMsg.id || 
                              lastMergedMsg.id !== lastExistingMsg.id ||
