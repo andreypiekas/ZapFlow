@@ -32,7 +32,8 @@ const loadConfig = (): ApiConfig => {
     instanceName: 'zapflow',
     isDemo: false,
     googleClientId: '',
-    geminiApiKey: ''
+    geminiApiKey: '',
+    holidayStates: []
   };
 };
 
@@ -432,20 +433,44 @@ const App: React.FC = () => {
 
         // Depois busca municipais em background (pode demorar)
         try {
-          // Busca API key do Gemini para buscar municipais
+          // Busca API key do Gemini e estados configurados
           const configData = await loadConfigFromBackend();
           const geminiApiKey = configData?.geminiApiKey || '';
           
-          // Busca municipais dos estados principais (SP, RJ, MG, RS, PR, SC, BA, GO, PE, CE)
-          // Limita a 10 estados para não demorar muito
-          const mainStates = ['SP', 'RJ', 'MG', 'RS', 'PR', 'SC', 'BA', 'GO', 'PE', 'CE'];
+          // Estados principais (prioridade): SC, PR, RS
+          const priorityStates = ['SC', 'PR', 'RS'];
           
-          const allHolidays = await getUpcomingHolidays(
-            30, // Próximos 30 dias
-            mainStates, // Estados principais
-            undefined, // Sem callback de progresso
-            geminiApiKey || undefined
-          );
+          // Estados adicionais configurados pelo usuário (ou todos os demais se não configurado)
+          const configuredStates = configData?.holidayStates || [];
+          const otherStates = configuredStates.length > 0 
+            ? configuredStates.filter(s => !priorityStates.includes(s))
+            : BRAZILIAN_STATES.map(s => s.code).filter(s => !priorityStates.includes(s));
+          
+          // Primeiro busca dos estados principais
+          let allHolidays: Holiday[] = [];
+          
+          if (priorityStates.length > 0) {
+            console.log('[App] 🔍 Buscando feriados municipais dos estados principais (SC, PR, RS)...');
+            const priorityHolidays = await getUpcomingHolidays(
+              30,
+              priorityStates,
+              undefined,
+              geminiApiKey || undefined
+            );
+            allHolidays.push(...priorityHolidays);
+          }
+          
+          // Depois busca dos demais estados configurados
+          if (otherStates.length > 0) {
+            console.log(`[App] 🔍 Buscando feriados municipais dos demais estados (${otherStates.length} estados)...`);
+            const otherHolidays = await getUpcomingHolidays(
+              30,
+              otherStates,
+              undefined,
+              geminiApiKey || undefined
+            );
+            allHolidays.push(...otherHolidays);
+          }
 
           // Combina nacionais e municipais, ordena e pega os 5 próximos
           const combined = [...allHolidays]
@@ -466,7 +491,7 @@ const App: React.FC = () => {
     // Atualiza uma vez por dia
     const interval = setInterval(loadUpcomingHolidays, 24 * 60 * 60 * 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [apiConfig.holidayStates]); // Reexecuta quando os estados configurados mudarem
 
   // Verifica se o backend está disponível ao montar o componente
   useEffect(() => {

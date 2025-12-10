@@ -1362,7 +1362,8 @@ app.get('/api/config', authenticateToken, dataLimiter, async (req, res) => {
           instanceName: 'zapflow',
           isDemo: false,
           googleClientId: '',
-          geminiApiKey: ''
+          geminiApiKey: '',
+          holidayStates: []
         }
       });
     }

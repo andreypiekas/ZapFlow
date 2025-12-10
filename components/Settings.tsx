@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { ApiConfig, User, UserRole } from '../types';
-import { Save, Server, Shield, Globe, User as UserIcon, Bell, Lock, RefreshCw, Database, HardDrive, Sparkles, Trash2, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Save, Server, Shield, Globe, User as UserIcon, Bell, Lock, RefreshCw, Database, HardDrive, Sparkles, Trash2, AlertTriangle, CheckCircle, Calendar } from 'lucide-react';
 import { fetchAllInstances, fetchInstanceDetails, InstanceInfo } from '../services/whatsappService';
 import { checkApiHealth, getAuthToken, cleanupInvalidChats } from '../services/apiService';
+import { BRAZILIAN_STATES } from '../services/holidaysService';
 import { storageService } from '../services/storageService';
 
 interface SettingsProps {
@@ -464,6 +465,65 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
                     <p className="text-xs text-slate-400 mt-1">
                         Necessário para respostas inteligentes de IA. Obtenha em <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-blue-500 underline">Google AI Studio</a>.
                     </p>
+                  </div>
+
+                  <div className="col-span-1 md:col-span-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                      <Calendar size={16} /> Estados para Feriados Municipais no Dashboard
+                    </label>
+                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 max-h-64 overflow-y-auto">
+                      <p className="text-xs text-slate-600 mb-3">
+                        Selecione os estados para buscar feriados municipais. <strong>SC, PR e RS</strong> são sempre buscados primeiro (prioridade).
+                      </p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                        {BRAZILIAN_STATES.map(state => {
+                          const isSelected = (formData.holidayStates || []).includes(state.code);
+                          const isPriority = ['SC', 'PR', 'RS'].includes(state.code);
+                          
+                          return (
+                            <label
+                              key={state.code}
+                              className={`flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors border ${
+                                isPriority
+                                  ? 'bg-blue-50 border-blue-300'
+                                  : isSelected
+                                  ? 'bg-emerald-50 border-emerald-300'
+                                  : 'bg-white border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected || isPriority}
+                                disabled={isPriority}
+                                onChange={(e) => {
+                                  const currentStates = formData.holidayStates || [];
+                                  if (e.target.checked) {
+                                    if (!currentStates.includes(state.code) && !isPriority) {
+                                      setFormData({...formData, holidayStates: [...currentStates, state.code]});
+                                    }
+                                  } else {
+                                    if (!isPriority) {
+                                      setFormData({...formData, holidayStates: currentStates.filter(s => s !== state.code)});
+                                    }
+                                  }
+                                }}
+                                className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 disabled:opacity-50"
+                              />
+                              <span className={`text-sm ${isPriority ? 'font-semibold text-blue-700' : 'text-slate-700'}`}>
+                                {state.code}
+                              </span>
+                              {isPriority && (
+                                <span className="text-xs text-blue-600">(Prioridade)</span>
+                              )}
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-3">
+                        <strong>Estados principais (SC, PR, RS):</strong> Sempre buscados primeiro. <br />
+                        <strong>Outros estados:</strong> Buscados depois, apenas se selecionados acima.
+                      </p>
+                    </div>
                   </div>
               </div>
 
