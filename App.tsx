@@ -1848,8 +1848,26 @@ const App: React.FC = () => {
                                             const wasClosed = chat.status === 'closed';
                                             const isUserMessage = mapped.sender === 'user';
                                             
-                                            if (isUserMessage && !chat.departmentId && !chat.departmentSelectionSent && departments.length > 0 &&
-                                                (chat.status === 'pending' || !chat.assignedTo || wasClosed)) {
+                                            // Debug: log detalhado para entender por que a condição não está sendo satisfeita
+                                            if (isUserMessage) {
+                                                console.log(`[App] 🔍 [DEBUG] Socket.IO: Verificando envio de mensagem de seleção - chatId: ${chat.id}, isUserMessage: ${isUserMessage}, departmentId: ${chat.departmentId}, departmentSelectionSent: ${chat.departmentSelectionSent}, departments.length: ${departments.length}, status: ${chat.status}, assignedTo: ${chat.assignedTo}, wasClosed: ${wasClosed}`);
+                                            }
+                                            
+                                            // Se chat estava fechado e recebeu mensagem do usuário, RESETA departmentSelectionSent para permitir reenvio
+                                            // Isso garante que a mensagem seja enviada quando o chat for reaberto
+                                            if (wasClosed && isUserMessage) {
+                                                console.log(`[App] 🔄 [DEBUG] Socket.IO: Chat fechado recebeu mensagem do usuário - Resetando departmentSelectionSent para permitir reenvio`);
+                                                // Não atualiza o chat ainda, apenas prepara para enviar a mensagem
+                                            }
+                                            
+                                            // Condição ajustada: se chat estava fechado, reseta departmentSelectionSent na verificação
+                                            const shouldSendSelection = isUserMessage && 
+                                                !chat.departmentId && 
+                                                departments.length > 0 &&
+                                                (chat.status === 'pending' || !chat.assignedTo || wasClosed) &&
+                                                (!chat.departmentSelectionSent || wasClosed); // Permite reenvio se chat estava fechado
+                                            
+                                            if (shouldSendSelection) {
                                                 console.log(`[App] 📤 [DEBUG] Socket.IO: Chat sem departamento - Enviando mensagem de seleção IMEDIATAMENTE para ${chat.id} (status: ${chat.status}, wasClosed: ${wasClosed})`);
                                                 const contactNumber = chat.contactNumber || (chat.id ? chat.id.split('@')[0] : null);
                                                 
@@ -1879,6 +1897,8 @@ const App: React.FC = () => {
                                                 } else {
                                                     console.warn(`[App] ⚠️ [DEBUG] Socket.IO: Não foi possível enviar mensagem de seleção - número de contato inválido para ${chat.id} (contactNumber: ${contactNumber})`);
                                                 }
+                                            } else if (isUserMessage && !shouldSendSelection) {
+                                                console.log(`[App] ⚠️ [DEBUG] Socket.IO: Condição não satisfeita para envio - isUserMessage: ${isUserMessage}, departmentId: ${chat.departmentId}, departmentSelectionSent: ${chat.departmentSelectionSent}, departments.length: ${departments.length}, status: ${chat.status}, assignedTo: ${chat.assignedTo}, wasClosed: ${wasClosed}`);
                                             }
                                         
                                             // Para mensagens enviadas (fromMe: true), tenta atualizar mensagem local existente
