@@ -1711,7 +1711,11 @@ const App: React.FC = () => {
             
             // Event: connect
             socket.on('connect', () => {
-                console.log('[App] ✅ Socket.IO conectado com sucesso!');
+                console.log('[App] ✅ Socket.IO conectado com sucesso!', {
+                    socketId: socket.id,
+                    connected: socket.connected,
+                    hasMessagesUpsertHandler: socket.hasListeners('messages.upsert')
+                });
                 wsReconnectAttemptsRef.current = 0;
                 setWsStatus('connected');
             });
@@ -1742,7 +1746,15 @@ const App: React.FC = () => {
                     }
             });
                     
+            // Debug: Listener genérico para ver todos os eventos
+            socket.onAny((eventName, ...args) => {
+                if (eventName.includes('message') || eventName.includes('Message')) {
+                    console.log(`[App] 🔔 [DEBUG] Socket.IO evento recebido: ${eventName}`, args);
+                }
+            });
+            
             // Event: messages.upsert - mensagens novas ou atualizadas
+            console.log('[App] 🔧 [DEBUG] Registrando handler messages.upsert no Socket.IO');
             socket.on('messages.upsert', (data: any) => {
                 try {
                     // Log inicial para rastrear recebimento de dados
@@ -1751,7 +1763,9 @@ const App: React.FC = () => {
                         dataKeys: data ? Object.keys(data) : [],
                         hasDataKey: !!(data?.data),
                         hasKey: !!(data?.key),
-                        rawData: JSON.stringify(data).substring(0, 200)
+                        rawData: JSON.stringify(data).substring(0, 200),
+                        socketConnected: socket.connected,
+                        socketId: socket.id
                     });
                     
                     // Log adicional para debug
