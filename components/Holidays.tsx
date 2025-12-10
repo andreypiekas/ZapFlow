@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, MapPin, Flag, Building2, RefreshCw, AlertCircle, X } from 'lucide-react';
-import { getUpcomingHolidays, Holiday, BRAZILIAN_STATES } from '../services/holidaysService';
+import { Calendar, MapPin, Flag, Building2, RefreshCw, AlertCircle, X, Download } from 'lucide-react';
+import { getUpcomingHolidays, getNationalHolidays, Holiday, BRAZILIAN_STATES } from '../services/holidaysService';
 import { loadConfig as loadConfigFromBackend } from '../services/apiService';
+
+const NATIONAL_HOLIDAYS_CACHE_KEY = 'nationalHolidaysCache';
+const NATIONAL_HOLIDAYS_LAST_UPDATE_KEY = 'nationalHolidaysLastUpdate';
 
 const Holidays: React.FC = () => {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
@@ -11,6 +14,9 @@ const Holidays: React.FC = () => {
   const [days, setDays] = useState<number>(15);
   const [progressMessage, setProgressMessage] = useState<string>('');
   const [geminiApiKey, setGeminiApiKey] = useState<string>('');
+  const [nationalHolidays, setNationalHolidays] = useState<Holiday[]>([]);
+  const [isLoadingNational, setIsLoadingNational] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<string>('');
 
   // Carrega a API key do Gemini ao montar o componente
   useEffect(() => {
@@ -25,6 +31,81 @@ const Holidays: React.FC = () => {
       }
     };
     loadGeminiApiKey();
+  }, []);
+
+  // Carrega feriados nacionais dos próximos 15 dias (com cache e atualização automática diária)
+  const loadNationalHolidays = async (forceUpdate: boolean = false) => {
+    try {
+      const today = new Date();
+      const endDate = new Date(today);
+      endDate.setDate(today.getDate() + 15);
+
+      // Verifica cache e última atualização
+      const cachedData = localStorage.getItem(NATIONAL_HOLIDAYS_CACHE_KEY);
+      const lastUpdateStr = localStorage.getItem(NATIONAL_HOLIDAYS_LAST_UPDATE_KEY);
+      
+      if (!forceUpdate && cachedData && lastUpdateStr) {
+        const lastUpdate = new Date(lastUpdateStr);
+        const hoursSinceUpdate = (today.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60);
+        
+        // Se atualizou há menos de 24 horas, usa cache
+        if (hoursSinceUpdate < 24) {
+          const cached = JSON.parse(cachedData);
+          setNationalHolidays(cached);
+          setLastUpdate(lastUpdate.toLocaleString('pt-BR'));
+          console.log('[Holidays] ✅ Usando cache de feriados nacionais (atualizado há', Math.round(hoursSinceUpdate), 'horas)');
+          return;
+        }
+      }
+
+      // Busca novos dados
+      setIsLoadingNational(true);
+      const currentYear = today.getFullYear();
+      const nextYear = endDate.getFullYear();
+      
+      const allNationalHolidays = [
+        ...getNationalHolidays(currentYear),
+        ...(nextYear > currentYear ? getNationalHolidays(nextYear) : [])
+      ];
+
+      // Filtra apenas os próximos 15 dias
+      const next15Days = allNationalHolidays.filter(h => {
+        const holidayDate = new Date(h.date);
+        return holidayDate >= today && holidayDate <= endDate;
+      }).sort((a, b) => a.date.localeCompare(b.date));
+
+      // Salva no cache
+      localStorage.setItem(NATIONAL_HOLIDAYS_CACHE_KEY, JSON.stringify(next15Days));
+      localStorage.setItem(NATIONAL_HOLIDAYS_LAST_UPDATE_KEY, today.toISOString());
+      
+      setNationalHolidays(next15Days);
+      setLastUpdate(today.toLocaleString('pt-BR'));
+      console.log('[Holidays] ✅ Feriados nacionais atualizados:', next15Days.length);
+    } catch (err: any) {
+      console.error('[Holidays] Erro ao carregar feriados nacionais:', err);
+    } finally {
+      setIsLoadingNational(false);
+    }
+  };
+
+  // Carrega feriados nacionais ao montar e verifica atualização automática
+  useEffect(() => {
+    loadNationalHolidays();
+    
+    // Verifica a cada hora se precisa atualizar
+    const interval = setInterval(() => {
+      const lastUpdateStr = localStorage.getItem(NATIONAL_HOLIDAYS_LAST_UPDATE_KEY);
+      if (lastUpdateStr) {
+        const lastUpdate = new Date(lastUpdateStr);
+        const hoursSinceUpdate = (new Date().getTime() - lastUpdate.getTime()) / (1000 * 60 * 60);
+        if (hoursSinceUpdate >= 24) {
+          console.log('[Holidays] 🔄 Atualização automática de feriados nacionais (passou 24h)');
+          loadNationalHolidays();
+        }
+      }
+    }, 60 * 60 * 1000); // Verifica a cada 1 hora
+
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -132,7 +213,116 @@ const Holidays: React.FC = () => {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6 max-w-6xl mx-auto space-y-6">
+      {/* Tabela de Feriados Nacionais - 15 dias */}
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+        <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-blue-600 text-white rounded-lg">
+                <Flag size={24} />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-slate-800">Feriados Nacionais</h2>
+                <p className="text-slate-600 text-sm mt-1">
+                  Próximos 15 dias • Atualização automática diária
+                  {lastUpdate && (
+                    <span className="ml-2 text-xs text-slate-500">
+                      (Última atualização: {lastUpdate})
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => loadNationalHolidays(true)}
+              disabled={isLoadingNational}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Forçar atualização"
+            >
+              <RefreshCw size={18} className={isLoadingNational ? 'animate-spin' : ''} />
+              <span className="text-sm font-medium">Forçar Atualização</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6">
+          {isLoadingNational ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <RefreshCw size={24} className="animate-spin text-blue-600" />
+              <span className="mt-2 text-slate-600 text-sm">Carregando feriados nacionais...</span>
+            </div>
+          ) : nationalHolidays.length === 0 ? (
+            <div className="text-center py-8">
+              <Flag size={48} className="mx-auto text-slate-400 mb-4" />
+              <p className="text-slate-600">Nenhum feriado nacional nos próximos 15 dias</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">Data</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">Dia da Semana</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">Feriado</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">Dias Restantes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {nationalHolidays.map((holiday, index) => {
+                    const holidayDate = new Date(holiday.date);
+                    const daysUntil = getDaysUntil(holiday.date);
+                    const isToday = daysUntil === 0;
+                    const isTomorrow = daysUntil === 1;
+                    const dayOfWeek = holidayDate.toLocaleDateString('pt-BR', { weekday: 'long' });
+                    const formattedDate = holidayDate.toLocaleDateString('pt-BR', { 
+                      day: '2-digit', 
+                      month: '2-digit', 
+                      year: 'numeric' 
+                    });
+
+                    return (
+                      <tr
+                        key={`national-${holiday.date}-${index}`}
+                        className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${
+                          isToday ? 'bg-emerald-50' : isTomorrow ? 'bg-blue-50' : ''
+                        }`}
+                      >
+                        <td className="px-4 py-3 text-sm font-medium text-slate-800">
+                          {formattedDate}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600 capitalize">
+                          {dayOfWeek}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+                          {holiday.name}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          {isToday ? (
+                            <span className="px-2 py-1 bg-emerald-600 text-white rounded-full text-xs font-semibold">
+                              Hoje
+                            </span>
+                          ) : isTomorrow ? (
+                            <span className="px-2 py-1 bg-blue-600 text-white rounded-full text-xs font-semibold">
+                              Amanhã
+                            </span>
+                          ) : (
+                            <span className="text-slate-600">
+                              {daysUntil} {daysUntil === 1 ? 'dia' : 'dias'}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Feriados Gerais (Municipais e Estaduais) */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
         {/* Header */}
         <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
