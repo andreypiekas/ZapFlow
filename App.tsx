@@ -13,7 +13,8 @@ import WorkflowSettings from './components/WorkflowSettings';
 import ReportsDashboard from './components/ReportsDashboard';
 import Contacts from './components/Contacts';
 import ChatbotSettings from './components/ChatbotSettings';
-import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot, ChevronLeft, ChevronRight } from 'lucide-react';
+import Holidays from './components/Holidays';
+import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance, sendDepartmentSelectionMessage, processDepartmentSelection } from './services/whatsappService';
 import { processChatbotMessages } from './services/chatbotService'; 
 import { storageService } from './services/storageService';
@@ -112,7 +113,7 @@ const loadChatbotConfigFromStorage = (): ChatbotConfig => {
 const loadViewStateFromStorage = (): ViewState => {
   try {
     const saved = localStorage.getItem('zapflow_currentView');
-    if (saved && ['dashboard', 'chats', 'contacts', 'settings', 'connection', 'departments', 'users', 'quickMessages', 'workflows', 'reports', 'chatbot'].includes(saved)) {
+    if (saved && ['dashboard', 'chats', 'contacts', 'settings', 'connection', 'departments', 'users', 'quickMessages', 'workflows', 'reports', 'chatbot', 'holidays'].includes(saved)) {
       return saved as ViewState;
     }
   } catch (e) {
@@ -3591,6 +3592,7 @@ const App: React.FC = () => {
       case 'reports': return <ReportsDashboard chats={chats} departments={departments} />;
       case 'contacts': return <Contacts contacts={contacts} onSyncGoogle={handleSyncGoogleContacts} onImportCSV={handleImportCSVContacts} onAddContact={handleAddContact} onStartChat={handleStartChatFromContact} clientId={apiConfig.googleClientId} />;
       case 'chatbot': return <ChatbotSettings config={chatbotConfig} onSave={handleUpdateChatbotConfig} />;
+      case 'holidays': return <Holidays />;
       case 'connections': return <Connection config={apiConfig} onNavigateToSettings={() => setCurrentView('settings')} onUpdateConfig={handleSaveConfig} />;
       case 'departments': return <DepartmentSettings departments={departments} onAdd={handleAddDepartment} onUpdate={handleUpdateDepartment} onDelete={handleDeleteDepartment} />;
       case 'workflows': return <WorkflowSettings workflows={workflows} departments={departments} onAdd={handleAddWorkflow} onUpdate={handleUpdateWorkflow} onDelete={handleDeleteWorkflow} />;
@@ -3650,6 +3652,7 @@ const App: React.FC = () => {
           <SidebarItem view="dashboard" icon={LayoutDashboard} label="Dashboard" />
           <SidebarItem view="chat" icon={MessageSquare} label="Atendimento" />
           <SidebarItem view="contacts" icon={ContactIcon} label="Contatos" />
+          <SidebarItem view="holidays" icon={Calendar} label="Feriados" />
           {currentUser.role === UserRole.ADMIN && (
             <>
                 <div className={`pt-4 pb-2 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider ${isSidebarCollapsed ? 'text-center' : ''}`}>{isSidebarCollapsed ? 'Admin' : 'Administração'}</div>

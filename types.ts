@@ -144,4 +144,4 @@ export interface ApiConfig {
   geminiApiKey?: string; // API Key do Google Gemini para respostas de IA
 }
 
-export type ViewState = 'dashboard' | 'chat' | 'connections' | 'departments' | 'settings' | 'users' | 'reports' | 'workflows' | 'contacts' | 'chatbot';
+export type ViewState = 'dashboard' | 'chat' | 'connections' | 'departments' | 'settings' | 'users' | 'reports' | 'workflows' | 'contacts' | 'chatbot' | 'holidays';
