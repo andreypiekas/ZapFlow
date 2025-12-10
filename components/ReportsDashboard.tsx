@@ -95,82 +95,82 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
     <div className="max-w-7xl mx-auto py-8 px-4">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div className="flex items-center gap-3">
-            <div className="p-3 bg-indigo-100 text-indigo-700 rounded-lg">
-            <BarChart size={24} />
+            <div className="p-3 bg-gradient-to-br from-[#0074FF]/30 to-[#0074FF]/10 text-[#0074FF] rounded-xl border border-[#0074FF]/20">
+            <BarChart size={24} strokeWidth={2} />
             </div>
             <div>
-            <h2 className="text-2xl font-bold text-slate-800">Painel de Relatórios</h2>
-            <p className="text-slate-500">Métricas de performance, SLA e satisfação do cliente.</p>
+            <h2 className="text-2xl font-futuristic text-slate-200">Painel de Relatórios</h2>
+            <p className="text-slate-400 mt-1">Métricas de performance, SLA e satisfação do cliente.</p>
             </div>
         </div>
 
         <button 
             onClick={handleExportCSV}
-            className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors shadow-sm"
+            className="bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] hover:from-[#00B0E6] hover:to-[#00C8B8] text-[#0D0F13] px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-all shadow-lg glow-gradient"
         >
-            <Download size={18} /> Exportar CSV
+            <Download size={18} strokeWidth={2.5} /> Exportar CSV
         </button>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div className="bg-[#16191F] p-6 rounded-xl shadow-lg neon-border hover-glow transition-all hover:border-[#00E0D1]/50 group">
           <div className="flex justify-between items-start mb-4">
             <div>
-              <p className="text-slate-500 text-sm font-medium">Total de Atendimentos</p>
-              <h3 className="text-3xl font-bold text-slate-800 mt-1">{totalChats}</h3>
+              <p className="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Total de Atendimentos</p>
+              <h3 className="text-3xl font-tech bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] bg-clip-text text-transparent">{totalChats}</h3>
             </div>
-            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-              <MessageSquare size={20} />
+            <div className="p-2 bg-gradient-to-br from-[#0074FF]/30 to-[#0074FF]/10 text-[#0074FF] rounded-xl border border-[#0074FF]/20 group-hover:glow-blue transition-all">
+              <MessageSquare size={20} strokeWidth={2} />
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs">
-            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-medium">{activeChats} Ativos</span>
-            <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-medium">{closedChats} Finalizados</span>
+            <span className="px-2 py-0.5 bg-[#00E0D1]/20 text-[#00E0D1] rounded-full font-medium border border-[#00E0D1]/30">{activeChats} Ativos</span>
+            <span className="px-2 py-0.5 bg-slate-500/20 text-slate-400 rounded-full font-medium border border-slate-500/30">{closedChats} Finalizados</span>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div className="bg-[#16191F] p-6 rounded-xl shadow-lg neon-border hover-glow transition-all hover:border-[#00E0D1]/50 group">
           <div className="flex justify-between items-start mb-4">
             <div>
-              <p className="text-slate-500 text-sm font-medium">Nota Média (CSAT)</p>
-              <h3 className="text-3xl font-bold text-slate-800 mt-1">{averageRating}</h3>
+              <p className="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Nota Média (CSAT)</p>
+              <h3 className="text-3xl font-tech bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] bg-clip-text text-transparent">{averageRating}</h3>
             </div>
-            <div className="p-2 bg-yellow-50 text-yellow-600 rounded-lg">
-              <ThumbsUp size={20} />
+            <div className="p-2 bg-gradient-to-br from-yellow-500/30 to-yellow-500/10 text-yellow-400 rounded-xl border border-yellow-500/20 group-hover:glow-blue transition-all">
+              <ThumbsUp size={20} strokeWidth={2} />
             </div>
           </div>
           <p className="text-xs text-slate-400">Baseado em {ratedChats.length} avaliações</p>
           <div className="flex gap-1 mt-2">
              {[1,2,3,4,5].map(star => (
-                <div key={star} className={`h-1 flex-1 rounded-full ${Number(averageRating) >= star ? 'bg-yellow-400' : 'bg-slate-200'}`} />
+                <div key={star} className={`h-1 flex-1 rounded-full ${Number(averageRating) >= star ? 'bg-yellow-400' : 'bg-slate-500/30'}`} />
              ))}
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div className="bg-[#16191F] p-6 rounded-xl shadow-lg neon-border hover-glow transition-all hover:border-[#00E0D1]/50 group">
           <div className="flex justify-between items-start mb-4">
             <div>
-              <p className="text-slate-500 text-sm font-medium">Tempo Médio (TMA)</p>
-              <h3 className="text-3xl font-bold text-slate-800 mt-1">{averageHandleTime}</h3>
+              <p className="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Tempo Médio (TMA)</p>
+              <h3 className="text-3xl font-tech bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] bg-clip-text text-transparent">{averageHandleTime}</h3>
             </div>
-            <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
-              <Clock size={20} />
+            <div className="p-2 bg-gradient-to-br from-purple-500/30 to-purple-500/10 text-purple-400 rounded-xl border border-purple-500/20 group-hover:glow-blue transition-all">
+              <Clock size={20} strokeWidth={2} />
             </div>
           </div>
-          <p className="text-xs text-emerald-600 flex items-center gap-1">
-             <TrendingUp size={12} /> -12% vs mês anterior
+          <p className="text-xs text-[#00E0D1] flex items-center gap-1">
+             <TrendingUp size={12} strokeWidth={2} /> -12% vs mês anterior
           </p>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div className="bg-[#16191F] p-6 rounded-xl shadow-lg neon-border hover-glow transition-all hover:border-[#00E0D1]/50 group">
           <div className="flex justify-between items-start mb-4">
             <div>
-              <p className="text-slate-500 text-sm font-medium">Tempo Resposta</p>
-              <h3 className="text-3xl font-bold text-slate-800 mt-1">{averageResponseTime}</h3>
+              <p className="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Tempo Resposta</p>
+              <h3 className="text-3xl font-tech bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] bg-clip-text text-transparent">{averageResponseTime}</h3>
             </div>
-            <div className="p-2 bg-orange-50 text-orange-600 rounded-lg">
-              <Clock size={20} />
+            <div className="p-2 bg-gradient-to-br from-orange-500/30 to-orange-500/10 text-orange-400 rounded-xl border border-orange-500/20 group-hover:glow-blue transition-all">
+              <Clock size={20} strokeWidth={2} />
             </div>
           </div>
           <p className="text-xs text-slate-400">Primeira resposta</p>
@@ -179,9 +179,11 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Department Breakdown */}
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-           <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
-              <Users size={18} className="text-slate-500" />
+        <div className="lg:col-span-2 bg-[#16191F] rounded-xl shadow-lg neon-border p-6">
+           <h3 className="font-futuristic text-slate-200 mb-6 flex items-center gap-3 circuit-line pb-4">
+              <div className="p-2 bg-gradient-to-br from-[#00C3FF]/30 to-[#00E0D1]/10 text-[#00E0D1] rounded-xl border border-[#00E0D1]/20">
+                <Users size={18} strokeWidth={2} />
+              </div>
               Volume por Departamento
            </h3>
            
@@ -189,23 +191,23 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
               {chatsByDepartment.map((dept) => (
                  <div key={dept.name}>
                     <div className="flex justify-between text-sm mb-1">
-                       <span className="font-medium text-slate-700">{dept.name}</span>
+                       <span className="font-medium text-slate-200">{dept.name}</span>
                        <div className="flex items-center gap-2">
-                         <span className="text-slate-500">{dept.count} atendimentos</span>
+                         <span className="text-slate-400">{dept.count} atendimentos</span>
                          {dept.rated > 0 && (
-                           <span className="text-xs text-yellow-600 font-medium">
+                           <span className="text-xs text-yellow-400 font-medium">
                              ⭐ {dept.avgRating} ({dept.rated})
                            </span>
                          )}
                        </div>
                     </div>
-                    <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                    <div className="w-full bg-[#0D0F13] rounded-full h-2.5 overflow-hidden">
                        <div className={`h-2.5 rounded-full ${dept.color}`} style={{ width: `${(dept.count / totalChats) * 100}%` }}></div>
                     </div>
                     <div className="flex justify-between mt-1">
-                       <span className="text-[10px] text-slate-400">{dept.closed} Finalizados</span>
+                       <span className="text-[10px] text-slate-500">{dept.closed} Finalizados</span>
                        {dept.rated > 0 && (
-                         <span className="text-[10px] text-yellow-600">{dept.rated} avaliados</span>
+                         <span className="text-[10px] text-yellow-400">{dept.rated} avaliados</span>
                        )}
                     </div>
                  </div>
@@ -214,11 +216,11 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
               {/* General/Unassigned */}
               <div>
                 <div className="flex justify-between text-sm mb-1">
-                    <span className="font-medium text-slate-700">Triagem / Sem Setor</span>
-                    <span className="text-slate-500">{generalChats} atendimentos</span>
+                    <span className="font-medium text-slate-200">Triagem / Sem Setor</span>
+                    <span className="text-slate-400">{generalChats} atendimentos</span>
                 </div>
-                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                    <div className="h-2.5 rounded-full bg-slate-400" style={{ width: `${(generalChats / totalChats) * 100}%` }}></div>
+                <div className="w-full bg-[#0D0F13] rounded-full h-2.5 overflow-hidden">
+                    <div className="h-2.5 rounded-full bg-slate-500" style={{ width: `${(generalChats / totalChats) * 100}%` }}></div>
                 </div>
               </div>
 
@@ -227,9 +229,11 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
 
         {/* Recent Ratings / Distribution */}
         <div className="space-y-6">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
-              <CheckCircle size={18} className="text-slate-500" />
+          <div className="bg-[#16191F] rounded-xl shadow-lg neon-border p-6">
+            <h3 className="font-futuristic text-slate-200 mb-6 flex items-center gap-3 circuit-line pb-4">
+              <div className="p-2 bg-gradient-to-br from-[#00C3FF]/30 to-[#00E0D1]/10 text-[#00E0D1] rounded-xl border border-[#00E0D1]/20">
+                <CheckCircle size={18} strokeWidth={2} />
+              </div>
               Últimas Avaliações
             </h3>
             <div className="space-y-4">
@@ -242,16 +246,16 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
                 })
                 .slice(0, 5)
                 .map(chat => (
-                 <div key={chat.id} className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                 <div key={chat.id} className="p-3 bg-[#0D0F13] rounded-lg border border-[#111316] hover:border-[#00E0D1]/30 transition-all">
                     <div className="flex justify-between items-center mb-1">
-                       <span className="font-bold text-xs text-slate-700">{chat.contactName}</span>
+                       <span className="font-bold text-xs text-slate-200">{chat.contactName}</span>
                        <div className="flex text-yellow-400 gap-0.5">
                           {[...Array(Math.min(5, Math.max(1, chat.rating || 0)))].map((_, i) => (
-                            <ThumbsUp key={i} size={10} fill="currentColor" />
+                            <ThumbsUp key={i} size={10} fill="currentColor" strokeWidth={2} />
                           ))}
                        </div>
                     </div>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-400">
                       {chat.endedAt 
                         ? `Finalizado em ${new Date(chat.endedAt).toLocaleDateString('pt-BR')}`
                         : 'Atendido por: ' + (chat.assignedTo || 'Sistema')
@@ -267,9 +271,11 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
 
           {/* Rating Distribution */}
           {ratedChats.length > 0 && (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
-                <ThumbsUp size={18} className="text-slate-500" />
+            <div className="bg-[#16191F] rounded-xl shadow-lg neon-border p-6">
+              <h3 className="font-futuristic text-slate-200 mb-6 flex items-center gap-3 circuit-line pb-4">
+                <div className="p-2 bg-gradient-to-br from-[#00C3FF]/30 to-[#00E0D1]/10 text-[#00E0D1] rounded-xl border border-[#00E0D1]/20">
+                  <ThumbsUp size={18} strokeWidth={2} />
+                </div>
                 Distribuição de Avaliações
               </h3>
               <div className="space-y-3">
@@ -279,20 +285,20 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
                     <div key={rating}>
                       <div className="flex justify-between items-center mb-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-slate-700">{rating} estrela{rating > 1 ? 's' : ''}</span>
+                          <span className="text-sm font-medium text-slate-200">{rating} estrela{rating > 1 ? 's' : ''}</span>
                           <div className="flex text-yellow-400">
                             {[...Array(rating)].map((_, i) => (
-                              <ThumbsUp key={i} size={12} fill="currentColor" />
+                              <ThumbsUp key={i} size={12} fill="currentColor" strokeWidth={2} />
                             ))}
                           </div>
                         </div>
-                        <span className="text-sm text-slate-600 font-medium">{count} ({percentage.toFixed(1)}%)</span>
+                        <span className="text-sm text-slate-300 font-medium">{count} ({percentage.toFixed(1)}%)</span>
                       </div>
-                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                      <div className="w-full bg-[#0D0F13] rounded-full h-2 overflow-hidden">
                         <div 
-                          className="h-2 rounded-full bg-yellow-400 transition-all" 
+                          className="h-2 rounded-full bg-yellow-400 transition-all"
                           style={{ width: `${percentage}%` }}
-                        />
+                        ></div>
                       </div>
                     </div>
                   );
