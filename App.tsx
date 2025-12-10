@@ -4015,7 +4015,7 @@ const App: React.FC = () => {
   // Se ainda está verificando o backend, mostra loading
   if (backendAvailable === null) {
     return (
-      <div className="min-h-screen bg-[#111316] flex items-center justify-center">
+      <div className="min-h-screen bg-[#0A0B0E] flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-[#00E0D1] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-slate-300">Verificando conexão com o backend...</p>
@@ -4244,7 +4244,7 @@ const App: React.FC = () => {
   const SidebarItem = ({ view, icon: Icon, label }: { view: ViewState, icon: any, label: string }) => (
     <button 
         onClick={() => handleViewChange(view)}
-        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all relative group ${currentView === view ? 'bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] shadow-lg shadow-[#00C3FF]/30 font-medium' : 'hover:bg-[#111316] text-slate-300 hover:text-[#00E0D1]'} ${isSidebarCollapsed ? 'justify-center' : ''}`}
+        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all relative group ${currentView === view ? 'bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] shadow-lg shadow-[#00C3FF]/30 font-medium' : 'hover:bg-[#0D0F13] text-slate-300 hover:text-[#00E0D1]'} ${isSidebarCollapsed ? 'justify-center' : ''}`}
         title={isSidebarCollapsed ? label : ''}
     >
         {currentView === view && (
@@ -4256,7 +4256,7 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="flex h-screen bg-[#111316] font-sans overflow-hidden">
+    <div className="flex h-screen bg-[#0A0B0E] font-sans overflow-hidden">
       <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2">
         {notifications.map(n => (
           <div key={n.id} className={`min-w-[300px] max-w-sm p-4 rounded-lg shadow-xl border-l-4 bg-[#16191F] animate-in slide-in-from-right flex items-start gap-3 ${n.type === 'info' ? 'border-[#0074FF]' : n.type === 'warning' ? 'border-orange-500' : 'border-[#00E0D1]'}`}>
@@ -4277,7 +4277,7 @@ const App: React.FC = () => {
           <div className="w-8 h-8 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] rounded-lg flex items-center justify-center text-[#0D0F13] font-bold">Z</div>
           <span className="text-xl font-bold text-white tracking-tight">Zentria</span>
         </div>
-        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-white p-2 hover:bg-[#111316] rounded-lg">{isMobileMenuOpen ? <X /> : <Menu />}</button>
+        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-white p-2 hover:bg-[#0D0F13] rounded-lg">{isMobileMenuOpen ? <X /> : <Menu />}</button>
       </div>
 
       {isMobileMenuOpen && <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setIsMobileMenuOpen(false)} />}
@@ -4288,7 +4288,7 @@ const App: React.FC = () => {
           {!isSidebarCollapsed && <span className="text-xl font-futuristic text-white tracking-tight animate-in fade-in">Zentria</span>}
         </div>
         
-        <div className={`p-4 bg-[#111316]/50 flex items-center gap-3 border-b border-[#111316] mt-16 md:mt-0 flex-shrink-0 ${isSidebarCollapsed ? 'justify-center' : ''}`}>
+        <div className={`p-4 bg-[#0D0F13]/50 flex items-center gap-3 border-b border-[#0D0F13] mt-16 md:mt-0 flex-shrink-0 ${isSidebarCollapsed ? 'justify-center' : ''}`}>
             <img src={currentUser.avatar} alt="User" className="w-8 h-8 rounded-full border border-slate-600 flex-shrink-0 object-cover"/>
             {!isSidebarCollapsed && <div className="overflow-hidden animate-in fade-in"><p className="text-sm font-semibold text-white truncate">{currentUser.name}</p><p className="text-xs text-slate-400 truncate capitalize">{currentUser.role === 'ADMIN' ? 'Administrador' : 'Agente'}</p></div>}
         </div>

@@ -298,19 +298,22 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, onImportCSV
     <div className="max-w-6xl mx-auto py-8 px-4">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
-           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-             <UserIcon className="text-emerald-600" /> Contatos
+           <h2 className="text-2xl font-futuristic text-slate-200 flex items-center gap-3">
+             <div className="p-2 bg-gradient-to-br from-[#00C3FF]/30 to-[#00E0D1]/10 text-[#00E0D1] rounded-xl border border-[#00E0D1]/20">
+               <UserIcon size={24} strokeWidth={2} />
+             </div>
+             Contatos
            </h2>
-           <p className="text-slate-500">Gerencie sua agenda e sincronize com o Google Contacts.</p>
+           <p className="text-slate-400 mt-1">Gerencie sua agenda e sincronize com o Google Contacts.</p>
         </div>
         
         <div className="flex flex-col items-end gap-2">
             <div className="flex gap-2">
                 <button
                   onClick={() => setIsAddModalOpen(true)}
-                  className="bg-slate-600 hover:bg-slate-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 transition-colors shadow-sm font-medium"
+                  className="bg-[#111316] hover:bg-[#16191F] border border-[#0D0F13] text-slate-300 hover:text-[#00E0D1] hover:border-[#00E0D1]/30 px-5 py-2.5 rounded-lg flex items-center gap-2 transition-all shadow-sm font-medium"
                 >
-                  <Plus size={20} />
+                  <Plus size={20} strokeWidth={2} />
                   Adicionar Contato
                 </button>
                 <input
@@ -323,117 +326,117 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, onImportCSV
                 />
                 <label
                   htmlFor="csv-import-input"
-                  className={`bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 transition-colors shadow-sm font-medium cursor-pointer disabled:opacity-70 ${isImporting ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  className={`bg-[#111316] hover:bg-[#16191F] border border-[#0D0F13] text-slate-300 hover:text-[#00E0D1] hover:border-[#00E0D1]/30 px-5 py-2.5 rounded-lg flex items-center gap-2 transition-all shadow-sm font-medium cursor-pointer disabled:opacity-70 ${isImporting ? 'opacity-70 cursor-not-allowed' : ''}`}
                 >
-                  {isImporting ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}
+                  {isImporting ? <Loader2 className="animate-spin" size={20} strokeWidth={2} /> : <Upload size={20} strokeWidth={2} />}
                   {isImporting ? 'Importando...' : 'Importar CSV'}
                 </label>
                 <button 
                 onClick={handleSync}
                 disabled={isSyncing}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 transition-colors shadow-sm font-medium disabled:opacity-70"
+                className="bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] hover:from-[#00B0E6] hover:to-[#00C8B8] text-[#0D0F13] px-5 py-2.5 rounded-lg flex items-center gap-2 transition-all shadow-lg glow-gradient font-medium disabled:opacity-70"
                 >
-                {isSyncing ? <Loader2 className="animate-spin" size={20} /> : <RefreshCw size={20} />}
+                {isSyncing ? <Loader2 className="animate-spin" size={20} strokeWidth={2.5} /> : <RefreshCw size={20} strokeWidth={2.5} />}
                 {isSyncing ? 'Sincronizando...' : 'Sincronizar Google Contacts'}
                 </button>
             </div>
             {!clientId && (
-                <span className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded border border-red-100 flex items-center gap-1">
-                    <AlertTriangle size={10} /> Configure o Client ID nas Configurações
+                <span className="text-xs text-red-400 bg-red-500/10 px-2 py-1 rounded border border-red-500/30 flex items-center gap-1 neon-border">
+                    <AlertTriangle size={10} strokeWidth={2} /> Configure o Client ID nas Configurações
                 </span>
             )}
         </div>
       </div>
 
       {error && (
-          <div className="mb-6 p-4 bg-red-50 text-red-700 border border-red-200 rounded-lg flex items-center gap-2 animate-in slide-in-from-top-2">
-              <AlertTriangle size={20} />
+          <div className="mb-6 p-4 bg-red-500/10 text-red-400 border border-red-500/30 rounded-lg flex items-center gap-2 animate-in slide-in-from-top-2 neon-border">
+              <AlertTriangle size={20} strokeWidth={2} />
               {error}
           </div>
       )}
 
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+      <div className="bg-[#16191F] rounded-xl shadow-lg neon-border overflow-hidden">
         {/* Search Bar */}
-        <div className="p-4 border-b border-slate-200 bg-slate-50">
+        <div className="p-4 border-b border-[#0D0F13] bg-[#0D0F13] circuit-line">
             <div className="relative max-w-md">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500" size={18} strokeWidth={2} />
                 <input 
                     type="text" 
                     placeholder="Buscar por nome, telefone ou email..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                    className="w-full pl-10 pr-4 py-2 border border-[#0D0F13] bg-[#111316] text-slate-200 rounded-lg focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500"
                 />
             </div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-50 border-b border-slate-200">
+            <thead className="bg-[#0D0F13] border-b border-[#111316]">
               <tr>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Nome</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Telefone</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Email</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Origem</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Última Sync</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Ações</th>
+                <th className="px-6 py-4 text-xs font-futuristic text-slate-400 uppercase tracking-wider">Nome</th>
+                <th className="px-6 py-4 text-xs font-futuristic text-slate-400 uppercase tracking-wider">Telefone</th>
+                <th className="px-6 py-4 text-xs font-futuristic text-slate-400 uppercase tracking-wider">Email</th>
+                <th className="px-6 py-4 text-xs font-futuristic text-slate-400 uppercase tracking-wider">Origem</th>
+                <th className="px-6 py-4 text-xs font-futuristic text-slate-400 uppercase tracking-wider">Última Sync</th>
+                <th className="px-6 py-4 text-xs font-futuristic text-slate-400 uppercase tracking-wider">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-[#0D0F13]">
               {filteredContacts.map(contact => {
                 const cleaned = contact.phone.replace(/\D/g, '');
                 const isShort = cleaned.length > 0 && cleaned.length < 10;
                 
                 return (
-                <tr key={contact.id} className="hover:bg-slate-50 transition-colors">
+                <tr key={contact.id} className="hover:bg-[#111316] transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       {contact.avatar ? (
-                          <img src={contact.avatar} alt={contact.name} className="w-8 h-8 rounded-full" />
+                          <img src={contact.avatar} alt={contact.name} className="w-8 h-8 rounded-full border border-[#0D0F13]" />
                       ) : (
-                        <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold text-xs">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#00C3FF]/20 to-[#00E0D1]/20 border border-[#00E0D1]/30 flex items-center justify-center text-[#00E0D1] font-bold text-xs">
                             {contact.name.charAt(0)}
                         </div>
                       )}
-                      <span className="font-medium text-slate-800">{contact.name}</span>
+                      <span className="font-medium text-slate-200">{contact.name}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-slate-600 font-mono text-sm flex items-center gap-2">
+                  <td className="px-6 py-4 text-slate-300 font-mono text-sm flex items-center gap-2">
                       {contact.phone}
                       {isShort && (
-                          <span title="Número parece incompleto (sem DDD?)" className="text-amber-500 cursor-help"><AlertTriangle size={14}/></span>
+                          <span title="Número parece incompleto (sem DDD?)" className="text-orange-400 cursor-help"><AlertTriangle size={14} strokeWidth={2}/></span>
                       )}
                   </td>
-                  <td className="px-6 py-4 text-slate-600 text-sm">
+                  <td className="px-6 py-4 text-slate-300 text-sm">
                       {contact.email ? (
-                          <span className="flex items-center gap-1"><Mail size={14} className="text-slate-400"/> {contact.email}</span>
+                          <span className="flex items-center gap-1"><Mail size={14} className="text-slate-500" strokeWidth={2}/> {contact.email}</span>
                       ) : '-'}
                   </td>
                   <td className="px-6 py-4">
                     {contact.source === 'google' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#0074FF]/20 text-[#0074FF] border border-[#0074FF]/30">
                              Google
                         </span>
                     ) : contact.source === 'csv' ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 border border-emerald-200">
-                            <FileText size={12} /> CSV
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#00E0D1]/20 text-[#00E0D1] border border-[#00E0D1]/30">
+                            <FileText size={12} strokeWidth={2} /> CSV
                         </span>
                     ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-500/20 text-slate-400 border border-slate-500/30">
                             Manual
                         </span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-xs text-slate-500">
+                  <td className="px-6 py-4 text-xs text-slate-400">
                       {contact.lastSync ? new Date(contact.lastSync).toLocaleString() : '-'}
                   </td>
                   <td className="px-6 py-4">
                     <button
                       onClick={() => onStartChat(contact)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md flex items-center gap-1.5 text-xs font-medium transition-colors"
+                      className="bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] hover:from-[#00B0E6] hover:to-[#00C8B8] text-[#0D0F13] px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-medium transition-all shadow-lg shadow-[#00C3FF]/20"
                       title="Iniciar chat com este contato"
                     >
-                      <MessageSquare size={14} />
+                      <MessageSquare size={14} strokeWidth={2.5} />
                       Chat
                     </button>
                   </td>
@@ -441,7 +444,7 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, onImportCSV
               )})}
               {filteredContacts.length === 0 && (
                   <tr>
-                      <td colSpan={6} className="text-center py-8 text-slate-400">
+                      <td colSpan={6} className="text-center py-8 text-slate-500">
                           Nenhum contato encontrado.
                       </td>
                   </tr>
@@ -453,47 +456,47 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, onImportCSV
 
       {/* Modal para Adicionar Contato */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h3 className="text-xl font-bold text-slate-800 mb-4">Adicionar Novo Contato</h3>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#16191F] rounded-xl shadow-2xl neon-border max-w-md w-full p-6">
+            <h3 className="text-xl font-futuristic text-slate-200 mb-4">Adicionar Novo Contato</h3>
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Nome <span className="text-red-500">*</span>
+                <label className="block text-sm font-medium text-slate-300 mb-1">
+                  Nome <span className="text-red-400">*</span>
                 </label>
                 <input
                   type="text"
                   value={newContactName}
                   onChange={(e) => setNewContactName(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                  className="w-full px-4 py-2 border border-[#0D0F13] bg-[#111316] text-slate-200 rounded-lg focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500"
                   placeholder="Nome completo"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Telefone <span className="text-red-500">*</span>
+                <label className="block text-sm font-medium text-slate-300 mb-1">
+                  Telefone <span className="text-red-400">*</span>
                 </label>
                 <input
                   type="text"
                   value={newContactPhone}
                   onChange={(e) => setNewContactPhone(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                  className="w-full px-4 py-2 border border-[#0D0F13] bg-[#111316] text-slate-200 rounded-lg focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500"
                   placeholder="11999999999"
                 />
-                <p className="text-xs text-slate-400 mt-1">Digite DDD + Número (ex: 11999999999)</p>
+                <p className="text-xs text-slate-500 mt-1">Digite DDD + Número (ex: 11999999999)</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-slate-300 mb-1">
                   Email (opcional)
                 </label>
                 <input
                   type="email"
                   value={newContactEmail}
                   onChange={(e) => setNewContactEmail(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                  className="w-full px-4 py-2 border border-[#0D0F13] bg-[#111316] text-slate-200 rounded-lg focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500"
                   placeholder="email@exemplo.com"
                 />
               </div>
@@ -508,13 +511,13 @@ const Contacts: React.FC<ContactsProps> = ({ contacts, onSyncGoogle, onImportCSV
                   setNewContactEmail('');
                   setError(null);
                 }}
-                className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50 transition-colors"
+                className="flex-1 px-4 py-2 border border-[#0D0F13] text-slate-300 rounded-lg hover:bg-[#111316] hover:border-[#00E0D1]/30 transition-colors"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleAddNewContact}
-                className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors"
+                className="flex-1 px-4 py-2 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] hover:from-[#00B0E6] hover:to-[#00C8B8] text-[#0D0F13] rounded-lg transition-all shadow-lg glow-gradient font-medium"
               >
                 Adicionar
               </button>

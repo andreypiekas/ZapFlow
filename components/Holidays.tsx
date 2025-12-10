@@ -228,16 +228,16 @@ const Holidays: React.FC = () => {
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       {/* Tabela de Feriados Nacionais - 15 dias */}
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+      <div className="bg-[#16191F] rounded-xl shadow-lg neon-border overflow-hidden">
+        <div className="p-6 border-b border-[#0D0F13] bg-[#0D0F13] circuit-line">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-blue-600 text-white rounded-lg">
-                <Flag size={24} />
+              <div className="p-3 bg-gradient-to-br from-[#0074FF]/30 to-[#0074FF]/10 text-[#0074FF] rounded-xl border border-[#0074FF]/20">
+                <Flag size={24} strokeWidth={2} />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-slate-800">Feriados Nacionais</h2>
-                <p className="text-slate-600 text-sm mt-1">
+                <h2 className="text-2xl font-futuristic text-slate-200">Feriados Nacionais</h2>
+                <p className="text-slate-400 text-sm mt-1">
                   Próximos 15 dias • Atualização automática diária
                   {lastUpdate && (
                     <span className="ml-2 text-xs text-slate-500">
@@ -250,10 +250,10 @@ const Holidays: React.FC = () => {
             <button
               onClick={() => loadNationalHolidays(true)}
               disabled={isLoadingNational}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] hover:from-[#00B0E6] hover:to-[#00C8B8] text-[#0D0F13] rounded-lg transition-all shadow-lg glow-gradient font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               title="Forçar atualização"
             >
-              <RefreshCw size={18} className={isLoadingNational ? 'animate-spin' : ''} />
+              <RefreshCw size={18} strokeWidth={2.5} className={isLoadingNational ? 'animate-spin' : ''} />
               <span className="text-sm font-medium">Forçar Atualização</span>
             </button>
           </div>
@@ -262,23 +262,23 @@ const Holidays: React.FC = () => {
         <div className="p-6">
           {isLoadingNational ? (
             <div className="flex flex-col items-center justify-center py-8">
-              <RefreshCw size={24} className="animate-spin text-blue-600" />
-              <span className="mt-2 text-slate-600 text-sm">Carregando feriados nacionais...</span>
+              <RefreshCw size={24} className="animate-spin text-[#00E0D1]" strokeWidth={2} />
+              <span className="mt-2 text-slate-400 text-sm">Carregando feriados nacionais...</span>
             </div>
           ) : nationalHolidays.length === 0 ? (
             <div className="text-center py-8">
-              <Flag size={48} className="mx-auto text-slate-400 mb-4" />
-              <p className="text-slate-600">Nenhum feriado nacional nos próximos 15 dias</p>
+              <Flag size={48} className="mx-auto text-slate-500 mb-4" strokeWidth={1.5} />
+              <p className="text-slate-400">Nenhum feriado nacional nos próximos 15 dias</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200">
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">Data</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">Dia da Semana</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">Feriado</th>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">Dias Restantes</th>
+                  <tr className="bg-[#0D0F13] border-b border-[#111316]">
+                    <th className="px-4 py-3 text-left text-sm font-futuristic text-slate-400 uppercase tracking-wider">Data</th>
+                    <th className="px-4 py-3 text-left text-sm font-futuristic text-slate-400 uppercase tracking-wider">Dia da Semana</th>
+                    <th className="px-4 py-3 text-left text-sm font-futuristic text-slate-400 uppercase tracking-wider">Feriado</th>
+                    <th className="px-4 py-3 text-left text-sm font-futuristic text-slate-400 uppercase tracking-wider">Dias Restantes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -297,30 +297,30 @@ const Holidays: React.FC = () => {
                     return (
                       <tr
                         key={`national-${holiday.date}-${index}`}
-                        className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${
-                          isToday ? 'bg-emerald-50' : isTomorrow ? 'bg-blue-50' : ''
+                        className={`border-b border-[#0D0F13] hover:bg-[#111316] transition-colors ${
+                          isToday ? 'bg-[#00E0D1]/10 border-[#00E0D1]/30' : isTomorrow ? 'bg-[#0074FF]/10 border-[#0074FF]/30' : ''
                         }`}
                       >
-                        <td className="px-4 py-3 text-sm font-medium text-slate-800">
+                        <td className="px-4 py-3 text-sm font-medium text-slate-200">
                           {formattedDate}
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-600 capitalize">
+                        <td className="px-4 py-3 text-sm text-slate-300 capitalize">
                           {dayOfWeek}
                         </td>
-                        <td className="px-4 py-3 text-sm font-semibold text-slate-800">
+                        <td className="px-4 py-3 text-sm font-semibold text-slate-200">
                           {holiday.name}
                         </td>
                         <td className="px-4 py-3 text-sm">
                           {isToday ? (
-                            <span className="px-2 py-1 bg-emerald-600 text-white rounded-full text-xs font-semibold">
+                            <span className="px-2 py-1 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] rounded-full text-xs font-semibold">
                               Hoje
                             </span>
                           ) : isTomorrow ? (
-                            <span className="px-2 py-1 bg-blue-600 text-white rounded-full text-xs font-semibold">
+                            <span className="px-2 py-1 bg-[#0074FF] text-white rounded-full text-xs font-semibold">
                               Amanhã
                             </span>
                           ) : (
-                            <span className="text-slate-600">
+                            <span className="text-slate-300">
                               {daysUntil} {daysUntil === 1 ? 'dia' : 'dias'}
                             </span>
                           )}
@@ -336,17 +336,17 @@ const Holidays: React.FC = () => {
       </div>
 
       {/* Feriados Gerais (Municipais e Estaduais) */}
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+      <div className="bg-[#16191F] rounded-xl shadow-lg neon-border overflow-hidden">
         {/* Header */}
-        <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+        <div className="p-6 border-b border-[#0D0F13] bg-[#0D0F13] circuit-line">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-blue-600 text-white rounded-lg">
-                <Calendar size={24} />
+              <div className="p-3 bg-gradient-to-br from-[#00C3FF]/30 to-[#00E0D1]/10 text-[#00E0D1] rounded-xl border border-[#00E0D1]/20">
+                <Calendar size={24} strokeWidth={2} />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-slate-800">Feriados</h2>
-                <p className="text-slate-600 text-sm mt-1">
+                <h2 className="text-2xl font-futuristic text-slate-200">Feriados</h2>
+                <p className="text-slate-400 text-sm mt-1">
                   Próximos {days} dias de feriados nacionais e municipais
                 </p>
               </div>
@@ -354,22 +354,22 @@ const Holidays: React.FC = () => {
             <button
               onClick={loadHolidays}
               disabled={isLoading}
-              className="p-2 text-slate-600 hover:text-slate-800 hover:bg-white rounded-md transition-colors disabled:opacity-50"
+              className="p-2 text-slate-400 hover:text-[#00E0D1] hover:bg-[#111316] rounded-lg transition-colors disabled:opacity-50 border border-[#0D0F13] hover:border-[#00E0D1]/30"
               title="Atualizar"
             >
-              <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''} />
+              <RefreshCw size={20} strokeWidth={2} className={isLoading ? 'animate-spin' : ''} />
             </button>
           </div>
         </div>
 
         {/* Filtros */}
-        <div className="p-6 border-b border-slate-200 bg-slate-50">
+        <div className="p-6 border-b border-[#0D0F13] bg-[#0D0F13]">
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-3">
+              <label className="block text-sm font-medium text-slate-300 mb-3">
                 Selecionar Estados (Máximo 3)
               </label>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 max-h-64 overflow-y-auto p-2 border border-slate-200 rounded-md bg-white">
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 max-h-64 overflow-y-auto p-2 border border-[#0D0F13] rounded-lg bg-[#111316]">
                 {BRAZILIAN_STATES.map(state => {
                   const isSelected = selectedStates.includes(state.code);
                   const isDisabled = !isSelected && selectedStates.length >= 3;
@@ -377,12 +377,12 @@ const Holidays: React.FC = () => {
                   return (
                     <label
                       key={state.code}
-                      className={`flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors ${
+                      className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${
                         isSelected
-                          ? 'bg-blue-100 text-blue-800 border-2 border-blue-500'
+                          ? 'bg-[#0074FF]/20 text-[#0074FF] border-2 border-[#0074FF]/50'
                           : isDisabled
-                          ? 'bg-slate-50 text-slate-400 cursor-not-allowed border border-slate-200'
-                          : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
+                          ? 'bg-[#0D0F13] text-slate-500 cursor-not-allowed border border-[#111316]'
+                          : 'bg-[#16191F] text-slate-300 hover:bg-[#111316] border border-[#0D0F13] hover:border-[#00E0D1]/30'
                       }`}
                     >
                       <input
@@ -428,7 +428,7 @@ const Holidays: React.FC = () => {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label className="block text-sm font-medium text-slate-300 mb-2">
                 Próximos N dias
               </label>
               <input
@@ -437,7 +437,7 @@ const Holidays: React.FC = () => {
                 onChange={(e) => setDays(Math.max(1, Math.min(365, parseInt(e.target.value) || 15)))}
                 min={1}
                 max={365}
-                className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-2 border border-[#0D0F13] bg-[#111316] text-slate-200 rounded-lg focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500"
               />
             </div>
           </div>
@@ -447,8 +447,8 @@ const Holidays: React.FC = () => {
         <div className="p-6">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-12">
-              <RefreshCw size={32} className="animate-spin text-blue-600" />
-              <span className="mt-3 text-slate-600">
+              <RefreshCw size={32} className="animate-spin text-[#00E0D1]" strokeWidth={2} />
+              <span className="mt-3 text-slate-400">
                 {progressMessage || 'Carregando feriados...'}
               </span>
               {selectedStates.length > 0 && (
@@ -458,17 +458,17 @@ const Holidays: React.FC = () => {
               )}
             </div>
           ) : error ? (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-              <AlertCircle className="text-red-600 mt-0.5 flex-shrink-0" size={20} />
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-start gap-3 neon-border">
+              <AlertCircle className="text-red-400 mt-0.5 flex-shrink-0" size={20} strokeWidth={2} />
               <div>
-                <h3 className="font-semibold text-red-800">Erro ao carregar feriados</h3>
-                <p className="text-red-700 text-sm mt-1">{error}</p>
+                <h3 className="font-semibold text-red-400">Erro ao carregar feriados</h3>
+                <p className="text-red-300 text-sm mt-1">{error}</p>
               </div>
             </div>
           ) : holidays.length === 0 ? (
             <div className="text-center py-12">
-              <Calendar size={48} className="mx-auto text-slate-400 mb-4" />
-              <p className="text-slate-600 text-lg">Nenhum feriado encontrado nos próximos {days} dias</p>
+              <Calendar size={48} className="mx-auto text-slate-500 mb-4" strokeWidth={1.5} />
+              <p className="text-slate-400 text-lg">Nenhum feriado encontrado nos próximos {days} dias</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -480,12 +480,12 @@ const Holidays: React.FC = () => {
                 return (
                   <div
                     key={`${holiday.date}-${holiday.name}-${index}`}
-                    className={`border rounded-lg p-4 transition-all ${
+                    className={`border rounded-xl p-4 transition-all hover:border-[#00E0D1]/50 ${
                       isToday
-                        ? 'bg-emerald-50 border-emerald-300 shadow-md'
+                        ? 'bg-[#00E0D1]/10 border-[#00E0D1]/30 neon-border'
                         : isTomorrow
-                        ? 'bg-blue-50 border-blue-300'
-                        : 'bg-white border-slate-200 hover:shadow-md'
+                        ? 'bg-[#0074FF]/10 border-[#0074FF]/30'
+                        : 'bg-[#111316] border-[#0D0F13] hover:bg-[#16191F]'
                     }`}
                   >
                     <div className="flex items-start justify-between">
@@ -496,30 +496,30 @@ const Holidays: React.FC = () => {
                             <span>{getHolidayTypeLabel(holiday.type)}</span>
                           </div>
                           {isToday && (
-                            <span className="px-3 py-1 bg-emerald-600 text-white rounded-full text-xs font-semibold">
+                            <span className="px-3 py-1 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] rounded-full text-xs font-semibold">
                               Hoje
                             </span>
                           )}
                           {isTomorrow && (
-                            <span className="px-3 py-1 bg-blue-600 text-white rounded-full text-xs font-semibold">
+                            <span className="px-3 py-1 bg-[#0074FF] text-white rounded-full text-xs font-semibold">
                               Amanhã
                             </span>
                           )}
                           {!isToday && !isTomorrow && daysUntil > 0 && (
-                            <span className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-semibold">
+                            <span className="px-3 py-1 bg-slate-500/20 text-slate-300 rounded-full text-xs font-semibold border border-slate-500/30">
                               Em {daysUntil} {daysUntil === 1 ? 'dia' : 'dias'}
                             </span>
                           )}
                         </div>
-                        <h3 className={`text-lg font-bold mb-1 ${isToday ? 'text-emerald-900' : 'text-slate-800'}`}>
+                        <h3 className={`text-lg font-futuristic mb-1 ${isToday ? 'text-[#00E0D1]' : 'text-slate-200'}`}>
                           {holiday.name}
                         </h3>
-                        <p className="text-slate-600 text-sm">
+                        <p className="text-slate-400 text-sm">
                           {formatDate(holiday.date)}
                         </p>
                         {(holiday.city || holiday.state) && (
                           <p className="text-slate-500 text-xs mt-1 flex items-center gap-1">
-                            <MapPin size={12} />
+                            <MapPin size={12} strokeWidth={2} />
                             {holiday.city && holiday.state
                               ? `${holiday.city}, ${holiday.state}`
                               : holiday.city || holiday.state}
@@ -536,27 +536,27 @@ const Holidays: React.FC = () => {
 
         {/* Estatísticas */}
         {holidays.length > 0 && (
-          <div className="p-6 border-t border-slate-200 bg-slate-50">
+          <div className="p-6 border-t border-[#0D0F13] bg-[#0D0F13]">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-white rounded-lg p-4 border border-slate-200">
-                <p className="text-slate-500 text-sm">Total</p>
-                <p className="text-2xl font-bold text-slate-800">{holidays.length}</p>
+              <div className="bg-[#16191F] rounded-xl p-4 border border-[#111316] neon-border">
+                <p className="text-slate-400 text-sm">Total</p>
+                <p className="text-2xl font-tech bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] bg-clip-text text-transparent">{holidays.length}</p>
               </div>
-              <div className="bg-white rounded-lg p-4 border border-slate-200">
-                <p className="text-slate-500 text-sm">Nacionais</p>
-                <p className="text-2xl font-bold text-blue-600">
+              <div className="bg-[#16191F] rounded-xl p-4 border border-[#111316] neon-border">
+                <p className="text-slate-400 text-sm">Nacionais</p>
+                <p className="text-2xl font-tech text-[#0074FF]">
                   {holidays.filter(h => h.type === 'national').length}
                 </p>
               </div>
-              <div className="bg-white rounded-lg p-4 border border-slate-200">
-                <p className="text-slate-500 text-sm">Municipais</p>
-                <p className="text-2xl font-bold text-green-600">
+              <div className="bg-[#16191F] rounded-xl p-4 border border-[#111316] neon-border">
+                <p className="text-slate-400 text-sm">Municipais</p>
+                <p className="text-2xl font-tech text-[#00E0D1]">
                   {holidays.filter(h => h.type === 'municipal').length}
                 </p>
               </div>
-              <div className="bg-white rounded-lg p-4 border border-slate-200">
-                <p className="text-slate-500 text-sm">Estaduais</p>
-                <p className="text-2xl font-bold text-purple-600">
+              <div className="bg-[#16191F] rounded-xl p-4 border border-[#111316] neon-border">
+                <p className="text-slate-400 text-sm">Estaduais</p>
+                <p className="text-2xl font-tech text-purple-400">
                   {holidays.filter(h => h.type === 'state').length}
                 </p>
               </div>
