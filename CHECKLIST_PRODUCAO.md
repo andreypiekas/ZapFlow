@@ -84,7 +84,10 @@
 #### Segurança
 
 - [ ] **JWT_SECRET forte** em produção (não usar fallback)
-- [x] **Rate limiting** no backend (prevenir brute force) ✅ IMPLEMENTADO
+- [ ] **Rate limiting** no backend (prevenir brute force) ⚠️ TEMPORARIAMENTE DESABILITADO - Ver backend/server.js linha 50
+  - [ ] Reativar `generalLimiter`, `loginLimiter` e `dataLimiter` antes de produção
+  - [ ] Ajustar limites para não bloquear requisições legítimas
+  - [ ] Testar com carga real para definir valores adequados
 - [ ] **Validação de input** robusta (sanitização, validação de tipos)
 - [ ] **HTTPS obrigatório** (certificado SSL válido)
 - [ ] **Headers de segurança** (HSTS, CSP, X-Frame-Options, etc.)

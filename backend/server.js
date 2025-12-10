@@ -49,106 +49,113 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // ============================================================================
 // RATE LIMITING - Prevenção de Brute Force e DDoS
 // ============================================================================
+// ⚠️ TEMPORARIAMENTE DESABILITADO - Ver CHECKLIST_PRODUCAO.md para reativar
+// TODO: Revisar e reativar rate limiting antes de produção
+// ============================================================================
 
 // Rate limiter geral para todas as rotas (proteção básica)
-const generalLimiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '15') * 60 * 1000, // 15 minutos por padrão
-  max: parseInt(process.env.RATE_LIMIT_MAX || '1000'), // 100 requisições por janela
-  message: {
-    error: 'Muitas requisições deste IP, tente novamente mais tarde.',
-    retryAfter: '15 minutos'
-  },
-  standardHeaders: true, // Retorna informações de rate limit nos headers `RateLimit-*`
-  legacyHeaders: false, // Desabilita headers `X-RateLimit-*`
-  // Função para obter o IP do cliente (considera proxies/load balancers)
-  keyGenerator: (req) => {
-    return req.ip || 
-           req.headers['x-forwarded-for']?.split(',')[0] || 
-           req.headers['x-real-ip'] || 
-           req.connection.remoteAddress || 
-           'unknown';
-  },
-  // Handler customizado para erros
-  handler: (req, res) => {
-    res.status(429).json({
-      error: 'Muitas requisições deste IP, tente novamente mais tarde.',
-      retryAfter: Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000) + ' segundos'
-    });
-  },
-  // Skip rate limiting para health checks (não conta no limite)
-  skip: (req) => {
-    return req.path === '/api/health' || req.path === '/';
-  }
-});
+// const generalLimiter = rateLimit({
+//   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '15') * 60 * 1000, // 15 minutos por padrão
+//   max: parseInt(process.env.RATE_LIMIT_MAX || '1000'), // 100 requisições por janela
+//   message: {
+//     error: 'Muitas requisições deste IP, tente novamente mais tarde.',
+//     retryAfter: '15 minutos'
+//   },
+//   standardHeaders: true, // Retorna informações de rate limit nos headers `RateLimit-*`
+//   legacyHeaders: false, // Desabilita headers `X-RateLimit-*`
+//   // Função para obter o IP do cliente (considera proxies/load balancers)
+//   keyGenerator: (req) => {
+//     return req.ip || 
+//            req.headers['x-forwarded-for']?.split(',')[0] || 
+//            req.headers['x-real-ip'] || 
+//            req.connection.remoteAddress || 
+//            'unknown';
+//   },
+//   // Handler customizado para erros
+//   handler: (req, res) => {
+//     res.status(429).json({
+//       error: 'Muitas requisições deste IP, tente novamente mais tarde.',
+//       retryAfter: Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000) + ' segundos'
+//     });
+//   },
+//   // Skip rate limiting para health checks (não conta no limite)
+//   skip: (req) => {
+//     return req.path === '/api/health' || req.path === '/';
+//   }
+// });
 
 // Rate limiter RESTRITIVO para login (prevenção de brute force)
-const loginLimiter = rateLimit({
-  windowMs: parseInt(process.env.LOGIN_RATE_LIMIT_WINDOW_MS || '15') * 60 * 1000, // 15 minutos
-  max: parseInt(process.env.LOGIN_RATE_LIMIT_MAX || '5'), // Apenas 5 tentativas de login por 15 minutos
-  message: {
-    error: 'Muitas tentativas de login. Por segurança, tente novamente em alguns minutos.',
-    retryAfter: '15 minutos'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    // Para login, também considerar o username para rate limiting mais inteligente
-    const username = req.body?.username || 'unknown';
-    const ip = req.ip || 
-               req.headers['x-forwarded-for']?.split(',')[0] || 
-               req.headers['x-real-ip'] || 
-               req.connection.remoteAddress || 
-               'unknown';
-    return `login:${ip}:${username}`;
-  },
-  handler: (req, res) => {
-    const retryAfter = Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000);
-    const ip = req.ip || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
-    const username = req.body?.username || 'unknown';
-    
-    // Log de tentativas bloqueadas para auditoria (movido para dentro do handler - onLimitReached foi removido no v7)
-    console.warn(`[SECURITY] Rate limit atingido para login - IP: ${ip}, Username: ${username}, Tentativas: ${req.rateLimit.totalHits}`);
-    
-    res.status(429).json({
-      error: 'Muitas tentativas de login. Por segurança, sua conta foi temporariamente bloqueada.',
-      retryAfter: `${Math.ceil(retryAfter / 60)} minutos`,
-      message: 'Por favor, aguarde antes de tentar novamente. Se você esqueceu sua senha, entre em contato com o administrador.'
-    });
-  }
-});
+// const loginLimiter = rateLimit({
+//   windowMs: parseInt(process.env.LOGIN_RATE_LIMIT_WINDOW_MS || '15') * 60 * 1000, // 15 minutos
+//   max: parseInt(process.env.LOGIN_RATE_LIMIT_MAX || '5'), // Apenas 5 tentativas de login por 15 minutos
+//   message: {
+//     error: 'Muitas tentativas de login. Por segurança, tente novamente em alguns minutos.',
+//     retryAfter: '15 minutos'
+//   },
+//   standardHeaders: true,
+//   legacyHeaders: false,
+//   keyGenerator: (req) => {
+//     // Para login, também considerar o username para rate limiting mais inteligente
+//     const username = req.body?.username || 'unknown';
+//     const ip = req.ip || 
+//                req.headers['x-forwarded-for']?.split(',')[0] || 
+//                req.headers['x-real-ip'] || 
+//                req.connection.remoteAddress || 
+//                'unknown';
+//     return `login:${ip}:${username}`;
+//   },
+//   handler: (req, res) => {
+//     const retryAfter = Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000);
+//     const ip = req.ip || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
+//     const username = req.body?.username || 'unknown';
+//     
+//     // Log de tentativas bloqueadas para auditoria (movido para dentro do handler - onLimitReached foi removido no v7)
+//     console.warn(`[SECURITY] Rate limit atingido para login - IP: ${ip}, Username: ${username}, Tentativas: ${req.rateLimit.totalHits}`);
+//     
+//     res.status(429).json({
+//       error: 'Muitas tentativas de login. Por segurança, sua conta foi temporariamente bloqueada.',
+//       retryAfter: `${Math.ceil(retryAfter / 60)} minutos`,
+//       message: 'Por favor, aguarde antes de tentar novamente. Se você esqueceu sua senha, entre em contato com o administrador.'
+//     });
+//   }
+// });
 
 // Rate limiter para rotas de dados (proteção contra abuso de API)
-const dataLimiter = rateLimit({
-  windowMs: parseInt(process.env.DATA_RATE_LIMIT_WINDOW_MS || '1') * 60 * 1000, // 1 minuto
-  max: parseInt(process.env.DATA_RATE_LIMIT_MAX || '200'), // 200 requisições por minuto (aumentado para evitar 429 em sincronizações frequentes)
-  message: {
-    error: 'Muitas requisições de dados. Aguarde um momento antes de continuar.',
-    retryAfter: '1 minuto'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    // Para rotas autenticadas, usar user ID se disponível
-    if (req.user?.id) {
-      return `data:user:${req.user.id}`;
-    }
-    return req.ip || 
-           req.headers['x-forwarded-for']?.split(',')[0] || 
-           req.headers['x-real-ip'] || 
-           req.connection.remoteAddress || 
-           'unknown';
-  },
-  handler: (req, res) => {
-    const retryAfter = Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000);
-    res.status(429).json({
-      error: 'Muitas requisições. Aguarde um momento antes de continuar.',
-      retryAfter: `${retryAfter} segundos`
-    });
-  }
-});
+// const dataLimiter = rateLimit({
+//   windowMs: parseInt(process.env.DATA_RATE_LIMIT_WINDOW_MS || '1') * 60 * 1000, // 1 minuto
+//   max: parseInt(process.env.DATA_RATE_LIMIT_MAX || '200'), // 200 requisições por minuto (aumentado para evitar 429 em sincronizações frequentes)
+//   message: {
+//     error: 'Muitas requisições de dados. Aguarde um momento antes de continuar.',
+//     retryAfter: '1 minuto'
+//   },
+//   standardHeaders: true,
+//   legacyHeaders: false,
+//   keyGenerator: (req) => {
+//     // Para rotas autenticadas, usar user ID se disponível
+//     if (req.user?.id) {
+//       return `data:user:${req.user.id}`;
+//     }
+//     return req.ip || 
+//            req.headers['x-forwarded-for']?.split(',')[0] || 
+//            req.headers['x-real-ip'] || 
+//            req.connection.remoteAddress || 
+//            'unknown';
+//   },
+//   handler: (req, res) => {
+//     const retryAfter = Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000);
+//     res.status(429).json({
+//       error: 'Muitas requisições. Aguarde um momento antes de continuar.',
+//       retryAfter: `${retryAfter} segundos`
+//     });
+//   }
+// });
 
 // Aplicar rate limiting geral em todas as rotas
-app.use(generalLimiter);
+// app.use(generalLimiter);
+
+// Criar variáveis vazias para não quebrar as rotas (limiters desabilitados)
+const loginLimiter = (req, res, next) => next(); // Middleware vazio - rate limiting desabilitado
+const dataLimiter = (req, res, next) => next(); // Middleware vazio - rate limiting desabilitado
 
 // Middleware de autenticação
 const authenticateToken = async (req, res, next) => {
