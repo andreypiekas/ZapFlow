@@ -2173,7 +2173,8 @@ const App: React.FC = () => {
                                             
                                             // Se a mensagem já existir, usa as mensagens do chat atual
                                             // Se não existir, updatedMessages já foi definido acima
-                                            const finalMessages = updatedMessages || chat.messages;
+                                            // Se updatedMessages não foi definido (mensagem já existe), usa chat.messages
+                                            const finalMessages = updatedMessages !== undefined ? updatedMessages : chat.messages;
                                             
                                             // PRIORIDADE ABSOLUTA: Status do banco NUNCA é alterado via Socket.IO
                                             // EXCEÇÃO: Se chat estava fechado e recebeu mensagem do cliente, reabre para 'pending'
