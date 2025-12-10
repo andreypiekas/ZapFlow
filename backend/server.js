@@ -1167,7 +1167,7 @@ app.post('/api/data/:dataType/batch', authenticateToken, dataLimiter, async (req
 app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) => {
   try {
     const { chatId } = req.params;
-    const { status, assignedTo, departmentId } = req.body;
+    const { status, assignedTo, departmentId, contactName, contactAvatar } = req.body;
 
     // Decodifica o chatId (pode vir URL encoded)
     const decodedChatId = decodeURIComponent(chatId);
@@ -1233,7 +1233,7 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
       chatData.id = decodedChatId;
     }
 
-    // Atualiza apenas status, assignedTo e departmentId (preserva outros campos)
+    // Atualiza status, assignedTo, departmentId, contactName e contactAvatar (preserva outros campos)
     if (status !== undefined) {
       chatData.status = status;
     }
@@ -1242,6 +1242,12 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
     }
     if (departmentId !== undefined) {
       chatData.departmentId = departmentId;
+    }
+    if (contactName !== undefined && contactName !== null) {
+      chatData.contactName = contactName;
+    }
+    if (contactAvatar !== undefined && contactAvatar !== null) {
+      chatData.contactAvatar = contactAvatar;
     }
     if (status === 'closed') {
       chatData.endedAt = new Date().toISOString();

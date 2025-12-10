@@ -213,12 +213,12 @@ class ApiService {
     }
   }
 
-  // Atualiza status e assignedTo de um chat específico no banco
-  async updateChatStatus(chatId: string, status?: 'open' | 'pending' | 'closed', assignedTo?: string, departmentId?: string | null): Promise<boolean> {
+  // Atualiza status, assignedTo, departmentId, contactName e contactAvatar de um chat específico no banco
+  async updateChatStatus(chatId: string, status?: 'open' | 'pending' | 'closed', assignedTo?: string, departmentId?: string | null, contactName?: string, contactAvatar?: string): Promise<boolean> {
     try {
       await this.request(`/api/chats/${encodeURIComponent(chatId)}`, {
         method: 'PUT',
-        body: JSON.stringify({ status, assignedTo, departmentId }),
+        body: JSON.stringify({ status, assignedTo, departmentId, contactName, contactAvatar }),
       });
       return true;
     } catch (error: any) {

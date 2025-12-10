@@ -1651,7 +1651,8 @@ const App: React.FC = () => {
                         // console.log(`[App] Novo chat encontrado: ${realChat.id} (${finalContactName})`);
                         return {
                           ...realChat,
-                          contactName: finalContactName
+                          contactName: finalContactName,
+                          contactAvatar: realChat.contactAvatar // Preserva avatar da API
                         };
                     }
                 });
@@ -3140,39 +3141,49 @@ const App: React.FC = () => {
           newDepartmentId: updatedChat.departmentId
         });
         
-        // Verifica se status ou assignedTo mudaram - se sim, salva no banco
+        // Verifica se status, assignedTo, departmentId, contactName ou contactAvatar mudaram - se sim, salva no banco
         const statusChanged = oldChat && oldChat.status !== updatedChat.status;
         const assignedToChanged = oldChat && oldChat.assignedTo !== updatedChat.assignedTo;
         const departmentIdChanged = oldChat && oldChat.departmentId !== updatedChat.departmentId;
+        const contactNameChanged = oldChat && oldChat.contactName !== updatedChat.contactName;
+        const contactAvatarChanged = oldChat && oldChat.contactAvatar !== updatedChat.contactAvatar;
         
         console.log('[App] 🔍 [DEBUG] handleUpdateChat - Mudanças detectadas:', {
           statusChanged,
           assignedToChanged,
           departmentIdChanged,
-          willSave: !!(currentUser && (statusChanged || assignedToChanged || departmentIdChanged))
+          contactNameChanged,
+          contactAvatarChanged,
+          willSave: !!(currentUser && (statusChanged || assignedToChanged || departmentIdChanged || contactNameChanged || contactAvatarChanged))
         });
         
-        // Salva no banco se status, assignedTo ou departmentId mudaram
-        if (currentUser && (statusChanged || assignedToChanged || departmentIdChanged)) {
+        // Salva no banco se status, assignedTo, departmentId, contactName ou contactAvatar mudaram
+        if (currentUser && (statusChanged || assignedToChanged || departmentIdChanged || contactNameChanged || contactAvatarChanged)) {
           try {
             console.log('[App] 🔍 [DEBUG] handleUpdateChat - Salvando no banco:', {
               chatId: updatedChat.id,
               status: updatedChat.status,
               assignedTo: updatedChat.assignedTo,
               departmentId: updatedChat.departmentId,
+              contactName: updatedChat.contactName,
+              contactAvatar: updatedChat.contactAvatar,
               statusChanged,
               assignedToChanged,
-              departmentIdChanged
+              departmentIdChanged,
+              contactNameChanged,
+              contactAvatarChanged
             });
             await apiService.updateChatStatus(
               updatedChat.id,
               updatedChat.status,
               updatedChat.assignedTo,
-              updatedChat.departmentId || null
+              updatedChat.departmentId || null,
+              updatedChat.contactName,
+              updatedChat.contactAvatar
             );
-            console.log(`[App] ✅ [DEBUG] Status do chat ${updatedChat.contactName} salvo no banco: status=${updatedChat.status}, assignedTo=${updatedChat.assignedTo}`);
+            console.log(`[App] ✅ [DEBUG] Chat ${updatedChat.contactName} salvo no banco: status=${updatedChat.status}, assignedTo=${updatedChat.assignedTo}, contactName=${updatedChat.contactName}`);
           } catch (error) {
-            console.error(`[App] ❌ [DEBUG] Erro ao salvar status do chat no banco:`, error);
+            console.error(`[App] ❌ [DEBUG] Erro ao salvar chat no banco:`, error);
           }
         } else {
           console.log('[App] 🔍 [DEBUG] handleUpdateChat - NÃO salvou no banco:', {
@@ -3180,7 +3191,9 @@ const App: React.FC = () => {
             hasUser: !!currentUser,
             statusChanged,
             assignedToChanged,
-            departmentIdChanged
+            departmentIdChanged,
+            contactNameChanged,
+            contactAvatarChanged
           });
         }
         
