@@ -1524,8 +1524,8 @@ const App: React.FC = () => {
                           if (contactMatch && contactMatch.name && contactMatch.name.trim()) {
                             const chatNameIsNumber = !existingChat.contactName || 
                                                      existingChat.contactName === existingChat.contactNumber || 
-                                                     existingChat.contactName === existingChat.contactNumber.replace(/\D/g, '') ||
-                                                     /^\d+$/.test(existingChat.contactName);
+                                                     (existingChat.contactNumber && existingChat.contactName === existingChat.contactNumber.replace(/\D/g, '')) ||
+                                                     (existingChat.contactName && /^\d+$/.test(existingChat.contactName));
                             if (chatNameIsNumber) {
                               finalContactName = contactMatch.name.trim();
                             }
@@ -1675,8 +1675,8 @@ const App: React.FC = () => {
                           if (contactMatch && contactMatch.name && contactMatch.name.trim()) {
                             const chatNameIsNumber = !realChat.contactName || 
                                                      realChat.contactName === realChat.contactNumber || 
-                                                     realChat.contactName === realChat.contactNumber.replace(/\D/g, '') ||
-                                                     /^\d+$/.test(realChat.contactName);
+                                                     (realChat.contactNumber && realChat.contactName === realChat.contactNumber.replace(/\D/g, '')) ||
+                                                     (realChat.contactName && /^\d+$/.test(realChat.contactName));
                             if (chatNameIsNumber) {
                               finalContactName = contactMatch.name.trim();
                             }
@@ -3867,6 +3867,11 @@ const App: React.FC = () => {
 
   // Inicia chat a partir de um contato
   const handleStartChatFromContact = (contact: Contact) => {
+    if (!contact.phone || typeof contact.phone !== 'string') {
+      console.error('[handleStartChatFromContact] Número de telefone inválido:', contact.phone);
+      alert('Número de telefone inválido. Por favor, verifique o contato.');
+      return;
+    }
     const contactNumber = contact.phone.replace(/\D/g, '');
     
     if (!contactNumber || contactNumber.length < 8) {
@@ -3966,8 +3971,8 @@ const App: React.FC = () => {
         if (match && match.name && match.name.trim()) {
           // Verifica se precisa atualizar
           const chatNameIsNumber = chat.contactName === chat.contactNumber || 
-                                   chat.contactName === chat.contactNumber.replace(/\D/g, '') ||
-                                   /^\d+$/.test(chat.contactName) ||
+                                   (chat.contactNumber && chat.contactName === chat.contactNumber.replace(/\D/g, '')) ||
+                                   (chat.contactName && /^\d+$/.test(chat.contactName)) ||
                                    !chat.contactName ||
                                    chat.contactName.trim().length === 0;
           
