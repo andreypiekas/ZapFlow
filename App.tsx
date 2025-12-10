@@ -2975,15 +2975,15 @@ const App: React.FC = () => {
           
           if (shouldUpdateName || shouldUpdateAvatar) {
             hasUpdates = true;
-            const updatedChat = {
-              ...chat,
-              contactName: shouldUpdateName ? match.name.trim() : chat.contactName,
+            const updatedChat = { 
+              ...chat, 
+              contactName: shouldUpdateName ? match.name.trim() : chat.contactName, 
               contactAvatar: shouldUpdateAvatar ? match.avatar : chat.contactAvatar,
               // clientCode é preservado automaticamente (não é sobrescrito)
             };
             
-            // Salva no banco se o nome foi atualizado
-            if (shouldUpdateName) {
+            // Salva no banco se o nome ou avatar foi atualizado
+            if (shouldUpdateName || shouldUpdateAvatar) {
               handleUpdateChat(updatedChat);
             }
             
