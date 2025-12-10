@@ -3959,8 +3959,8 @@ const App: React.FC = () => {
               // clientCode é preservado automaticamente (não é sobrescrito)
             };
             
-            // Salva no banco se o nome foi atualizado
-            if (shouldUpdateName) {
+            // Salva no banco se o nome ou avatar foi atualizado
+            if (shouldUpdateName || shouldUpdateAvatar) {
               handleUpdateChat(updatedChat);
             }
             
