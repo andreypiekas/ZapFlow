@@ -1,4 +1,4 @@
-# Instalação do Backend ZapFlow
+# Instalação do Backend Zentria
 
 ## Passo a Passo Rápido
 
@@ -22,11 +22,11 @@ sudo systemctl enable postgresql
 sudo -u postgres psql
 
 # Crie o banco de dados
-CREATE DATABASE zapflow;
+CREATE DATABASE zentria;
 
 # Crie um usuário (opcional, pode usar postgres)
-CREATE USER zapflow_user WITH PASSWORD 'sua_senha_segura';
-GRANT ALL PRIVILEGES ON DATABASE zapflow TO zapflow_user;
+CREATE USER zentria_user WITH PASSWORD 'sua_senha_segura';
+GRANT ALL PRIVILEGES ON DATABASE zentria TO zentria_user;
 
 # Saia
 \q
@@ -50,7 +50,7 @@ nano .env
 
 **Configure o .env:**
 ```env
-DATABASE_URL=postgresql://zapflow_user:sua_senha_segura@localhost:5432/zapflow
+DATABASE_URL=postgresql://zentria_user:sua_senha_segura@localhost:5432/zentria
 JWT_SECRET=seu_jwt_secret_super_seguro_aqui_mude_em_producao
 PORT=3001
 CORS_ORIGIN=http://SEU_IP_SERVIDOR:5173,http://localhost:5173
@@ -186,7 +186,7 @@ pm2 startup
 
 **Erro de conexão com PostgreSQL:**
 - Verifique se o PostgreSQL está rodando: `sudo systemctl status postgresql`
-- Teste a conexão: `psql -U postgres -d zapflow`
+- Teste a conexão: `psql -U postgres -d zentria`
 - Verifique as credenciais no .env
 
 **Erro de porta em uso:**

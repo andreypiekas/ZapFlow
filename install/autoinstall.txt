@@ -2,10 +2,10 @@
 #!/bin/bash
 
 # ==============================================================================
-# 🚀 ZAPFLOW MANAGER - AUTO INSTALLER (ZERO-TO-HERO)
+# 🚀 ZENTRIA MANAGER - AUTO INSTALLER (ZERO-TO-HERO)
 # ==============================================================================
 # Instalação completa e automatizada para VPS Ubuntu 20.04+
-# Configura SWAP, Docker, Evolution API e ZapFlow.
+# Configura SWAP, Docker, Evolution API e Zentria.
 # ==============================================================================
 
 set -e
@@ -81,7 +81,7 @@ services:
       - STORE_MESSAGE_UP=true
       - STORE_CONTACTS=true
       - STORE_CHATS=true
-      - CONFIG_SESSION_PHONE_CLIENT=ZapFlow
+      - CONFIG_SESSION_PHONE_CLIENT=Zentria
       - CONFIG_SESSION_PHONE_NAME=Chrome
       - CONFIG_SESSION_PHONE_OS=Windows
       # - CONFIG_SESSION_PHONE_VERSION=2.3000.1029255529
@@ -153,10 +153,10 @@ fi
 sleep 2
 
 # Configurar banco de dados (usando porta 54321)
-sudo -u postgres PGPORT=54321 psql -c "CREATE DATABASE zapflow;" 2>/dev/null || echo "Banco zapflow já existe ou erro ao criar"
-sudo -u postgres PGPORT=54321 psql -c "CREATE USER zapflow_user WITH PASSWORD 'zapflow_secure_password_2024';" 2>/dev/null || echo "Usuário já existe"
-sudo -u postgres PGPORT=54321 psql -c "GRANT ALL PRIVILEGES ON DATABASE zapflow TO zapflow_user;" 2>/dev/null || true
-sudo -u postgres PGPORT=54321 psql -c "ALTER USER zapflow_user CREATEDB;" 2>/dev/null || true
+sudo -u postgres PGPORT=54321 psql -c "CREATE DATABASE zentria;" 2>/dev/null || echo "Banco zentria já existe ou erro ao criar"
+sudo -u postgres PGPORT=54321 psql -c "CREATE USER zentria_user WITH PASSWORD 'zentria_secure_password_2024';" 2>/dev/null || echo "Usuário já existe"
+sudo -u postgres PGPORT=54321 psql -c "GRANT ALL PRIVILEGES ON DATABASE zentria TO zentria_user;" 2>/dev/null || true
+sudo -u postgres PGPORT=54321 psql -c "ALTER USER zentria_user CREATEDB;" 2>/dev/null || true
 
 echo -e "${BLUE}[7/9] Configurando Backend API...${NC}"
 cd backend 2>/dev/null || mkdir -p backend && cd backend
@@ -165,15 +165,22 @@ cd backend 2>/dev/null || mkdir -p backend && cd backend
 if [ ! -f "package.json" ]; then
     cat > package.json <<EOL
 {
-  "name": "zapflow-backend",
+  "name": "zentria-backend",
   "version": "1.0.0",
-  "description": "Backend API para ZapFlow com PostgreSQL",
+  "description": "Backend API para Zentria com PostgreSQL",
   "type": "module",
   "main": "server.js",
   "scripts": {
     "dev": "node --watch server.js",
     "start": "node server.js",
-    "migrate": "node scripts/migrate.js"
+    "build": "echo 'Backend não requer build - Node.js puro' && exit 0",
+    "migrate": "node scripts/migrate.js",
+    "migrate-holidays-cache": "node scripts/add-municipal-holidays-cache.js",
+    "migrate-gemini-quota": "node scripts/add-gemini-quota-control.js",
+    "migrate-national-holidays": "node scripts/add-national-holidays-table.js",
+    "create-admin": "node scripts/create-admin.js",
+    "update-user-name": "node scripts/update-user-name.js",
+    "validate-users": "node scripts/validate-users.js"
   },
   "dependencies": {
     "express": "^4.18.2",
@@ -197,12 +204,12 @@ JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | base6
 # Criar arquivo .env do backend
 cat > .env <<EOL
 # Configuração do PostgreSQL (porta alta para evitar conflitos)
-DATABASE_URL=postgresql://zapflow_user:zapflow_secure_password_2024@localhost:54321/zapflow
+DATABASE_URL=postgresql://zentria_user:zentria_secure_password_2024@localhost:54321/zentria
 DB_HOST=localhost
 DB_PORT=54321
-DB_NAME=zapflow
-DB_USER=zapflow_user
-DB_PASSWORD=zapflow_secure_password_2024
+DB_NAME=zentria
+DB_USER=zentria_user
+DB_PASSWORD=zentria_secure_password_2024
 
 # JWT Secret para autenticação
 JWT_SECRET=${JWT_SECRET}
@@ -234,9 +241,27 @@ else
         BACKEND_AVAILABLE=false
     }
     
-    # Executar migrações adicionais (se os scripts existirem)
+    # Executar TODAS as migrações adicionais automaticamente
     if [ "$BACKEND_AVAILABLE" = true ]; then
-        echo "Executando migrações adicionais..."
+        echo "Executando todas as migrações do banco de dados..."
+        
+        # Migração: Cache de feriados municipais
+        if [ -f "scripts/add-municipal-holidays-cache.js" ]; then
+            echo "  - Criando tabela de cache de feriados municipais..."
+            npm run migrate-holidays-cache 2>/dev/null || echo "    Tabela já existe ou erro (pode ignorar)"
+        fi
+        
+        # Migração: Controle de cota do Gemini
+        if [ -f "scripts/add-gemini-quota-control.js" ]; then
+            echo "  - Criando tabela de controle de cota do Gemini..."
+            npm run migrate-gemini-quota 2>/dev/null || echo "    Tabela já existe ou erro (pode ignorar)"
+        fi
+        
+        # Migração: Tabela de feriados nacionais
+        if [ -f "scripts/add-national-holidays-table.js" ]; then
+            echo "  - Criando tabela de feriados nacionais..."
+            npm run migrate-national-holidays 2>/dev/null || echo "    Tabela já existe ou erro (pode ignorar)"
+        fi
         
         # Adicionar campo department_id na tabela users (se não existir)
         if [ -f "scripts/add-department-id-to-users.js" ]; then
@@ -261,6 +286,14 @@ else
             echo "  - Limpando chats inválidos..."
             node scripts/clean-invalid-chats.js 2>/dev/null || echo "    Nenhum chat inválido encontrado ou erro (pode ignorar)"
         fi
+        
+        # Criar usuário admin padrão (se não existir)
+        if [ -f "scripts/create-admin.js" ]; then
+            echo "  - Criando usuário administrador padrão..."
+            npm run create-admin 2>/dev/null || echo "    Usuário admin já existe ou erro (pode ignorar)"
+        fi
+        
+        echo "✅ Todas as migrações do banco de dados foram executadas"
     fi
 fi
 
@@ -272,14 +305,18 @@ echo -e "${BLUE}[8/9] Configurando Frontend...${NC}"
 # Se não estiver, tentar encontrar o diretório correto
 if [ ! -f "package.json" ]; then
     # Tentar encontrar o diretório do projeto
-    if [ -d "ZapFlow" ] && [ -f "ZapFlow/package.json" ]; then
+    if [ -d "Zentria" ] && [ -f "Zentria/package.json" ]; then
+        cd Zentria
+    elif [ -d "zentria" ] && [ -f "zentria/package.json" ]; then
+        cd zentria
+    elif [ -d "ZapFlow" ] && [ -f "ZapFlow/package.json" ]; then
         cd ZapFlow
     elif [ -d "zapflow" ] && [ -f "zapflow/package.json" ]; then
         cd zapflow
     else
         echo "⚠️  package.json não encontrado no diretório atual."
-        echo "   Certifique-se de estar no diretório raiz do projeto ZapFlow."
-        echo "   Ou execute: cd /caminho/para/ZapFlow antes de executar este script."
+        echo "   Certifique-se de estar no diretório raiz do projeto Zentria."
+        echo "   Ou execute: cd /caminho/para/Zentria antes de executar este script."
         exit 1
     fi
 fi
@@ -321,7 +358,7 @@ fi
 # Verificar se package.json existe antes de instalar
 if [ ! -f "package.json" ]; then
     echo "❌ Erro: package.json não encontrado!"
-    echo "   Certifique-se de estar no diretório raiz do projeto ZapFlow."
+    echo "   Certifique-se de estar no diretório raiz do projeto Zentria."
     exit 1
 fi
 

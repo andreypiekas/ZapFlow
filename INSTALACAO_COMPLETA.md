@@ -1,4 +1,4 @@
-# 🚀 Guia Completo de Instalação - ZapFlow Manager
+# 🚀 Guia Completo de Instalação - Zentria Manager
 
 Este guia contém **TODAS** as funcionalidades implementadas até agora e instruções completas para instalação em uma nova máquina.
 
@@ -77,11 +77,11 @@ brew services start postgresql@15
 sudo -u postgres psql
 
 # Crie o banco de dados
-CREATE DATABASE zapflow;
+CREATE DATABASE zentria;
 
 # Crie um usuário (opcional, pode usar postgres)
-CREATE USER zapflow_user WITH PASSWORD 'sua_senha_super_segura_aqui';
-GRANT ALL PRIVILEGES ON DATABASE zapflow TO zapflow_user;
+CREATE USER zentria_user WITH PASSWORD 'sua_senha_super_segura_aqui';
+GRANT ALL PRIVILEGES ON DATABASE zentria TO zentria_user;
 
 # Saia
 \q
@@ -106,12 +106,12 @@ nano .env  # ou use seu editor preferido
 **Configure o `.env` com:**
 ```env
 # PostgreSQL
-DATABASE_URL=postgresql://zapflow_user:sua_senha_super_segura_aqui@localhost:5432/zapflow
+DATABASE_URL=postgresql://zentria_user:sua_senha_super_segura_aqui@localhost:5432/zentria
 # ou use variáveis individuais:
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=zapflow
-DB_USER=zapflow_user
+DB_NAME=zentria
+DB_USER=zentria_user
 DB_PASSWORD=sua_senha_super_segura_aqui
 
 # JWT Secret (GERE UMA SENHA ALEATÓRIA SEGURA!)
@@ -371,7 +371,7 @@ node scripts/clean-invalid-chats.js
 
 1. Acesse: https://makersuite.google.com/app/apikey
 2. Crie uma API Key
-3. No ZapFlow, vá em **Configurações > Integração Google**
+3. No Zentria, vá em **Configurações > Integração Google**
 4. Cole a API Key do Gemini
 5. Salve
 
@@ -410,7 +410,7 @@ node scripts/clean-invalid-chats.js
 1. Acesse **Configurações > Conexão**
 2. Configure:
    - **URL da API:** `http://SEU_IP_SERVIDOR:8080`
-   - **Nome da Instância:** Ex: `ZapFlow`
+   - **Nome da Instância:** Ex: `Zentria`
    - **API Key:** Obtida automaticamente ou manualmente
 
 ---
@@ -536,7 +536,7 @@ sudo systemctl restart postgresql
 Use este checklist para garantir que tudo está configurado:
 
 - [ ] PostgreSQL instalado e rodando
-- [ ] Banco de dados `zapflow` criado
+- [ ] Banco de dados `zentria` criado
 - [ ] Backend configurado (`.env` criado)
 - [ ] Migração principal executada (`npm run migrate`)
 - [ ] Migração `department_id` executada (`node scripts/add-department-id-to-users.js`)

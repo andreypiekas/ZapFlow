@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Script de instalação e configuração do backend ZapFlow
-# Autor: ZapFlow Team
+# Script de instalação e configuração do backend Zentria
+# Autor: Zentria Team
 # Versão: 1.0.0
 
 set -e  # Para em caso de erro
@@ -14,7 +14,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}  Instalação do Backend ZapFlow${NC}"
+echo -e "${BLUE}  Instalação do Backend Zentria${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
@@ -63,7 +63,7 @@ fi
 # Verificar se está na raiz do projeto
 if [ ! -d "backend" ]; then
     echo -e "${RED}❌ Erro: Diretório 'backend' não encontrado.${NC}"
-    echo "Execute este script da raiz do projeto ZapFlow ou da pasta scripts/."
+    echo "Execute este script da raiz do projeto Zentria ou da pasta scripts/."
     echo "Diretório atual: $(pwd)"
     exit 1
 fi
@@ -126,7 +126,7 @@ if [ "$PG_NATIVE_INSTALLED" = false ] || [ "$PG_NATIVE_RUNNING" = false ]; then
     fi
     
     echo ""
-    echo "O ZapFlow precisa do PostgreSQL nativo (não Docker) para o backend."
+    echo "O Zentria precisa do PostgreSQL nativo (não Docker) para o backend."
     echo "Deseja instalar/iniciar o PostgreSQL nativo? (s/n)"
     read -r INSTALL_PG
     
@@ -194,37 +194,37 @@ EXISTING_DB=""
 EXISTING_USER=""
 EXISTING_PASSWORD=""
 
-# Verificar se já existe instalação do ZapFlow
-check_existing_zapflow_install() {
-    echo "Verificando instalações existentes do ZapFlow..."
+# Verificar se já existe instalação do Zentria
+check_existing_zentria_install() {
+    echo "Verificando instalações existentes do Zentria..."
     
-    # Verificar se existe banco zapflow na porta 54321 (instalação do autoinstall)
-    if PGPASSWORD="" psql -h localhost -p 54321 -U postgres -d zapflow -c "SELECT 1;" > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ Instalação existente do ZapFlow detectada!${NC}"
-        echo -e "${GREEN}   Banco: zapflow na porta 54321${NC}"
+    # Verificar se existe banco zentria na porta 54321 (instalação do autoinstall)
+    if PGPASSWORD="" psql -h localhost -p 54321 -U postgres -d zentria -c "SELECT 1;" > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ Instalação existente do Zentria detectada!${NC}"
+        echo -e "${GREEN}   Banco: zentria na porta 54321${NC}"
         
-        # Verificar se usuário zapflow_user existe
-        USER_EXISTS=$(PGPASSWORD="" psql -h localhost -p 54321 -U postgres -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='zapflow_user';" 2>/dev/null)
+        # Verificar se usuário zentria_user existe
+        USER_EXISTS=$(PGPASSWORD="" psql -h localhost -p 54321 -U postgres -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='zentria_user';" 2>/dev/null)
         if [ "$USER_EXISTS" = "1" ]; then
-            echo -e "${GREEN}   Usuário: zapflow_user encontrado${NC}"
+            echo -e "${GREEN}   Usuário: zentria_user encontrado${NC}"
             EXISTING_INSTALL=true
             EXISTING_PORT="54321"
-            EXISTING_DB="zapflow"
-            EXISTING_USER="zapflow_user"
-            EXISTING_PASSWORD="zapflow_secure_password_2024"
+            EXISTING_DB="zentria"
+            EXISTING_USER="zentria_user"
+            EXISTING_PASSWORD="zentria_secure_password_2024"
             return 0
         fi
     fi
     
-    # Verificar se existe banco zapflow na porta 5432
-    if PGPASSWORD="" psql -h localhost -p 5432 -U postgres -d zapflow -c "SELECT 1;" > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ Instalação existente do ZapFlow detectada!${NC}"
-        echo -e "${GREEN}   Banco: zapflow na porta 5432${NC}"
+    # Verificar se existe banco zentria na porta 5432
+    if PGPASSWORD="" psql -h localhost -p 5432 -U postgres -d zentria -c "SELECT 1;" > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ Instalação existente do Zentria detectada!${NC}"
+        echo -e "${GREEN}   Banco: zentria na porta 5432${NC}"
         EXISTING_INSTALL=true
         EXISTING_PORT="5432"
-        EXISTING_DB="zapflow"
-        EXISTING_USER="zapflow_user"
-        EXISTING_PASSWORD="zapflow_secure_password_2024"
+        EXISTING_DB="zentria"
+        EXISTING_USER="zentria_user"
+        EXISTING_PASSWORD="zentria_secure_password_2024"
         return 0
     fi
     
@@ -258,7 +258,7 @@ check_docker_postgres() {
                 fi
             else
                 echo -e "${GREEN}   Porta 5432 não está exposta para o host (apenas interna do Docker)${NC}"
-                echo -e "${GREEN}   Não há conflito - o ZapFlow usará PostgreSQL nativo na porta 54321${NC}"
+                echo -e "${GREEN}   Não há conflito - o Zentria usará PostgreSQL nativo na porta 54321${NC}"
             fi
             
             # Verificar configurações do Docker
@@ -287,7 +287,7 @@ detect_postgresql() {
     echo "Detectando instalações do PostgreSQL..."
     
     # Verificar instalação existente do ZapFlow primeiro
-    if check_existing_zapflow_install; then
+    if check_existing_zentria_install; then
         SUGGESTED_HOST="localhost"
         SUGGESTED_PORT="$EXISTING_PORT"
         SUGGESTED_DB="$EXISTING_DB"
@@ -594,8 +594,8 @@ if [ "$EXISTING_INSTALL" = true ]; then
     echo -e "${GREEN}✅ Usando instalação existente do ZapFlow${NC}"
     DB_HOST="${SUGGESTED_HOST:-localhost}"
     DB_PORT="${SUGGESTED_PORT:-54321}"
-    DB_NAME="${SUGGESTED_DB:-zapflow}"
-    DB_USER="${SUGGESTED_USER:-zapflow_user}"
+    DB_NAME="${SUGGESTED_DB:-zentria}"
+    DB_USER="${SUGGESTED_USER:-zentria_user}"
     DB_PASSWORD="${SUGGESTED_PASSWORD:-zapflow_secure_password_2024}"
     echo "  Host: $DB_HOST"
     echo "  Porta: $DB_PORT"
@@ -623,7 +623,7 @@ if [ "$EXISTING_INSTALL" != true ]; then
 
     echo -n "Nome do banco [zapflow]: "
     read -r DB_NAME
-    DB_NAME=${DB_NAME:-zapflow}
+    DB_NAME=${DB_NAME:-zentria}
 
     echo -n "Usuário [postgres]: "
     read -r DB_USER
