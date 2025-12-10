@@ -85,9 +85,9 @@ export const searchMunicipalHolidaysWithAI = async (
     const genAI = new GoogleGenerativeAI(apiKey);
 
     // Configura o modelo com a ferramenta de busca (Google Search)
-    // Usando gemini-pro que é mais estável e suporta googleSearch
+    // Usando gemini-2.5-flash que suporta googleSearch
     const model = genAI.getGenerativeModel({
-      model: "gemini-pro",
+      model: "gemini-2.5-flash",
       tools: [
         {
           googleSearch: {}, // Ativa o acesso à web
@@ -243,9 +243,9 @@ export const searchMunicipalHolidaysForStates = async (
     const genAI = new GoogleGenerativeAI(apiKey);
 
     // Configura o modelo com a ferramenta de busca (Google Search)
-    // Usando gemini-pro que é mais estável e suporta googleSearch
+    // Usando gemini-2.5-flash que suporta googleSearch
     const model = genAI.getGenerativeModel({
-      model: "gemini-pro",
+      model: "gemini-2.5-flash",
       tools: [
         {
           googleSearch: {}, // Ativa o acesso à web
