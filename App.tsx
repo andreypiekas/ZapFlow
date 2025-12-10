@@ -713,15 +713,35 @@ const App: React.FC = () => {
                             console.log(`[App] 📊 [DEBUG] syncChats: Contagem de mensagens diferente - chatId: ${realChat.id}, oldCount: ${oldMsgCount}, newCount: ${newMsgCount}, dbStatus: ${dbChat?.status}`);
                         }
                         
-                        // Verifica se há novas mensagens do usuário em chat fechado
-                        if (newMsgCount > oldMsgCount) {
+                        // COMPARAÇÃO ROBUSTA: Verifica se há novas mensagens do usuário comparando as mensagens reais
+                        // Filtra apenas mensagens do usuário e agente (ignora mensagens de sistema)
+                        const realUserMessages = realChat.messages.filter(m => m.sender === 'user' || m.sender === 'agent');
+                        const existingUserMessages = existingChat.messages.filter(m => m.sender === 'user' || m.sender === 'agent');
+                        
+                        // Encontra a última mensagem do usuário na API
+                        const lastRealUserMsg = realUserMessages.length > 0 ? realUserMessages[realUserMessages.length - 1] : null;
+                        const lastExistingUserMsg = existingUserMessages.length > 0 ? existingUserMessages[existingUserMessages.length - 1] : null;
+                        
+                        // Verifica se há uma nova mensagem do usuário que não estava no estado anterior
+                        // Compara por ID, timestamp e conteúdo para detectar mensagens realmente novas
+                        const hasNewUserMessage = lastRealUserMsg && lastRealUserMsg.sender === 'user' && (
+                            !lastExistingUserMsg || 
+                            lastRealUserMsg.id !== lastExistingUserMsg.id ||
+                            (lastRealUserMsg.timestamp && lastExistingUserMsg.timestamp && 
+                             lastRealUserMsg.timestamp.getTime() > lastExistingUserMsg.timestamp.getTime())
+                        );
+                        
+                        // Verifica se há novas mensagens (qualquer tipo) ou se há nova mensagem do usuário
+                        const hasNewMessages = newMsgCount > oldMsgCount || hasNewUserMessage;
+                        
+                        if (hasNewMessages) {
                             const lastMsg = realChat.messages[realChat.messages.length - 1];
                             const dbChatStatus = dbChat?.status;
                             
-                            console.log(`[App] 🔍 [DEBUG] syncChats: Nova mensagem detectada - chatId: ${realChat.id}, dbStatus: ${dbChatStatus}, lastMsgSender: ${lastMsg?.sender}, lastMsgContent: ${lastMsg?.content?.substring(0, 50)}`);
+                            console.log(`[App] 🔍 [DEBUG] syncChats: Nova mensagem detectada - chatId: ${realChat.id}, dbStatus: ${dbChatStatus}, lastMsgSender: ${lastMsg?.sender}, lastMsgContent: ${lastMsg?.content?.substring(0, 50)}, hasNewUserMessage: ${hasNewUserMessage}`);
                             
                             // Se o chat está fechado no banco e recebeu nova mensagem do usuário, reabre IMEDIATAMENTE
-                            if (dbChatStatus === 'closed' && lastMsg.sender === 'user') {
+                            if (dbChatStatus === 'closed' && hasNewUserMessage) {
                                 console.log(`[App] 🔄 [DEBUG] syncChats: Chat fechado ${realChat.id} recebeu nova mensagem do usuário, reabrindo IMEDIATAMENTE...`);
                                 
                                 // Atualiza status para pending e limpa assignedTo/departmentId IMEDIATAMENTE
