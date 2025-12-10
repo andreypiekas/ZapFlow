@@ -590,6 +590,14 @@ const App: React.FC = () => {
             })) || []
           }));
           setChats(chatsWithDates);
+          
+          // Após carregar chats, atualiza com nomes dos contatos se houver contatos
+          if (contactsData && contactsData.length > 0) {
+            // Usa setTimeout para garantir que setChats seja executado primeiro
+            setTimeout(() => {
+              updateChatsWithContacts(contactsData);
+            }, 100);
+          }
         }
       } catch (error) {
         console.error('[App] Erro ao carregar dados da API:', error);
@@ -1498,11 +1506,37 @@ const App: React.FC = () => {
                              (lastMergedMsg.timestamp && lastExistingMsg.timestamp && 
                               lastMergedMsg.timestamp.getTime() > lastExistingMsg.timestamp.getTime()));
                         
+                        // Verifica se há contato salvo para atualizar o nome
+                        let finalContactName = existingChat.contactName;
+                        if (contacts.length > 0) {
+                          const chatPhone = normalizePhoneForMatch(useRealContactNumber ? realChat.contactNumber : existingChat.contactNumber);
+                          const contactMatch = contacts.find(c => {
+                            if (!c.phone) return false;
+                            const cPhone = normalizePhoneForMatch(c.phone);
+                            return cPhone === chatPhone || 
+                                   (cPhone.length >= 8 && chatPhone.length >= 8 && 
+                                    (cPhone.slice(-8) === chatPhone.slice(-8) || 
+                                     cPhone.slice(-9) === chatPhone.slice(-9) ||
+                                     cPhone.slice(-10) === chatPhone.slice(-10) ||
+                                     cPhone.slice(-11) === chatPhone.slice(-11)));
+                          });
+                          
+                          if (contactMatch && contactMatch.name && contactMatch.name.trim()) {
+                            const chatNameIsNumber = !existingChat.contactName || 
+                                                     existingChat.contactName === existingChat.contactNumber || 
+                                                     existingChat.contactName === existingChat.contactNumber.replace(/\D/g, '') ||
+                                                     /^\d+$/.test(existingChat.contactName);
+                            if (chatNameIsNumber) {
+                              finalContactName = contactMatch.name.trim();
+                            }
+                          }
+                        }
+                        
                         return {
                             ...realChat,
                             messages: mergedMessages, // Usa mensagens mescladas
                             id: shouldUpdateId ? realChat.id : existingChat.id, // Atualiza ID se existente for gerado e real for válido
-                            contactName: existingChat.contactName, // Mantém nome editado localmente se houver
+                            contactName: finalContactName, // Usa nome do contato se encontrado, senão mantém o existente
                             contactNumber: useRealContactNumber ? realChat.contactNumber : existingChat.contactNumber, // Atualiza se número mais completo
                             clientCode: dbChat?.clientCode || existingChat.clientCode,
                             // PRIORIDADE ABSOLUTA: Dados do banco têm precedência
@@ -1588,8 +1622,37 @@ const App: React.FC = () => {
                             });
                         }
                         
-                        // console.log(`[App] Novo chat encontrado: ${realChat.id} (${realChat.contactName})`);
-                        return realChat;
+                        // Verifica se há contato salvo para atualizar o nome do novo chat
+                        let finalContactName = realChat.contactName;
+                        if (contacts.length > 0 && realChat.contactNumber) {
+                          const chatPhone = normalizePhoneForMatch(realChat.contactNumber);
+                          const contactMatch = contacts.find(c => {
+                            if (!c.phone) return false;
+                            const cPhone = normalizePhoneForMatch(c.phone);
+                            return cPhone === chatPhone || 
+                                   (cPhone.length >= 8 && chatPhone.length >= 8 && 
+                                    (cPhone.slice(-8) === chatPhone.slice(-8) || 
+                                     cPhone.slice(-9) === chatPhone.slice(-9) ||
+                                     cPhone.slice(-10) === chatPhone.slice(-10) ||
+                                     cPhone.slice(-11) === chatPhone.slice(-11)));
+                          });
+                          
+                          if (contactMatch && contactMatch.name && contactMatch.name.trim()) {
+                            const chatNameIsNumber = !realChat.contactName || 
+                                                     realChat.contactName === realChat.contactNumber || 
+                                                     realChat.contactName === realChat.contactNumber.replace(/\D/g, '') ||
+                                                     /^\d+$/.test(realChat.contactName);
+                            if (chatNameIsNumber) {
+                              finalContactName = contactMatch.name.trim();
+                            }
+                          }
+                        }
+                        
+                        // console.log(`[App] Novo chat encontrado: ${realChat.id} (${finalContactName})`);
+                        return {
+                          ...realChat,
+                          contactName: finalContactName
+                        };
                     }
                 });
                 // console.log(`[App] Merge concluído: ${mergedChats.length} chats no total`);
@@ -1618,6 +1681,11 @@ const App: React.FC = () => {
                 
                 return finalMergedChats;
             });
+            
+            // Após sincronizar chats, verifica contatos para atualizar nomes
+            if (contacts.length > 0) {
+                updateChatsWithContacts(contacts);
+            }
         } else {
             // console.log('[App] Nenhum chat retornado da API, mantendo estado atual');
         }
@@ -2832,21 +2900,30 @@ const App: React.FC = () => {
         });
         
         if (match) {
-          // Só atualiza se o nome ou avatar do contato for diferente e mais completo
-          const shouldUpdateName = match.name && match.name.trim() && 
-                                   (chat.contactName === chat.contactNumber || 
-                                    chat.contactName.length < match.name.length ||
-                                    chat.contactName === match.name);
+          // Sempre atualiza o nome se o contato tiver um nome válido
+          // Só não atualiza se o chat já tiver um nome melhor (mais longo) que não seja apenas o número
+          const hasValidContactName = match.name && match.name.trim() && match.name.trim().length > 0;
+          const chatNameIsNumber = chat.contactName === chat.contactNumber || 
+                                   chat.contactName === chat.contactNumber.replace(/\D/g, '') ||
+                                   /^\d+$/.test(chat.contactName);
+          const shouldUpdateName = hasValidContactName && (chatNameIsNumber || !chat.contactName || chat.contactName.trim().length === 0);
           const shouldUpdateAvatar = match.avatar && match.avatar !== chat.contactAvatar;
           
           if (shouldUpdateName || shouldUpdateAvatar) {
             hasUpdates = true;
-            return {
+            const updatedChat = {
               ...chat,
-              contactName: shouldUpdateName ? match.name : chat.contactName,
+              contactName: shouldUpdateName ? match.name.trim() : chat.contactName,
               contactAvatar: shouldUpdateAvatar ? match.avatar : chat.contactAvatar,
               // clientCode é preservado automaticamente (não é sobrescrito)
             };
+            
+            // Salva no banco se o nome foi atualizado
+            if (shouldUpdateName) {
+              handleUpdateChat(updatedChat);
+            }
+            
+            return updatedChat;
           }
         }
         return chat;
@@ -3646,6 +3723,17 @@ const App: React.FC = () => {
             lastSync: result.data.lastSync ? new Date(result.data.lastSync) : undefined
           }];
         });
+        
+        // Atualiza chats com o novo contato
+        updateChatsWithContacts([{
+          id: result.data.id,
+          name: result.data.name,
+          phone: result.data.phone,
+          email: result.data.email,
+          avatar: result.data.avatar,
+          source: result.data.source as 'manual' | 'google' | 'csv',
+          lastSync: result.data.lastSync ? new Date(result.data.lastSync) : undefined
+        }]);
       } else {
         console.error('[App] Erro ao criar contato:', result.error);
         // Fallback: adiciona localmente
@@ -3757,28 +3845,56 @@ const App: React.FC = () => {
 
   // Função para atualizar chats com informações de contatos (preservando clientCode)
   const updateChatsWithContacts = (contactList: Contact[]) => {
+    if (!contactList || contactList.length === 0) return;
+    
     setChats(currentChats => {
-      return currentChats.map(chat => {
+      const updatedChats = currentChats.map(chat => {
+        if (!chat.contactNumber) return chat;
+        
         const chatPhone = normalizePhoneForMatch(chat.contactNumber);
         const match = contactList.find(c => {
+          if (!c.phone) return false;
           const cPhone = normalizePhoneForMatch(c.phone);
-          // Match exato ou match pelos últimos 8-9 dígitos
+          // Match exato ou match pelos últimos 8-11 dígitos (para números com/sem DDI)
           return cPhone === chatPhone || 
                  (cPhone.length >= 8 && chatPhone.length >= 8 && 
-                  (cPhone.slice(-8) === chatPhone.slice(-8) || cPhone.slice(-9) === chatPhone.slice(-9)));
+                  (cPhone.slice(-8) === chatPhone.slice(-8) || 
+                   cPhone.slice(-9) === chatPhone.slice(-9) ||
+                   cPhone.slice(-10) === chatPhone.slice(-10) ||
+                   cPhone.slice(-11) === chatPhone.slice(-11)));
         });
         
-        if (match) {
-          // Atualiza informações do contato, mas preserva clientCode e outras informações editadas
-          return { 
-            ...chat, 
-            contactName: match.name, 
-            contactAvatar: match.avatar || chat.contactAvatar,
-            // clientCode é preservado automaticamente (não é sobrescrito)
-          };
+        if (match && match.name && match.name.trim()) {
+          // Verifica se precisa atualizar
+          const chatNameIsNumber = chat.contactName === chat.contactNumber || 
+                                   chat.contactName === chat.contactNumber.replace(/\D/g, '') ||
+                                   /^\d+$/.test(chat.contactName) ||
+                                   !chat.contactName ||
+                                   chat.contactName.trim().length === 0;
+          
+          const shouldUpdateName = chatNameIsNumber;
+          const shouldUpdateAvatar = match.avatar && match.avatar !== chat.contactAvatar;
+          
+          if (shouldUpdateName || shouldUpdateAvatar) {
+            const updatedChat = { 
+              ...chat, 
+              contactName: shouldUpdateName ? match.name.trim() : chat.contactName, 
+              contactAvatar: shouldUpdateAvatar ? match.avatar : chat.contactAvatar,
+              // clientCode é preservado automaticamente (não é sobrescrito)
+            };
+            
+            // Salva no banco se o nome foi atualizado
+            if (shouldUpdateName) {
+              handleUpdateChat(updatedChat);
+            }
+            
+            return updatedChat;
+          }
         }
         return chat;
       });
+      
+      return updatedChats;
     });
   };
 
