@@ -1649,11 +1649,42 @@ const App: React.FC = () => {
                         }
                         
                         // console.log(`[App] Novo chat encontrado: ${realChat.id} (${finalContactName})`);
-                        return {
+                        let finalContactAvatar = realChat.contactAvatar;
+                        
+                        // Se encontrou contato e o chat não tem avatar ou tem avatar padrão, usa o avatar do contato
+                        if (contacts.length > 0 && realChat.contactNumber) {
+                          const chatPhone = normalizePhoneForMatch(realChat.contactNumber);
+                          const contactMatch = contacts.find(c => {
+                            if (!c.phone) return false;
+                            const cPhone = normalizePhoneForMatch(c.phone);
+                            return cPhone === chatPhone || 
+                                   (cPhone.length >= 8 && chatPhone.length >= 8 && 
+                                    (cPhone.slice(-8) === chatPhone.slice(-8) || 
+                                     cPhone.slice(-9) === chatPhone.slice(-9) ||
+                                     cPhone.slice(-10) === chatPhone.slice(-10) ||
+                                     cPhone.slice(-11) === chatPhone.slice(-11)));
+                          });
+                          
+                          if (contactMatch && contactMatch.avatar && (!finalContactAvatar || finalContactAvatar.includes('ui-avatars.com'))) {
+                            finalContactAvatar = contactMatch.avatar;
+                          }
+                        }
+                        
+                        const newChat = {
                           ...realChat,
                           contactName: finalContactName,
-                          contactAvatar: realChat.contactAvatar // Preserva avatar da API
+                          contactAvatar: finalContactAvatar
                         };
+                        
+                        // Salva o novo chat no banco com o nome do contato se foi atualizado
+                        if (finalContactName !== realChat.contactName || finalContactAvatar !== realChat.contactAvatar) {
+                          // Salva assincronamente para não bloquear
+                          setTimeout(() => {
+                            handleUpdateChat(newChat);
+                          }, 100);
+                        }
+                        
+                        return newChat;
                     }
                 });
                 // console.log(`[App] Merge concluído: ${mergedChats.length} chats no total`);
