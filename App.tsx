@@ -2991,8 +2991,8 @@ const App: React.FC = () => {
           // Só não atualiza se o chat já tiver um nome melhor (mais longo) que não seja apenas o número
           const hasValidContactName = match.name && match.name.trim() && match.name.trim().length > 0;
           const chatNameIsNumber = chat.contactName === chat.contactNumber || 
-                                   chat.contactName === chat.contactNumber.replace(/\D/g, '') ||
-                                   /^\d+$/.test(chat.contactName);
+                                   (chat.contactNumber && chat.contactName === chat.contactNumber.replace(/\D/g, '')) ||
+                                   (chat.contactName && /^\d+$/.test(chat.contactName));
           const shouldUpdateName = hasValidContactName && (chatNameIsNumber || !chat.contactName || chat.contactName.trim().length === 0);
           const shouldUpdateAvatar = match.avatar && match.avatar !== chat.contactAvatar;
           
