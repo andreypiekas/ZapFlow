@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw, Smile, Tag, Plus, Clock, User as UserIcon, AlertTriangle } from 'lucide-react';
 import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow, Contact } from '../types';
 import { generateSmartReply } from '../services/geminiService';
-import { sendRealMessage, sendRealMediaMessage, blobToBase64, sendRealContact } from '../services/whatsappService';
+import { sendRealMessage, sendRealMediaMessage, blobToBase64, sendRealContact, sendDepartmentSelectionMessage } from '../services/whatsappService';
 import { AVAILABLE_TAGS, EMOJIS, STICKERS } from '../constants';
 
 interface ChatInterfaceProps {
@@ -782,6 +782,38 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         }
         
         finalizeMessageStatus(newMessage, success);
+        
+        // Se a mensagem foi enviada com sucesso e o chat não tem departamento, envia mensagem de seleção
+        if (success && selectedChat && !selectedChat.departmentId && !selectedChat.departmentSelectionSent && departments.length > 0) {
+            console.log(`[ChatInterface] 📤 Chat sem departamento após envio de mensagem - Enviando mensagem de seleção de departamento para ${selectedChat.id}`);
+            sendDepartmentSelectionMessage(apiConfig, targetNumber, departments)
+                .then(sent => {
+                    if (sent) {
+                        // Adiciona mensagem de sistema
+                        const systemMessage: Message = {
+                            id: `sys_dept_selection_send_${Date.now()}`,
+                            content: 'department_selection_sent - Mensagem de seleção de departamento enviada',
+                            sender: 'system',
+                            timestamp: new Date(),
+                            status: MessageStatus.READ,
+                            type: 'text'
+                        };
+                        
+                        onUpdateChat({
+                            ...selectedChat,
+                            departmentSelectionSent: true,
+                            awaitingDepartmentSelection: true,
+                            messages: [...(selectedChat.messages || []), systemMessage]
+                        });
+                        console.log(`[ChatInterface] ✅ Mensagem de seleção de departamento enviada para ${selectedChat.id}`);
+                    } else {
+                        console.error(`[ChatInterface] ❌ Falha ao enviar mensagem de seleção de departamento para ${selectedChat.id}`);
+                    }
+                })
+                .catch(err => {
+                    console.error(`[ChatInterface] ❌ Erro ao enviar mensagem de seleção de departamento:`, err);
+                });
+        }
     } catch (error: any) {
         console.error('[handleSendMessage] Erro ao enviar:', error);
         // Mostra mensagem específica se disponível, senão mostra genérica
