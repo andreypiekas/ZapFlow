@@ -1584,11 +1584,14 @@ const App: React.FC = () => {
                         };
                         
                         // Se o nome ou avatar foi atualizado do contato, salva no banco
-                        if (finalContactName !== existingChat.contactName || finalContactAvatar !== (existingChat.contactAvatar || realChat.contactAvatar)) {
-                          // Salva assincronamente para não bloquear
+                        // IMPORTANTE: Só salva se realmente mudou para evitar loops infinitos
+                        const nameChanged = finalContactName !== existingChat.contactName;
+                        const avatarChanged = finalContactAvatar !== (existingChat.contactAvatar || realChat.contactAvatar);
+                        if (nameChanged || avatarChanged) {
+                          // Salva assincronamente para não bloquear e evitar múltiplas chamadas
                           setTimeout(() => {
                             handleUpdateChat(mergedChat);
-                          }, 100);
+                          }, 500);
                         }
                         
                         return mergedChat;
