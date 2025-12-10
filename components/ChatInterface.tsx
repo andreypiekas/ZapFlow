@@ -2043,7 +2043,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             <div className="bg-emerald-100 p-6 rounded-full mb-4">
                <MessageSquare size={48} className="text-emerald-600" />
             </div>
-            <h2 className="text-xl font-medium text-slate-700">ZapFlow Manager</h2>
+            <h2 className="text-xl font-medium text-slate-700">Zentria Manager</h2>
             <p className="mt-2 text-sm">Selecione uma conversa para iniciar o atendimento</p>
           </div>
         )}

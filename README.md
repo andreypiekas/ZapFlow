@@ -1,9 +1,9 @@
 
-# ⚡ ZapFlow Manager v1.3.0
+# ⚡ Zentria Manager v1.3.0
 
 **Plataforma Enterprise de Gestão de Atendimento para WhatsApp**
 
-O **ZapFlow Manager** é uma solução completa para centralizar, organizar e escalar o atendimento via WhatsApp da sua empresa. Desenvolvido para transformar o WhatsApp em uma ferramenta de ticket profissional, ele elimina a desorganização de múltiplos celulares e centraliza tudo em um único painel multi-agente.
+O **Zentria Manager** é uma solução completa para centralizar, organizar e escalar o atendimento via WhatsApp da sua empresa. Desenvolvido para transformar o WhatsApp em uma ferramenta de ticket profissional, ele elimina a desorganização de múltiplos celulares e centraliza tudo em um único painel multi-agente.
 
 ---
 
@@ -40,7 +40,7 @@ O sistema utiliza uma arquitetura moderna baseada em microsserviços containeriz
 ```mermaid
 graph TD
     User[Cliente/Navegador] -->|HTTPS/WSS| Nginx[Proxy Reverso Nginx]
-    Nginx -->|Porta 5173| Frontend[ZapFlow React App]
+    Nginx -->|Porta 5173| Frontend[Zentria React App]
     Nginx -->|Porta 8080| Backend[Evolution API latest]
     
     subgraph "Docker Containers"
@@ -119,7 +119,7 @@ Os scripts abaixo podem ser executados diretamente ou criados no servidor a part
 
 ## 💾 Persistência de Dados
 
-O ZapFlow agora suporta persistência segura de dados usando PostgreSQL:
+O Zentria agora suporta persistência segura de dados usando PostgreSQL:
 
 ### Backend API (Recomendado)
 

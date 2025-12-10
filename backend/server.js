@@ -1409,7 +1409,7 @@ app.delete('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res
 // Rota raiz
 app.get('/', (req, res) => {
   res.json({ 
-    service: 'ZapFlow Backend API',
+    service: 'Zentria Backend API',
     version: '1.0.0',
     status: 'running',
     endpoints: {
