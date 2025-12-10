@@ -4015,7 +4015,7 @@ const App: React.FC = () => {
   // Se ainda está verificando o backend, mostra loading
   if (backendAvailable === null) {
     return (
-      <div className="min-h-screen bg-[#0A0B0E] flex items-center justify-center">
+      <div className="min-h-screen bg-dark-charcoal flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-[#00E0D1] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-slate-300">Verificando conexão com o backend...</p>
@@ -4256,7 +4256,7 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="flex h-screen bg-[#0A0B0E] font-sans overflow-hidden">
+    <div className="flex h-screen bg-dark-charcoal font-sans overflow-hidden">
       <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2">
         {notifications.map(n => (
           <div key={n.id} className={`min-w-[300px] max-w-sm p-4 rounded-lg shadow-xl border-l-4 bg-[#16191F] animate-in slide-in-from-right flex items-start gap-3 ${n.type === 'info' ? 'border-[#0074FF]' : n.type === 'warning' ? 'border-orange-500' : 'border-[#00E0D1]'}`}>
