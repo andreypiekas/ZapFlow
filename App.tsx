@@ -1862,6 +1862,10 @@ const App: React.FC = () => {
 
     // Carrega chats do banco PRIMEIRO, depois sincroniza
     loadChatsFromDatabase().then(() => {
+      // Após carregar chats do banco, atualiza nomes com contatos
+      if (contacts.length > 0) {
+        updateChatsWithContacts(contacts);
+      }
       // Aguarda um pouco para garantir que o estado foi atualizado
       setTimeout(() => {
     syncChats();
