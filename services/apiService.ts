@@ -616,3 +616,84 @@ export const cleanupInvalidChats = async (): Promise<{ success: boolean; summary
   }
 };
 
+// Cache de feriados municipais
+export interface MunicipalHolidayCache {
+  cityName: string;
+  stateCode: string;
+  year: number;
+  holidays: any[] | null;
+  lastUpdated?: string;
+  fromCache: boolean;
+}
+
+// Buscar feriados municipais do cache
+export const getMunicipalHolidaysCache = async (
+  cityName: string,
+  stateCode: string,
+  year: number
+): Promise<MunicipalHolidayCache | null> => {
+  try {
+    const response = await apiService.request<{ success: boolean; holidays: any[] | null; lastUpdated?: string; fromCache: boolean }>(
+      `/api/holidays/municipal-cache?cityName=${encodeURIComponent(cityName)}&stateCode=${encodeURIComponent(stateCode)}&year=${year}`,
+      { method: 'GET' }
+    );
+    
+    if (response.success) {
+      return {
+        cityName,
+        stateCode,
+        year,
+        holidays: response.holidays,
+        lastUpdated: response.lastUpdated,
+        fromCache: response.fromCache
+      };
+    }
+    return null;
+  } catch (error: any) {
+    console.error('[ApiService] Erro ao buscar cache de feriados municipais:', error);
+    return null;
+  }
+};
+
+// Salvar feriados municipais no cache
+export const saveMunicipalHolidaysCache = async (
+  cityName: string,
+  stateCode: string,
+  year: number,
+  holidays: any[]
+): Promise<boolean> => {
+  try {
+    const response = await apiService.request<{ success: boolean }>('/api/holidays/municipal-cache', {
+      method: 'POST',
+      body: JSON.stringify({ cityName, stateCode, year, holidays })
+    });
+    return response.success || false;
+  } catch (error: any) {
+    console.error('[ApiService] Erro ao salvar cache de feriados municipais:', error);
+    return false;
+  }
+};
+
+// Buscar múltiplos feriados do cache (otimizado)
+export const getMunicipalHolidaysCacheBatch = async (
+  cities: Array<{ cityName: string; stateCode: string; year: number }>
+): Promise<MunicipalHolidayCache[]> => {
+  try {
+    const response = await apiService.request<{ success: boolean; results: MunicipalHolidayCache[] }>(
+      '/api/holidays/municipal-cache/batch',
+      {
+        method: 'POST',
+        body: JSON.stringify({ cities })
+      }
+    );
+    
+    if (response.success && response.results) {
+      return response.results;
+    }
+    return [];
+  } catch (error: any) {
+    console.error('[ApiService] Erro ao buscar cache em lote de feriados municipais:', error);
+    return [];
+  }
+};
+

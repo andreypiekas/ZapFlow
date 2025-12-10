@@ -118,8 +118,11 @@ const Holidays: React.FC = () => {
     setProgressMessage('');
     
     try {
+      // Para feriados municipais, sempre usa 15 dias (cache atualiza a cada 10 dias)
+      const daysToSearch = selectedStates.length > 0 ? 15 : days;
+      
       const upcomingHolidays = await getUpcomingHolidays(
-        days, 
+        daysToSearch, 
         selectedStates.length > 0 ? selectedStates : undefined,
         (message) => setProgressMessage(message),
         geminiApiKey || undefined

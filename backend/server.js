@@ -1483,3 +1483,136 @@ function startChatCleanupScheduler() {
 // Inicia o agendador quando o servidor inicia
 startChatCleanupScheduler();
 
+// ============================================================================
+// Endpoints para cache de feriados municipais
+// ============================================================================
+
+// Buscar feriados municipais do cache
+app.get('/api/holidays/municipal-cache', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { cityName, stateCode, year } = req.query;
+    
+    if (!cityName || !stateCode || !year) {
+      return res.status(400).json({ error: 'cityName, stateCode e year são obrigatórios' });
+    }
+
+    const result = await pool.query(
+      `SELECT holidays, last_updated 
+       FROM municipal_holidays_cache 
+       WHERE city_name = $1 AND state_code = $2 AND year = $3`,
+      [cityName, stateCode, parseInt(year)]
+    );
+
+    if (result.rows.length > 0) {
+      const cacheData = result.rows[0];
+      const lastUpdated = new Date(cacheData.last_updated);
+      const daysSinceUpdate = (new Date().getTime() - lastUpdated.getTime()) / (1000 * 60 * 60 * 24);
+      
+      // Retorna os dados se foram atualizados há menos de 10 dias
+      if (daysSinceUpdate < 10) {
+        return res.json({
+          success: true,
+          holidays: cacheData.holidays,
+          lastUpdated: cacheData.last_updated,
+          fromCache: true
+        });
+      }
+    }
+
+    // Não encontrou ou está expirado
+    res.json({
+      success: true,
+      holidays: null,
+      fromCache: false
+    });
+  } catch (error) {
+    console.error('Erro ao buscar cache de feriados municipais:', error);
+    res.status(500).json({ error: 'Erro ao buscar cache de feriados municipais' });
+  }
+});
+
+// Salvar feriados municipais no cache
+app.post('/api/holidays/municipal-cache', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { cityName, stateCode, year, holidays } = req.body;
+    
+    if (!cityName || !stateCode || !year || !Array.isArray(holidays)) {
+      return res.status(400).json({ error: 'cityName, stateCode, year e holidays (array) são obrigatórios' });
+    }
+
+    // Usa UPSERT para atualizar se já existir
+    await pool.query(
+      `INSERT INTO municipal_holidays_cache (city_name, state_code, year, holidays, last_updated)
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+       ON CONFLICT (city_name, state_code, year)
+       DO UPDATE SET holidays = $4, last_updated = CURRENT_TIMESTAMP`,
+      [cityName, stateCode, parseInt(year), JSON.stringify(holidays)]
+    );
+
+    res.json({ success: true, message: 'Cache de feriados municipais salvo com sucesso' });
+  } catch (error) {
+    console.error('Erro ao salvar cache de feriados municipais:', error);
+    res.status(500).json({ error: 'Erro ao salvar cache de feriados municipais' });
+  }
+});
+
+// Buscar múltiplos feriados do cache (otimizado para estados)
+app.post('/api/holidays/municipal-cache/batch', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { cities } = req.body; // Array de {cityName, stateCode, year}
+    
+    if (!Array.isArray(cities) || cities.length === 0) {
+      return res.status(400).json({ error: 'cities deve ser um array não vazio' });
+    }
+
+    const results = [];
+    const tenDaysAgo = new Date();
+    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+
+    for (const city of cities) {
+      const { cityName, stateCode, year } = city;
+      
+      if (!cityName || !stateCode || !year) continue;
+
+      const result = await pool.query(
+        `SELECT holidays, last_updated 
+         FROM municipal_holidays_cache 
+         WHERE city_name = $1 AND state_code = $2 AND year = $3`,
+        [cityName, stateCode, parseInt(year)]
+      );
+
+      if (result.rows.length > 0) {
+        const cacheData = result.rows[0];
+        const lastUpdated = new Date(cacheData.last_updated);
+        
+        // Retorna os dados se foram atualizados há menos de 10 dias
+        if (lastUpdated >= tenDaysAgo) {
+          results.push({
+            cityName,
+            stateCode,
+            year: parseInt(year),
+            holidays: cacheData.holidays,
+            lastUpdated: cacheData.last_updated,
+            fromCache: true
+          });
+          continue;
+        }
+      }
+
+      // Não encontrou ou está expirado
+      results.push({
+        cityName,
+        stateCode,
+        year: parseInt(year),
+        holidays: null,
+        fromCache: false
+      });
+    }
+
+    res.json({ success: true, results });
+  } catch (error) {
+    console.error('Erro ao buscar cache em lote de feriados municipais:', error);
+    res.status(500).json({ error: 'Erro ao buscar cache em lote de feriados municipais' });
+  }
+});
+

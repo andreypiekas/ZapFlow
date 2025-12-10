@@ -1,8 +1,10 @@
 // Serviço para buscar feriados nacionais e municipais do Brasil
 // Feriados nacionais: calculados localmente
 // Feriados municipais: buscados APENAS via IA (Gemini) - requer API key configurada
+// Cache: feriados municipais são armazenados no banco e atualizados a cada 10 dias
 
 import { searchMunicipalHolidaysWithAI, searchMunicipalHolidaysForStates } from './geminiService';
+import { getMunicipalHolidaysCache, saveMunicipalHolidaysCache } from './apiService';
 
 export interface Holiday {
   date: string; // YYYY-MM-DD
@@ -172,6 +174,7 @@ async function getCitiesByState(stateCode: string): Promise<Array<{ code: string
 }
 
 // Busca feriados municipais de uma cidade específica usando APENAS IA
+// Verifica cache primeiro (atualizado a cada 10 dias) e busca apenas os próximos 15 dias
 async function getMunicipalHolidaysByCity(
   cityCode: string, 
   year: number, 
@@ -179,36 +182,86 @@ async function getMunicipalHolidaysByCity(
   stateName?: string,
   geminiApiKey?: string
 ): Promise<Holiday[]> {
-  // Busca feriados municipais APENAS via IA
-  if (cityName && stateName && geminiApiKey) {
-    console.log(`[HolidaysService] 🤖 Buscando feriados municipais via IA para ${cityName}/${stateName}...`);
+  if (!cityName || !stateName) {
+    return [];
+  }
+
+  const today = new Date();
+  const endDate = new Date(today);
+  endDate.setDate(today.getDate() + 15); // Apenas próximos 15 dias
+
+  // Verifica cache primeiro
+  try {
+    const cacheData = await getMunicipalHolidaysCache(cityName, stateName, year);
+    
+    if (cacheData && cacheData.fromCache && cacheData.holidays) {
+      // Filtra apenas os próximos 15 dias
+      const filteredHolidays = cacheData.holidays
+        .filter((h: any) => {
+          const holidayDate = new Date(h.date);
+          return holidayDate >= today && holidayDate <= endDate;
+        })
+        .map((h: any) => ({
+          date: h.date,
+          name: h.name,
+          type: 'municipal' as const,
+          city: h.city || cityName,
+          state: h.state || stateName
+        }));
+      
+      console.log(`[HolidaysService] ✅ Usando cache de feriados municipais para ${cityName}/${stateName} (${filteredHolidays.length} feriados nos próximos 15 dias)`);
+      return filteredHolidays;
+    }
+  } catch (error) {
+    console.warn(`[HolidaysService] Erro ao verificar cache para ${cityName}/${stateName}:`, error);
+  }
+
+  // Se não encontrou no cache ou está expirado, busca via IA
+  if (geminiApiKey) {
+    console.log(`[HolidaysService] 🤖 Cache não encontrado/expirado. Buscando feriados municipais via IA para ${cityName}/${stateName}...`);
     
     try {
       const aiHolidays = await searchMunicipalHolidaysWithAI(cityName, stateName, year, geminiApiKey);
       
       if (aiHolidays.length > 0) {
-        const aiHolidaysFormatted: Holiday[] = aiHolidays.map(h => ({
-          date: h.date,
-          name: h.name,
-          type: 'municipal' as const,
-          city: h.city,
-          state: h.state
-        }));
+        // Filtra apenas os próximos 15 dias
+        const filteredHolidays = aiHolidays
+          .filter(h => {
+            const holidayDate = new Date(h.date);
+            return holidayDate >= today && holidayDate <= endDate;
+          })
+          .map(h => ({
+            date: h.date,
+            name: h.name,
+            type: 'municipal' as const,
+            city: h.city,
+            state: h.state
+          }));
         
-        console.log(`[HolidaysService] ✅ IA encontrou ${aiHolidaysFormatted.length} feriados municipais para ${cityName}/${stateName}`);
-        return aiHolidaysFormatted;
+        // Salva no cache
+        try {
+          await saveMunicipalHolidaysCache(cityName, stateName, year, aiHolidays);
+          console.log(`[HolidaysService] 💾 Cache atualizado para ${cityName}/${stateName}`);
+        } catch (cacheError) {
+          console.warn(`[HolidaysService] Erro ao salvar cache para ${cityName}/${stateName}:`, cacheError);
+        }
+        
+        console.log(`[HolidaysService] ✅ IA encontrou ${filteredHolidays.length} feriados municipais para ${cityName}/${stateName} (próximos 15 dias)`);
+        return filteredHolidays;
       } else {
         console.log(`[HolidaysService] ⚠️ IA não encontrou feriados municipais para ${cityName}/${stateName}`);
+        // Salva array vazio no cache para não buscar novamente por 10 dias
+        try {
+          await saveMunicipalHolidaysCache(cityName, stateName, year, []);
+        } catch (cacheError) {
+          // Ignora erro ao salvar cache vazio
+        }
       }
     } catch (error) {
       console.warn(`[HolidaysService] Erro ao buscar feriados via IA para ${cityName}/${stateName}:`, error);
     }
   } else {
-    if (!geminiApiKey) {
-      console.warn(`[HolidaysService] ⚠️ API Key do Gemini não configurada. Configure em Configurações > Google Gemini API Key para buscar feriados municipais.`);
-    } else if (!cityName || !stateName) {
-      console.warn(`[HolidaysService] ⚠️ Informações da cidade incompletas (nome: ${cityName}, estado: ${stateName})`);
-    }
+    console.warn(`[HolidaysService] ⚠️ API Key do Gemini não configurada. Configure em Configurações > Google Gemini API Key para buscar feriados municipais.`);
   }
 
   return [];
@@ -290,6 +343,7 @@ export async function getMunicipalHolidays(
 }
 
 // Busca todos os feriados (nacionais + municipais) para os próximos N dias
+// IMPORTANTE: Para feriados municipais, sempre busca apenas os próximos 15 dias (independente do parâmetro days)
 export async function getUpcomingHolidays(
   days: number = 15, 
   selectedStates?: string[],
@@ -299,6 +353,10 @@ export async function getUpcomingHolidays(
   const today = new Date();
   const endDate = new Date(today);
   endDate.setDate(today.getDate() + days);
+  
+  // Para feriados municipais, sempre limita a 15 dias
+  const municipalEndDate = new Date(today);
+  municipalEndDate.setDate(today.getDate() + 15);
 
   const holidays: Holiday[] = [];
   const currentYear = today.getFullYear();
@@ -395,10 +453,10 @@ export async function getUpcomingHolidays(
       }
     }
 
-    // Filtra apenas os feriados dentro do período
+    // Filtra apenas os feriados dentro do período (máximo 15 dias para municipais)
     const filteredMunicipal = allMunicipalHolidays.filter(h => {
       const holidayDate = new Date(h.date);
-      return holidayDate >= today && holidayDate <= endDate;
+      return holidayDate >= today && holidayDate <= municipalEndDate;
     });
 
     holidays.push(...filteredMunicipal);

@@ -452,7 +452,7 @@ const App: React.FC = () => {
           if (priorityStates.length > 0) {
             console.log('[App] 🔍 Buscando feriados municipais dos estados principais (SC, PR, RS)...');
             const priorityHolidays = await getUpcomingHolidays(
-              30,
+              15, // Apenas próximos 15 dias
               priorityStates,
               undefined,
               geminiApiKey || undefined
@@ -464,7 +464,7 @@ const App: React.FC = () => {
           if (otherStates.length > 0) {
             console.log(`[App] 🔍 Buscando feriados municipais dos demais estados (${otherStates.length} estados)...`);
             const otherHolidays = await getUpcomingHolidays(
-              30,
+              15, // Apenas próximos 15 dias
               otherStates,
               undefined,
               geminiApiKey || undefined
@@ -488,8 +488,8 @@ const App: React.FC = () => {
     };
 
     loadUpcomingHolidays();
-    // Atualiza uma vez por dia
-    const interval = setInterval(loadUpcomingHolidays, 24 * 60 * 60 * 1000);
+    // Atualiza automaticamente a cada 10 dias (para atualizar cache de feriados municipais)
+    const interval = setInterval(loadUpcomingHolidays, 10 * 24 * 60 * 60 * 1000);
     return () => clearInterval(interval);
   }, [apiConfig.holidayStates]); // Reexecuta quando os estados configurados mudarem
 
