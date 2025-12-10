@@ -1843,6 +1843,44 @@ const App: React.FC = () => {
                                             foundChat = true;
                                             console.log(`[App] 🔍 [DEBUG] Chat encontrado: chatId=${chat.id}, chatJid=${chatJid}, messageJid=${messageJid}, matchType=${exactMatch ? 'exato' : fullNumberMatch ? 'número completo' : 'parcial'}`);
                                         
+                                            // Verifica se precisa enviar mensagem de seleção de departamento IMEDIATAMENTE
+                                            // ANTES de processar a mensagem, para garantir que seja enviada sempre que necessário
+                                            const wasClosed = chat.status === 'closed';
+                                            const isUserMessage = mapped.sender === 'user';
+                                            
+                                            if (isUserMessage && !chat.departmentId && !chat.departmentSelectionSent && departments.length > 0 &&
+                                                (chat.status === 'pending' || !chat.assignedTo || wasClosed)) {
+                                                console.log(`[App] 📤 [DEBUG] Socket.IO: Chat sem departamento - Enviando mensagem de seleção IMEDIATAMENTE para ${chat.id} (status: ${chat.status}, wasClosed: ${wasClosed})`);
+                                                const contactNumber = chat.contactNumber || (chat.id ? chat.id.split('@')[0] : null);
+                                                
+                                                if (contactNumber && contactNumber.length >= 10) {
+                                                    // Envia imediatamente, sem esperar processar a mensagem
+                                                    sendDepartmentSelectionMessage(apiConfig, contactNumber, departments)
+                                                        .then(sent => {
+                                                            if (sent) {
+                                                                console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada IMEDIATAMENTE para ${chat.id}`);
+                                                                // Marca como enviada para evitar reenvio
+                                                                handleUpdateChat({
+                                                                    ...chat,
+                                                                    departmentSelectionSent: true,
+                                                                    awaitingDepartmentSelection: true,
+                                                                    // Se estava fechado, já marca como pending para evitar loop
+                                                                    status: wasClosed ? 'pending' : chat.status,
+                                                                    assignedTo: wasClosed ? undefined : chat.assignedTo,
+                                                                    departmentId: null
+                                                                });
+                                                            } else {
+                                                                console.error(`[App] ❌ [DEBUG] Socket.IO: Falha ao enviar mensagem de seleção de departamento para ${chat.id}`);
+                                                            }
+                                                        })
+                                                        .catch(err => {
+                                                            console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem de seleção de departamento:`, err);
+                                                        });
+                                                } else {
+                                                    console.warn(`[App] ⚠️ [DEBUG] Socket.IO: Não foi possível enviar mensagem de seleção - número de contato inválido para ${chat.id} (contactNumber: ${contactNumber})`);
+                                                }
+                                            }
+                                        
                                             // Para mensagens enviadas (fromMe: true), tenta atualizar mensagem local existente
                                             // ao invés de adicionar uma nova (evita duplicação)
                                             let messageIndex = -1;
@@ -1967,52 +2005,6 @@ const App: React.FC = () => {
                                             } else if (!exists) {
                                                 // Nova mensagem (não existe e não é atualização)
                                                 chatUpdated = true;
-                                                
-                                                // Verifica se o chat estava fechado e recebeu mensagem do cliente
-                                                // A reabertura será processada mais abaixo, após atualizar mensagens
-                                                const wasClosed = chat.status === 'closed';
-                                                const isUserMessage = mapped.sender === 'user';
-                                                
-                                                // Verifica se precisa enviar mensagem de seleção de departamento IMEDIATAMENTE
-                                                // quando recebe mensagem do usuário, se chat não tem departamento e não foi assumido
-                                                // Inclui chats fechados que serão reabertos (wasClosed && isUserMessage)
-                                                if (isUserMessage && !chat.departmentId && !chat.departmentSelectionSent && departments.length > 0 &&
-                                                    (chat.status === 'pending' || !chat.assignedTo || (wasClosed && chat.status === 'closed'))) {
-                                                    console.log(`[App] 📤 [DEBUG] Socket.IO: Chat sem departamento - Enviando mensagem de seleção IMEDIATAMENTE para ${chat.id} (status: ${chat.status}, wasClosed: ${wasClosed})`);
-                                                    const contactNumber = chat.contactNumber || (chat.id ? chat.id.split('@')[0] : null);
-                                                    
-                                                    if (contactNumber && contactNumber.length >= 10) {
-                                                        // Envia imediatamente, sem esperar processar a mensagem
-                                                        sendDepartmentSelectionMessage(apiConfig, contactNumber, departments)
-                                                            .then(sent => {
-                                                                if (sent) {
-                                                                    console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada IMEDIATAMENTE para ${chat.id}`);
-                                                                    // Marca como enviada para evitar reenvio
-                                                                    handleUpdateChat({
-                                                                        ...chat,
-                                                                        departmentSelectionSent: true,
-                                                                        awaitingDepartmentSelection: true,
-                                                                        // Se estava fechado, já marca como pending para evitar loop
-                                                                        status: wasClosed ? 'pending' : chat.status,
-                                                                        assignedTo: wasClosed ? undefined : chat.assignedTo,
-                                                                        departmentId: null
-                                                                    });
-                                                                } else {
-                                                                    console.error(`[App] ❌ [DEBUG] Socket.IO: Falha ao enviar mensagem de seleção de departamento para ${chat.id}`);
-                                                                }
-                                                            })
-                                                            .catch(err => {
-                                                                console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem de seleção de departamento:`, err);
-                                                            });
-                                                    } else {
-                                                        console.warn(`[App] ⚠️ [DEBUG] Socket.IO: Não foi possível enviar mensagem de seleção - número de contato inválido para ${chat.id} (contactNumber: ${contactNumber})`);
-                                                    }
-                                                }
-                                                
-                                                // Debug: log para rastrear quando chat fechado recebe mensagem
-                                                if (wasClosed && isUserMessage) {
-                                                    console.log(`[App] 🔍 [DEBUG] Chat fechado detectado: ${chat.id}, status: ${chat.status}, sender: ${mapped.sender}`);
-                                                }
                                                 
                                             // Log removido para produção - muito verboso
                                             // console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}`);
@@ -2178,6 +2170,10 @@ const App: React.FC = () => {
                                                     }
                                                 }
                                             
+                                            // Se a mensagem já existir, usa as mensagens do chat atual
+                                            // Se não existir, updatedMessages já foi definido acima
+                                            const finalMessages = updatedMessages || chat.messages;
+                                            
                                             // PRIORIDADE ABSOLUTA: Status do banco NUNCA é alterado via Socket.IO
                                             // EXCEÇÃO: Se chat estava fechado e recebeu mensagem do cliente, reabre para 'pending'
                                             let finalStatus = updatedChat.status;
@@ -2186,6 +2182,8 @@ const App: React.FC = () => {
                                             
                                             // Se chat estava fechado e recebeu mensagem do cliente, atualiza status para pending
                                             // EXCEÇÃO: Se está aguardando avaliação e a mensagem é uma avaliação (1-5), não reabre (já tratado acima)
+                                            // Esta verificação deve ser executada SEMPRE que uma mensagem do usuário chegar em um chat fechado,
+                                            // independentemente de a mensagem já existir ou não
                                             if (wasClosed && isUserMessage && !(chat.awaitingRating && /^[1-5]$/.test(mapped.content?.trim() || ''))) {
                                                 console.log(`[App] 🔄 Chat fechado ${chat.id} recebeu mensagem do cliente, reabrindo...`);
                                                 finalStatus = 'pending';
@@ -2204,27 +2202,23 @@ const App: React.FC = () => {
                                                         assignedTo: finalAssignedTo,
                                                         departmentId: finalDepartmentId,
                                                         endedAt: undefined,
-                                                        messages: updatedMessages
+                                                        messages: finalMessages
                                                     });
                                                 }, 100);
-                                                }
-                                                
-                                                return {
-                                                    ...updatedChat,
-                                                    messages: updatedMessages,
-                                                    lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
-                                                    lastMessageTime: mapped.timestamp,
-                                                    unreadCount: mapped.sender === 'user' ? (updatedChat.unreadCount || 0) + 1 : updatedChat.unreadCount,
-                                                    // Status: se estava fechado e recebeu mensagem, muda para pending (será salvo no banco)
-                                                    status: finalStatus,
-                                                    assignedTo: finalAssignedTo,
-                                                    departmentId: finalDepartmentId,
-                                                    endedAt: wasClosed && isUserMessage ? undefined : updatedChat.endedAt
-                                                };
-                                            } else {
-                                            // Log removido para produção - muito verboso (mantém apenas warnings importantes)
-                                            // console.log(`[App] ⚠️ Mensagem já existe no chat ${chat.contactName}`);
                                             }
+                                                
+                                            return {
+                                                ...updatedChat,
+                                                messages: finalMessages,
+                                                lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
+                                                lastMessageTime: mapped.timestamp,
+                                                unreadCount: mapped.sender === 'user' ? (updatedChat.unreadCount || 0) + 1 : updatedChat.unreadCount,
+                                                // Status: se estava fechado e recebeu mensagem, muda para pending (será salvo no banco)
+                                                status: finalStatus,
+                                                assignedTo: finalAssignedTo,
+                                                departmentId: finalDepartmentId,
+                                                endedAt: wasClosed && isUserMessage ? undefined : updatedChat.endedAt
+                                            };
                                         }
                                         return chat;
                                     });
