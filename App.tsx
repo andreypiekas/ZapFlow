@@ -1777,9 +1777,10 @@ const App: React.FC = () => {
                             if (mapped) {
                                 // Verifica se o chat já existe antes de processar
                                 let chatExistsBefore = false;
+                                let existingChatBefore: Chat | undefined = undefined;
                                 setChats(currentChats => {
                                     // Verifica se chat existe antes de processar
-                                    const existingChatBefore = currentChats.find(c => {
+                                    const existingChat = currentChats.find(c => {
                                         if (!c || !c.id) return false;
                                         const chatJid = normalizeJid(c.id);
                                         const messageJid = normalizeJid(remoteJid);
@@ -1787,9 +1788,88 @@ const App: React.FC = () => {
                                                (c.contactNumber && typeof c.contactNumber === 'string' && 
                                                 c.contactNumber.replace(/\D/g, '') === remoteJid.split('@')[0]?.replace(/\D/g, ''));
                                     });
-                                    chatExistsBefore = !!existingChatBefore;
+                                    chatExistsBefore = !!existingChat;
+                                    existingChatBefore = existingChat;
                                     return currentChats;
                                 });
+                                
+                                // VERIFICAÇÃO CRÍTICA: Se é mensagem do usuário, verifica no banco se chat está fechado
+                                // e envia mensagem de seleção IMEDIATAMENTE, mesmo se chat não estiver no estado
+                                if (mapped.sender === 'user' && departments.length > 0) {
+                                    const contactNumber = remoteJid.split('@')[0]?.replace(/\D/g, '') || '';
+                                    
+                                    // Verifica se chat existe no estado
+                                    const chatInState = existingChatBefore;
+                                    
+                                    // Se chat não está no estado OU está fechado, verifica no banco e envia mensagem
+                                    if (!chatInState || chatInState.status === 'closed') {
+                                        console.log(`[App] 🔍 [DEBUG] Socket.IO: Verificando chat no banco para envio imediato - remoteJid=${remoteJid}, chatInState=${!!chatInState}, status=${chatInState?.status}`);
+                                        
+                                        // Busca chat no banco de dados
+                                        storageService.getAllData('chats').then(allChatsData => {
+                                            if (allChatsData && typeof allChatsData === 'object') {
+                                                const chatKey = Object.keys(allChatsData).find(key => {
+                                                    const chat = allChatsData[key];
+                                                    if (!chat || typeof chat !== 'object') return false;
+                                                    const chatId = chat.id;
+                                                    if (!chatId) return false;
+                                                    const chatJid = normalizeJid(chatId);
+                                                    const messageJid = normalizeJid(remoteJid);
+                                                    return chatJid === messageJid || 
+                                                           (chat.contactNumber && typeof chat.contactNumber === 'string' && 
+                                                            chat.contactNumber.replace(/\D/g, '') === contactNumber);
+                                                });
+                                                
+                                                if (chatKey) {
+                                                    const dbChat = allChatsData[chatKey];
+                                                    const wasClosed = dbChat.status === 'closed';
+                                                    const hasNoDepartment = !dbChat.departmentId;
+                                                    const shouldSend = !dbChat.departmentSelectionSent || wasClosed;
+                                                    
+                                                    console.log(`[App] 🔍 [DEBUG] Socket.IO: Chat encontrado no banco - chatId=${chatKey}, status=${dbChat.status}, departmentId=${dbChat.departmentId}, departmentSelectionSent=${dbChat.departmentSelectionSent}, shouldSend=${shouldSend}`);
+                                                    
+                                                    if (wasClosed && hasNoDepartment && shouldSend && contactNumber.length >= 10) {
+                                                        console.log(`[App] 📤 [DEBUG] Socket.IO: Chat fechado no banco - Enviando mensagem de seleção IMEDIATAMENTE para ${remoteJid} (número: ${contactNumber})`);
+                                                        sendDepartmentSelectionMessage(apiConfig, contactNumber, departments)
+                                                            .then(sent => {
+                                                                if (sent) {
+                                                                    console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção enviada IMEDIATAMENTE do banco para ${remoteJid}`);
+                                                                    // Atualiza chat no banco
+                                                                    handleUpdateChat({
+                                                                        ...dbChat,
+                                                                        departmentSelectionSent: true,
+                                                                        awaitingDepartmentSelection: true,
+                                                                        status: 'pending',
+                                                                        assignedTo: undefined,
+                                                                        departmentId: null
+                                                                    });
+                                                                }
+                                                            })
+                                                            .catch(err => {
+                                                                console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem do banco:`, err);
+                                                            });
+                                                    }
+                                                } else {
+                                                    // Chat não existe no banco - é um chat novo, envia mensagem imediatamente
+                                                    if (contactNumber.length >= 10) {
+                                                        console.log(`[App] 📤 [DEBUG] Socket.IO: Chat novo detectado - Enviando mensagem de seleção IMEDIATAMENTE para ${remoteJid} (número: ${contactNumber})`);
+                                                        sendDepartmentSelectionMessage(apiConfig, contactNumber, departments)
+                                                            .then(sent => {
+                                                                if (sent) {
+                                                                    console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção enviada IMEDIATAMENTE para chat novo ${remoteJid}`);
+                                                                }
+                                                            })
+                                                            .catch(err => {
+                                                                console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem para chat novo:`, err);
+                                                            });
+                                                    }
+                                                }
+                                            }
+                                        }).catch(err => {
+                                            console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao buscar chat no banco:`, err);
+                                        });
+                                    }
+                                }
                                 
                                 setChats(currentChats => {
                                     let chatUpdated = false;
