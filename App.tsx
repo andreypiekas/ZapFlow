@@ -433,8 +433,8 @@ const App: React.FC = () => {
             ? configuredStates.filter(s => !priorityStates.includes(s))
             : BRAZILIAN_STATES.map(s => s.code).filter(s => !priorityStates.includes(s));
           
-          // Primeiro busca dos estados principais
-          let allHolidays: Holiday[] = [];
+          // Busca apenas municipais (getUpcomingHolidays retorna nacionais + municipais, então filtra)
+          let allMunicipalHolidays: Holiday[] = [];
           
           if (priorityStates.length > 0) {
             console.log('[App] 🔍 Buscando feriados municipais dos estados principais (SC, PR, RS)...');
@@ -444,7 +444,9 @@ const App: React.FC = () => {
               undefined,
               geminiApiKey || undefined
             );
-            allHolidays.push(...priorityHolidays);
+            // Filtra apenas municipais (remove nacionais que já foram buscados)
+            const municipalOnly = priorityHolidays.filter(h => h.type === 'municipal');
+            allMunicipalHolidays.push(...municipalOnly);
           }
           
           // Depois busca dos demais estados configurados
@@ -456,11 +458,20 @@ const App: React.FC = () => {
               undefined,
               geminiApiKey || undefined
             );
-            allHolidays.push(...otherHolidays);
+            // Filtra apenas municipais
+            const municipalOnly = otherHolidays.filter(h => h.type === 'municipal');
+            allMunicipalHolidays.push(...municipalOnly);
           }
 
-          // Combina nacionais e municipais, ordena e pega os 5 próximos
-          const combined = [...allHolidays]
+          // Combina nacionais e municipais, remove duplicatas, ordena e pega os 5 próximos
+          const combined = [...upcomingNational, ...allMunicipalHolidays]
+            .filter((h, index, self) => 
+              index === self.findIndex(t => 
+                t.date === h.date && 
+                t.name === h.name && 
+                (t.type !== 'municipal' || (t.city === h.city && t.state === h.state))
+              )
+            )
             .sort((a, b) => a.date.localeCompare(b.date))
             .slice(0, 5);
 
@@ -4002,9 +4013,12 @@ const App: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   {upcomingHolidays.map((holiday, index) => {
-                    const holidayDate = new Date(holiday.date);
+                    // Parse da data sem problemas de timezone (YYYY-MM-DD)
+                    const [year, month, day] = holiday.date.split('-').map(Number);
+                    const holidayDate = new Date(year, month - 1, day);
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
+                    holidayDate.setHours(0, 0, 0, 0);
                     const daysUntil = Math.ceil((holidayDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                     const isToday = daysUntil === 0;
                     const isTomorrow = daysUntil === 1;
@@ -4013,7 +4027,7 @@ const App: React.FC = () => {
                     
                     return (
                       <div
-                        key={`${holiday.date}-${index}`}
+                        key={`${holiday.date}-${holiday.name}-${holiday.type}-${holiday.city || ''}-${index}`}
                         className={`flex items-center justify-between p-3 rounded-lg border ${
                           isToday
                             ? 'bg-emerald-50 border-emerald-200'

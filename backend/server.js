@@ -1784,12 +1784,19 @@ app.post('/api/holidays/national/sync', authenticateToken, async (req, res) => {
           continue;
         }
         
-        // Formata data (BrasilAPI retorna YYYY-MM-DD)
-        const holidayDate = new Date(holiday.date);
-        if (isNaN(holidayDate.getTime())) {
-          console.warn(`[NationalHolidays] ⚠️ Data inválida ignorada: ${holiday.date}`);
+        // Valida formato de data (BrasilAPI retorna YYYY-MM-DD)
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(holiday.date)) {
+          console.warn(`[NationalHolidays] ⚠️ Formato de data inválido ignorado: ${holiday.date}`);
           errors++;
           continue;
+        }
+        
+        // Extrai ano da data para validar
+        const holidayYear = parseInt(holiday.date.substring(0, 4));
+        if (holidayYear !== targetYear) {
+          console.warn(`[NationalHolidays] ⚠️ Ano da data não corresponde ao ano solicitado: ${holiday.date} (esperado: ${targetYear})`);
+          // Continua mesmo assim, pois pode ser um feriado que cai no ano seguinte
         }
         
         // Tenta inserir (UNIQUE constraint previne duplicações)
@@ -1799,7 +1806,7 @@ app.post('/api/holidays/national/sync', authenticateToken, async (req, res) => {
            ON CONFLICT (date, name) 
            DO UPDATE SET updated_at = CURRENT_TIMESTAMP
            RETURNING id`,
-          [holiday.date, holiday.name.trim(), targetYear]
+          [holiday.date, holiday.name.trim(), holidayYear]
         );
         
         if (result.rows.length > 0) {
@@ -1871,12 +1878,18 @@ app.get('/api/holidays/national', authenticateToken, async (req, res) => {
     
     res.json({
       success: true,
-      holidays: result.rows.map(row => ({
-        date: row.date.toISOString().split('T')[0], // YYYY-MM-DD
-        name: row.name,
-        type: row.type || 'national',
-        year: row.year
-      }))
+      holidays: result.rows.map(row => {
+        // Garante que a data seja retornada no formato YYYY-MM-DD sem problemas de timezone
+        const date = row.date instanceof Date 
+          ? `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}-${String(row.date.getDate()).padStart(2, '0')}`
+          : row.date.toISOString().split('T')[0];
+        return {
+          date: date,
+          name: row.name,
+          type: row.type || 'national',
+          year: row.year
+        };
+      })
     });
   } catch (error) {
     console.error('[NationalHolidays] ❌ Erro ao buscar feriados nacionais:', error);
@@ -1906,12 +1919,18 @@ app.get('/api/holidays/national/upcoming', authenticateToken, async (req, res) =
     
     res.json({
       success: true,
-      holidays: result.rows.map(row => ({
-        date: row.date.toISOString().split('T')[0],
-        name: row.name,
-        type: row.type || 'national',
-        year: row.year
-      }))
+      holidays: result.rows.map(row => {
+        // Garante que a data seja retornada no formato YYYY-MM-DD sem problemas de timezone
+        const date = row.date instanceof Date 
+          ? `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, '0')}-${String(row.date.getDate()).padStart(2, '0')}`
+          : row.date.toISOString().split('T')[0];
+        return {
+          date: date,
+          name: row.name,
+          type: row.type || 'national',
+          year: row.year
+        };
+      })
     });
   } catch (error) {
     console.error('[NationalHolidays] ❌ Erro ao buscar próximos feriados nacionais:', error);
