@@ -1363,10 +1363,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
+                        e.preventDefault();
                         setChatToDelete(chat);
                       }}
-                      className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors flex-shrink-0 ml-2"
+                      className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors flex-shrink-0 ml-2 z-10 relative"
                       title="Excluir chat"
+                      style={{ minWidth: '32px', minHeight: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     >
                       <Trash2 size={16} />
                     </button>
