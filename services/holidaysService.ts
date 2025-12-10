@@ -180,19 +180,23 @@ async function getMunicipalHolidaysByCity(
   year: number, 
   cityName?: string, 
   stateName?: string,
+  stateCode?: string,
   geminiApiKey?: string
 ): Promise<Holiday[]> {
   if (!cityName || !stateName) {
     return [];
   }
 
+  // Usa stateCode se fornecido, senão tenta encontrar pelo nome
+  const effectiveStateCode = stateCode || BRAZILIAN_STATES.find(s => s.name === stateName)?.code || stateName;
+
   const today = new Date();
   const endDate = new Date(today);
   endDate.setDate(today.getDate() + 15); // Apenas próximos 15 dias
 
-  // Verifica cache primeiro
+  // Verifica cache primeiro (usa stateCode para o cache)
   try {
-    const cacheData = await getMunicipalHolidaysCache(cityName, stateName, year);
+    const cacheData = await getMunicipalHolidaysCache(cityName, effectiveStateCode, year);
     
     if (cacheData && cacheData.fromCache && cacheData.holidays) {
       // Filtra apenas os próximos 15 dias
@@ -250,23 +254,19 @@ async function getMunicipalHolidaysByCity(
             state: h.state
           }));
         
-        // Salva no cache
+        // Salva no cache (usa stateCode)
         try {
-          await saveMunicipalHolidaysCache(cityName, stateName, year, aiHolidays);
-          console.log(`[HolidaysService] 💾 Cache atualizado para ${cityName}/${stateName}`);
+          await saveMunicipalHolidaysCache(cityName, effectiveStateCode, year, aiHolidays);
+          console.log(`[HolidaysService] 💾 Cache atualizado para ${cityName}/${effectiveStateCode}`);
         } catch (cacheError) {
-          console.warn(`[HolidaysService] Erro ao salvar cache para ${cityName}/${stateName}:`, cacheError);
+          console.warn(`[HolidaysService] Erro ao salvar cache para ${cityName}/${effectiveStateCode}:`, cacheError);
         }
         
         console.log(`[HolidaysService] ✅ IA encontrou ${filteredHolidays.length} feriados municipais para ${cityName}/${stateName} (próximos 15 dias)`);
         return filteredHolidays;
       } else {
         console.log(`[HolidaysService] ⚠️ IA não encontrou feriados municipais para ${cityName}/${stateName}`);
-        // Salva array vazio no cache para não buscar novamente por 10 dias
-        try {
-          await saveMunicipalHolidaysCache(cityName, stateName, year, []);
-        } catch (cacheError) {
-          // Ignora erro ao salvar cache vazio
+        // Não salva array vazio no cache (backend não aceita arrays vazios)
         }
       }
     } catch (error) {
@@ -316,7 +316,7 @@ export async function getMunicipalHolidaysByState(
       
       const batch = citiesToProcess.slice(i, i + batchSize);
       const batchPromises = batch.map(city => 
-        getMunicipalHolidaysByCity(city.code, year, city.name, stateName, geminiApiKey)
+        getMunicipalHolidaysByCity(city.code, year, city.name, stateName, stateCode, geminiApiKey)
       );
       const batchResults = await Promise.all(batchPromises);
       
@@ -361,9 +361,10 @@ export async function getMunicipalHolidays(
   year: number, 
   cityName?: string, 
   stateName?: string,
+  stateCode?: string,
   geminiApiKey?: string
 ): Promise<Holiday[]> {
-  return getMunicipalHolidaysByCity(cityCode, year, cityName, stateName, geminiApiKey);
+  return getMunicipalHolidaysByCity(cityCode, year, cityName, stateName, stateCode, geminiApiKey);
 }
 
 // Busca todos os feriados (nacionais + municipais) para os próximos N dias

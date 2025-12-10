@@ -1536,26 +1536,62 @@ app.post('/api/holidays/municipal-cache', authenticateToken, dataLimiter, async 
   try {
     const { cityName, stateCode, year, holidays } = req.body;
     
+    console.log('[HolidaysCache] 📥 Recebendo dados:', { 
+      cityName: cityName?.substring(0, 50), 
+      stateCode, 
+      year, 
+      holidaysCount: Array.isArray(holidays) ? holidays.length : 'não é array' 
+    });
+    
     if (!cityName || !stateCode || !year || !Array.isArray(holidays)) {
-      console.error('[HolidaysCache] Dados inválidos:', { cityName, stateCode, year, holidaysIsArray: Array.isArray(holidays) });
+      console.error('[HolidaysCache] ❌ Dados inválidos:', { 
+        cityName: !!cityName, 
+        stateCode: !!stateCode, 
+        year: !!year, 
+        holidaysIsArray: Array.isArray(holidays) 
+      });
       return res.status(400).json({ error: 'cityName, stateCode, year e holidays (array) são obrigatórios' });
     }
 
+    // Não salva arrays vazios no cache (economiza espaço e evita problemas)
+    if (holidays.length === 0) {
+      console.log(`[HolidaysCache] ⚠️ Array vazio para ${cityName}/${stateCode} (${year}), não salvando no cache`);
+      return res.json({ success: true, message: 'Array vazio, não salvo no cache' });
+    }
+
+    const holidaysJson = JSON.stringify(holidays);
+    const yearInt = parseInt(year);
+    
+    if (isNaN(yearInt)) {
+      console.error('[HolidaysCache] ❌ Ano inválido:', year);
+      return res.status(400).json({ error: 'Ano deve ser um número válido' });
+    }
+
     // Usa UPSERT para atualizar se já existir
-    await pool.query(
+    const result = await pool.query(
       `INSERT INTO municipal_holidays_cache (city_name, state_code, year, holidays, last_updated)
-       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+       VALUES ($1, $2, $3, $4::jsonb, CURRENT_TIMESTAMP)
        ON CONFLICT (city_name, state_code, year)
-       DO UPDATE SET holidays = $4, last_updated = CURRENT_TIMESTAMP`,
-      [cityName, stateCode, parseInt(year), JSON.stringify(holidays)]
+       DO UPDATE SET holidays = $4::jsonb, last_updated = CURRENT_TIMESTAMP`,
+      [cityName.trim(), stateCode.trim().toUpperCase(), yearInt, holidaysJson]
     );
 
-    console.log(`[HolidaysCache] ✅ Cache salvo para ${cityName}/${stateCode} (${year})`);
+    console.log(`[HolidaysCache] ✅ Cache salvo para ${cityName}/${stateCode} (${year}) - ${holidays.length} feriados`);
     res.json({ success: true, message: 'Cache de feriados municipais salvo com sucesso' });
   } catch (error) {
     console.error('[HolidaysCache] ❌ Erro ao salvar cache:', error);
-    console.error('[HolidaysCache] Stack:', error.stack);
-    res.status(500).json({ error: 'Erro ao salvar cache de feriados municipais', details: error.message });
+    console.error('[HolidaysCache] ❌ Detalhes:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      constraint: error.constraint,
+      table: error.table
+    });
+    res.status(500).json({ 
+      error: 'Erro ao salvar cache de feriados municipais', 
+      details: error.message,
+      code: error.code
+    });
   }
 });
 
