@@ -1260,7 +1260,7 @@ const App: React.FC = () => {
                                 assignedTo: finalAssignedTo,
                                 departmentId: finalDepartmentId
                             });
-                        } else {
+                                } else {
                             // Chat NÃO está no banco: usa status da API (pending para novos chats)
                             // NÃO preserva status local - apenas banco tem prioridade
                             finalStatus = realChat.status || 'pending';
@@ -1622,7 +1622,7 @@ const App: React.FC = () => {
     loadChatsFromDatabase().then(() => {
       // Aguarda um pouco para garantir que o estado foi atualizado
       setTimeout(() => {
-        syncChats();
+    syncChats();
       }, 100);
     });
     
@@ -1973,6 +1973,37 @@ const App: React.FC = () => {
                                                 const wasClosed = chat.status === 'closed';
                                                 const isUserMessage = mapped.sender === 'user';
                                                 
+                                                // Verifica se precisa enviar mensagem de seleção de departamento IMEDIATAMENTE
+                                                // quando recebe mensagem do usuário, se chat não tem departamento e não foi assumido
+                                                if (isUserMessage && !chat.departmentId && !chat.departmentSelectionSent && departments.length > 0 &&
+                                                    (chat.status === 'pending' || !chat.assignedTo)) {
+                                                    console.log(`[App] 📤 [DEBUG] Socket.IO: Chat sem departamento - Enviando mensagem de seleção IMEDIATAMENTE para ${chat.id}`);
+                                                    const contactNumber = chat.contactNumber || (chat.id ? chat.id.split('@')[0] : null);
+                                                    
+                                                    if (contactNumber && contactNumber.length >= 10) {
+                                                        // Envia imediatamente, sem esperar processar a mensagem
+                                                        sendDepartmentSelectionMessage(apiConfig, contactNumber, departments)
+                                                            .then(sent => {
+                                                                if (sent) {
+                                                                    console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada IMEDIATAMENTE para ${chat.id}`);
+                                                                    // Marca como enviada para evitar reenvio
+                                                                    handleUpdateChat({
+                                                                        ...chat,
+                                                                        departmentSelectionSent: true,
+                                                                        awaitingDepartmentSelection: true
+                                                                    });
+                                                                } else {
+                                                                    console.error(`[App] ❌ [DEBUG] Socket.IO: Falha ao enviar mensagem de seleção de departamento para ${chat.id}`);
+                                                                }
+                                                            })
+                                                            .catch(err => {
+                                                                console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem de seleção de departamento:`, err);
+                                                            });
+                                                    } else {
+                                                        console.warn(`[App] ⚠️ [DEBUG] Socket.IO: Não foi possível enviar mensagem de seleção - número de contato inválido para ${chat.id} (contactNumber: ${contactNumber})`);
+                                                    }
+                                                }
+                                                
                                                 // Debug: log para rastrear quando chat fechado recebe mensagem
                                                 if (wasClosed && isUserMessage) {
                                                     console.log(`[App] 🔍 [DEBUG] Chat fechado detectado: ${chat.id}, status: ${chat.status}, sender: ${mapped.sender}`);
@@ -2031,7 +2062,7 @@ const App: React.FC = () => {
                                                     });
                                                     // Se é avaliação, não reabre - retorna sem processar reabertura
                                                     return {
-                                                        ...chat,
+                                                            ...chat,
                                                         messages: updatedMessages,
                                                         lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
                                                         lastMessageTime: mapped.timestamp,
@@ -2068,7 +2099,7 @@ const App: React.FC = () => {
                                                             
                                                             // Prepara dados do chat atualizado
                                                             const updatedChatData: Chat = {
-                                                                ...updatedChat,
+                                                                        ...updatedChat,
                                                                 departmentId: selectedDeptId,
                                                                 status: assignedUser ? 'open' : 'pending',
                                                                 assignedTo: assignedUser?.id,
@@ -2101,7 +2132,7 @@ const App: React.FC = () => {
                                                                         true
                                                                     );
                                                                 }
-                                                            } else {
+                                                                } else {
                                                                 // Se não há usuário disponível, notifica administradores (se currentUser for admin)
                                                                 if (currentUser?.role === UserRole.ADMIN) {
                                                                     addNotification(
@@ -2119,9 +2150,9 @@ const App: React.FC = () => {
                                                         .then(sent => {
                                                                     if (sent) {
                                                                         handleUpdateChat({
-                                                                            ...updatedChat,
-                                                                            awaitingDepartmentSelection: true,
-                                                                            departmentSelectionSent: true
+                                                                        ...updatedChat,
+                                                                        awaitingDepartmentSelection: true,
+                                                                        departmentSelectionSent: true
                                                                         });
                                                             }
                                                         }).catch(err => console.error('[App] Erro ao enviar seleção de setores:', err));
@@ -2139,7 +2170,7 @@ const App: React.FC = () => {
                                                     if (contactNumber && contactNumber.length >= 10) {
                                                         sendDepartmentSelectionMessage(apiConfig, contactNumber, departments)
                                                             .then(sent => {
-                                                                if (sent) {
+                                                                    if (sent) {
                                                                     // Adiciona mensagem de sistema
                                                                     const systemMessage: Message = {
                                                                         id: `sys_dept_selection_socket_${Date.now()}`,
@@ -2150,20 +2181,20 @@ const App: React.FC = () => {
                                                                         type: 'text'
                                                                     };
                                                                     
-                                                                    handleUpdateChat({
-                                                                        ...updatedChat,
+                                                                        handleUpdateChat({
+                                                                            ...updatedChat,
                                                                         departmentSelectionSent: true,
-                                                                        awaitingDepartmentSelection: true,
+                                                                            awaitingDepartmentSelection: true,
                                                                         messages: [...updatedMessages, systemMessage]
-                                                                    });
+                                                                        });
                                                                     console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada para ${chat.id}`);
-                                                                } else {
+                                                                    } else {
                                                                     console.error(`[App] ❌ [DEBUG] Socket.IO: Falha ao enviar mensagem de seleção de departamento para ${chat.id}`);
-                                                                }
+                                                                    }
                                                             })
                                                             .catch(err => {
                                                                 console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem de seleção de departamento:`, err);
-                                                            });
+                                                                });
                                                     } else {
                                                         console.warn(`[App] ⚠️ [DEBUG] Socket.IO: Não foi possível enviar mensagem de seleção - número de contato inválido para ${chat.id} (contactNumber: ${contactNumber})`);
                                                     }
@@ -2304,7 +2335,7 @@ const App: React.FC = () => {
                                                         messages: updatedMessages
                                                     });
                                                 }, 100);
-                                            }
+                                                }
                                                 
                                                 return {
                                                     ...updatedChat,
@@ -2405,7 +2436,7 @@ const App: React.FC = () => {
                                                 .catch(err => {
                                                     console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem de seleção de departamento para novo chat:`, err);
                                                 });
-                                        } else {
+                    } else {
                                             console.warn(`[App] ⚠️ [DEBUG] Socket.IO: Não enviando mensagem de seleção - NENHUM DEPARTAMENTO CONFIGURADO para novo chat ${remoteJid}`);
                                         }
                                     } else {
@@ -3105,7 +3136,7 @@ const App: React.FC = () => {
           if (!storageService.getUseOnlyPostgreSQL()) {
             try {
               localStorage.setItem('zapflow_user', SecurityService.encrypt(JSON.stringify(updatedCurrentUser)));
-            } catch (e) {
+    } catch (e) {
               console.error('[App] Erro ao salvar usuário no localStorage:', e);
             }
           }
