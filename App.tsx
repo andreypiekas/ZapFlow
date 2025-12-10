@@ -2949,7 +2949,11 @@ const App: React.FC = () => {
   }, [currentUser, apiConfig]);
 
   // Função utilitária para normalizar números de telefone para comparação
-  const normalizePhoneForMatch = (phone: string): string => {
+  const normalizePhoneForMatch = (phone: string | undefined | null): string => {
+    // Valida se o telefone é válido antes de processar
+    if (!phone || typeof phone !== 'string') {
+      return '';
+    }
     // Remove tudo que não é dígito
     let cleaned = phone.replace(/\D/g, '');
     // Remove código do país (55) se estiver no início e o número tiver mais de 10 dígitos
