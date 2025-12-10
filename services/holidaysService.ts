@@ -1,6 +1,6 @@
 // Serviço para buscar feriados nacionais e municipais do Brasil
-// Usa a API pública BrasilAPI para feriados nacionais e municipais
-// Usa IA (Gemini) como fallback quando a API não retorna resultados
+// Feriados nacionais: calculados localmente
+// Feriados municipais: buscados APENAS via IA (Gemini) - requer API key configurada
 
 import { searchMunicipalHolidaysWithAI } from './geminiService';
 
@@ -171,8 +171,7 @@ async function getCitiesByState(stateCode: string): Promise<Array<{ code: string
   }
 }
 
-// Busca feriados municipais de uma cidade específica
-// Tenta primeiro a API BrasilAPI, se não retornar resultados, usa IA como fallback
+// Busca feriados municipais de uma cidade específica usando APENAS IA
 async function getMunicipalHolidaysByCity(
   cityCode: string, 
   year: number, 
@@ -180,42 +179,9 @@ async function getMunicipalHolidaysByCity(
   stateName?: string,
   geminiApiKey?: string
 ): Promise<Holiday[]> {
-  let holidays: Holiday[] = [];
-  
-  // Tenta primeiro a API BrasilAPI
-  try {
-    const url = `https://brasilapi.com.br/api/feriados/v1/${year}?codigoIBGE=${cityCode}`;
-    const response = await fetch(url);
-    
-    if (response.ok) {
-      const data = await response.json();
-      
-      if (Array.isArray(data) && data.length > 0) {
-        holidays = data
-          .filter((h: any) => h.type === 'municipal' || h.type === 'estadual')
-          .map((h: any) => ({
-            date: h.date,
-            name: h.name,
-            type: h.type === 'estadual' ? 'state' : 'municipal',
-            city: h.city,
-            state: h.state
-          }));
-        
-        // Se encontrou feriados municipais na API, retorna
-        const municipalHolidays = holidays.filter(h => h.type === 'municipal');
-        if (municipalHolidays.length > 0) {
-          console.log(`[HolidaysService] ✅ Encontrados ${municipalHolidays.length} feriados municipais via BrasilAPI para código ${cityCode}`);
-          return holidays;
-        }
-      }
-    }
-  } catch (error) {
-    console.warn(`[HolidaysService] Erro ao buscar feriados via BrasilAPI para código ${cityCode}:`, error);
-  }
-
-  // Se não encontrou feriados municipais na API e temos informações da cidade + API key do Gemini, tenta IA
-  if (holidays.filter(h => h.type === 'municipal').length === 0 && cityName && stateName && geminiApiKey) {
-    console.log(`[HolidaysService] 🔍 BrasilAPI não retornou feriados municipais. Tentando buscar via IA para ${cityName}/${stateName}...`);
+  // Busca feriados municipais APENAS via IA
+  if (cityName && stateName && geminiApiKey) {
+    console.log(`[HolidaysService] 🤖 Buscando feriados municipais via IA para ${cityName}/${stateName}...`);
     
     try {
       const aiHolidays = await searchMunicipalHolidaysWithAI(cityName, stateName, year, geminiApiKey);
@@ -230,16 +196,22 @@ async function getMunicipalHolidaysByCity(
         }));
         
         console.log(`[HolidaysService] ✅ IA encontrou ${aiHolidaysFormatted.length} feriados municipais para ${cityName}/${stateName}`);
-        
-        // Combina com feriados estaduais encontrados na API (se houver)
-        return [...holidays.filter(h => h.type === 'state'), ...aiHolidaysFormatted];
+        return aiHolidaysFormatted;
+      } else {
+        console.log(`[HolidaysService] ⚠️ IA não encontrou feriados municipais para ${cityName}/${stateName}`);
       }
     } catch (error) {
       console.warn(`[HolidaysService] Erro ao buscar feriados via IA para ${cityName}/${stateName}:`, error);
     }
+  } else {
+    if (!geminiApiKey) {
+      console.warn(`[HolidaysService] ⚠️ API Key do Gemini não configurada. Configure em Configurações > Google Gemini API Key para buscar feriados municipais.`);
+    } else if (!cityName || !stateName) {
+      console.warn(`[HolidaysService] ⚠️ Informações da cidade incompletas (nome: ${cityName}, estado: ${stateName})`);
+    }
   }
 
-  return holidays;
+  return [];
 }
 
 // Busca feriados municipais de todos os municípios de um estado
