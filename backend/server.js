@@ -1537,6 +1537,7 @@ app.post('/api/holidays/municipal-cache', authenticateToken, dataLimiter, async 
     const { cityName, stateCode, year, holidays } = req.body;
     
     if (!cityName || !stateCode || !year || !Array.isArray(holidays)) {
+      console.error('[HolidaysCache] Dados inválidos:', { cityName, stateCode, year, holidaysIsArray: Array.isArray(holidays) });
       return res.status(400).json({ error: 'cityName, stateCode, year e holidays (array) são obrigatórios' });
     }
 
@@ -1549,10 +1550,12 @@ app.post('/api/holidays/municipal-cache', authenticateToken, dataLimiter, async 
       [cityName, stateCode, parseInt(year), JSON.stringify(holidays)]
     );
 
+    console.log(`[HolidaysCache] ✅ Cache salvo para ${cityName}/${stateCode} (${year})`);
     res.json({ success: true, message: 'Cache de feriados municipais salvo com sucesso' });
   } catch (error) {
-    console.error('Erro ao salvar cache de feriados municipais:', error);
-    res.status(500).json({ error: 'Erro ao salvar cache de feriados municipais' });
+    console.error('[HolidaysCache] ❌ Erro ao salvar cache:', error);
+    console.error('[HolidaysCache] Stack:', error.stack);
+    res.status(500).json({ error: 'Erro ao salvar cache de feriados municipais', details: error.message });
   }
 });
 
