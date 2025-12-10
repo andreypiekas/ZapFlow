@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, MapPin, Flag, Building2, RefreshCw, AlertCircle, X } from 'lucide-react';
 import { getUpcomingHolidays, Holiday, BRAZILIAN_STATES } from '../services/holidaysService';
+import { loadConfig as loadConfigFromBackend } from '../services/apiService';
 
 const Holidays: React.FC = () => {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
@@ -9,10 +10,26 @@ const Holidays: React.FC = () => {
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
   const [days, setDays] = useState<number>(15);
   const [progressMessage, setProgressMessage] = useState<string>('');
+  const [geminiApiKey, setGeminiApiKey] = useState<string>('');
+
+  // Carrega a API key do Gemini ao montar o componente
+  useEffect(() => {
+    const loadGeminiApiKey = async () => {
+      try {
+        const configData = await loadConfigFromBackend();
+        if (configData?.geminiApiKey) {
+          setGeminiApiKey(configData.geminiApiKey);
+        }
+      } catch (err) {
+        console.warn('[Holidays] Erro ao carregar API key do Gemini:', err);
+      }
+    };
+    loadGeminiApiKey();
+  }, []);
 
   useEffect(() => {
     loadHolidays();
-  }, [selectedStates, days]);
+  }, [selectedStates, days, geminiApiKey]);
 
   const loadHolidays = async () => {
     setIsLoading(true);
@@ -23,7 +40,8 @@ const Holidays: React.FC = () => {
       const upcomingHolidays = await getUpcomingHolidays(
         days, 
         selectedStates.length > 0 ? selectedStates : undefined,
-        (message) => setProgressMessage(message)
+        (message) => setProgressMessage(message),
+        geminiApiKey || undefined
       );
       setHolidays(upcomingHolidays);
       setProgressMessage('');

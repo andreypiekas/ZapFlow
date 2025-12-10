@@ -1,5 +1,8 @@
 // Serviço para buscar feriados nacionais e municipais do Brasil
 // Usa a API pública BrasilAPI para feriados nacionais e municipais
+// Usa IA (Gemini) como fallback quando a API não retorna resultados
+
+import { searchMunicipalHolidaysWithAI } from './geminiService';
 
 export interface Holiday {
   date: string; // YYYY-MM-DD
@@ -169,40 +172,82 @@ async function getCitiesByState(stateCode: string): Promise<Array<{ code: string
 }
 
 // Busca feriados municipais de uma cidade específica
-async function getMunicipalHolidaysByCity(cityCode: string, year: number): Promise<Holiday[]> {
+// Tenta primeiro a API BrasilAPI, se não retornar resultados, usa IA como fallback
+async function getMunicipalHolidaysByCity(
+  cityCode: string, 
+  year: number, 
+  cityName?: string, 
+  stateName?: string,
+  geminiApiKey?: string
+): Promise<Holiday[]> {
+  let holidays: Holiday[] = [];
+  
+  // Tenta primeiro a API BrasilAPI
   try {
     const url = `https://brasilapi.com.br/api/feriados/v1/${year}?codigoIBGE=${cityCode}`;
     const response = await fetch(url);
     
-    if (!response.ok) {
-      return [];
+    if (response.ok) {
+      const data = await response.json();
+      
+      if (Array.isArray(data) && data.length > 0) {
+        holidays = data
+          .filter((h: any) => h.type === 'municipal' || h.type === 'estadual')
+          .map((h: any) => ({
+            date: h.date,
+            name: h.name,
+            type: h.type === 'estadual' ? 'state' : 'municipal',
+            city: h.city,
+            state: h.state
+          }));
+        
+        // Se encontrou feriados municipais na API, retorna
+        const municipalHolidays = holidays.filter(h => h.type === 'municipal');
+        if (municipalHolidays.length > 0) {
+          console.log(`[HolidaysService] ✅ Encontrados ${municipalHolidays.length} feriados municipais via BrasilAPI para código ${cityCode}`);
+          return holidays;
+        }
+      }
     }
+  } catch (error) {
+    console.warn(`[HolidaysService] Erro ao buscar feriados via BrasilAPI para código ${cityCode}:`, error);
+  }
 
-    const data = await response.json();
+  // Se não encontrou feriados municipais na API e temos informações da cidade + API key do Gemini, tenta IA
+  if (holidays.filter(h => h.type === 'municipal').length === 0 && cityName && stateName && geminiApiKey) {
+    console.log(`[HolidaysService] 🔍 BrasilAPI não retornou feriados municipais. Tentando buscar via IA para ${cityName}/${stateName}...`);
     
-    if (Array.isArray(data)) {
-      return data
-        .filter((h: any) => h.type === 'municipal' || h.type === 'estadual')
-        .map((h: any) => ({
+    try {
+      const aiHolidays = await searchMunicipalHolidaysWithAI(cityName, stateName, year, geminiApiKey);
+      
+      if (aiHolidays.length > 0) {
+        const aiHolidaysFormatted: Holiday[] = aiHolidays.map(h => ({
           date: h.date,
           name: h.name,
-          type: h.type === 'estadual' ? 'state' : 'municipal',
+          type: 'municipal' as const,
           city: h.city,
           state: h.state
         }));
+        
+        console.log(`[HolidaysService] ✅ IA encontrou ${aiHolidaysFormatted.length} feriados municipais para ${cityName}/${stateName}`);
+        
+        // Combina com feriados estaduais encontrados na API (se houver)
+        return [...holidays.filter(h => h.type === 'state'), ...aiHolidaysFormatted];
+      }
+    } catch (error) {
+      console.warn(`[HolidaysService] Erro ao buscar feriados via IA para ${cityName}/${stateName}:`, error);
     }
-
-    return [];
-  } catch (error) {
-    return [];
   }
+
+  return holidays;
 }
 
 // Busca feriados municipais de todos os municípios de um estado
 export async function getMunicipalHolidaysByState(
   stateCode: string, 
   year: number,
-  onProgress?: (current: number, total: number) => void
+  onProgress?: (current: number, total: number) => void,
+  geminiApiKey?: string
 ): Promise<Holiday[]> {
   try {
     // Busca todos os municípios do estado
@@ -212,6 +257,10 @@ export async function getMunicipalHolidaysByState(
       console.warn(`[HolidaysService] Nenhum município encontrado para o estado ${stateCode}`);
       return [];
     }
+
+    // Busca o nome do estado
+    const state = BRAZILIAN_STATES.find(s => s.code === stateCode);
+    const stateName = state?.name || stateCode;
 
     // Limita a 100 municípios para não sobrecarregar a API
     const maxCities = Math.min(cities.length, 100);
@@ -223,7 +272,9 @@ export async function getMunicipalHolidaysByState(
     
     for (let i = 0; i < citiesToProcess.length; i += batchSize) {
       const batch = citiesToProcess.slice(i, i + batchSize);
-      const batchPromises = batch.map(city => getMunicipalHolidaysByCity(city.code, year));
+      const batchPromises = batch.map(city => 
+        getMunicipalHolidaysByCity(city.code, year, city.name, stateName, geminiApiKey)
+      );
       const batchResults = await Promise.all(batchPromises);
       
       batchResults.forEach(holidays => {
@@ -235,9 +286,9 @@ export async function getMunicipalHolidaysByState(
         onProgress(Math.min(i + batchSize, citiesToProcess.length), citiesToProcess.length);
       }
       
-      // Pequeno delay para não sobrecarregar a API
+      // Pequeno delay para não sobrecarregar a API e IA
       if (i + batchSize < citiesToProcess.length) {
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 500)); // Aumentado para 500ms para dar tempo à IA
       }
     }
 
@@ -254,15 +305,22 @@ export async function getMunicipalHolidaysByState(
 }
 
 // Busca feriados municipais usando BrasilAPI (mantido para compatibilidade)
-export async function getMunicipalHolidays(cityCode: string, year: number): Promise<Holiday[]> {
-  return getMunicipalHolidaysByCity(cityCode, year);
+export async function getMunicipalHolidays(
+  cityCode: string, 
+  year: number, 
+  cityName?: string, 
+  stateName?: string,
+  geminiApiKey?: string
+): Promise<Holiday[]> {
+  return getMunicipalHolidaysByCity(cityCode, year, cityName, stateName, geminiApiKey);
 }
 
 // Busca todos os feriados (nacionais + municipais) para os próximos N dias
 export async function getUpcomingHolidays(
   days: number = 15, 
   selectedStates?: string[],
-  onProgress?: (message: string) => void
+  onProgress?: (message: string) => void,
+  geminiApiKey?: string
 ): Promise<Holiday[]> {
   const today = new Date();
   const endDate = new Date(today);
@@ -305,8 +363,8 @@ export async function getUpcomingHolidays(
           if (onProgress) {
             onProgress(`Processando ${stateName}: ${current}/${total} municípios...`);
           }
-        }),
-        ...(nextYear > currentYear ? await getMunicipalHolidaysByState(stateCode, nextYear) : [])
+        }, geminiApiKey),
+        ...(nextYear > currentYear ? await getMunicipalHolidaysByState(stateCode, nextYear, undefined, geminiApiKey) : [])
       ];
       allMunicipalHolidays.push(...stateHolidays);
     }
