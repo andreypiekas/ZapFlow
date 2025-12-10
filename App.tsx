@@ -21,7 +21,8 @@ import { storageService } from './services/storageService';
 import { apiService, getBackendUrl, loadConfig as loadConfigFromBackend, saveConfig as saveConfigToBackend } from './services/apiService';
 import { SecurityService } from './services/securityService';
 import { io, Socket } from 'socket.io-client';
-import { getNationalHolidays, Holiday } from './services/holidaysService'; 
+import { getNationalHolidays, getUpcomingHolidays, Holiday, BRAZILIAN_STATES } from './services/holidaysService';
+import { loadConfig as loadConfigFromBackend } from './services/apiService'; 
 
 // Carrega configuração padrão (será substituída quando usuário fizer login)
 const loadConfig = (): ApiConfig => {
@@ -404,32 +405,58 @@ const App: React.FC = () => {
     loadInitialData();
   }, []); // Executa apenas uma vez quando o componente montar
 
-  // Carrega feriados nacionais próximos para o dashboard
+  // Carrega feriados nacionais e municipais próximos para o dashboard
   useEffect(() => {
-    const loadUpcomingHolidays = () => {
+    const loadUpcomingHolidays = async () => {
       try {
+        // Primeiro carrega apenas nacionais (rápido)
         const today = new Date();
-        const endDate = new Date(today);
-        endDate.setDate(today.getDate() + 30); // Próximos 30 dias
-
         const currentYear = today.getFullYear();
-        const nextYear = endDate.getFullYear();
+        const nextYear = today.getFullYear() + 1;
         
         const allNationalHolidays = [
           ...getNationalHolidays(currentYear),
-          ...(nextYear > currentYear ? getNationalHolidays(nextYear) : [])
+          ...getNationalHolidays(nextYear)
         ];
 
-        // Filtra apenas os próximos 30 dias e ordena por data
-        const upcoming = allNationalHolidays
+        // Filtra apenas os próximos 30 dias
+        const upcomingNational = allNationalHolidays
           .filter(h => {
             const holidayDate = new Date(h.date);
-            return holidayDate >= today && holidayDate <= endDate;
+            return holidayDate >= today;
           })
-          .sort((a, b) => a.date.localeCompare(b.date))
-          .slice(0, 5); // Apenas os 5 próximos
+          .sort((a, b) => a.date.localeCompare(b.date));
 
-        setUpcomingHolidays(upcoming);
+        // Exibe nacionais imediatamente
+        setUpcomingHolidays(upcomingNational.slice(0, 5));
+
+        // Depois busca municipais em background (pode demorar)
+        try {
+          // Busca API key do Gemini para buscar municipais
+          const configData = await loadConfigFromBackend();
+          const geminiApiKey = configData?.geminiApiKey || '';
+          
+          // Busca municipais dos estados principais (SP, RJ, MG, RS, PR, SC, BA, GO, PE, CE)
+          // Limita a 10 estados para não demorar muito
+          const mainStates = ['SP', 'RJ', 'MG', 'RS', 'PR', 'SC', 'BA', 'GO', 'PE', 'CE'];
+          
+          const allHolidays = await getUpcomingHolidays(
+            30, // Próximos 30 dias
+            mainStates, // Estados principais
+            undefined, // Sem callback de progresso
+            geminiApiKey || undefined
+          );
+
+          // Combina nacionais e municipais, ordena e pega os 5 próximos
+          const combined = [...allHolidays]
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .slice(0, 5);
+
+          setUpcomingHolidays(combined);
+        } catch (municipalError) {
+          console.warn('[App] Erro ao carregar feriados municipais, usando apenas nacionais:', municipalError);
+          // Mantém apenas os nacionais se der erro
+        }
       } catch (error) {
         console.error('[App] Erro ao carregar feriados:', error);
       }
@@ -3959,7 +3986,7 @@ const App: React.FC = () => {
                   <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
                     <Flag size={20} />
                   </div>
-                  <h3 className="text-lg font-bold text-slate-800">Próximos Feriados Nacionais</h3>
+                  <h3 className="text-lg font-bold text-slate-800">Próximos Feriados</h3>
                 </div>
                 <div className="space-y-2">
                   {upcomingHolidays.map((holiday, index) => {
@@ -3969,6 +3996,8 @@ const App: React.FC = () => {
                     const daysUntil = Math.ceil((holidayDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                     const isToday = daysUntil === 0;
                     const isTomorrow = daysUntil === 1;
+                    const isNational = holiday.type === 'national';
+                    const isMunicipal = holiday.type === 'municipal';
                     
                     return (
                       <div
@@ -3981,20 +4010,37 @@ const App: React.FC = () => {
                             : 'bg-slate-50 border-slate-200'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-1">
                           <Calendar className={isToday ? 'text-emerald-600' : isTomorrow ? 'text-blue-600' : 'text-slate-400'} size={18} />
-                          <div>
-                            <p className="font-semibold text-slate-800">{holiday.name}</p>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-semibold text-slate-800">{holiday.name}</p>
+                              {isNational && (
+                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-semibold">
+                                  Nacional
+                                </span>
+                              )}
+                              {isMunicipal && (
+                                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-semibold">
+                                  {holiday.city ? `${holiday.city}` : 'Municipal'}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-sm text-slate-600">
                               {holidayDate.toLocaleDateString('pt-BR', { 
                                 weekday: 'long', 
                                 day: 'numeric', 
                                 month: 'long' 
                               })}
+                              {holiday.city && holiday.state && (
+                                <span className="ml-2 text-xs text-slate-500">
+                                  ({holiday.city}, {holiday.state})
+                                </span>
+                              )}
                             </p>
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right ml-4">
                           {isToday ? (
                             <span className="px-3 py-1 bg-emerald-600 text-white rounded-full text-xs font-semibold">
                               Hoje
