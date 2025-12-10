@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;500;600;700;800&family=Orbitron:wght@400;500;600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,6 +7,122 @@
 
 body {
   font-family: 'Inter', sans-serif;
+}
+
+/* Tipografia futurista para títulos */
+.font-futuristic {
+  font-family: 'Exo 2', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.font-tech {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+/* Glow effects */
+.glow-cyan {
+  box-shadow: 0 0 10px rgba(0, 227, 209, 0.3), 0 0 20px rgba(0, 227, 209, 0.2);
+}
+
+.glow-blue {
+  box-shadow: 0 0 10px rgba(0, 195, 255, 0.3), 0 0 20px rgba(0, 195, 255, 0.2);
+}
+
+.glow-gradient {
+  box-shadow: 0 0 15px rgba(0, 195, 255, 0.4), 0 0 30px rgba(0, 227, 209, 0.3);
+}
+
+/* Circuit line pattern */
+.circuit-line {
+  position: relative;
+}
+
+.circuit-line::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, 
+    transparent 0%, 
+    rgba(0, 195, 255, 0.3) 20%, 
+    rgba(0, 227, 209, 0.5) 50%, 
+    rgba(0, 195, 255, 0.3) 80%, 
+    transparent 100%);
+}
+
+/* Neon border */
+.neon-border {
+  border: 0.5px solid rgba(0, 227, 209, 0.3);
+  box-shadow: 0 0 5px rgba(0, 227, 209, 0.2), inset 0 0 5px rgba(0, 227, 209, 0.1);
+}
+
+/* Pulse animation for notifications */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(0, 227, 209, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(0, 227, 209, 0.6), 0 0 30px rgba(0, 227, 209, 0.4);
+  }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Circuit animation for logo */
+@keyframes circuit-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.circuit-animated {
+  background: linear-gradient(90deg, 
+    rgba(0, 195, 255, 0.1) 0%, 
+    rgba(0, 227, 209, 0.3) 50%, 
+    rgba(0, 195, 255, 0.1) 100%);
+  background-size: 200% 100%;
+  animation: circuit-flow 3s ease-in-out infinite;
+}
+
+/* Hover glow effect */
+.hover-glow:hover {
+  box-shadow: 0 0 15px rgba(0, 227, 209, 0.4), 0 0 25px rgba(0, 227, 209, 0.2);
+  transition: box-shadow 0.3s ease;
+}
+
+/* Tech loader */
+@keyframes tech-loader {
+  0% {
+    transform: rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: rotate(360deg);
+    opacity: 1;
+  }
+}
+
+.tech-loader {
+  border: 2px solid rgba(0, 227, 209, 0.2);
+  border-top: 2px solid rgba(0, 227, 209, 1);
+  border-right: 2px solid rgba(0, 195, 255, 1);
+  animation: tech-loader 1s linear infinite;
 }
 
 /* Custom Scrollbar for Chat */

@@ -1280,53 +1280,53 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   }) || [];
 
   return (
-    <div className={`flex h-full bg-white md:rounded-lg shadow-sm overflow-hidden md:border border-slate-200 ${isResizing ? 'select-none' : ''}`}>
+    <div className={`flex h-full bg-[#111316] md:rounded-lg shadow-lg overflow-hidden md:border border-[#0D0F13] neon-border ${isResizing ? 'select-none' : ''}`}>
       
       {/* Sidebar List (Resizable) */}
       <div 
-        className={`flex-col bg-slate-50 border-r border-slate-200 ${selectedChatId ? 'hidden md:flex' : 'flex'}`}
+        className={`flex-col bg-[#16191F] border-r border-[#0D0F13] ${selectedChatId ? 'hidden md:flex' : 'flex'}`}
         style={{ width: selectedChatId ? listWidth : '100%' }} // On mobile, if no chat selected, it takes full width
       >
         {/* Header da Sidebar */}
-        <div className="p-4 bg-white border-b border-slate-200 space-y-3">
+        <div className="p-4 bg-[#0D0F13] border-b border-[#111316] space-y-3 circuit-line">
            <div className="flex items-center gap-2 mb-2">
-                <div className="flex flex-1 bg-slate-100 p-1 rounded-lg">
+                <div className="flex flex-1 bg-[#111316] p-1 rounded-lg border border-[#0D0F13]">
                     <button 
                         onClick={() => setActiveTab('todo')}
-                        className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all flex justify-center items-center gap-1 ${activeTab === 'todo' ? 'bg-white shadow text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+                        className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all flex justify-center items-center gap-1 ${activeTab === 'todo' ? 'bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] shadow-lg shadow-[#00C3FF]/20 font-semibold' : 'text-slate-400 hover:text-[#00E0D1]'}`}
                     >
                         A Fazer
                     </button>
                     <button 
                         onClick={() => setActiveTab('waiting')}
-                        className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all flex justify-center items-center gap-1 ${activeTab === 'waiting' ? 'bg-white shadow text-amber-600' : 'text-slate-500 hover:text-slate-700'}`}
+                        className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all flex justify-center items-center gap-1 ${activeTab === 'waiting' ? 'bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] shadow-lg shadow-[#00C3FF]/20 font-semibold' : 'text-slate-400 hover:text-[#00E0D1]'}`}
                     >
                         <Clock size={12} /> Aguardando
                     </button>
                     <button 
                         onClick={() => setActiveTab('closed')}
-                        className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all flex justify-center items-center gap-1 ${activeTab === 'closed' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+                        className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all flex justify-center items-center gap-1 ${activeTab === 'closed' ? 'bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] shadow-lg shadow-[#00C3FF]/20 font-semibold' : 'text-slate-400 hover:text-[#00E0D1]'}`}
                     >
                         Finalizados
                     </button>
                 </div>
                 <button 
                     onClick={() => setIsNewChatModalOpen(true)}
-                    className="p-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm"
+                    className="p-2 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] rounded-lg hover:from-[#00B0E6] hover:to-[#00C8B8] shadow-lg shadow-[#00C3FF]/20 transition-all glow-gradient"
                     title="Novo Atendimento"
                 >
-                    <Plus size={18} />
+                    <Plus size={18} strokeWidth={2.5} />
                 </button>
            </div>
 
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500" size={18} strokeWidth={2} />
             <input 
               type="text" 
               placeholder="Buscar conversas..."
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+              className="w-full pl-10 pr-4 py-2 bg-[#111316] border border-[#0D0F13] text-slate-200 rounded-full text-sm focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500"
             />
           </div>
         </div>
@@ -1344,7 +1344,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             <div 
               key={chat.id}
               onClick={() => setSelectedChatId(chat.id)}
-              className={`p-4 border-b border-slate-100 cursor-pointer hover:bg-emerald-50 transition-colors ${selectedChatId === chat.id ? 'bg-emerald-50 border-emerald-200' : ''}`}
+              className={`p-4 border-b border-[#0D0F13] cursor-pointer hover:bg-[#111316] transition-all group ${selectedChatId === chat.id ? 'bg-[#111316] border-l-2 border-l-[#00E0D1] glow-cyan' : ''}`}
             >
               <div className="flex justify-between items-start mb-1">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -1442,7 +1442,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       {/* Main Chat Area */}
       <div 
         className={`
-           flex-1 flex-col bg-[#e5ddd5] relative
+           flex-1 flex-col bg-[#111316] relative
            ${selectedChatId ? 'flex' : 'hidden md:flex'}
         `}
         onDragEnter={handleDragEnter}
@@ -1462,8 +1462,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         {selectedChat ? (
           <>
             {/* Header */}
-            <div className="bg-emerald-700 shadow-sm z-10 shrink-0">
-                <div className="h-16 flex items-center justify-between px-2 md:px-4 text-white">
+            <div className="bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] shadow-lg z-10 shrink-0 circuit-line">
+                <div className="h-16 flex items-center justify-between px-2 md:px-4 text-[#0D0F13]">
                     <div className="flex items-center gap-2 md:gap-3 flex-1">
                         <button 
                         onClick={() => setSelectedChatId(null)}
@@ -1671,24 +1671,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             )}
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundRepeat: 'repeat' }}>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 relative" style={{ 
+              background: 'linear-gradient(135deg, #111316 0%, #0D0F13 100%)',
+              backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(0, 227, 209, 0.04) 1px, transparent 0)',
+              backgroundSize: '40px 40px'
+            }}>
               {displayedMessages.map((msg) => (
                 <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-start' : msg.sender === 'system' ? 'justify-center' : 'justify-end'}`}>
                   {msg.sender === 'system' ? (
-                     <div className="bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-full shadow-sm my-2">
+                     <div className="bg-[#0074FF]/20 text-[#00E0D1] border border-[#0074FF]/30 text-xs px-3 py-1 rounded-full shadow-sm my-2 neon-border">
                         {msg.content}
                      </div>
                   ) : (
                     <div 
-                      className={`max-w-[85%] md:max-w-[70%] rounded-lg px-2 py-2 shadow-sm relative group ${
-                        msg.sender === 'user' ? 'bg-white rounded-tl-none' : 'bg-emerald-100 rounded-tr-none'
+                      className={`max-w-[85%] md:max-w-[70%] rounded-lg px-3 py-2 shadow-lg relative group ${
+                        msg.sender === 'user' ? 'bg-[#16191F] text-slate-200 rounded-tl-none neon-border' : 'bg-gradient-to-r from-[#0074FF] to-[#00C3FF] text-white rounded-tr-none glow-blue'
                       }`}
                       onDoubleClick={() => msg.sender !== 'system' && handleReplyToMessage(msg)}
                     >
                       {/* Mensagem citada (se for uma resposta) */}
                       {msg.replyTo && (
-                        <div className={`mb-1 px-2 py-1 border-l-3 ${
-                          msg.replyTo.sender === 'user' ? 'border-blue-400 bg-blue-50' : 'border-emerald-400 bg-emerald-50'
+                        <div className={`mb-1 px-2 py-1 border-l-2 ${
+                          msg.replyTo.sender === 'user' ? 'border-[#00E0D1] bg-[#00E0D1]/10' : 'border-[#0074FF] bg-[#0074FF]/20'
                         } rounded text-xs`}>
                           <div className="font-medium text-slate-600">
                             {msg.replyTo.sender === 'user' ? selectedChat?.contactName : currentUser.name}
@@ -1708,7 +1712,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                           : null;
                         return (
                           <div className="px-2 pt-1 pb-0.5">
-                            <span className="font-bold text-slate-800">
+                            <span className="font-bold text-white/90">
                               {currentUser.name}
                               {userDepartment && <> - {userDepartment.name}</>}
                               :
@@ -1764,13 +1768,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         <p className="text-slate-600 font-medium">Este chat ainda não possui um responsável.</p>
                         <button 
                             onClick={handleAssumeChat}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-lg font-bold shadow-md transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
+                            className="bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] hover:from-[#00B0E6] hover:to-[#00C8B8] text-[#0D0F13] px-8 py-3 rounded-lg font-tech shadow-lg glow-gradient transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
                         >
-                            <UserPlus size={20} /> ASSUMIR ATENDIMENTO
+                            <UserPlus size={20} strokeWidth={2.5} /> ASSUMIR ATENDIMENTO
                         </button>
                     </div>
                 ) : (
-                    <div className="bg-slate-100 p-2 md:p-3 relative z-20">
+                    <div className="bg-[#0D0F13] border-t border-[#111316] p-2 md:p-3 relative z-20">
                     
                         {/* Greeting Shortcut - Shows if assigned to me, no text yet, and greeting hasn't been sent */}
                         {isAssignedToMe && !inputText && !hasGreetingBeenSent() && (

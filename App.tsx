@@ -4035,27 +4035,39 @@ const App: React.FC = () => {
       case 'dashboard':
         return (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-4 md:p-6">
-            <div className="bg-[#16191F] p-6 rounded-lg shadow-sm border border-[#0D0F13]">
+            <div className="bg-[#16191F] p-6 rounded-xl shadow-lg neon-border hover-glow transition-all hover:border-[#00E0D1]/50 group">
               <div className="flex items-center gap-4 mb-4">
-                 <div className="p-3 bg-[#0074FF]/20 text-[#0074FF] rounded-lg"><MessageSquare /></div>
-                 <div>
-                   <p className="text-slate-400 text-sm">Meus Chats Ativos</p>
-                   <h3 className="text-2xl font-bold text-slate-200">{filteredChats.filter(c => c.status === 'open').length}</h3>
+                 <div className="p-3 bg-gradient-to-br from-[#0074FF]/30 to-[#0074FF]/10 text-[#0074FF] rounded-xl border border-[#0074FF]/20 group-hover:glow-blue transition-all">
+                   <MessageSquare size={24} strokeWidth={2} />
+                 </div>
+                 <div className="flex-1">
+                   <p className="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Meus Chats Ativos</p>
+                   <h3 className="text-3xl font-tech bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] bg-clip-text text-transparent">{filteredChats.filter(c => c.status === 'open').length}</h3>
                  </div>
               </div>
             </div>
             {currentUser.role === UserRole.ADMIN && (
                 <>
-                <div className="bg-[#16191F] p-6 rounded-lg shadow-sm border border-[#0D0F13]">
+                <div className="bg-[#16191F] p-6 rounded-xl shadow-lg neon-border hover-glow transition-all hover:border-[#00E0D1]/50 group">
                 <div className="flex items-center gap-4 mb-4">
-                    <div className="p-3 bg-orange-500/20 text-orange-400 rounded-lg"><Users /></div>
-                    <div><p className="text-slate-400 text-sm">Aguardando Triagem</p><h3 className="text-2xl font-bold text-slate-200">{chats.filter(c => !c.departmentId && c.status !== 'closed').length}</h3></div>
+                    <div className="p-3 bg-orange-500/20 text-orange-400 rounded-xl border border-orange-500/20 group-hover:border-orange-400/40 transition-all">
+                      <Users size={24} strokeWidth={2} />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Aguardando Triagem</p>
+                      <h3 className="text-3xl font-tech text-slate-200">{chats.filter(c => !c.departmentId && c.status !== 'closed').length}</h3>
+                    </div>
                 </div>
                 </div>
-                <div className="bg-[#16191F] p-6 rounded-lg shadow-sm border border-[#0D0F13]">
+                <div className="bg-[#16191F] p-6 rounded-xl shadow-lg neon-border hover-glow transition-all hover:border-[#00E0D1]/50 group">
                 <div className="flex items-center gap-4 mb-4">
-                    <div className="p-3 bg-[#00E0D1]/20 text-[#00E0D1] rounded-lg"><Smartphone /></div>
-                    <div><p className="text-slate-400 text-sm">Status Conexão</p><h3 className="text-2xl font-bold text-[#00E0D1]">{apiConfig.isDemo ? 'Modo Simulação' : 'Modo Real'}</h3></div>
+                    <div className="p-3 bg-gradient-to-br from-[#00E0D1]/30 to-[#00C3FF]/10 text-[#00E0D1] rounded-xl border border-[#00E0D1]/20 group-hover:glow-cyan transition-all">
+                      <Smartphone size={24} strokeWidth={2} />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Status Conexão</p>
+                      <h3 className="text-2xl font-tech bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] bg-clip-text text-transparent">{apiConfig.isDemo ? 'Modo Simulação' : 'Modo Real'}</h3>
+                    </div>
                 </div>
                 </div>
                 {!apiConfig.isDemo && (
@@ -4232,11 +4244,14 @@ const App: React.FC = () => {
   const SidebarItem = ({ view, icon: Icon, label }: { view: ViewState, icon: any, label: string }) => (
     <button 
         onClick={() => handleViewChange(view)}
-        className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-all ${currentView === view ? 'bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] shadow-lg shadow-[#00C3FF]/20' : 'hover:bg-[#111316] text-slate-300'} ${isSidebarCollapsed ? 'justify-center' : ''}`}
+        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all relative group ${currentView === view ? 'bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] shadow-lg shadow-[#00C3FF]/30 font-medium' : 'hover:bg-[#111316] text-slate-300 hover:text-[#00E0D1]'} ${isSidebarCollapsed ? 'justify-center' : ''}`}
         title={isSidebarCollapsed ? label : ''}
     >
-        <Icon size={20} className="flex-shrink-0" /> 
-        {!isSidebarCollapsed && <span className="truncate">{label}</span>}
+        {currentView === view && (
+          <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-[#00C3FF] to-[#00E0D1] rounded-r-full glow-cyan"></div>
+        )}
+        <Icon size={20} className={`flex-shrink-0 ${currentView === view ? '' : 'group-hover:text-[#00E0D1] transition-colors'}`} strokeWidth={currentView === view ? 2.5 : 2} /> 
+        {!isSidebarCollapsed && <span className={`truncate ${currentView === view ? 'font-semibold' : ''}`}>{label}</span>}
     </button>
   );
 
@@ -4267,10 +4282,10 @@ const App: React.FC = () => {
 
       {isMobileMenuOpen && <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setIsMobileMenuOpen(false)} />}
 
-      <aside className={`fixed md:static inset-y-0 left-0 z-50 bg-[#0D0F13] flex flex-col h-full transform transition-all duration-300 ease-in-out flex-shrink-0 ${isMobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full'} md:translate-x-0 shadow-xl md:shadow-none ${isSidebarCollapsed ? 'md:w-20' : 'md:w-64'}`}>
-        <div className={`hidden md:flex p-6 border-b border-[#111316] items-center gap-3 flex-shrink-0 ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}>
-          <div className="w-8 h-8 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] rounded-lg flex items-center justify-center text-[#0D0F13] font-bold flex-shrink-0">Z</div>
-          {!isSidebarCollapsed && <span className="text-xl font-bold text-white tracking-tight animate-in fade-in">Zentria</span>}
+      <aside className={`fixed md:static inset-y-0 left-0 z-50 bg-[#0D0F13] flex flex-col h-full transform transition-all duration-300 ease-in-out flex-shrink-0 ${isMobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full'} md:translate-x-0 shadow-xl md:shadow-none ${isSidebarCollapsed ? 'md:w-20' : 'md:w-64'} border-r border-[#111316]`}>
+        <div className={`hidden md:flex p-6 border-b border-[#111316] items-center gap-3 flex-shrink-0 circuit-line ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}>
+          <div className="w-10 h-10 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] rounded-lg flex items-center justify-center text-[#0D0F13] font-tech text-lg flex-shrink-0 glow-gradient circuit-animated">Z</div>
+          {!isSidebarCollapsed && <span className="text-xl font-futuristic text-white tracking-tight animate-in fade-in">Zentria</span>}
         </div>
         
         <div className={`p-4 bg-[#111316]/50 flex items-center gap-3 border-b border-[#111316] mt-16 md:mt-0 flex-shrink-0 ${isSidebarCollapsed ? 'justify-center' : ''}`}>
