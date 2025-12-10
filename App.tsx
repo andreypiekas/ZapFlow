@@ -2292,21 +2292,63 @@ const App: React.FC = () => {
                                                 finalAssignedTo = undefined;
                                                 finalDepartmentId = null;
                                                 
-                                                // Quando chat fechado é reaberto, a mensagem de seleção já foi enviada acima (verificação imediata)
-                                                // Apenas atualiza o status no banco sem reenviar a mensagem
-                                                // Isso evita loops e garante que a mensagem seja enviada apenas uma vez
-                                                
-                                                // Salva no banco via handleUpdateChat (async, não bloqueia retorno)
-                                                setTimeout(() => {
-                                                    handleUpdateChat({
-                                                        ...updatedChat,
-                                                        status: finalStatus,
-                                                        assignedTo: finalAssignedTo,
-                                                        departmentId: finalDepartmentId,
-                                                        endedAt: undefined,
-                                                        messages: finalMessages
-                                                    });
-                                                }, 100);
+                                                // Salva IMEDIATAMENTE no banco para evitar que syncChats sobrescreva com status 'closed'
+                                                // Usa Promise para garantir que seja salvo antes de syncChats rodar
+                                                (async () => {
+                                                    try {
+                                                        // Atualiza status no banco IMEDIATAMENTE
+                                                        await apiService.updateChatStatus(chat.id, 'pending', undefined, null);
+                                                        console.log(`[App] ✅ Chat ${chat.id} reaberto e salvo no banco IMEDIATAMENTE`);
+                                                        
+                                                        // Depois de salvar, envia mensagem de seleção de departamento se necessário
+                                                        // Verifica se já foi enviada pela lógica anterior para evitar duplicação
+                                                        const contactNumber = updatedChat.contactNumber || (chat.id ? chat.id.split('@')[0] : null);
+                                                        const needsDepartmentSelection = contactNumber && contactNumber.length >= 10 && 
+                                                                                        departments.length > 0 && 
+                                                                                        !updatedChat.departmentId &&
+                                                                                        !updatedChat.departmentSelectionSent;
+                                                        
+                                                        if (needsDepartmentSelection) {
+                                                            console.log(`[App] 📤 [DEBUG] Socket.IO: Chat reaberto - Enviando mensagem de seleção de departamento para ${chat.id} (número: ${contactNumber})`);
+                                                            const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, departments);
+                                                            if (sent) {
+                                                                console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada para ${chat.id}`);
+                                                                // Atualiza chat com departmentSelectionSent
+                                                                handleUpdateChat({
+                                                                    ...updatedChat,
+                                                                    status: 'pending',
+                                                                    assignedTo: undefined,
+                                                                    departmentId: null,
+                                                                    endedAt: undefined,
+                                                                    departmentSelectionSent: true,
+                                                                    awaitingDepartmentSelection: true,
+                                                                    messages: finalMessages
+                                                                });
+                                                            }
+                                                        } else {
+                                                            // Apenas atualiza status sem enviar mensagem (já foi enviada ou não é necessário)
+                                                            handleUpdateChat({
+                                                                ...updatedChat,
+                                                                status: 'pending',
+                                                                assignedTo: undefined,
+                                                                departmentId: null,
+                                                                endedAt: undefined,
+                                                                messages: finalMessages
+                                                            });
+                                                        }
+                                                    } catch (error) {
+                                                        console.error(`[App] ❌ Erro ao reabrir chat ${chat.id} no banco:`, error);
+                                                        // Em caso de erro, ainda tenta atualizar localmente
+                                                        handleUpdateChat({
+                                                            ...updatedChat,
+                                                            status: finalStatus,
+                                                            assignedTo: finalAssignedTo,
+                                                            departmentId: finalDepartmentId,
+                                                            endedAt: undefined,
+                                                            messages: finalMessages
+                                                        });
+                                                    }
+                                                })();
                                             }
                                                 
                                             return {
@@ -2335,17 +2377,63 @@ const App: React.FC = () => {
                                                     finalAssignedTo = undefined;
                                                     finalDepartmentId = null;
                                                     
-                                                    // Salva no banco via handleUpdateChat (async, não bloqueia retorno)
-                                                    setTimeout(() => {
-                                                        handleUpdateChat({
-                                                            ...chat,
-                                                            status: finalStatus,
-                                                            assignedTo: finalAssignedTo,
-                                                            departmentId: finalDepartmentId,
-                                                            endedAt: undefined,
-                                                            messages: finalMessages
-                                                        });
-                                                    }, 100);
+                                                    // Salva IMEDIATAMENTE no banco para evitar que syncChats sobrescreva com status 'closed'
+                                                    // Usa Promise para garantir que seja salvo antes de syncChats rodar
+                                                    (async () => {
+                                                        try {
+                                                            // Atualiza status no banco IMEDIATAMENTE
+                                                            await apiService.updateChatStatus(chat.id, 'pending', undefined, null);
+                                                            console.log(`[App] ✅ Chat ${chat.id} reaberto e salvo no banco IMEDIATAMENTE (mensagem já existia)`);
+                                                            
+                                                            // Depois de salvar, envia mensagem de seleção de departamento se necessário
+                                                            // Verifica se já foi enviada pela lógica anterior para evitar duplicação
+                                                            const contactNumber = chat.contactNumber || (chat.id ? chat.id.split('@')[0] : null);
+                                                            const needsDepartmentSelection = contactNumber && contactNumber.length >= 10 && 
+                                                                                            departments.length > 0 && 
+                                                                                            !chat.departmentId &&
+                                                                                            !chat.departmentSelectionSent;
+                                                            
+                                                            if (needsDepartmentSelection) {
+                                                                console.log(`[App] 📤 [DEBUG] Socket.IO: Chat reaberto (mensagem já existia) - Enviando mensagem de seleção de departamento para ${chat.id} (número: ${contactNumber})`);
+                                                                const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, departments);
+                                                                if (sent) {
+                                                                    console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada para ${chat.id} (mensagem já existia)`);
+                                                                    // Atualiza chat com departmentSelectionSent
+                                                                    handleUpdateChat({
+                                                                        ...chat,
+                                                                        status: 'pending',
+                                                                        assignedTo: undefined,
+                                                                        departmentId: null,
+                                                                        endedAt: undefined,
+                                                                        departmentSelectionSent: true,
+                                                                        awaitingDepartmentSelection: true,
+                                                                        messages: finalMessages
+                                                                    });
+                                                                }
+                                                            } else {
+                                                                // Apenas atualiza status sem enviar mensagem (já foi enviada ou não é necessário)
+                                                                handleUpdateChat({
+                                                                    ...chat,
+                                                                    status: 'pending',
+                                                                    assignedTo: undefined,
+                                                                    departmentId: null,
+                                                                    endedAt: undefined,
+                                                                    messages: finalMessages
+                                                                });
+                                                            }
+                                                        } catch (error) {
+                                                            console.error(`[App] ❌ Erro ao reabrir chat ${chat.id} no banco (mensagem já existia):`, error);
+                                                            // Em caso de erro, ainda tenta atualizar localmente
+                                                            handleUpdateChat({
+                                                                ...chat,
+                                                                status: finalStatus,
+                                                                assignedTo: finalAssignedTo,
+                                                                departmentId: finalDepartmentId,
+                                                                endedAt: undefined,
+                                                                messages: finalMessages
+                                                            });
+                                                        }
+                                                    })();
                                                 }
                                                 
                                                 return {
