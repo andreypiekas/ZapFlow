@@ -2221,6 +2221,45 @@ const App: React.FC = () => {
                                                 departmentId: finalDepartmentId,
                                                 endedAt: wasClosed && isUserMessage ? undefined : updatedChat.endedAt
                                             };
+                                            } else {
+                                                // Mensagem já existe - processa lógica de reabertura se necessário
+                                                const finalMessages = chat.messages;
+                                                let finalStatus = chat.status;
+                                                let finalAssignedTo = chat.assignedTo;
+                                                let finalDepartmentId = chat.departmentId;
+                                                
+                                                // Se chat estava fechado e recebeu mensagem do cliente, atualiza status para pending
+                                                if (wasClosed && isUserMessage && !(chat.awaitingRating && /^[1-5]$/.test(mapped.content?.trim() || ''))) {
+                                                    console.log(`[App] 🔄 Chat fechado ${chat.id} recebeu mensagem do cliente (mensagem já existe), reabrindo...`);
+                                                    finalStatus = 'pending';
+                                                    finalAssignedTo = undefined;
+                                                    finalDepartmentId = null;
+                                                    
+                                                    // Salva no banco via handleUpdateChat (async, não bloqueia retorno)
+                                                    setTimeout(() => {
+                                                        handleUpdateChat({
+                                                            ...chat,
+                                                            status: finalStatus,
+                                                            assignedTo: finalAssignedTo,
+                                                            departmentId: finalDepartmentId,
+                                                            endedAt: undefined,
+                                                            messages: finalMessages
+                                                        });
+                                                    }, 100);
+                                                }
+                                                
+                                                return {
+                                                    ...chat,
+                                                    messages: finalMessages,
+                                                    lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
+                                                    lastMessageTime: mapped.timestamp,
+                                                    unreadCount: mapped.sender === 'user' ? (chat.unreadCount || 0) + 1 : chat.unreadCount,
+                                                    status: finalStatus,
+                                                    assignedTo: finalAssignedTo,
+                                                    departmentId: finalDepartmentId,
+                                                    endedAt: wasClosed && isUserMessage ? undefined : chat.endedAt
+                                                };
+                                            }
                                         }
                                         return chat;
                                     });
