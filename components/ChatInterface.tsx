@@ -1211,6 +1211,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     // Search Highlight
     const content = msg.content;
     const highlight = messageSearchTerm.trim();
+    const isUserMessage = msg.sender === 'user';
     
     const highlightedContent = (text: string) => {
         if (!highlight || !text) return text;
@@ -1219,7 +1220,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             <>
                 {parts.map((part, i) => 
                     part.toLowerCase() === highlight.toLowerCase() 
-                        ? <span key={i} className="bg-yellow-200 text-slate-800">{part}</span> 
+                        ? <span key={i} className={isUserMessage ? "bg-yellow-400 text-slate-900" : "bg-yellow-200 text-slate-800"}>{part}</span> 
                         : part
                 )}
             </>
@@ -1240,7 +1241,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             onClick={() => window.open(msg.mediaUrl, '_blank')}
           />
           {msg.content && msg.content !== 'Imagem' && (
-             <p className="text-sm mt-1">{highlightedContent(msg.content)}</p>
+             <p className={`text-sm mt-1 ${isUserMessage ? 'text-white' : ''}`}>{highlightedContent(msg.content)}</p>
           )}
         </div>
       );
@@ -1254,23 +1255,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     }
     if (msg.type === 'document') {
        return (
-           <div className="flex items-center gap-3 bg-black/5 p-3 rounded-lg">
-               <div className="bg-white p-2 rounded-full text-emerald-600">
+           <div className={`flex items-center gap-3 p-3 rounded-lg ${isUserMessage ? 'bg-white/10' : 'bg-black/5'}`}>
+               <div className={`p-2 rounded-full ${isUserMessage ? 'bg-white/20 text-white' : 'bg-white text-emerald-600'}`}>
                    <FileIcon size={20} />
                </div>
                <div className="flex-1 overflow-hidden">
-                   <p className="text-sm font-medium truncate">{msg.fileName || 'Documento'}</p>
-                   <p className="text-xs opacity-70 uppercase">{msg.mimeType?.split('/')[1] || 'FILE'}</p>
+                   <p className={`text-sm font-medium truncate ${isUserMessage ? 'text-white' : ''}`}>{msg.fileName || 'Documento'}</p>
+                   <p className={`text-xs uppercase ${isUserMessage ? 'text-slate-300' : 'opacity-70'}`}>{msg.mimeType?.split('/')[1] || 'FILE'}</p>
                </div>
                {msg.mediaUrl && (
-                  <a href={msg.mediaUrl} download={msg.fileName} className="p-2 text-emerald-700 hover:bg-emerald-100 rounded-full">
+                  <a href={msg.mediaUrl} download={msg.fileName} className={`p-2 rounded-full ${isUserMessage ? 'text-white hover:bg-white/20' : 'text-emerald-700 hover:bg-emerald-100'}`}>
                       <ArrowRightLeft className="rotate-90" size={16} />
                   </a>
                )}
            </div>
        );
     }
-    return <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{highlightedContent(msg.content)}</p>;
+    return <p className={`text-sm leading-relaxed whitespace-pre-wrap ${isUserMessage ? 'text-white' : 'text-slate-800'}`}>{highlightedContent(msg.content)}</p>;
   };
 
   const displayedMessages = selectedChat?.messages.filter(msg => {
@@ -1685,7 +1686,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                   ) : (
                     <div 
                       className={`max-w-[85%] md:max-w-[70%] rounded-lg px-3 py-2 shadow-lg relative group ${
-                        msg.sender === 'user' ? 'bg-[#1E293B] text-white rounded-tl-none border border-[#334155]' : 'bg-gradient-to-r from-[#0074FF] to-[#00C3FF] text-white rounded-tr-none glow-blue'
+                        msg.sender === 'user' ? 'bg-[#2D3748] text-white rounded-tl-none border border-[#4A5568]' : 'bg-gradient-to-r from-[#0074FF] to-[#00C3FF] text-white rounded-tr-none glow-blue'
                       }`}
                       onDoubleClick={() => msg.sender !== 'system' && handleReplyToMessage(msg)}
                     >
