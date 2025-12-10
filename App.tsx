@@ -1829,12 +1829,20 @@ const App: React.FC = () => {
                                                     console.log(`[App] 🔍 [DEBUG] Socket.IO: Chat encontrado no banco - chatId=${chatKey}, status=${dbChat.status}, departmentId=${dbChat.departmentId}, departmentSelectionSent=${dbChat.departmentSelectionSent}, shouldSend=${shouldSend}`);
                                                     
                                                     if (wasClosed && hasNoDepartment && shouldSend && contactNumber.length >= 10) {
-                                                        console.log(`[App] 📤 [DEBUG] Socket.IO: Chat fechado no banco - Enviando mensagem de seleção IMEDIATAMENTE para ${remoteJid} (número: ${contactNumber})`);
-                                                        sendDepartmentSelectionMessage(apiConfig, contactNumber, departments)
-                                                            .then(sent => {
+                                                        console.log(`[App] 🔄 [DEBUG] Socket.IO: Chat fechado no banco recebeu mensagem do usuário - Reabrindo IMEDIATAMENTE para ${remoteJid} (número: ${contactNumber})`);
+                                                        
+                                                        // Reabre o chat IMEDIATAMENTE no banco antes de enviar mensagem
+                                                        (async () => {
+                                                            try {
+                                                                // Atualiza status no banco IMEDIATAMENTE
+                                                                await apiService.updateChatStatus(dbChat.id, 'pending', undefined, null);
+                                                                console.log(`[App] ✅ [DEBUG] Socket.IO: Chat ${dbChat.id} reaberto e salvo no banco IMEDIATAMENTE (verificação do banco)`);
+                                                                
+                                                                // Depois de salvar, envia mensagem de seleção de departamento
+                                                                const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, departments);
                                                                 if (sent) {
                                                                     console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção enviada IMEDIATAMENTE do banco para ${remoteJid}`);
-                                                                    // Atualiza chat no banco
+                                                                    // Atualiza chat com departmentSelectionSent
                                                                     handleUpdateChat({
                                                                         ...dbChat,
                                                                         departmentSelectionSent: true,
@@ -1844,10 +1852,21 @@ const App: React.FC = () => {
                                                                         departmentId: null
                                                                     });
                                                                 }
-                                                            })
-                                                            .catch(err => {
-                                                                console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem do banco:`, err);
-                                                            });
+                                                            } catch (error) {
+                                                                console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao reabrir chat do banco:`, error);
+                                                            }
+                                                        })();
+                                                    } else if (wasClosed && contactNumber.length >= 10) {
+                                                        // Chat está fechado mas já tem departamento ou mensagem já foi enviada - apenas reabre
+                                                        console.log(`[App] 🔄 [DEBUG] Socket.IO: Chat fechado no banco recebeu mensagem do usuário - Reabrindo (sem enviar mensagem) para ${remoteJid}`);
+                                                        (async () => {
+                                                            try {
+                                                                await apiService.updateChatStatus(dbChat.id, 'pending', undefined, null);
+                                                                console.log(`[App] ✅ [DEBUG] Socket.IO: Chat ${dbChat.id} reaberto no banco (sem enviar mensagem)`);
+                                                            } catch (error) {
+                                                                console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao reabrir chat do banco:`, error);
+                                                            }
+                                                        })();
                                                     }
                                                 } else {
                                                     // Chat não existe no banco - é um chat novo, envia mensagem imediatamente
