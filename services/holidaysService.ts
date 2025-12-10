@@ -267,7 +267,6 @@ async function getMunicipalHolidaysByCity(
       } else {
         console.log(`[HolidaysService] ⚠️ IA não encontrou feriados municipais para ${cityName}/${stateName}`);
         // Não salva array vazio no cache (backend não aceita arrays vazios)
-        }
       }
     } catch (error) {
       console.warn(`[HolidaysService] Erro ao buscar feriados via IA para ${cityName}/${stateName}:`, error);
