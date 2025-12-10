@@ -4015,9 +4015,9 @@ const App: React.FC = () => {
   // Se ainda está verificando o backend, mostra loading
   if (backendAvailable === null) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-[#111316] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="w-16 h-16 border-4 border-[#00E0D1] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-slate-300">Verificando conexão com o backend...</p>
         </div>
       </div>
@@ -4035,50 +4035,50 @@ const App: React.FC = () => {
       case 'dashboard':
         return (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-4 md:p-6">
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+            <div className="bg-[#16191F] p-6 rounded-lg shadow-sm border border-[#0D0F13]">
               <div className="flex items-center gap-4 mb-4">
-                 <div className="p-3 bg-blue-100 text-blue-600 rounded-lg"><MessageSquare /></div>
+                 <div className="p-3 bg-[#0074FF]/20 text-[#0074FF] rounded-lg"><MessageSquare /></div>
                  <div>
-                   <p className="text-slate-500 text-sm">Meus Chats Ativos</p>
-                   <h3 className="text-2xl font-bold text-slate-800">{filteredChats.filter(c => c.status === 'open').length}</h3>
+                   <p className="text-slate-400 text-sm">Meus Chats Ativos</p>
+                   <h3 className="text-2xl font-bold text-slate-200">{filteredChats.filter(c => c.status === 'open').length}</h3>
                  </div>
               </div>
             </div>
             {currentUser.role === UserRole.ADMIN && (
                 <>
-                <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+                <div className="bg-[#16191F] p-6 rounded-lg shadow-sm border border-[#0D0F13]">
                 <div className="flex items-center gap-4 mb-4">
-                    <div className="p-3 bg-orange-100 text-orange-600 rounded-lg"><Users /></div>
-                    <div><p className="text-slate-500 text-sm">Aguardando Triagem</p><h3 className="text-2xl font-bold text-slate-800">{chats.filter(c => !c.departmentId && c.status !== 'closed').length}</h3></div>
+                    <div className="p-3 bg-orange-500/20 text-orange-400 rounded-lg"><Users /></div>
+                    <div><p className="text-slate-400 text-sm">Aguardando Triagem</p><h3 className="text-2xl font-bold text-slate-200">{chats.filter(c => !c.departmentId && c.status !== 'closed').length}</h3></div>
                 </div>
                 </div>
-                <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+                <div className="bg-[#16191F] p-6 rounded-lg shadow-sm border border-[#0D0F13]">
                 <div className="flex items-center gap-4 mb-4">
-                    <div className="p-3 bg-green-100 text-green-600 rounded-lg"><Smartphone /></div>
-                    <div><p className="text-slate-500 text-sm">Status Conexão</p><h3 className="text-2xl font-bold text-emerald-600">{apiConfig.isDemo ? 'Modo Simulação' : 'Modo Real'}</h3></div>
+                    <div className="p-3 bg-[#00E0D1]/20 text-[#00E0D1] rounded-lg"><Smartphone /></div>
+                    <div><p className="text-slate-400 text-sm">Status Conexão</p><h3 className="text-2xl font-bold text-[#00E0D1]">{apiConfig.isDemo ? 'Modo Simulação' : 'Modo Real'}</h3></div>
                 </div>
                 </div>
                 {!apiConfig.isDemo && (
-                <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
+                <div className="bg-[#16191F] p-6 rounded-lg shadow-sm border border-[#0D0F13]">
                 <div className="flex items-center gap-4 mb-2">
                     <div className={`p-3 rounded-lg ${
-                        wsStatus === 'connected' ? 'bg-emerald-100 text-emerald-600' :
-                        wsStatus === 'connecting' ? 'bg-amber-100 text-amber-600' :
-                        wsStatus === 'failed' ? 'bg-red-100 text-red-600' :
-                        'bg-slate-100 text-slate-600'
+                        wsStatus === 'connected' ? 'bg-[#00E0D1]/20 text-[#00E0D1]' :
+                        wsStatus === 'connecting' ? 'bg-amber-500/20 text-amber-400' :
+                        wsStatus === 'failed' ? 'bg-red-500/20 text-red-400' :
+                        'bg-slate-500/20 text-slate-400'
                     }`}>
                         {wsStatus === 'connected' ? <MessageSquare /> :
                          wsStatus === 'connecting' ? <MessageSquare className="animate-pulse" /> :
                          <MessageSquare />}
                     </div>
                     <div className="flex-1">
-                        <p className="text-slate-500 text-sm">Tempo Real (Socket.IO)</p>
+                        <p className="text-slate-400 text-sm">Tempo Real (Socket.IO)</p>
                         <div className="flex items-center gap-2">
                             <h3 className={`text-lg font-bold ${
-                                wsStatus === 'connected' ? 'text-emerald-600' :
-                                wsStatus === 'connecting' ? 'text-amber-600' :
-                                wsStatus === 'failed' ? 'text-red-600' :
-                                'text-slate-600'
+                                wsStatus === 'connected' ? 'text-[#00E0D1]' :
+                                wsStatus === 'connecting' ? 'text-amber-400' :
+                                wsStatus === 'failed' ? 'text-red-400' :
+                                'text-slate-400'
                             }`}>
                                 {wsStatus === 'connected' ? 'Conectado' :
                                  wsStatus === 'connecting' ? 'Conectando...' :
@@ -4112,20 +4112,20 @@ const App: React.FC = () => {
                 )}
                 </>
             )}
-            <div className="col-span-1 md:col-span-3 bg-white p-6 rounded-lg shadow-sm border border-slate-200 mt-4">
-              <h3 className="text-lg font-bold text-slate-800 mb-4">Olá, {currentUser.name} ({currentUser.role === 'ADMIN' ? 'Administrador' : 'Agente'})</h3>
-              <p className="text-slate-600">
+            <div className="col-span-1 md:col-span-3 bg-[#16191F] p-6 rounded-lg shadow-sm border border-[#0D0F13] mt-4">
+              <h3 className="text-lg font-bold text-slate-200 mb-4">Olá, {currentUser.name} ({currentUser.role === 'ADMIN' ? 'Administrador' : 'Agente'})</h3>
+              <p className="text-slate-400">
                 {currentUser.role === 'ADMIN' ? "Você tem acesso total ao sistema." : `Você está visualizando os atendimentos do setor: ${departments.find(d => d.id === currentUser.departmentId)?.name || 'Nenhum'}.`}
-                {currentUser.role === 'AGENT' && currentUser.allowGeneralConnection && <span className="block mt-2 font-medium text-emerald-600">Você tem permissão para acessar a Triagem (Geral).</span>}
+                {currentUser.role === 'AGENT' && currentUser.allowGeneralConnection && <span className="block mt-2 font-medium text-[#00E0D1]">Você tem permissão para acessar a Triagem (Geral).</span>}
               </p>
             </div>
             {upcomingHolidays.length > 0 && (
-              <div className="col-span-1 md:col-span-3 bg-white p-6 rounded-lg shadow-sm border border-slate-200 mt-4">
+              <div className="col-span-1 md:col-span-3 bg-[#16191F] p-6 rounded-lg shadow-sm border border-[#0D0F13] mt-4">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                  <div className="p-2 bg-[#0074FF]/20 text-[#0074FF] rounded-lg">
                     <Flag size={20} />
                   </div>
-                  <h3 className="text-lg font-bold text-slate-800">Próximos Feriados</h3>
+                  <h3 className="text-lg font-bold text-slate-200">Próximos Feriados</h3>
                 </div>
                 <div className="space-y-2">
                   {upcomingHolidays.map((holiday, index) => {
@@ -4146,29 +4146,29 @@ const App: React.FC = () => {
                         key={`${holiday.date}-${holiday.name}-${holiday.type}-${holiday.city || ''}-${index}`}
                         className={`flex items-center justify-between p-3 rounded-lg border ${
                           isToday
-                            ? 'bg-emerald-50 border-emerald-200'
+                            ? 'bg-[#00E0D1]/10 border-[#00E0D1]/30'
                             : isTomorrow
-                            ? 'bg-blue-50 border-blue-200'
-                            : 'bg-slate-50 border-slate-200'
+                            ? 'bg-[#0074FF]/10 border-[#0074FF]/30'
+                            : 'bg-[#111316] border-[#0D0F13]'
                         }`}
                       >
                         <div className="flex items-center gap-3 flex-1">
-                          <Calendar className={isToday ? 'text-emerald-600' : isTomorrow ? 'text-blue-600' : 'text-slate-400'} size={18} />
+                          <Calendar className={isToday ? 'text-[#00E0D1]' : isTomorrow ? 'text-[#0074FF]' : 'text-slate-400'} size={18} />
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
-                              <p className="font-semibold text-slate-800">{holiday.name}</p>
+                              <p className="font-semibold text-slate-200">{holiday.name}</p>
                               {isNational && (
-                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-semibold">
+                                <span className="px-2 py-0.5 bg-[#0074FF]/20 text-[#0074FF] rounded text-xs font-semibold">
                                   Nacional
                                 </span>
                               )}
                               {isMunicipal && (
-                                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-semibold">
+                                <span className="px-2 py-0.5 bg-[#00E0D1]/20 text-[#00E0D1] rounded text-xs font-semibold">
                                   {holiday.city ? `${holiday.city}` : 'Municipal'}
                                 </span>
                               )}
                             </div>
-                            <p className="text-sm text-slate-600">
+                            <p className="text-sm text-slate-400">
                               {holidayDate.toLocaleDateString('pt-BR', { 
                                 weekday: 'long', 
                                 day: 'numeric', 
@@ -4184,11 +4184,11 @@ const App: React.FC = () => {
                         </div>
                         <div className="text-right ml-4">
                           {isToday ? (
-                            <span className="px-3 py-1 bg-emerald-600 text-white rounded-full text-xs font-semibold">
+                            <span className="px-3 py-1 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] rounded-full text-xs font-semibold">
                               Hoje
                             </span>
                           ) : isTomorrow ? (
-                            <span className="px-3 py-1 bg-blue-600 text-white rounded-full text-xs font-semibold">
+                            <span className="px-3 py-1 bg-[#0074FF] text-white rounded-full text-xs font-semibold">
                               Amanhã
                             </span>
                           ) : (
@@ -4232,7 +4232,7 @@ const App: React.FC = () => {
   const SidebarItem = ({ view, icon: Icon, label }: { view: ViewState, icon: any, label: string }) => (
     <button 
         onClick={() => handleViewChange(view)}
-        className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-all ${currentView === view ? 'bg-emerald-600 text-white shadow-lg' : 'hover:bg-slate-800 text-slate-300'} ${isSidebarCollapsed ? 'justify-center' : ''}`}
+        className={`w-full flex items-center gap-3 px-4 py-3 rounded-md transition-all ${currentView === view ? 'bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] shadow-lg shadow-[#00C3FF]/20' : 'hover:bg-[#111316] text-slate-300'} ${isSidebarCollapsed ? 'justify-center' : ''}`}
         title={isSidebarCollapsed ? label : ''}
     >
         <Icon size={20} className="flex-shrink-0" /> 
@@ -4241,11 +4241,11 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="flex h-screen bg-slate-100 font-sans overflow-hidden">
+    <div className="flex h-screen bg-[#111316] font-sans overflow-hidden">
       <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2">
         {notifications.map(n => (
-          <div key={n.id} className={`min-w-[300px] max-w-sm p-4 rounded-lg shadow-xl border-l-4 bg-white animate-in slide-in-from-right flex items-start gap-3 ${n.type === 'info' ? 'border-blue-500' : n.type === 'warning' ? 'border-orange-500' : 'border-emerald-500'}`}>
-             <div className={`mt-1 ${n.type === 'info' ? 'text-blue-500' : n.type === 'warning' ? 'text-orange-500' : 'text-emerald-500'}`}>
+          <div key={n.id} className={`min-w-[300px] max-w-sm p-4 rounded-lg shadow-xl border-l-4 bg-[#16191F] animate-in slide-in-from-right flex items-start gap-3 ${n.type === 'info' ? 'border-[#0074FF]' : n.type === 'warning' ? 'border-orange-500' : 'border-[#00E0D1]'}`}>
+             <div className={`mt-1 ${n.type === 'info' ? 'text-[#0074FF]' : n.type === 'warning' ? 'text-orange-500' : 'text-[#00E0D1]'}`}>
                 {n.type === 'info' ? <Info size={20} /> : n.type === 'warning' ? <AlertTriangle size={20} /> : <CheckCircle size={20} />}
              </div>
              <div className="flex-1">
@@ -4257,20 +4257,23 @@ const App: React.FC = () => {
         ))}
       </div>
 
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-slate-900 z-40 flex items-center justify-between px-4 shadow-md flex-shrink-0">
-        <div className="flex items-center gap-3"><div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center text-white font-bold">Z</div><span className="text-xl font-bold text-white tracking-tight">Zentria</span></div>
-        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-white p-2 hover:bg-slate-800 rounded-lg">{isMobileMenuOpen ? <X /> : <Menu />}</button>
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-[#0D0F13] z-40 flex items-center justify-between px-4 shadow-md flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] rounded-lg flex items-center justify-center text-[#0D0F13] font-bold">Z</div>
+          <span className="text-xl font-bold text-white tracking-tight">Zentria</span>
+        </div>
+        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-white p-2 hover:bg-[#111316] rounded-lg">{isMobileMenuOpen ? <X /> : <Menu />}</button>
       </div>
 
       {isMobileMenuOpen && <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setIsMobileMenuOpen(false)} />}
 
-      <aside className={`fixed md:static inset-y-0 left-0 z-50 bg-slate-900 flex flex-col h-full transform transition-all duration-300 ease-in-out flex-shrink-0 ${isMobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full'} md:translate-x-0 shadow-xl md:shadow-none ${isSidebarCollapsed ? 'md:w-20' : 'md:w-64'}`}>
-        <div className={`hidden md:flex p-6 border-b border-slate-800 items-center gap-3 flex-shrink-0 ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}>
-          <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center text-white font-bold flex-shrink-0">Z</div>
+      <aside className={`fixed md:static inset-y-0 left-0 z-50 bg-[#0D0F13] flex flex-col h-full transform transition-all duration-300 ease-in-out flex-shrink-0 ${isMobileMenuOpen ? 'translate-x-0 w-64' : '-translate-x-full'} md:translate-x-0 shadow-xl md:shadow-none ${isSidebarCollapsed ? 'md:w-20' : 'md:w-64'}`}>
+        <div className={`hidden md:flex p-6 border-b border-[#111316] items-center gap-3 flex-shrink-0 ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}>
+          <div className="w-8 h-8 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] rounded-lg flex items-center justify-center text-[#0D0F13] font-bold flex-shrink-0">Z</div>
           {!isSidebarCollapsed && <span className="text-xl font-bold text-white tracking-tight animate-in fade-in">Zentria</span>}
         </div>
         
-        <div className={`p-4 bg-slate-800/50 flex items-center gap-3 border-b border-slate-800 mt-16 md:mt-0 flex-shrink-0 ${isSidebarCollapsed ? 'justify-center' : ''}`}>
+        <div className={`p-4 bg-[#111316]/50 flex items-center gap-3 border-b border-[#111316] mt-16 md:mt-0 flex-shrink-0 ${isSidebarCollapsed ? 'justify-center' : ''}`}>
             <img src={currentUser.avatar} alt="User" className="w-8 h-8 rounded-full border border-slate-600 flex-shrink-0 object-cover"/>
             {!isSidebarCollapsed && <div className="overflow-hidden animate-in fade-in"><p className="text-sm font-semibold text-white truncate">{currentUser.name}</p><p className="text-xs text-slate-400 truncate capitalize">{currentUser.role === 'ADMIN' ? 'Administrador' : 'Agente'}</p></div>}
         </div>

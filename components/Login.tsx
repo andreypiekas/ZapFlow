@@ -65,54 +65,60 @@ const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl overflow-hidden w-full max-w-md flex flex-col">
-        <div className="bg-emerald-600 p-8 text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white mb-4">
-            <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+    <div className="min-h-screen bg-[#111316] flex items-center justify-center p-4">
+      <div className="bg-[#16191F] rounded-lg shadow-2xl overflow-hidden w-full max-w-md flex flex-col border border-[#0D0F13]">
+        <div className="bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] p-8 text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#0D0F13] mb-4">
+            <svg className="w-10 h-10" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M20 30 L80 30 L80 35 L25 35 L25 65 L80 65 L80 70 L20 70 Z" fill="url(#gradient)" stroke="url(#gradient)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/>
+              <defs>
+                <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#00C3FF" />
+                  <stop offset="100%" stopColor="#00E0D1" />
+                </linearGradient>
+              </defs>
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-white">ZapFlow Manager</h1>
-          <p className="text-emerald-100 mt-2">Plataforma de Gestão Multi-Setor</p>
+          <h1 className="text-2xl font-bold text-[#0D0F13]">Zentria Manager</h1>
+          <p className="text-[#0D0F13]/80 mt-2">Plataforma de Gestão Multi-Setor</p>
         </div>
         
         <div className="p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Email</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Email</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <UserIcon size={18} className="text-slate-400" />
+                  <UserIcon size={18} className="text-slate-500" />
                 </div>
                 <input 
                   type="email" 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-colors"
+                  className="w-full pl-10 pr-4 py-2 bg-[#111316] border border-[#0D0F13] text-slate-200 rounded-md focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none transition-colors placeholder:text-slate-500"
                   placeholder="seu@email.com"
                 />
               </div>
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Senha</label>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Senha</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock size={18} className="text-slate-400" />
+                  <Lock size={18} className="text-slate-500" />
                 </div>
                 <input 
                   type="password" 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-colors"
+                  className="w-full pl-10 pr-4 py-2 bg-[#111316] border border-[#0D0F13] text-slate-200 rounded-md focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none transition-colors placeholder:text-slate-500"
                   placeholder="••••••••"
                 />
               </div>
             </div>
 
             {error && (
-              <div className="p-3 bg-red-50 text-red-600 text-sm rounded-md border border-red-100">
+              <div className="p-3 bg-red-900/20 text-red-400 text-sm rounded-md border border-red-800/50">
                 {error}
               </div>
             )}
@@ -120,13 +126,13 @@ const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
             <button 
               type="submit"
               disabled={isLoading}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-md transition-colors flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] hover:from-[#00B0E6] hover:to-[#00C8B8] disabled:from-slate-600 disabled:to-slate-600 disabled:cursor-not-allowed text-[#0D0F13] font-semibold py-3 px-4 rounded-md transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#00C3FF]/20"
             >
               {isLoading ? 'Entrando...' : 'Entrar na Plataforma'}
             </button>
           </form>
 
-          <div className="mt-6 text-center text-xs text-slate-400">
+          <div className="mt-6 text-center text-xs text-slate-500">
             <p>Desenvolvido por Andrey Gheno Piekas • Versão 1.2.0 (Production)</p>
           </div>
         </div>
