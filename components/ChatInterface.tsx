@@ -1347,16 +1347,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
               className={`p-4 border-b border-slate-100 cursor-pointer hover:bg-emerald-50 transition-colors ${selectedChatId === chat.id ? 'bg-emerald-50 border-emerald-200' : ''}`}
             >
               <div className="flex justify-between items-start mb-1">
-                <div className="flex items-center gap-3 flex-1">
-                  <img src={chat.contactAvatar} alt="" className="w-10 h-10 rounded-full object-cover" />
-                  <div className="flex-1">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <img src={chat.contactAvatar} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-1">
-                      {chat.contactName}
+                      <span className="truncate">{chat.contactName}</span>
                       {chat.clientCode && (
-                          <span className="text-[10px] text-slate-500 font-mono bg-slate-100 px-1 rounded">#{chat.clientCode}</span>
+                          <span className="text-[10px] text-slate-500 font-mono bg-slate-100 px-1 rounded flex-shrink-0">#{chat.clientCode}</span>
                       )}
                     </h3>
-                    <p className="text-xs text-slate-500">{chat.contactNumber}</p>
+                    <p className="text-xs text-slate-500 truncate">{chat.contactNumber}</p>
                   </div>
                   {/* Botão de excluir - visível para admins em todos os chats (incluindo finalizados) */}
                   {currentUser.role === 'admin' && (
@@ -1365,14 +1365,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         e.stopPropagation();
                         setChatToDelete(chat);
                       }}
-                      className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors flex-shrink-0"
+                      className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors flex-shrink-0 ml-2"
                       title="Excluir chat"
                     >
                       <Trash2 size={16} />
                     </button>
                   )}
                 </div>
-                <div className="text-right">
+                <div className="text-right flex-shrink-0 ml-2">
                   <span className="text-xs text-slate-400 block whitespace-nowrap">
                     {chat.lastMessageTime && chat.lastMessageTime instanceof Date ? chat.lastMessageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
