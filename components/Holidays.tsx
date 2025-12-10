@@ -189,13 +189,13 @@ const Holidays: React.FC = () => {
   const getHolidayTypeColor = (type: string): string => {
     switch (type) {
       case 'national':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
+        return 'bg-[#0074FF]/20 text-[#0074FF] border-[#0074FF]/30';
       case 'municipal':
-        return 'bg-green-100 text-green-800 border-green-200';
+        return 'bg-[#00E0D1]/20 text-[#00E0D1] border-[#00E0D1]/30';
       case 'state':
-        return 'bg-purple-100 text-purple-800 border-purple-200';
+        return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
       default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
+        return 'bg-slate-500/20 text-slate-300 border-slate-500/30';
     }
   };
 
