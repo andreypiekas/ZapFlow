@@ -1407,11 +1407,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
               )}
 
               <div className="flex justify-between items-center mt-2">
-                <div className="flex items-center gap-1 text-slate-600 max-w-[180px]">
-                    {chat.messages && Array.isArray(chat.messages) && chat.messages.length > 0 && chat.messages[chat.messages.length -1]?.type === 'image' && <ImageIcon size={12} />}
-                    {chat.messages && Array.isArray(chat.messages) && chat.messages.length > 0 && chat.messages[chat.messages.length -1]?.type === 'audio' && <Mic size={12} />}
-                    {chat.messages && Array.isArray(chat.messages) && chat.messages.length > 0 && chat.messages[chat.messages.length -1]?.sender === 'agent' && <ArrowRight size={12} className="text-slate-400"/>}
-                    <p className="text-sm truncate">{chat.lastMessage}</p>
+                <div className="flex items-center gap-1 text-slate-300 max-w-[180px]">
+                    {chat.messages && Array.isArray(chat.messages) && chat.messages.length > 0 && chat.messages[chat.messages.length -1]?.type === 'image' && <ImageIcon size={12} strokeWidth={2} />}
+                    {chat.messages && Array.isArray(chat.messages) && chat.messages.length > 0 && chat.messages[chat.messages.length -1]?.type === 'audio' && <Mic size={12} strokeWidth={2} />}
+                    {chat.messages && Array.isArray(chat.messages) && chat.messages.length > 0 && chat.messages[chat.messages.length -1]?.sender === 'agent' && <ArrowRight size={12} className="text-slate-400" strokeWidth={2}/>}
+                    <p className="text-sm truncate text-slate-300">{chat.lastMessage}</p>
                 </div>
                 <div className="flex gap-1">
                     {!chat.assignedTo && chat.status !== 'closed' && (
