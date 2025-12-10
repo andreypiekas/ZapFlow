@@ -1358,13 +1358,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                     </h3>
                     <p className="text-xs text-slate-500">{chat.contactNumber}</p>
                   </div>
+                  {/* Botão de excluir - visível para admins em todos os chats (incluindo finalizados) */}
                   {currentUser.role === 'admin' && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         setChatToDelete(chat);
                       }}
-                      className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                      className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors flex-shrink-0"
                       title="Excluir chat"
                     >
                       <Trash2 size={16} />
