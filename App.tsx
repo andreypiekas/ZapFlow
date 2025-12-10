@@ -4318,7 +4318,7 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col h-full relative min-w-0 bg-slate-100">
+      <main className="flex-1 flex flex-col h-full relative min-w-0 bg-transparent">
          <div className={`flex-1 w-full pt-16 md:pt-0 ${currentView === 'chat' ? 'overflow-hidden' : 'overflow-y-auto'}`}>{renderContent()}</div>
       </main>
     </div>
