@@ -2128,6 +2128,45 @@ const App: React.FC = () => {
                                                     }
                                                 }
                                                 
+                                                // Verifica se precisa enviar mensagem de seleção de departamento após processar mensagem
+                                                // (para casos onde o operador enviou mensagem e o cliente respondeu)
+                                                if (mapped.sender === 'user' && !updatedChat.departmentId && !updatedChat.departmentSelectionSent && departments.length > 0) {
+                                                    console.log(`[App] 📤 [DEBUG] Socket.IO: Chat sem departamento após mensagem do usuário - Enviando mensagem de seleção para ${chat.id}`);
+                                                    const contactNumber = updatedChat.contactNumber || (chat.id ? chat.id.split('@')[0] : null);
+                                                    
+                                                    if (contactNumber && contactNumber.length >= 10) {
+                                                        sendDepartmentSelectionMessage(apiConfig, contactNumber, departments)
+                                                            .then(sent => {
+                                                                if (sent) {
+                                                                    // Adiciona mensagem de sistema
+                                                                    const systemMessage: Message = {
+                                                                        id: `sys_dept_selection_socket_${Date.now()}`,
+                                                                        content: 'department_selection_sent - Mensagem de seleção de departamento enviada',
+                                                                        sender: 'system',
+                                                                        timestamp: new Date(),
+                                                                        status: MessageStatus.READ,
+                                                                        type: 'text'
+                                                                    };
+                                                                    
+                                                                    handleUpdateChat({
+                                                                        ...updatedChat,
+                                                                        departmentSelectionSent: true,
+                                                                        awaitingDepartmentSelection: true,
+                                                                        messages: [...updatedMessages, systemMessage]
+                                                                    });
+                                                                    console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada para ${chat.id}`);
+                                                                } else {
+                                                                    console.error(`[App] ❌ [DEBUG] Socket.IO: Falha ao enviar mensagem de seleção de departamento para ${chat.id}`);
+                                                                }
+                                                            })
+                                                            .catch(err => {
+                                                                console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem de seleção de departamento:`, err);
+                                                            });
+                                                    } else {
+                                                        console.warn(`[App] ⚠️ [DEBUG] Socket.IO: Não foi possível enviar mensagem de seleção - número de contato inválido para ${chat.id} (contactNumber: ${contactNumber})`);
+                                                    }
+                                                }
+                                                
                                                 // Notifica se for mensagem recebida
                                                 if (mapped.sender === 'user' && currentUser) {
                                                     // Notifica se estiver atribuído ao usuário atual ou se não estiver atribuído a ninguém (triagem)
