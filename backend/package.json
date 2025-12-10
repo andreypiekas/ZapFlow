@@ -11,6 +11,7 @@
     "migrate": "node scripts/migrate.js",
     "migrate-holidays-cache": "node scripts/add-municipal-holidays-cache.js",
     "migrate-gemini-quota": "node scripts/add-gemini-quota-control.js",
+    "migrate-national-holidays": "node scripts/add-national-holidays-table.js",
     "create-admin": "node scripts/create-admin.js",
     "update-user-name": "node scripts/update-user-name.js",
     "validate-users": "node scripts/validate-users.js"

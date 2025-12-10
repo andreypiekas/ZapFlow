@@ -1745,3 +1745,224 @@ app.delete('/api/gemini/quota/cleanup', authenticateToken, async (req, res) => {
   }
 });
 
+// ==================== Feriados Nacionais ====================
+
+// Buscar feriados nacionais da BrasilAPI e salvar no banco
+app.post('/api/holidays/national/sync', authenticateToken, async (req, res) => {
+  try {
+    const { year } = req.body;
+    const targetYear = year || new Date().getFullYear();
+    
+    console.log(`[NationalHolidays] 🔍 Buscando feriados nacionais de ${targetYear} na BrasilAPI...`);
+    
+    // Busca na BrasilAPI
+    const response = await fetch(`https://brasilapi.com.br/api/feriados/v1/${targetYear}`);
+    
+    if (!response.ok) {
+      throw new Error(`BrasilAPI retornou status ${response.status}`);
+    }
+    
+    const holidays = await response.json();
+    
+    if (!Array.isArray(holidays)) {
+      throw new Error('Resposta da BrasilAPI não é um array');
+    }
+    
+    console.log(`[NationalHolidays] ✅ Recebidos ${holidays.length} feriados da BrasilAPI`);
+    
+    // Valida e salva no banco (com validação de duplicações)
+    let saved = 0;
+    let skipped = 0;
+    let errors = 0;
+    
+    for (const holiday of holidays) {
+      try {
+        // Valida dados
+        if (!holiday.date || !holiday.name) {
+          console.warn(`[NationalHolidays] ⚠️ Feriado inválido ignorado:`, holiday);
+          errors++;
+          continue;
+        }
+        
+        // Formata data (BrasilAPI retorna YYYY-MM-DD)
+        const holidayDate = new Date(holiday.date);
+        if (isNaN(holidayDate.getTime())) {
+          console.warn(`[NationalHolidays] ⚠️ Data inválida ignorada: ${holiday.date}`);
+          errors++;
+          continue;
+        }
+        
+        // Tenta inserir (UNIQUE constraint previne duplicações)
+        const result = await pool.query(
+          `INSERT INTO national_holidays (date, name, year, type, updated_at)
+           VALUES ($1, $2, $3, 'national', CURRENT_TIMESTAMP)
+           ON CONFLICT (date, name) 
+           DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+           RETURNING id`,
+          [holiday.date, holiday.name.trim(), targetYear]
+        );
+        
+        if (result.rows.length > 0) {
+          saved++;
+        } else {
+          skipped++;
+        }
+      } catch (error) {
+        // Se for erro de duplicação, ignora (já existe)
+        if (error.code === '23505') {
+          skipped++;
+        } else {
+          console.error(`[NationalHolidays] ❌ Erro ao salvar feriado ${holiday.name}:`, error.message);
+          errors++;
+        }
+      }
+    }
+    
+    console.log(`[NationalHolidays] ✅ Sincronização concluída: ${saved} salvos, ${skipped} já existiam, ${errors} erros`);
+    
+    res.json({
+      success: true,
+      message: 'Feriados nacionais sincronizados com sucesso',
+      year: targetYear,
+      total: holidays.length,
+      saved,
+      skipped,
+      errors
+    });
+  } catch (error) {
+    console.error('[NationalHolidays] ❌ Erro ao sincronizar feriados nacionais:', error);
+    res.status(500).json({
+      error: 'Erro ao sincronizar feriados nacionais',
+      details: error.message
+    });
+  }
+});
+
+// Buscar feriados nacionais do banco
+app.get('/api/holidays/national', authenticateToken, async (req, res) => {
+  try {
+    const { year, startDate, endDate } = req.query;
+    
+    let query = 'SELECT date, name, year, type FROM national_holidays WHERE 1=1';
+    const params = [];
+    let paramIndex = 1;
+    
+    if (year) {
+      query += ` AND year = $${paramIndex}`;
+      params.push(parseInt(year));
+      paramIndex++;
+    }
+    
+    if (startDate) {
+      query += ` AND date >= $${paramIndex}`;
+      params.push(startDate);
+      paramIndex++;
+    }
+    
+    if (endDate) {
+      query += ` AND date <= $${paramIndex}`;
+      params.push(endDate);
+      paramIndex++;
+    }
+    
+    query += ' ORDER BY date ASC';
+    
+    const result = await pool.query(query, params);
+    
+    res.json({
+      success: true,
+      holidays: result.rows.map(row => ({
+        date: row.date.toISOString().split('T')[0], // YYYY-MM-DD
+        name: row.name,
+        type: row.type || 'national',
+        year: row.year
+      }))
+    });
+  } catch (error) {
+    console.error('[NationalHolidays] ❌ Erro ao buscar feriados nacionais:', error);
+    res.status(500).json({
+      error: 'Erro ao buscar feriados nacionais',
+      details: error.message
+    });
+  }
+});
+
+// Buscar feriados nacionais dos próximos N dias
+app.get('/api/holidays/national/upcoming', authenticateToken, async (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 15;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const endDate = new Date(today);
+    endDate.setDate(today.getDate() + days);
+    
+    const result = await pool.query(
+      `SELECT date, name, year, type 
+       FROM national_holidays 
+       WHERE date >= $1 AND date <= $2 
+       ORDER BY date ASC`,
+      [today.toISOString().split('T')[0], endDate.toISOString().split('T')[0]]
+    );
+    
+    res.json({
+      success: true,
+      holidays: result.rows.map(row => ({
+        date: row.date.toISOString().split('T')[0],
+        name: row.name,
+        type: row.type || 'national',
+        year: row.year
+      }))
+    });
+  } catch (error) {
+    console.error('[NationalHolidays] ❌ Erro ao buscar próximos feriados nacionais:', error);
+    res.status(500).json({
+      error: 'Erro ao buscar próximos feriados nacionais',
+      details: error.message
+    });
+  }
+});
+
+// Validar e remover duplicações
+app.post('/api/holidays/national/validate', authenticateToken, async (req, res) => {
+  try {
+    console.log('[NationalHolidays] 🔍 Validando e removendo duplicações...');
+    
+    // Encontra duplicações (mesma data e nome)
+    const duplicates = await pool.query(
+      `SELECT date, name, COUNT(*) as count, array_agg(id) as ids
+       FROM national_holidays
+       GROUP BY date, name
+       HAVING COUNT(*) > 1`
+    );
+    
+    let removed = 0;
+    
+    for (const dup of duplicates.rows) {
+      // Mantém o mais recente, remove os outros
+      const ids = dup.ids;
+      const idsToRemove = ids.slice(1); // Remove todos exceto o primeiro
+      
+      await pool.query(
+        `DELETE FROM national_holidays WHERE id = ANY($1)`,
+        [idsToRemove]
+      );
+      
+      removed += idsToRemove.length;
+      console.log(`[NationalHolidays] 🧹 Removidos ${idsToRemove.length} duplicados de ${dup.name} (${dup.date})`);
+    }
+    
+    res.json({
+      success: true,
+      message: 'Validação concluída',
+      duplicatesFound: duplicates.rows.length,
+      removed
+    });
+  } catch (error) {
+    console.error('[NationalHolidays] ❌ Erro ao validar duplicações:', error);
+    res.status(500).json({
+      error: 'Erro ao validar duplicações',
+      details: error.message
+    });
+  }
+});
+

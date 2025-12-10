@@ -2,6 +2,7 @@
 // Remove /api do final da URL se presente, pois os endpoints já incluem /api
 import { SecurityService } from './securityService';
 import { storageService } from './storageService';
+import { Holiday } from './holidaysService';
 
 const getApiBaseUrl = () => {
   const envUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
@@ -729,6 +730,110 @@ export const setGeminiQuotaExceeded = async (): Promise<void> => {
     }
   } catch (error: any) {
     console.error('[ApiService] Erro ao salvar data de cota excedida:', error);
+  }
+};
+
+// ==================== Feriados Nacionais ====================
+
+// Sincronizar feriados nacionais da BrasilAPI para o banco
+export const syncNationalHolidays = async (year?: number): Promise<{ success: boolean; saved: number; skipped: number; errors: number }> => {
+  try {
+    const response = await apiService.request<{ 
+      success: boolean; 
+      saved: number; 
+      skipped: number; 
+      errors: number;
+      year: number;
+      total: number;
+    }>(
+      '/api/holidays/national/sync',
+      {
+        method: 'POST',
+        body: JSON.stringify({ year: year || new Date().getFullYear() })
+      }
+    );
+    
+    if (response.success) {
+      console.log(`[ApiService] ✅ Feriados nacionais sincronizados: ${response.saved} salvos, ${response.skipped} já existiam`);
+      return {
+        success: true,
+        saved: response.saved,
+        skipped: response.skipped,
+        errors: response.errors
+      };
+    }
+    
+    return { success: false, saved: 0, skipped: 0, errors: 0 };
+  } catch (error: any) {
+    console.error('[ApiService] Erro ao sincronizar feriados nacionais:', error);
+    return { success: false, saved: 0, skipped: 0, errors: 0 };
+  }
+};
+
+// Buscar feriados nacionais do banco
+export const getNationalHolidaysFromDB = async (year?: number, startDate?: string, endDate?: string): Promise<Holiday[]> => {
+  try {
+    const params = new URLSearchParams();
+    if (year) params.append('year', year.toString());
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    
+    const response = await apiService.request<{ success: boolean; holidays: Holiday[] }>(
+      `/api/holidays/national?${params.toString()}`,
+      { method: 'GET' }
+    );
+    
+    if (response.success && response.holidays) {
+      return response.holidays;
+    }
+    
+    return [];
+  } catch (error: any) {
+    console.error('[ApiService] Erro ao buscar feriados nacionais do banco:', error);
+    return [];
+  }
+};
+
+// Buscar próximos feriados nacionais
+export const getUpcomingNationalHolidays = async (days: number = 15): Promise<Holiday[]> => {
+  try {
+    const response = await apiService.request<{ success: boolean; holidays: Holiday[] }>(
+      `/api/holidays/national/upcoming?days=${days}`,
+      { method: 'GET' }
+    );
+    
+    if (response.success && response.holidays) {
+      return response.holidays;
+    }
+    
+    return [];
+  } catch (error: any) {
+    console.error('[ApiService] Erro ao buscar próximos feriados nacionais:', error);
+    return [];
+  }
+};
+
+// Validar e remover duplicações
+export const validateNationalHolidays = async (): Promise<{ success: boolean; removed: number }> => {
+  try {
+    const response = await apiService.request<{ 
+      success: boolean; 
+      duplicatesFound: number;
+      removed: number;
+    }>(
+      '/api/holidays/national/validate',
+      { method: 'POST' }
+    );
+    
+    if (response.success) {
+      console.log(`[ApiService] ✅ Validação concluída: ${response.removed} duplicados removidos`);
+      return { success: true, removed: response.removed };
+    }
+    
+    return { success: false, removed: 0 };
+  } catch (error: any) {
+    console.error('[ApiService] Erro ao validar feriados nacionais:', error);
+    return { success: false, removed: 0 };
   }
 };
 

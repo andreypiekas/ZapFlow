@@ -4,7 +4,7 @@
 // Cache: feriados municipais são armazenados no banco e atualizados a cada 10 dias
 
 import { searchMunicipalHolidaysWithAI, searchMunicipalHolidaysForStates } from './geminiService';
-import { getMunicipalHolidaysCache, saveMunicipalHolidaysCache, isGeminiQuotaExceeded } from './apiService';
+import { getMunicipalHolidaysCache, saveMunicipalHolidaysCache, isGeminiQuotaExceeded, getNationalHolidaysFromDB, getUpcomingNationalHolidays, syncNationalHolidays } from './apiService';
 
 export interface Holiday {
   date: string; // YYYY-MM-DD
@@ -95,8 +95,42 @@ function formatDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-// Busca feriados nacionais para um ano
-export function getNationalHolidays(year: number): Holiday[] {
+// Busca feriados nacionais para um ano (do banco de dados ou cálculo local como fallback)
+export async function getNationalHolidays(year: number): Promise<Holiday[]> {
+  try {
+    // Tenta buscar do banco de dados primeiro
+    const dbHolidays = await getNationalHolidaysFromDB(year);
+    
+    if (dbHolidays && dbHolidays.length > 0) {
+      console.log(`[HolidaysService] ✅ Carregados ${dbHolidays.length} feriados nacionais de ${year} do banco de dados`);
+      return dbHolidays.sort((a, b) => a.date.localeCompare(b.date));
+    }
+    
+    // Se não encontrou no banco, tenta sincronizar da BrasilAPI
+    console.log(`[HolidaysService] 🔍 Feriados nacionais de ${year} não encontrados no banco. Sincronizando da BrasilAPI...`);
+    const syncResult = await syncNationalHolidays(year);
+    
+    if (syncResult.success && syncResult.saved > 0) {
+      // Tenta buscar novamente do banco após sincronizar
+      const syncedHolidays = await getNationalHolidaysFromDB(year);
+      if (syncedHolidays && syncedHolidays.length > 0) {
+        console.log(`[HolidaysService] ✅ Carregados ${syncedHolidays.length} feriados nacionais de ${year} após sincronização`);
+        return syncedHolidays.sort((a, b) => a.date.localeCompare(b.date));
+      }
+    }
+    
+    // Fallback: cálculo local (caso BrasilAPI não esteja disponível)
+    console.warn(`[HolidaysService] ⚠️ Usando cálculo local como fallback para feriados nacionais de ${year}`);
+    return getNationalHolidaysLocal(year);
+  } catch (error) {
+    console.error(`[HolidaysService] ❌ Erro ao buscar feriados nacionais de ${year} do banco:`, error);
+    // Fallback: cálculo local
+    return getNationalHolidaysLocal(year);
+  }
+}
+
+// Função auxiliar para cálculo local (fallback)
+function getNationalHolidaysLocal(year: number): Holiday[] {
   const holidays: Holiday[] = [];
 
   // Adiciona feriados fixos
@@ -386,20 +420,45 @@ export async function getUpcomingHolidays(
   const currentYear = today.getFullYear();
   const nextYear = endDate.getFullYear();
 
-  // Busca feriados nacionais para o ano atual e próximo
+  // Busca feriados nacionais do banco de dados
   if (onProgress) onProgress('Buscando feriados nacionais...');
-  const nationalHolidays = [
-    ...getNationalHolidays(currentYear),
-    ...(nextYear > currentYear ? getNationalHolidays(nextYear) : [])
-  ];
+  try {
+    // Tenta buscar do banco primeiro (mais eficiente)
+    const dbNationalHolidays = await getUpcomingNationalHolidays(days);
+    
+    if (dbNationalHolidays && dbNationalHolidays.length > 0) {
+      holidays.push(...dbNationalHolidays);
+      console.log(`[HolidaysService] ✅ Carregados ${dbNationalHolidays.length} feriados nacionais do banco`);
+    } else {
+      // Se não encontrou no banco, busca do banco por ano ou sincroniza
+      const nationalHolidays = [
+        ...await getNationalHolidays(currentYear),
+        ...(nextYear > currentYear ? await getNationalHolidays(nextYear) : [])
+      ];
 
-  // Filtra apenas os feriados dentro do período
-  const filteredNational = nationalHolidays.filter(h => {
-    const holidayDate = new Date(h.date);
-    return holidayDate >= today && holidayDate <= endDate;
-  });
+      // Filtra apenas os feriados dentro do período
+      const filteredNational = nationalHolidays.filter(h => {
+        const holidayDate = new Date(h.date);
+        return holidayDate >= today && holidayDate <= endDate;
+      });
 
-  holidays.push(...filteredNational);
+      holidays.push(...filteredNational);
+    }
+  } catch (error) {
+    console.error('[HolidaysService] Erro ao buscar feriados nacionais do banco, usando fallback:', error);
+    // Fallback: cálculo local
+    const nationalHolidays = [
+      ...getNationalHolidaysLocal(currentYear),
+      ...(nextYear > currentYear ? getNationalHolidaysLocal(nextYear) : [])
+    ];
+
+    const filteredNational = nationalHolidays.filter(h => {
+      const holidayDate = new Date(h.date);
+      return holidayDate >= today && holidayDate <= endDate;
+    });
+
+    holidays.push(...filteredNational);
+  }
 
   // Se tiver estados selecionados, busca feriados municipais
   if (selectedStates && selectedStates.length > 0 && geminiApiKey) {

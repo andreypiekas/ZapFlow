@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, MapPin, Flag, Building2, RefreshCw, AlertCircle, X, Download } from 'lucide-react';
 import { getUpcomingHolidays, getNationalHolidays, Holiday, BRAZILIAN_STATES } from '../services/holidaysService';
-import { loadConfig as loadConfigFromBackend } from '../services/apiService';
-
-const NATIONAL_HOLIDAYS_CACHE_KEY = 'nationalHolidaysCache';
-const NATIONAL_HOLIDAYS_LAST_UPDATE_KEY = 'nationalHolidaysLastUpdate';
+import { loadConfig as loadConfigFromBackend, getUpcomingNationalHolidays, syncNationalHolidays, validateNationalHolidays } from '../services/apiService';
 
 const Holidays: React.FC = () => {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
@@ -33,74 +30,87 @@ const Holidays: React.FC = () => {
     loadGeminiApiKey();
   }, []);
 
-  // Carrega feriados nacionais dos próximos 15 dias (com cache e atualização automática diária)
+  // Carrega feriados nacionais dos próximos 15 dias do banco de dados
   const loadNationalHolidays = async (forceUpdate: boolean = false) => {
     try {
+      setIsLoadingNational(true);
       const today = new Date();
       const endDate = new Date(today);
       endDate.setDate(today.getDate() + 15);
 
-      // Verifica cache e última atualização
-      const cachedData = localStorage.getItem(NATIONAL_HOLIDAYS_CACHE_KEY);
-      const lastUpdateStr = localStorage.getItem(NATIONAL_HOLIDAYS_LAST_UPDATE_KEY);
-      
-      if (!forceUpdate && cachedData && lastUpdateStr) {
-        const lastUpdate = new Date(lastUpdateStr);
-        const hoursSinceUpdate = (today.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60);
+      // Se for atualização forçada, sincroniza da BrasilAPI primeiro
+      if (forceUpdate) {
+        const currentYear = today.getFullYear();
+        const nextYear = endDate.getFullYear();
         
-        // Se atualizou há menos de 24 horas, usa cache
-        if (hoursSinceUpdate < 24) {
-          const cached = JSON.parse(cachedData);
-          setNationalHolidays(cached);
-          setLastUpdate(lastUpdate.toLocaleString('pt-BR'));
-          console.log('[Holidays] ✅ Usando cache de feriados nacionais (atualizado há', Math.round(hoursSinceUpdate), 'horas)');
-          return;
+        console.log('[Holidays] 🔄 Forçando sincronização de feriados nacionais...');
+        await syncNationalHolidays(currentYear);
+        if (nextYear > currentYear) {
+          await syncNationalHolidays(nextYear);
         }
+        
+        // Valida duplicações após sincronizar
+        await validateNationalHolidays();
       }
 
-      // Busca novos dados
-      setIsLoadingNational(true);
-      const currentYear = today.getFullYear();
-      const nextYear = endDate.getFullYear();
-      
-      const allNationalHolidays = [
-        ...getNationalHolidays(currentYear),
-        ...(nextYear > currentYear ? getNationalHolidays(nextYear) : [])
-      ];
-
-      // Filtra apenas os próximos 15 dias
-      const next15Days = allNationalHolidays.filter(h => {
-        const holidayDate = new Date(h.date);
-        return holidayDate >= today && holidayDate <= endDate;
-      }).sort((a, b) => a.date.localeCompare(b.date));
-
-      // Salva no cache
-      localStorage.setItem(NATIONAL_HOLIDAYS_CACHE_KEY, JSON.stringify(next15Days));
-      localStorage.setItem(NATIONAL_HOLIDAYS_LAST_UPDATE_KEY, today.toISOString());
+      // Busca do banco de dados
+      const next15Days = await getUpcomingNationalHolidays(15);
       
       setNationalHolidays(next15Days);
       setLastUpdate(today.toLocaleString('pt-BR'));
-      console.log('[Holidays] ✅ Feriados nacionais atualizados:', next15Days.length);
+      console.log('[Holidays] ✅ Feriados nacionais carregados do banco:', next15Days.length);
     } catch (err: any) {
       console.error('[Holidays] Erro ao carregar feriados nacionais:', err);
+      // Em caso de erro, tenta buscar usando a função antiga como fallback
+      try {
+        const today = new Date();
+        const currentYear = today.getFullYear();
+        const nextYear = new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000).getFullYear();
+        
+        const allNationalHolidays = [
+          ...await getNationalHolidays(currentYear),
+          ...(nextYear > currentYear ? await getNationalHolidays(nextYear) : [])
+        ];
+
+        const endDate = new Date(today);
+        endDate.setDate(today.getDate() + 15);
+        const next15Days = allNationalHolidays.filter(h => {
+          const holidayDate = new Date(h.date);
+          return holidayDate >= today && holidayDate <= endDate;
+        }).sort((a, b) => a.date.localeCompare(b.date));
+
+        setNationalHolidays(next15Days);
+        setLastUpdate(today.toLocaleString('pt-BR'));
+      } catch (fallbackErr) {
+        console.error('[Holidays] Erro no fallback:', fallbackErr);
+      }
     } finally {
       setIsLoadingNational(false);
     }
   };
 
-  // Carrega feriados nacionais ao montar e verifica atualização automática
+  // Carrega feriados nacionais ao montar
   useEffect(() => {
     loadNationalHolidays();
     
-    // Verifica a cada hora se precisa atualizar
+    // Sincroniza automaticamente uma vez por dia (verifica a cada hora)
     const interval = setInterval(() => {
-      const lastUpdateStr = localStorage.getItem(NATIONAL_HOLIDAYS_LAST_UPDATE_KEY);
-      if (lastUpdateStr) {
-        const lastUpdate = new Date(lastUpdateStr);
-        const hoursSinceUpdate = (new Date().getTime() - lastUpdate.getTime()) / (1000 * 60 * 60);
-        if (hoursSinceUpdate >= 24) {
+      const today = new Date();
+      const lastSyncKey = 'nationalHolidaysLastSync';
+      const lastSyncStr = localStorage.getItem(lastSyncKey);
+      
+      if (!lastSyncStr) {
+        // Primeira vez, sincroniza
+        console.log('[Holidays] 🔄 Primeira sincronização de feriados nacionais');
+        loadNationalHolidays(true);
+        localStorage.setItem(lastSyncKey, today.toISOString());
+      } else {
+        const lastSync = new Date(lastSyncStr);
+        const hoursSinceSync = (today.getTime() - lastSync.getTime()) / (1000 * 60 * 60);
+        if (hoursSinceSync >= 24) {
           console.log('[Holidays] 🔄 Atualização automática de feriados nacionais (passou 24h)');
-          loadNationalHolidays();
+          loadNationalHolidays(true);
+          localStorage.setItem(lastSyncKey, today.toISOString());
         }
       }
     }, 60 * 60 * 1000); // Verifica a cada 1 hora

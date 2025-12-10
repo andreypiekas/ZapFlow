@@ -18,11 +18,10 @@ import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashb
 import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance, sendDepartmentSelectionMessage, processDepartmentSelection } from './services/whatsappService';
 import { processChatbotMessages } from './services/chatbotService'; 
 import { storageService } from './services/storageService';
-import { apiService, getBackendUrl, loadConfig as loadConfigFromBackend, saveConfig as saveConfigToBackend } from './services/apiService';
+import { apiService, getBackendUrl, loadConfig as loadConfigFromBackend, saveConfig as saveConfigToBackend, getUpcomingNationalHolidays } from './services/apiService';
 import { SecurityService } from './services/securityService';
 import { io, Socket } from 'socket.io-client';
-import { getNationalHolidays, getUpcomingHolidays, Holiday, BRAZILIAN_STATES } from './services/holidaysService';
-import { loadConfig as loadConfigFromBackend } from './services/apiService'; 
+import { getNationalHolidays, getUpcomingHolidays, Holiday, BRAZILIAN_STATES } from './services/holidaysService'; 
 
 // Carrega configuração padrão (será substituída quando usuário fizer login)
 const loadConfig = (): ApiConfig => {
@@ -410,23 +409,11 @@ const App: React.FC = () => {
   useEffect(() => {
     const loadUpcomingHolidays = async () => {
       try {
-        // Primeiro carrega apenas nacionais (rápido)
+        // Primeiro carrega apenas nacionais do banco (rápido)
         const today = new Date();
-        const currentYear = today.getFullYear();
-        const nextYear = today.getFullYear() + 1;
         
-        const allNationalHolidays = [
-          ...getNationalHolidays(currentYear),
-          ...getNationalHolidays(nextYear)
-        ];
-
-        // Filtra apenas os próximos 30 dias
-        const upcomingNational = allNationalHolidays
-          .filter(h => {
-            const holidayDate = new Date(h.date);
-            return holidayDate >= today;
-          })
-          .sort((a, b) => a.date.localeCompare(b.date));
+        // Busca do banco de dados
+        const upcomingNational = await getUpcomingNationalHolidays(30);
 
         // Exibe nacionais imediatamente
         setUpcomingHolidays(upcomingNational.slice(0, 5));
