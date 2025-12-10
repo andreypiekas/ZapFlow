@@ -1754,6 +1754,14 @@ const App: React.FC = () => {
                         rawData: JSON.stringify(data).substring(0, 200)
                     });
                     
+                    // Log adicional para debug
+                    if (data && (data.key || data.data)) {
+                        const key = data.key || data.data?.key;
+                        if (key && key.remoteJid) {
+                            console.log(`[App] 🔍 [DEBUG] Socket.IO: Mensagem detectada - remoteJid=${key.remoteJid}, fromMe=${key.fromMe}`);
+                        }
+                    }
+                    
                     // Processa mensagens recebidas - múltiplos formatos possíveis
                     // Formato 1: { key: {...}, message: {...} }
                     // Formato 2: { data: { key: {...}, message: {...} } }
@@ -1795,11 +1803,15 @@ const App: React.FC = () => {
                                 
                                 // VERIFICAÇÃO CRÍTICA: Se é mensagem do usuário, verifica no banco se chat está fechado
                                 // e envia mensagem de seleção IMEDIATAMENTE, mesmo se chat não estiver no estado
+                                console.log(`[App] 🔍 [DEBUG] Socket.IO: Verificando mensagem - sender=${mapped?.sender}, remoteJid=${remoteJid}, departments.length=${departments.length}`);
+                                
                                 if (mapped.sender === 'user' && departments.length > 0) {
                                     const contactNumber = remoteJid.split('@')[0]?.replace(/\D/g, '') || '';
                                     
                                     // Verifica se chat existe no estado
                                     const chatInState = existingChatBefore;
+                                    
+                                    console.log(`[App] 🔍 [DEBUG] Socket.IO: Mensagem do usuário detectada - remoteJid=${remoteJid}, contactNumber=${contactNumber}, chatInState=${!!chatInState}, status=${chatInState?.status}`);
                                     
                                     // Se chat não está no estado OU está fechado, verifica no banco e envia mensagem
                                     if (!chatInState || chatInState.status === 'closed') {
