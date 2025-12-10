@@ -2130,7 +2130,9 @@ const App: React.FC = () => {
                                                 
                                                 // Verifica se precisa enviar mensagem de seleção de departamento após processar mensagem
                                                 // (para casos onde o operador enviou mensagem e o cliente respondeu)
-                                                if (mapped.sender === 'user' && !updatedChat.departmentId && !updatedChat.departmentSelectionSent && departments.length > 0) {
+                                                // MAS apenas se o chat ainda não foi assumido por um operador (status: 'pending' ou sem assignedTo)
+                                                if (mapped.sender === 'user' && !updatedChat.departmentId && !updatedChat.departmentSelectionSent && departments.length > 0 &&
+                                                    (updatedChat.status === 'pending' || !updatedChat.assignedTo)) {
                                                     console.log(`[App] 📤 [DEBUG] Socket.IO: Chat sem departamento após mensagem do usuário - Enviando mensagem de seleção para ${chat.id}`);
                                                     const contactNumber = updatedChat.contactNumber || (chat.id ? chat.id.split('@')[0] : null);
                                                     

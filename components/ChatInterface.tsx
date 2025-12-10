@@ -784,7 +784,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         finalizeMessageStatus(newMessage, success);
         
         // Se a mensagem foi enviada com sucesso e o chat não tem departamento, envia mensagem de seleção
-        if (success && selectedChat && !selectedChat.departmentId && !selectedChat.departmentSelectionSent && departments.length > 0) {
+        // MAS apenas se o chat ainda não foi assumido por um operador (status: 'pending' ou sem assignedTo)
+        if (success && selectedChat && !selectedChat.departmentId && !selectedChat.departmentSelectionSent && departments.length > 0 && 
+            (selectedChat.status === 'pending' || !selectedChat.assignedTo)) {
             console.log(`[ChatInterface] 📤 Chat sem departamento após envio de mensagem - Enviando mensagem de seleção de departamento para ${selectedChat.id}`);
             sendDepartmentSelectionMessage(apiConfig, targetNumber, departments)
                 .then(sent => {
