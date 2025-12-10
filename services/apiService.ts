@@ -698,30 +698,36 @@ export const getMunicipalHolidaysCacheBatch = async (
 };
 
 // Verificar se a cota do Gemini foi excedida hoje
-export const isGeminiQuotaExceeded = (): boolean => {
+export const isGeminiQuotaExceeded = async (): Promise<boolean> => {
   try {
-    const quotaExceededDate = localStorage.getItem('gemini_quota_exceeded_date');
-    if (!quotaExceededDate) return false;
+    const response = await apiService.request<{ success: boolean; quotaExceeded: boolean }>(
+      '/api/gemini/quota/check',
+      { method: 'GET' }
+    );
     
-    const exceededDate = new Date(quotaExceededDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    exceededDate.setHours(0, 0, 0, 0);
-    
-    // Se foi excedida hoje, retorna true
-    return exceededDate.getTime() === today.getTime();
-  } catch (error) {
+    if (response.success && response.quotaExceeded) {
+      return true;
+    }
+    return false;
+  } catch (error: any) {
+    console.error('[ApiService] Erro ao verificar cota do Gemini:', error);
+    // Em caso de erro, retorna false para não bloquear as buscas
     return false;
   }
 };
 
 // Marcar que a cota foi excedida
-export const setGeminiQuotaExceeded = (): void => {
+export const setGeminiQuotaExceeded = async (): Promise<void> => {
   try {
-    const today = new Date().toISOString();
-    localStorage.setItem('gemini_quota_exceeded_date', today);
-    console.warn('[ApiService] ⚠️ Cota do Gemini excedida. Buscas serão pausadas até o próximo dia.');
-  } catch (error) {
+    const response = await apiService.request<{ success: boolean; message: string }>(
+      '/api/gemini/quota/exceeded',
+      { method: 'POST' }
+    );
+    
+    if (response.success) {
+      console.warn('[ApiService] ⚠️ Cota do Gemini excedida. Buscas serão pausadas até o próximo dia.');
+    }
+  } catch (error: any) {
     console.error('[ApiService] Erro ao salvar data de cota excedida:', error);
   }
 };

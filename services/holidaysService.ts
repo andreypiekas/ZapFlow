@@ -223,7 +223,7 @@ async function getMunicipalHolidaysByCity(
   // Se não encontrou no cache ou está expirado, busca via IA
   if (geminiApiKey) {
     // Verifica se a cota foi excedida hoje antes de buscar
-    if (isGeminiQuotaExceeded()) {
+    if (await isGeminiQuotaExceeded()) {
       console.warn(`[HolidaysService] ⚠️ Cota do Gemini excedida hoje. Pulando busca para ${cityName}/${stateName}.`);
       return [];
     }
@@ -234,7 +234,7 @@ async function getMunicipalHolidaysByCity(
       const aiHolidays = await searchMunicipalHolidaysWithAI(cityName, stateName, year, geminiApiKey);
       
       // Se retornou vazio e a cota foi excedida, para a busca
-      if (aiHolidays.length === 0 && isGeminiQuotaExceeded()) {
+      if (aiHolidays.length === 0 && await isGeminiQuotaExceeded()) {
         console.warn(`[HolidaysService] ⚠️ Cota excedida durante a busca. Parando processamento.`);
         return [];
       }
@@ -308,7 +308,7 @@ export async function getMunicipalHolidaysByState(
     
     for (let i = 0; i < citiesToProcess.length; i += batchSize) {
       // Verifica se a cota foi excedida antes de processar cada batch
-      if (isGeminiQuotaExceeded()) {
+      if (await isGeminiQuotaExceeded()) {
         console.warn(`[HolidaysService] ⚠️ Cota do Gemini excedida. Parando busca de municípios de ${stateName}.`);
         break;
       }
@@ -324,7 +324,7 @@ export async function getMunicipalHolidaysByState(
       });
       
       // Se a cota foi excedida durante o batch, para
-      if (isGeminiQuotaExceeded()) {
+      if (await isGeminiQuotaExceeded()) {
         console.warn(`[HolidaysService] ⚠️ Cota excedida durante processamento. Parando busca.`);
         break;
       }
@@ -413,7 +413,7 @@ export async function getUpcomingHolidays(
     // Busca otimizada para estados principais usando Google Search
     if (priorityStatesToSearch.length > 0) {
       // Verifica se a cota foi excedida antes de buscar
-      if (isGeminiQuotaExceeded()) {
+      if (await isGeminiQuotaExceeded()) {
         console.warn(`[HolidaysService] ⚠️ Cota do Gemini excedida hoje. Pulando busca dos estados principais.`);
       } else {
         if (onProgress) {
@@ -428,7 +428,7 @@ export async function getUpcomingHolidays(
           );
           
           // Se a cota foi excedida durante a busca, para
-          if (isGeminiQuotaExceeded()) {
+          if (await isGeminiQuotaExceeded()) {
             console.warn(`[HolidaysService] ⚠️ Cota excedida durante busca dos estados principais. Parando processamento.`);
           } else {
             // Converte para formato Holiday
@@ -445,13 +445,13 @@ export async function getUpcomingHolidays(
           }
         } catch (error) {
           // Se a cota foi excedida, não tenta fallback
-          if (isGeminiQuotaExceeded()) {
+          if (await isGeminiQuotaExceeded()) {
             console.warn('[HolidaysService] ⚠️ Cota excedida. Parando busca dos estados principais.');
           } else {
             console.warn('[HolidaysService] Erro na busca otimizada dos estados principais, tentando método tradicional:', error);
             // Fallback para método tradicional se a busca otimizada falhar (apenas se cota não foi excedida)
             for (const stateCode of priorityStatesToSearch) {
-              if (isGeminiQuotaExceeded()) {
+              if (await isGeminiQuotaExceeded()) {
                 console.warn(`[HolidaysService] ⚠️ Cota excedida. Parando busca de ${stateCode}.`);
                 break;
               }
@@ -475,10 +475,11 @@ export async function getUpcomingHolidays(
     }
     
     // Busca tradicional cidade por cidade para os demais estados
-    if (otherStates.length > 0 && !isGeminiQuotaExceeded()) {
+    const quotaExceeded = await isGeminiQuotaExceeded();
+    if (otherStates.length > 0 && !quotaExceeded) {
       for (let i = 0; i < otherStates.length; i++) {
         // Verifica se a cota foi excedida antes de cada estado
-        if (isGeminiQuotaExceeded()) {
+        if (await isGeminiQuotaExceeded()) {
           console.warn(`[HolidaysService] ⚠️ Cota excedida. Parando busca dos demais estados.`);
           break;
         }
@@ -501,7 +502,7 @@ export async function getUpcomingHolidays(
         ];
         allMunicipalHolidays.push(...stateHolidays);
       }
-    } else if (otherStates.length > 0 && isGeminiQuotaExceeded()) {
+    } else if (otherStates.length > 0 && quotaExceeded) {
       console.warn(`[HolidaysService] ⚠️ Cota do Gemini excedida hoje. Pulando busca dos demais estados.`);
     }
 

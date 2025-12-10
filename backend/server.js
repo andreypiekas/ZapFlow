@@ -1655,3 +1655,93 @@ app.post('/api/holidays/municipal-cache/batch', authenticateToken, dataLimiter, 
   }
 });
 
+// ==================== Controle de Cota do Gemini ====================
+
+// Verificar se a cota do Gemini foi excedida hoje
+app.get('/api/gemini/quota/check', authenticateToken, async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+
+    const result = await pool.query(
+      `SELECT quota_exceeded_date FROM gemini_quota_control 
+       WHERE quota_exceeded_date = $1`,
+      [todayStr]
+    );
+
+    const isExceeded = result.rows.length > 0;
+    res.json({ 
+      success: true, 
+      quotaExceeded: isExceeded,
+      date: todayStr
+    });
+  } catch (error) {
+    console.error('[GeminiQuota] Erro ao verificar cota:', error);
+    res.status(500).json({ 
+      error: 'Erro ao verificar cota do Gemini',
+      details: error.message
+    });
+  }
+});
+
+// Marcar que a cota foi excedida hoje
+app.post('/api/gemini/quota/exceeded', authenticateToken, async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+
+    // Usa UPSERT para atualizar se já existir
+    await pool.query(
+      `INSERT INTO gemini_quota_control (quota_exceeded_date, last_updated)
+       VALUES ($1, CURRENT_TIMESTAMP)
+       ON CONFLICT (quota_exceeded_date)
+       DO UPDATE SET last_updated = CURRENT_TIMESTAMP`,
+      [todayStr]
+    );
+
+    console.log(`[GeminiQuota] ✅ Cota excedida marcada para ${todayStr}`);
+    res.json({ 
+      success: true, 
+      message: 'Cota excedida marcada com sucesso',
+      date: todayStr
+    });
+  } catch (error) {
+    console.error('[GeminiQuota] Erro ao marcar cota excedida:', error);
+    res.status(500).json({ 
+      error: 'Erro ao marcar cota excedida',
+      details: error.message
+    });
+  }
+});
+
+// Limpar registros antigos de cota excedida (manutenção)
+app.delete('/api/gemini/quota/cleanup', authenticateToken, async (req, res) => {
+  try {
+    // Remove registros com mais de 2 dias
+    const twoDaysAgo = new Date();
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+    const twoDaysAgoStr = twoDaysAgo.toISOString().split('T')[0];
+
+    const result = await pool.query(
+      `DELETE FROM gemini_quota_control 
+       WHERE quota_exceeded_date < $1`,
+      [twoDaysAgoStr]
+    );
+
+    console.log(`[GeminiQuota] 🧹 Limpeza: ${result.rowCount} registros antigos removidos`);
+    res.json({ 
+      success: true, 
+      message: 'Limpeza concluída',
+      deletedCount: result.rowCount
+    });
+  } catch (error) {
+    console.error('[GeminiQuota] Erro ao limpar registros antigos:', error);
+    res.status(500).json({ 
+      error: 'Erro ao limpar registros antigos',
+      details: error.message
+    });
+  }
+});
+

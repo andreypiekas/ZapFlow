@@ -75,7 +75,7 @@ export const searchMunicipalHolidaysWithAI = async (
   }
 
   // Verifica se a cota foi excedida hoje
-  if (isGeminiQuotaExceeded()) {
+  if (await isGeminiQuotaExceeded()) {
     console.warn(`[GeminiService] ⚠️ Cota do Gemini excedida hoje. Pulando busca para ${cityName}/${stateName}. Tentará novamente amanhã.`);
     return [];
   }
@@ -203,7 +203,7 @@ Responda APENAS com o JSON, sem explicações ou texto adicional.
     
     if (errorCode === 429 || errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
       console.error(`[GeminiService] ❌ Cota do Gemini excedida (429). Parando buscas até o próximo dia.`);
-      setGeminiQuotaExceeded();
+      await setGeminiQuotaExceeded();
       // Retorna array vazio e para a busca
       return [];
     }
@@ -233,7 +233,7 @@ export const searchMunicipalHolidaysForStates = async (
   }
 
   // Verifica se a cota foi excedida hoje
-  if (isGeminiQuotaExceeded()) {
+  if (await isGeminiQuotaExceeded()) {
     console.warn(`[GeminiService] ⚠️ Cota do Gemini excedida hoje. Pulando busca para estados ${states.join(', ')}. Tentará novamente amanhã.`);
     return [];
   }
@@ -380,7 +380,7 @@ Responda APENAS com o JSON, sem explicações ou texto adicional.
     
     if (errorCode === 429 || errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
       console.error(`[GeminiService] ❌ Cota do Gemini excedida (429). Parando buscas até o próximo dia.`);
-      setGeminiQuotaExceeded();
+      await setGeminiQuotaExceeded();
       // Retorna array vazio e para a busca
       return [];
     }
