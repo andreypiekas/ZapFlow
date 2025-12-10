@@ -1709,11 +1709,14 @@ const App: React.FC = () => {
                         };
                         
                         // Salva o novo chat no banco com o nome do contato se foi atualizado
-                        if (finalContactName !== realChat.contactName || finalContactAvatar !== realChat.contactAvatar) {
-                          // Salva assincronamente para não bloquear
+                        // IMPORTANTE: Só salva se realmente mudou para evitar loops infinitos
+                        const nameChanged = finalContactName !== realChat.contactName;
+                        const avatarChanged = finalContactAvatar !== realChat.contactAvatar;
+                        if (nameChanged || avatarChanged) {
+                          // Salva assincronamente para não bloquear e evitar múltiplas chamadas
                           setTimeout(() => {
                             handleUpdateChat(newChat);
-                          }, 100);
+                          }, 500);
                         }
                         
                         return newChat;
@@ -1860,6 +1863,12 @@ const App: React.FC = () => {
       }
     };
 
+    // Limpa intervalo anterior se existir (evita múltiplos intervalos)
+    if (intervalIdRef.current) {
+      clearInterval(intervalIdRef.current);
+      intervalIdRef.current = null;
+    }
+    
     // Carrega chats do banco PRIMEIRO, depois sincroniza
     loadChatsFromDatabase().then(() => {
       // Após carregar chats do banco, atualiza nomes com contatos
@@ -1868,12 +1877,15 @@ const App: React.FC = () => {
       }
       // Aguarda um pouco para garantir que o estado foi atualizado
       setTimeout(() => {
-    syncChats();
+        syncChats();
       }, 100);
     });
     
     // Polling a cada 2 segundos para detectar mensagens rapidamente (reduzido de 5s)
-    intervalIdRef.current = setInterval(syncChats, 2000);
+    // IMPORTANTE: Só cria novo intervalo se não existir um já rodando
+    if (!intervalIdRef.current) {
+      intervalIdRef.current = setInterval(syncChats, 2000);
+    }
     
     // Inicializa Socket.IO de forma assíncrona
     const initWebSocket = async (isReconnect: boolean = false) => {
