@@ -425,12 +425,6 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                           </button>
                         )}
                       </div>
-                      <div className={`inline-flex items-center gap-2 px-2 py-1 rounded-full text-xs font-semibold border ${getStatusColor(instance.status)}`}>
-                        {instance.status === 'open' ? <CheckCircle size={12} /> : 
-                         instance.status === 'connecting' ? <Clock size={12} className="animate-spin" /> : 
-                         <WifiOff size={12} />}
-                        {getStatusLabel(instance.status)}
-                      </div>
                     </div>
                   );
                 })}
@@ -452,14 +446,6 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                     <h3 className="text-lg font-bold text-slate-800 mb-2">
                       Instância: {selectedInstance}
                     </h3>
-                    {selectedInstanceData && (
-                      <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold border ${getStatusColor(selectedInstanceData.status)}`}>
-                        {selectedInstanceData.status === 'open' ? <CheckCircle size={14} /> : 
-                         selectedInstanceData.status === 'connecting' ? <Clock size={14} className="animate-spin" /> : 
-                         <WifiOff size={14} />}
-                        {getStatusLabel(selectedInstanceData.status)}
-                      </div>
-                    )}
                   </div>
 
                   {detectedName && detectedName !== config.instanceName && (
