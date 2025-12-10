@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Message } from "../types";
+import { isGeminiQuotaExceeded, setGeminiQuotaExceeded } from "./apiService";
 
 export interface MunicipalHoliday {
   date: string; // YYYY-MM-DD
@@ -70,6 +71,12 @@ export const searchMunicipalHolidaysWithAI = async (
   // Se não tiver API key, retorna array vazio
   if (!apiKey || apiKey.trim() === '') {
     console.warn("[GeminiService] API Key não configurada para busca de feriados municipais.");
+    return [];
+  }
+
+  // Verifica se a cota foi excedida hoje
+  if (isGeminiQuotaExceeded()) {
+    console.warn(`[GeminiService] ⚠️ Cota do Gemini excedida hoje. Pulando busca para ${cityName}/${stateName}. Tentará novamente amanhã.`);
     return [];
   }
 
@@ -188,7 +195,18 @@ Responda APENAS com o JSON, sem explicações ou texto adicional.
     console.log(`[GeminiService] ✅ Encontrados ${validHolidays.length} feriados municipais para ${cityName}/${stateName} em ${year}`);
     
     return validHolidays;
-  } catch (error) {
+  } catch (error: any) {
+    // Detecta erro 429 (quota excedida)
+    const errorMessage = error?.message || error?.toString() || '';
+    const errorCode = error?.status || error?.code || '';
+    
+    if (errorCode === 429 || errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+      console.error(`[GeminiService] ❌ Cota do Gemini excedida (429). Parando buscas até o próximo dia.`);
+      setGeminiQuotaExceeded();
+      // Retorna array vazio e para a busca
+      return [];
+    }
+    
     console.error(`[GeminiService] Erro ao buscar feriados municipais para ${cityName}/${stateName}:`, error);
     return [];
   }
@@ -210,6 +228,12 @@ export const searchMunicipalHolidaysForStates = async (
   }
 
   if (!states || states.length === 0) {
+    return [];
+  }
+
+  // Verifica se a cota foi excedida hoje
+  if (isGeminiQuotaExceeded()) {
+    console.warn(`[GeminiService] ⚠️ Cota do Gemini excedida hoje. Pulando busca para estados ${states.join(', ')}. Tentará novamente amanhã.`);
     return [];
   }
 
@@ -347,7 +371,18 @@ Responda APENAS com o JSON, sem explicações ou texto adicional.
     console.log(`[GeminiService] ✅ Encontrados ${validHolidays.length} feriados municipais para estados ${statesList}`);
     
     return validHolidays;
-  } catch (error) {
+  } catch (error: any) {
+    // Detecta erro 429 (quota excedida)
+    const errorMessage = error?.message || error?.toString() || '';
+    const errorCode = error?.status || error?.code || '';
+    
+    if (errorCode === 429 || errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+      console.error(`[GeminiService] ❌ Cota do Gemini excedida (429). Parando buscas até o próximo dia.`);
+      setGeminiQuotaExceeded();
+      // Retorna array vazio e para a busca
+      return [];
+    }
+    
     console.error(`[GeminiService] Erro ao buscar feriados municipais para estados ${states.join(', ')}:`, error);
     return [];
   }

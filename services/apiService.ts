@@ -697,3 +697,32 @@ export const getMunicipalHolidaysCacheBatch = async (
   }
 };
 
+// Verificar se a cota do Gemini foi excedida hoje
+export const isGeminiQuotaExceeded = (): boolean => {
+  try {
+    const quotaExceededDate = localStorage.getItem('gemini_quota_exceeded_date');
+    if (!quotaExceededDate) return false;
+    
+    const exceededDate = new Date(quotaExceededDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    exceededDate.setHours(0, 0, 0, 0);
+    
+    // Se foi excedida hoje, retorna true
+    return exceededDate.getTime() === today.getTime();
+  } catch (error) {
+    return false;
+  }
+};
+
+// Marcar que a cota foi excedida
+export const setGeminiQuotaExceeded = (): void => {
+  try {
+    const today = new Date().toISOString();
+    localStorage.setItem('gemini_quota_exceeded_date', today);
+    console.warn('[ApiService] ⚠️ Cota do Gemini excedida. Buscas serão pausadas até o próximo dia.');
+  } catch (error) {
+    console.error('[ApiService] Erro ao salvar data de cota excedida:', error);
+  }
+};
+

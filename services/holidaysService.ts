@@ -4,7 +4,7 @@
 // Cache: feriados municipais são armazenados no banco e atualizados a cada 10 dias
 
 import { searchMunicipalHolidaysWithAI, searchMunicipalHolidaysForStates } from './geminiService';
-import { getMunicipalHolidaysCache, saveMunicipalHolidaysCache } from './apiService';
+import { getMunicipalHolidaysCache, saveMunicipalHolidaysCache, isGeminiQuotaExceeded } from './apiService';
 
 export interface Holiday {
   date: string; // YYYY-MM-DD
@@ -218,10 +218,22 @@ async function getMunicipalHolidaysByCity(
 
   // Se não encontrou no cache ou está expirado, busca via IA
   if (geminiApiKey) {
+    // Verifica se a cota foi excedida hoje antes de buscar
+    if (isGeminiQuotaExceeded()) {
+      console.warn(`[HolidaysService] ⚠️ Cota do Gemini excedida hoje. Pulando busca para ${cityName}/${stateName}.`);
+      return [];
+    }
+    
     console.log(`[HolidaysService] 🤖 Cache não encontrado/expirado. Buscando feriados municipais via IA para ${cityName}/${stateName}...`);
     
     try {
       const aiHolidays = await searchMunicipalHolidaysWithAI(cityName, stateName, year, geminiApiKey);
+      
+      // Se retornou vazio e a cota foi excedida, para a busca
+      if (aiHolidays.length === 0 && isGeminiQuotaExceeded()) {
+        console.warn(`[HolidaysService] ⚠️ Cota excedida durante a busca. Parando processamento.`);
+        return [];
+      }
       
       if (aiHolidays.length > 0) {
         // Filtra apenas os próximos 15 dias
@@ -296,6 +308,12 @@ export async function getMunicipalHolidaysByState(
     const batchSize = 3; // Processa 3 municípios por vez para não sobrecarregar a IA
     
     for (let i = 0; i < citiesToProcess.length; i += batchSize) {
+      // Verifica se a cota foi excedida antes de processar cada batch
+      if (isGeminiQuotaExceeded()) {
+        console.warn(`[HolidaysService] ⚠️ Cota do Gemini excedida. Parando busca de municípios de ${stateName}.`);
+        break;
+      }
+      
       const batch = citiesToProcess.slice(i, i + batchSize);
       const batchPromises = batch.map(city => 
         getMunicipalHolidaysByCity(city.code, year, city.name, stateName, geminiApiKey)
@@ -305,6 +323,12 @@ export async function getMunicipalHolidaysByState(
       batchResults.forEach(holidays => {
         allHolidays.push(...holidays);
       });
+      
+      // Se a cota foi excedida durante o batch, para
+      if (isGeminiQuotaExceeded()) {
+        console.warn(`[HolidaysService] ⚠️ Cota excedida durante processamento. Parando busca.`);
+        break;
+      }
       
       // Callback de progresso
       if (onProgress) {
@@ -388,51 +412,77 @@ export async function getUpcomingHolidays(
     
     // Busca otimizada para estados principais usando Google Search
     if (priorityStatesToSearch.length > 0) {
-      if (onProgress) {
-        onProgress(`Buscando feriados municipais dos estados principais (${priorityStatesToSearch.join(', ')})...`);
-      }
-      
-      try {
-        const priorityHolidays = await searchMunicipalHolidaysForStates(
-          priorityStatesToSearch,
-          days,
-          geminiApiKey
-        );
+      // Verifica se a cota foi excedida antes de buscar
+      if (isGeminiQuotaExceeded()) {
+        console.warn(`[HolidaysService] ⚠️ Cota do Gemini excedida hoje. Pulando busca dos estados principais.`);
+      } else {
+        if (onProgress) {
+          onProgress(`Buscando feriados municipais dos estados principais (${priorityStatesToSearch.join(', ')})...`);
+        }
         
-        // Converte para formato Holiday
-        const formattedPriorityHolidays: Holiday[] = priorityHolidays.map(h => ({
-          date: h.date,
-          name: h.name,
-          type: 'municipal' as const,
-          city: h.city,
-          state: h.state
-        }));
-        
-        allMunicipalHolidays.push(...formattedPriorityHolidays);
-        console.log(`[HolidaysService] ✅ Encontrados ${formattedPriorityHolidays.length} feriados municipais dos estados principais`);
-      } catch (error) {
-        console.warn('[HolidaysService] Erro na busca otimizada dos estados principais, tentando método tradicional:', error);
-        // Fallback para método tradicional se a busca otimizada falhar
-        for (const stateCode of priorityStatesToSearch) {
-          const state = BRAZILIAN_STATES.find(s => s.code === stateCode);
-          const stateName = state?.name || stateCode;
+        try {
+          const priorityHolidays = await searchMunicipalHolidaysForStates(
+            priorityStatesToSearch,
+            days,
+            geminiApiKey
+          );
           
-          if (onProgress) {
-            onProgress(`Buscando feriados de ${stateName}...`);
+          // Se a cota foi excedida durante a busca, para
+          if (isGeminiQuotaExceeded()) {
+            console.warn(`[HolidaysService] ⚠️ Cota excedida durante busca dos estados principais. Parando processamento.`);
+          } else {
+            // Converte para formato Holiday
+            const formattedPriorityHolidays: Holiday[] = priorityHolidays.map(h => ({
+              date: h.date,
+              name: h.name,
+              type: 'municipal' as const,
+              city: h.city,
+              state: h.state
+            }));
+            
+            allMunicipalHolidays.push(...formattedPriorityHolidays);
+            console.log(`[HolidaysService] ✅ Encontrados ${formattedPriorityHolidays.length} feriados municipais dos estados principais`);
           }
-          
-          const stateHolidays = [
-            ...await getMunicipalHolidaysByState(stateCode, currentYear, undefined, geminiApiKey),
-            ...(nextYear > currentYear ? await getMunicipalHolidaysByState(stateCode, nextYear, undefined, geminiApiKey) : [])
-          ];
-          allMunicipalHolidays.push(...stateHolidays);
+        } catch (error) {
+          // Se a cota foi excedida, não tenta fallback
+          if (isGeminiQuotaExceeded()) {
+            console.warn('[HolidaysService] ⚠️ Cota excedida. Parando busca dos estados principais.');
+          } else {
+            console.warn('[HolidaysService] Erro na busca otimizada dos estados principais, tentando método tradicional:', error);
+            // Fallback para método tradicional se a busca otimizada falhar (apenas se cota não foi excedida)
+            for (const stateCode of priorityStatesToSearch) {
+              if (isGeminiQuotaExceeded()) {
+                console.warn(`[HolidaysService] ⚠️ Cota excedida. Parando busca de ${stateCode}.`);
+                break;
+              }
+              
+              const state = BRAZILIAN_STATES.find(s => s.code === stateCode);
+              const stateName = state?.name || stateCode;
+              
+              if (onProgress) {
+                onProgress(`Buscando feriados de ${stateName}...`);
+              }
+              
+              const stateHolidays = [
+                ...await getMunicipalHolidaysByState(stateCode, currentYear, undefined, geminiApiKey),
+                ...(nextYear > currentYear ? await getMunicipalHolidaysByState(stateCode, nextYear, undefined, geminiApiKey) : [])
+              ];
+              allMunicipalHolidays.push(...stateHolidays);
+            }
+          }
         }
       }
     }
     
     // Busca tradicional cidade por cidade para os demais estados
-    if (otherStates.length > 0) {
+    if (otherStates.length > 0 && !isGeminiQuotaExceeded()) {
       for (let i = 0; i < otherStates.length; i++) {
+        // Verifica se a cota foi excedida antes de cada estado
+        if (isGeminiQuotaExceeded()) {
+          console.warn(`[HolidaysService] ⚠️ Cota excedida. Parando busca dos demais estados.`);
+          break;
+        }
+        
         const stateCode = otherStates[i];
         const state = BRAZILIAN_STATES.find(s => s.code === stateCode);
         const stateName = state?.name || stateCode;
@@ -451,6 +501,8 @@ export async function getUpcomingHolidays(
         ];
         allMunicipalHolidays.push(...stateHolidays);
       }
+    } else if (otherStates.length > 0 && isGeminiQuotaExceeded()) {
+      console.warn(`[HolidaysService] ⚠️ Cota do Gemini excedida hoje. Pulando busca dos demais estados.`);
     }
 
     // Filtra apenas os feriados dentro do período (máximo 15 dias para municipais)
