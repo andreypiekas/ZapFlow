@@ -65,7 +65,7 @@ const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#111316] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-dark-charcoal flex items-center justify-center p-4">
       <div className="bg-[#16191F] rounded-lg shadow-2xl overflow-hidden w-full max-w-md flex flex-col border border-[#0D0F13]">
         <div className="bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] p-8 text-center">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#0D0F13] mb-4">
