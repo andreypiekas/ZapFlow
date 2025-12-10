@@ -1756,16 +1756,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             {selectedChat.status !== 'closed' ? (
                 <>
                 {isAssigned && !isAssignedToMe ? (
-                     <div className="p-4 bg-slate-100 text-center border-t border-slate-200">
-                        <p className="text-slate-500 text-sm flex items-center justify-center gap-2">
-                            <Lock size={16} /> 
+                     <div className="p-4 bg-[#0D0F13] text-center border-t border-[#111316]">
+                        <p className="text-slate-300 text-sm flex items-center justify-center gap-2">
+                            <Lock size={16} strokeWidth={2} /> 
                             Este atendimento está sendo realizado por outro agente.
                         </p>
-                        <p className="text-xs text-slate-400 mt-1">Modo apenas visualização.</p>
+                        <p className="text-xs text-slate-500 mt-1">Modo apenas visualização.</p>
                      </div>
                 ) : !isAssigned ? (
-                    <div className="p-4 bg-slate-100 border-t border-slate-200 flex flex-col items-center justify-center gap-3">
-                        <p className="text-slate-600 font-medium">Este chat ainda não possui um responsável.</p>
+                    <div className="p-4 bg-[#0D0F13] border-t border-[#111316] flex flex-col items-center justify-center gap-3">
+                        <p className="text-slate-300 font-medium">Este chat ainda não possui um responsável.</p>
                         <button 
                             onClick={handleAssumeChat}
                             className="bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] hover:from-[#00B0E6] hover:to-[#00C8B8] text-[#0D0F13] px-8 py-3 rounded-lg font-tech shadow-lg glow-gradient transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
@@ -1781,7 +1781,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                             <div className="absolute bottom-full left-0 w-full flex justify-center pb-2 pointer-events-none">
                                 <button 
                                     onClick={handleInsertGreeting}
-                                    className="pointer-events-auto bg-emerald-600 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-lg hover:bg-emerald-700 transition-transform hover:-translate-y-1 animate-in slide-in-from-bottom-2 flex items-center gap-1"
+                                    className="pointer-events-auto bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] text-xs font-tech px-4 py-1.5 rounded-full shadow-lg glow-gradient transition-all hover:-translate-y-1 hover:scale-105 animate-in slide-in-from-bottom-2 flex items-center gap-1"
                                 >
                                     👋 Enviar Saudação Inicial
                                 </button>
@@ -1790,46 +1790,46 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
                         {/* Quick Replies Menu */}
                         {showQuickReplies && (
-                            <div className="absolute bottom-full left-0 mb-2 ml-2 w-64 bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden animate-in slide-in-from-bottom-2 z-50">
-                                <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 text-xs font-bold text-slate-500 flex justify-between items-center">
+                            <div className="absolute bottom-full left-0 mb-2 ml-2 w-64 bg-[#16191F] rounded-lg shadow-xl neon-border overflow-hidden animate-in slide-in-from-bottom-2 z-50">
+                                <div className="bg-[#0D0F13] px-3 py-2 border-b border-[#111316] text-xs font-futuristic text-[#00E0D1] flex justify-between items-center circuit-line">
                                     <span>Respostas Rápidas</span>
-                                    <button onClick={() => setShowQuickReplies(false)}><X size={14} /></button>
+                                    <button onClick={() => setShowQuickReplies(false)} className="text-slate-400 hover:text-[#00E0D1]"><X size={14} strokeWidth={2} /></button>
                                 </div>
                                 <div className="max-h-48 overflow-y-auto">
                                     {quickReplies.map(qr => (
                                         <button 
                                             key={qr.id}
                                             onClick={() => { setInputText(qr.content); setShowQuickReplies(false); }}
-                                            className="w-full text-left px-3 py-2 hover:bg-emerald-50 text-sm text-slate-700 border-b border-slate-50 last:border-0"
+                                            className="w-full text-left px-3 py-2 hover:bg-[#111316] text-sm text-slate-300 border-b border-[#0D0F13] last:border-0 transition-colors"
                                         >
-                                            <span className="font-bold block text-emerald-600 text-xs mb-0.5">{qr.title}</span>
-                                            <span className="truncate block">{qr.content}</span>
+                                            <span className="font-bold block text-[#00E0D1] text-xs mb-0.5">{qr.title}</span>
+                                            <span className="truncate block text-slate-400">{qr.content}</span>
                                         </button>
                                     ))}
-                                    {quickReplies.length === 0 && <p className="p-3 text-xs text-slate-400">Nenhuma mensagem cadastrada.</p>}
+                                    {quickReplies.length === 0 && <p className="p-3 text-xs text-slate-500">Nenhuma mensagem cadastrada.</p>}
                                 </div>
                             </div>
                         )}
 
                         {/* Workflows Menu */}
                         {showWorkflowsMenu && (
-                            <div className="absolute bottom-full left-10 mb-2 w-72 bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden animate-in slide-in-from-bottom-2 z-50">
-                                <div className="bg-emerald-50 px-3 py-2 border-b border-emerald-100 text-xs font-bold text-emerald-700 flex justify-between items-center">
-                                    <span className="flex items-center gap-2"><ListChecks size={14}/> Iniciar Fluxo de Atendimento</span>
-                                    <button onClick={() => setShowWorkflowsMenu(false)}><X size={14} /></button>
+                            <div className="absolute bottom-full left-10 mb-2 w-72 bg-[#16191F] rounded-lg shadow-xl neon-border overflow-hidden animate-in slide-in-from-bottom-2 z-50">
+                                <div className="bg-gradient-to-r from-[#00C3FF]/20 to-[#00E0D1]/20 px-3 py-2 border-b border-[#00E0D1]/30 text-xs font-futuristic text-[#00E0D1] flex justify-between items-center circuit-line">
+                                    <span className="flex items-center gap-2"><ListChecks size={14} strokeWidth={2}/> Iniciar Fluxo de Atendimento</span>
+                                    <button onClick={() => setShowWorkflowsMenu(false)} className="text-slate-400 hover:text-[#00E0D1]"><X size={14} strokeWidth={2} /></button>
                                 </div>
                                 <div className="max-h-48 overflow-y-auto">
                                     {workflows.map(wf => (
                                         <button 
                                             key={wf.id}
                                             onClick={() => handleStartWorkflow(wf)}
-                                            className="w-full text-left px-3 py-2 hover:bg-emerald-50 text-sm text-slate-700 border-b border-slate-50 last:border-0"
+                                            className="w-full text-left px-3 py-2 hover:bg-[#111316] text-sm text-slate-300 border-b border-[#0D0F13] last:border-0 transition-colors"
                                         >
-                                            <span className="font-semibold block text-slate-800">{wf.title}</span>
+                                            <span className="font-semibold block text-slate-200">{wf.title}</span>
                                             <span className="text-xs text-slate-500">{wf.steps.length} etapas</span>
                                         </button>
                                     ))}
-                                    {workflows.length === 0 && <p className="p-3 text-xs text-slate-400">Nenhum fluxo cadastrado.</p>}
+                                    {workflows.length === 0 && <p className="p-3 text-xs text-slate-500">Nenhum fluxo cadastrado.</p>}
                                 </div>
                             </div>
                         )}
@@ -1872,54 +1872,54 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
                         {/* Reply Preview Area */}
                         {replyingTo && (
-                            <div className="bg-slate-200 p-3 rounded-t-lg border-b border-slate-300 flex items-center justify-between animate-in slide-in-from-bottom-2">
+                            <div className="bg-[#16191F] p-3 rounded-t-lg border-b border-[#0D0F13] flex items-center justify-between animate-in slide-in-from-bottom-2 neon-border">
                                 <div className="flex items-center gap-3 overflow-hidden flex-1">
                                     <div className={`w-0.5 h-10 rounded ${
-                                        replyingTo.sender === 'user' ? 'bg-blue-400' : 'bg-emerald-400'
+                                        replyingTo.sender === 'user' ? 'bg-[#00E0D1]' : 'bg-[#0074FF]'
                                     }`} />
                                     <div className="flex-1 min-w-0">
-                                        <div className="text-xs font-semibold text-slate-700">
+                                        <div className="text-xs font-semibold text-slate-200">
                                             {replyingTo.sender === 'user' ? selectedChat?.contactName : currentUser.name}
                                         </div>
-                                        <div className="text-xs text-slate-500 truncate">
+                                        <div className="text-xs text-slate-400 truncate">
                                             {replyingTo.content.length > 60 ? replyingTo.content.substring(0, 60) + '...' : replyingTo.content}
                                         </div>
                                     </div>
                                 </div>
                                 <button 
                                     onClick={handleCancelReply} 
-                                    className="p-1 hover:bg-slate-300 rounded-full text-slate-500 flex-shrink-0"
+                                    className="p-1 hover:bg-[#111316] rounded-full text-slate-400 hover:text-[#00E0D1] flex-shrink-0 transition-colors"
                                     title="Cancelar resposta"
                                 >
-                                    <X size={18} />
+                                    <X size={18} strokeWidth={2} />
                                 </button>
                             </div>
                         )}
 
                         {/* Attachment Preview Area */}
                         {selectedFile && (
-                            <div className="bg-slate-200 p-3 rounded-t-lg border-b border-slate-300 flex items-center justify-between animate-in slide-in-from-bottom-2">
+                            <div className="bg-[#16191F] p-3 rounded-t-lg border-b border-[#0D0F13] flex items-center justify-between animate-in slide-in-from-bottom-2 neon-border">
                             <div className="flex items-center gap-3 overflow-hidden">
                                 {filePreview ? (
-                                    <img src={filePreview} className="w-12 h-12 object-cover rounded-md border border-white" alt="Preview" />
+                                    <img src={filePreview} className="w-12 h-12 object-cover rounded-md border border-[#0D0F13]" alt="Preview" />
                                 ) : (
-                                    <div className="w-12 h-12 bg-white rounded-md flex items-center justify-center text-emerald-600"><FileIcon /></div>
+                                    <div className="w-12 h-12 bg-[#0D0F13] rounded-md flex items-center justify-center text-[#00E0D1] border border-[#00E0D1]/20"><FileIcon strokeWidth={2} /></div>
                                 )}
                                 <div>
-                                    <p className="text-sm font-semibold truncate max-w-[150px] text-slate-800">{selectedFile.name}</p>
-                                    <p className="text-xs text-slate-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                                    <p className="text-sm font-semibold truncate max-w-[150px] text-slate-200">{selectedFile.name}</p>
+                                    <p className="text-xs text-slate-400">{(selectedFile.size / 1024).toFixed(1)} KB</p>
                                 </div>
                             </div>
-                            <button onClick={clearAttachment} className="p-1 hover:bg-slate-300 rounded-full text-slate-500">
-                                <X size={20} />
+                            <button onClick={clearAttachment} className="p-1 hover:bg-[#111316] rounded-full text-slate-400 hover:text-[#00E0D1] transition-colors">
+                                <X size={20} strokeWidth={2} />
                             </button>
                             </div>
                         )}
 
                         {/* AI Badge */}
                         {isGeneratingAI && (
-                            <div className="absolute -top-10 left-4 bg-emerald-600 text-white text-xs px-3 py-1 rounded-full animate-pulse flex items-center gap-2">
-                            <Bot size={12} /> Gemini AI gerando resposta...
+                            <div className="absolute -top-10 left-4 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] text-xs px-3 py-1 rounded-full pulse-glow flex items-center gap-2 font-medium">
+                            <Bot size={12} strokeWidth={2.5} /> Gemini AI gerando resposta...
                             </div>
                         )}
                         
@@ -1935,24 +1935,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
                             {isRecording ? (
                                 // Recording UI
-                                <div className="flex-1 flex items-center gap-2 md:gap-4 bg-white px-2 md:px-4 py-3 rounded-full shadow-sm animate-in fade-in">
+                                <div className="flex-1 flex items-center gap-2 md:gap-4 bg-[#16191F] px-2 md:px-4 py-3 rounded-full shadow-sm animate-in fade-in neon-border">
                                     <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse flex-shrink-0" />
-                                    <span className="text-slate-700 font-mono font-medium min-w-[40px] text-sm">{formatTime(recordingTime)}</span>
+                                    <span className="text-slate-200 font-mono font-medium min-w-[40px] text-sm">{formatTime(recordingTime)}</span>
                                     <div className="flex-1 text-xs text-slate-400 truncate">Gravando...</div>
                                     
                                     <button 
                                     onClick={cancelRecording} 
-                                    className="p-2 text-red-500 hover:bg-red-50 rounded-full"
+                                    className="p-2 text-red-400 hover:bg-red-500/20 rounded-full transition-colors"
                                     title="Cancelar"
                                     >
-                                        <Trash2 size={20} />
+                                        <Trash2 size={20} strokeWidth={2} />
                                     </button>
                                     <button 
                                     onClick={() => stopRecording(true)} 
-                                    className="p-2 bg-emerald-500 text-white rounded-full hover:bg-emerald-600"
+                                    className="p-2 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] rounded-full hover:from-[#00B0E6] hover:to-[#00C8B8] shadow-lg glow-gradient transition-all"
                                     title="Enviar Áudio"
                                     >
-                                        <Send size={18} />
+                                        <Send size={18} strokeWidth={2.5} />
                                     </button>
                                 </div>
                             ) : (
@@ -1960,37 +1960,37 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                                 <>
                                     <button 
                                         onClick={() => setShowQuickReplies(!showQuickReplies)}
-                                        className="p-2 rounded-full text-slate-500 hover:bg-slate-200 transition-colors flex-shrink-0"
+                                        className="p-2 rounded-full text-slate-400 hover:text-[#00E0D1] hover:bg-[#111316] transition-colors flex-shrink-0"
                                         title="Mensagens Rápidas"
                                     >
-                                        <Zap size={20} />
+                                        <Zap size={20} strokeWidth={2} />
                                     </button>
                                     <button 
                                         onClick={() => setShowWorkflowsMenu(!showWorkflowsMenu)}
-                                        className={`p-2 rounded-full transition-colors flex-shrink-0 ${showWorkflowsMenu || activeWorkflowDef ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:bg-slate-200'}`}
+                                        className={`p-2 rounded-full transition-colors flex-shrink-0 ${showWorkflowsMenu || activeWorkflowDef ? 'text-[#00E0D1] bg-[#00E0D1]/20' : 'text-slate-400 hover:text-[#00E0D1] hover:bg-[#111316]'}`}
                                         title="Fluxos de Atendimento"
                                     >
-                                        <ListChecks size={20} />
+                                        <ListChecks size={20} strokeWidth={2} />
                                     </button>
                                     <button 
                                         onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                                        className={`p-2 rounded-full transition-colors flex-shrink-0 ${showEmojiPicker ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 hover:bg-slate-200'}`}
+                                        className={`p-2 rounded-full transition-colors flex-shrink-0 ${showEmojiPicker ? 'text-[#00E0D1] bg-[#00E0D1]/20' : 'text-slate-400 hover:text-[#00E0D1] hover:bg-[#111316]'}`}
                                         title="Emojis e Figurinhas"
                                     >
-                                        <Smile size={20} />
+                                        <Smile size={20} strokeWidth={2} />
                                     </button>
                                     <button 
                                         onClick={() => fileInputRef.current?.click()}
-                                        className={`p-2 rounded-full transition-colors flex-shrink-0 ${selectedFile ? 'text-emerald-600 bg-emerald-100' : 'text-slate-500 hover:bg-slate-200'}`}
+                                        className={`p-2 rounded-full transition-colors flex-shrink-0 ${selectedFile ? 'text-[#00E0D1] bg-[#00E0D1]/20' : 'text-slate-400 hover:text-[#00E0D1] hover:bg-[#111316]'}`}
                                     >
-                                        <Paperclip size={20} />
+                                        <Paperclip size={20} strokeWidth={2} />
                                     </button>
                                     <button 
                                         onClick={() => setIsContactModalOpen(true)}
-                                        className="p-2 rounded-full transition-colors flex-shrink-0 text-slate-500 hover:bg-slate-200"
+                                        className="p-2 rounded-full transition-colors flex-shrink-0 text-slate-400 hover:text-[#00E0D1] hover:bg-[#111316]"
                                         title="Enviar contato"
                                     >
-                                        <UserIcon size={20} />
+                                        <UserIcon size={20} strokeWidth={2} />
                                     </button>
                                     
                                     <div className="flex-1 relative">
@@ -2001,15 +2001,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                                         onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                                         placeholder={selectedFile ? "Legenda..." : replyingTo ? "Digite sua resposta..." : "Mensagem"}
                                         disabled={isSending}
-                                        className={`w-full px-4 py-3 rounded-lg border-none focus:ring-0 outline-none bg-white shadow-sm pr-10 text-sm ${selectedFile || replyingTo ? 'rounded-tl-none rounded-tr-none' : ''}`}
+                                        className={`w-full px-4 py-3 rounded-lg border border-[#0D0F13] focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none bg-[#16191F] text-slate-200 shadow-sm pr-10 text-sm placeholder:text-slate-500 ${selectedFile || replyingTo ? 'rounded-tl-none rounded-tr-none' : ''}`}
                                         />
                                         {!inputText && !selectedFile && (
                                             <button 
                                                 onClick={handleGenerateAI}
-                                                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-purple-600 hover:text-purple-700 hover:bg-purple-50 p-1.5 rounded-full transition-colors"
+                                                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-[#00E0D1] hover:text-[#00C3FF] hover:bg-[#00E0D1]/10 p-1.5 rounded-full transition-colors"
                                                 title="Sugerir resposta com IA"
                                             >
-                                            <Bot size={18} />
+                                            <Bot size={18} strokeWidth={2} />
                                             </button>
                                         )}
                                     </div>
@@ -2018,16 +2018,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                                         <button 
                                             onClick={handleSendMessage}
                                             disabled={isSending}
-                                            className="p-3 bg-emerald-600 text-white rounded-full hover:bg-emerald-700 shadow-md transition-transform hover:scale-105 active:scale-95 disabled:bg-slate-400 disabled:scale-100 flex-shrink-0"
+                                            className="p-3 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] rounded-full hover:from-[#00B0E6] hover:to-[#00C8B8] shadow-lg glow-gradient transition-all hover:scale-105 active:scale-95 disabled:from-slate-600 disabled:to-slate-600 disabled:scale-100 flex-shrink-0"
                                         >
-                                            <Send size={20} />
+                                            <Send size={20} strokeWidth={2.5} />
                                         </button>
                                     ) : (
                                         <button 
                                             onClick={startRecording}
-                                            className="p-3 bg-slate-200 text-slate-600 rounded-full hover:bg-slate-300 shadow-sm transition-transform hover:scale-105 active:scale-95 flex-shrink-0"
+                                            className="p-3 bg-[#16191F] text-slate-400 border border-[#0D0F13] rounded-full hover:bg-[#111316] hover:text-[#00E0D1] hover:border-[#00E0D1]/30 shadow-sm transition-all hover:scale-105 active:scale-95 flex-shrink-0"
                                         >
-                                            <Mic size={20} />
+                                            <Mic size={20} strokeWidth={2} />
                                         </button>
                                     )}
                                 </>
@@ -2037,15 +2037,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 )}
                 </>
             ) : (
-              <div className="p-4 bg-slate-100 text-center text-slate-500 text-sm border-t border-slate-200">
+              <div className="p-4 bg-[#0D0F13] text-center text-slate-400 text-sm border-t border-[#111316]">
                 Esta conversa foi finalizada.
               </div>
             )}
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-slate-50 border-b-8 border-emerald-500">
-            <div className="bg-emerald-100 p-6 rounded-full mb-4">
-               <MessageSquare size={48} className="text-emerald-600" />
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-[#111316] border-b-8 border-[#00E0D1]">
+            <div className="bg-gradient-to-r from-[#00C3FF]/20 to-[#00E0D1]/20 p-6 rounded-full mb-4 glow-cyan">
+               <MessageSquare size={48} className="text-[#00E0D1]" strokeWidth={2} />
             </div>
             <h2 className="text-xl font-medium text-slate-700">Zentria Manager</h2>
             <p className="mt-2 text-sm">Selecione uma conversa para iniciar o atendimento</p>

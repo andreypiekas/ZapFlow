@@ -234,12 +234,12 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
 
   return (
     <div className="max-w-4xl mx-auto py-8">
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-6 border-b border-slate-200">
+      <div className="bg-[#16191F] rounded-xl shadow-lg neon-border overflow-hidden">
+        <div className="p-6 border-b border-[#0D0F13] circuit-line">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold text-slate-800">Configurações</h2>
-              <p className="text-slate-500 text-sm mt-1">
+              <h2 className="text-xl font-futuristic text-slate-200">Configurações</h2>
+              <p className="text-slate-400 text-sm mt-1">
                 {isAdmin 
                   ? 'Configure a conexão com sua instância do WhatsApp e integrações externas.'
                   : 'Gerencie suas preferências de notificações.'}
@@ -248,10 +248,10 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
             {/* Indicador de Armazenamento */}
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border ${
               storageStatus === 'api' 
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                ? 'bg-[#00E0D1]/20 text-[#00E0D1] border-[#00E0D1]/30 glow-cyan' 
                 : storageStatus === 'checking'
-                ? 'bg-blue-50 text-blue-700 border-blue-200'
-                : 'bg-amber-50 text-amber-700 border-amber-200'
+                ? 'bg-[#0074FF]/20 text-[#0074FF] border-[#0074FF]/30'
+                : 'bg-orange-500/20 text-orange-400 border-orange-500/30'
             }`}>
               {storageStatus === 'api' ? (
                 <>
@@ -273,18 +273,18 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
           </div>
           {/* Informação detalhada sobre armazenamento */}
           {storageStatus !== 'checking' && (
-            <div className={`mt-3 p-2 rounded text-xs ${
+            <div className={`mt-3 p-2 rounded-lg text-xs neon-border ${
               storageStatus === 'api' 
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                ? 'bg-[#00E0D1]/10 text-[#00E0D1] border-[#00E0D1]/30' 
+                : 'bg-orange-500/10 text-orange-400 border-orange-500/30'
             }`}>
               {storageStatus === 'api' ? (
                 <div className="flex items-start gap-2">
-                  <Database size={14} className="mt-0.5 flex-shrink-0" />
+                  <Database size={14} className="mt-0.5 flex-shrink-0" strokeWidth={2} />
                   <div>
-                    <p className="font-semibold">Dados salvos no PostgreSQL</p>
-                    <p className="text-emerald-600">Seus dados estão sendo persistidos no banco de dados e estarão disponíveis em qualquer navegador após login.</p>
-                    {apiUrl && <p className="text-emerald-600 mt-1">API: {apiUrl}</p>}
+                    <p className="font-semibold text-slate-200">Dados salvos no PostgreSQL</p>
+                    <p className="text-[#00E0D1]">Seus dados estão sendo persistidos no banco de dados e estarão disponíveis em qualquer navegador após login.</p>
+                    {apiUrl && <p className="text-[#00E0D1] mt-1">API: {apiUrl}</p>}
                   </div>
                 </div>
               ) : (
