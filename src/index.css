@@ -11,27 +11,12 @@ body {
 
 /* Background com vinheta radial e glow centralizado */
 .bg-dark-charcoal {
-  background-color: #111317;
-  position: relative;
-}
-
-.bg-dark-charcoal::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
   background: 
     radial-gradient(circle at center, rgba(0, 163, 204, 0.18) 0%, transparent 70%),
-    radial-gradient(ellipse at center, transparent 0%, rgba(5, 5, 6, 0.8) 100%);
-  pointer-events: none;
-  z-index: 0;
-}
-
-.bg-dark-charcoal > * {
-  position: relative;
-  z-index: 1;
+    radial-gradient(ellipse at center, transparent 0%, rgba(5, 5, 6, 0.8) 100%),
+    #111317;
+  background-attachment: fixed;
+  min-height: 100vh;
 }
 
 /* Tipografia futurista para títulos */
