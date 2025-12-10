@@ -1276,6 +1276,136 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
   }
 });
 
+// ============================================================================
+// Endpoint para deletar um chat (apenas ADMIN)
+// Deleta do banco de dados e na Evolution API/WhatsApp
+// ============================================================================
+app.delete('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    // Verifica se o usuário é admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Apenas administradores podem deletar chats' });
+    }
+
+    const { chatId } = req.params;
+    const decodedChatId = decodeURIComponent(chatId);
+
+    console.log(`[DELETE /api/chats/:chatId] Deletando chat: ${decodedChatId} (usuário: ${req.user.username})`);
+
+    // Busca o chat no banco para obter informações necessárias
+    const chatResult = await pool.query(
+      `SELECT data_value FROM user_data 
+       WHERE user_id = $1 AND data_type = 'chats' AND data_key = $2`,
+      [req.user.id, decodedChatId]
+    );
+
+    let chatData = null;
+    if (chatResult.rows.length > 0) {
+      try {
+        chatData = JSON.parse(chatResult.rows[0].data_value);
+      } catch (parseError) {
+        console.warn(`[DELETE /api/chats/:chatId] Erro ao fazer parse do chat:`, parseError);
+      }
+    }
+
+    // Obtém a instância ativa e configuração da API
+    const configResult = await pool.query(
+      `SELECT data_value FROM user_data 
+       WHERE user_id = $1 AND data_type = 'config' AND data_key = 'default'`,
+      [req.user.id]
+    );
+
+    let apiConfig = null;
+    if (configResult.rows.length > 0) {
+      try {
+        apiConfig = JSON.parse(configResult.rows[0].data_value);
+      } catch (parseError) {
+        console.warn(`[DELETE /api/chats/:chatId] Erro ao fazer parse da config:`, parseError);
+      }
+    }
+
+    // Deleta na Evolution API se tiver configuração
+    if (apiConfig && apiConfig.baseUrl && !apiConfig.isDemo) {
+      try {
+        // Busca instância ativa
+        const activeInstance = chatData?.instanceName || apiConfig.instanceName;
+        
+        if (activeInstance) {
+          const authKey = apiConfig.authenticationApiKey || apiConfig.apiKey || '';
+          
+          // Usa fetch nativo (Node.js 18+) ou importa node-fetch se necessário
+          let fetchFunction;
+          try {
+            // Tenta usar fetch global (Node.js 18+)
+            fetchFunction = globalThis.fetch || fetch;
+            if (!fetchFunction) {
+              // Se não tiver, tenta importar node-fetch
+              const nodeFetch = await import('node-fetch');
+              fetchFunction = nodeFetch.default;
+            }
+          } catch (importError) {
+            console.warn(`[DELETE /api/chats/:chatId] ⚠️ Não foi possível importar fetch, pulando deleção na Evolution API`);
+            fetchFunction = null;
+          }
+
+          if (fetchFunction) {
+            const evolutionResponse = await fetchFunction(`${apiConfig.baseUrl}/chat/delete/${activeInstance}`, {
+              method: 'DELETE',
+              headers: {
+                'apikey': authKey,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                remoteJid: decodedChatId
+              })
+            });
+
+            if (evolutionResponse.ok) {
+              console.log(`[DELETE /api/chats/:chatId] ✅ Chat deletado na Evolution API: ${decodedChatId}`);
+            } else {
+              const errorText = await evolutionResponse.text();
+              console.warn(`[DELETE /api/chats/:chatId] ⚠️ Erro ao deletar na Evolution API: ${evolutionResponse.status} - ${errorText}`);
+              // Continua mesmo se falhar na Evolution API, ainda deleta do banco
+            }
+          }
+        }
+      } catch (evolutionError) {
+        console.error(`[DELETE /api/chats/:chatId] ❌ Erro ao deletar na Evolution API:`, evolutionError);
+        // Continua mesmo se falhar na Evolution API, ainda deleta do banco
+      }
+    }
+
+    // Deleta do banco de dados
+    const deleteResult = await pool.query(
+      `DELETE FROM user_data 
+       WHERE user_id = $1 AND data_type = 'chats' AND data_key = $2`,
+      [req.user.id, decodedChatId]
+    );
+
+    if (deleteResult.rowCount > 0) {
+      console.log(`[DELETE /api/chats/:chatId] ✅ Chat deletado do banco de dados: ${decodedChatId}`);
+      res.json({ 
+        success: true, 
+        message: 'Chat deletado com sucesso',
+        deletedFromDB: true,
+        deletedFromEvolution: apiConfig && apiConfig.baseUrl && !apiConfig.isDemo
+      });
+    } else {
+      console.warn(`[DELETE /api/chats/:chatId] ⚠️ Chat não encontrado no banco: ${decodedChatId}`);
+      res.status(404).json({ 
+        success: false, 
+        error: 'Chat não encontrado' 
+      });
+    }
+  } catch (error) {
+    console.error('[DELETE /api/chats/:chatId] Erro ao deletar chat:', error);
+    res.status(500).json({ 
+      error: 'Erro ao deletar chat', 
+      details: error.message 
+    });
+  }
+});
+
 // Rota raiz
 app.get('/', (req, res) => {
   res.json({ 

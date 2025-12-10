@@ -837,3 +837,39 @@ export const validateNationalHolidays = async (): Promise<{ success: boolean; re
   }
 };
 
+// ==================== Deletar Chat ====================
+
+// Deletar um chat (apenas ADMIN)
+export const deleteChat = async (chatId: string): Promise<{ success: boolean; message?: string; error?: string }> => {
+  try {
+    const response = await apiService.request<{ 
+      success: boolean; 
+      message?: string;
+      deletedFromDB?: boolean;
+      deletedFromEvolution?: boolean;
+    }>(
+      `/api/chats/${encodeURIComponent(chatId)}`,
+      { method: 'DELETE' }
+    );
+    
+    if (response.success) {
+      console.log(`[ApiService] ✅ Chat deletado com sucesso: ${chatId}`);
+      return { 
+        success: true, 
+        message: response.message || 'Chat deletado com sucesso' 
+      };
+    }
+    
+    return { 
+      success: false, 
+      error: response.error || 'Erro ao deletar chat' 
+    };
+  } catch (error: any) {
+    console.error('[ApiService] Erro ao deletar chat:', error);
+    return { 
+      success: false, 
+      error: error?.message || 'Erro ao deletar chat' 
+    };
+  }
+};
+

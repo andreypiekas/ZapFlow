@@ -2202,3 +2202,36 @@ export const getInstanceQRCode = async (config: ApiConfig, instanceName: string)
         return null;
     }
 };
+
+// Deleta um chat na Evolution API e no WhatsApp
+export const deleteChat = async (config: ApiConfig, instanceName: string, remoteJid: string): Promise<boolean> => {
+    if (config.isDemo || !config.baseUrl) return false;
+    
+    try {
+        // Evolution API endpoint para deletar chat
+        // Documentação: https://doc.evolution-api.com/v2/api-reference/chat-controller/delete-chat
+        const response = await fetch(`${config.baseUrl}/chat/delete/${instanceName}`, {
+            method: 'DELETE',
+            headers: {
+                'apikey': getAuthKey(config),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                remoteJid: remoteJid
+            })
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[deleteChat] Erro na Evolution API: ${response.status} - ${errorText}`);
+            return false;
+        }
+        
+        const result = await response.json();
+        console.log(`[deleteChat] ✅ Chat deletado com sucesso: ${remoteJid}`);
+        return result?.status === 'success' || response.ok;
+    } catch (error) {
+        console.error('[deleteChat] Erro ao deletar chat:', error);
+        return false;
+    }
+};

@@ -3,6 +3,7 @@ import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLe
 import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow, Contact } from '../types';
 import { generateSmartReply } from '../services/geminiService';
 import { sendRealMessage, sendRealMediaMessage, blobToBase64, sendRealContact, sendDepartmentSelectionMessage } from '../services/whatsappService';
+import { deleteChat as deleteChatApi } from '../services/apiService';
 import { AVAILABLE_TAGS, EMOJIS, STICKERS } from '../constants';
 
 interface ChatInterfaceProps {
@@ -224,6 +225,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const [showTagMenu, setShowTagMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [messageSearchTerm, setMessageSearchTerm] = useState('');
+  const [chatToDelete, setChatToDelete] = useState<Chat | null>(null);
+  const [isDeletingChat, setIsDeletingChat] = useState(false);
 
   // New Chat Modal
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
@@ -715,6 +718,36 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         alert('Erro ao enviar contato. Tente novamente.');
     } finally {
         setIsSending(false);
+    }
+  };
+
+  const handleDeleteChat = async () => {
+    if (!chatToDelete) return;
+    
+    setIsDeletingChat(true);
+    try {
+      const result = await deleteChatApi(chatToDelete.id);
+      
+      if (result.success) {
+        // Remove o chat da lista local
+        const updatedChats = chats.filter(c => c.id !== chatToDelete.id);
+        // Atualiza o estado no componente pai (se necessário)
+        // Se o chat deletado estava selecionado, deseleciona
+        if (selectedChatId === chatToDelete.id) {
+          setSelectedChatId(null);
+        }
+        // Fecha o modal
+        setChatToDelete(null);
+        // Recarrega a página ou atualiza a lista de chats
+        window.location.reload(); // Recarrega para garantir que o chat seja removido
+      } else {
+        alert(`Erro ao deletar chat: ${result.error || 'Erro desconhecido'}`);
+      }
+    } catch (error: any) {
+      console.error('[ChatInterface] Erro ao deletar chat:', error);
+      alert(`Erro ao deletar chat: ${error?.message || 'Erro desconhecido'}`);
+    } finally {
+      setIsDeletingChat(false);
     }
   };
 
@@ -1314,9 +1347,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
               className={`p-4 border-b border-slate-100 cursor-pointer hover:bg-emerald-50 transition-colors ${selectedChatId === chat.id ? 'bg-emerald-50 border-emerald-200' : ''}`}
             >
               <div className="flex justify-between items-start mb-1">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-1">
                   <img src={chat.contactAvatar} alt="" className="w-10 h-10 rounded-full object-cover" />
-                  <div>
+                  <div className="flex-1">
                     <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-1">
                       {chat.contactName}
                       {chat.clientCode && (
@@ -1325,6 +1358,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                     </h3>
                     <p className="text-xs text-slate-500">{chat.contactNumber}</p>
                   </div>
+                  {currentUser.role === 'admin' && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setChatToDelete(chat);
+                      }}
+                      className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                      title="Excluir chat"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
                 <div className="text-right">
                   <span className="text-xs text-slate-400 block whitespace-nowrap">
@@ -2143,6 +2188,53 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             >
               Cancelar
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Chat Confirmation Modal */}
+      {chatToDelete && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 animate-in zoom-in duration-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-100 rounded-lg">
+                <Trash2 className="text-red-600" size={24} />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800">Excluir Chat</h3>
+            </div>
+            <p className="text-slate-600 mb-6">
+              Tem certeza que deseja excluir o chat com <strong>{chatToDelete.contactName}</strong>?
+              <br />
+              <span className="text-sm text-slate-500 mt-2 block">
+                Esta ação irá excluir o chat do banco de dados, da Evolution API e do WhatsApp. Esta ação não pode ser desfeita.
+              </span>
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setChatToDelete(null)}
+                disabled={isDeletingChat}
+                className="flex-1 py-2 px-4 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeleteChat}
+                disabled={isDeletingChat}
+                className="flex-1 py-2 px-4 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isDeletingChat ? (
+                  <>
+                    <RefreshCw size={16} className="animate-spin" />
+                    Excluindo...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={16} />
+                    Excluir
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
