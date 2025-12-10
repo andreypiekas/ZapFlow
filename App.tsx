@@ -14,13 +14,14 @@ import ReportsDashboard from './components/ReportsDashboard';
 import Contacts from './components/Contacts';
 import ChatbotSettings from './components/ChatbotSettings';
 import Holidays from './components/Holidays';
-import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot, ChevronLeft, ChevronRight, Calendar, Flag } from 'lucide-react';
 import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance, sendDepartmentSelectionMessage, processDepartmentSelection } from './services/whatsappService';
 import { processChatbotMessages } from './services/chatbotService'; 
 import { storageService } from './services/storageService';
 import { apiService, getBackendUrl, loadConfig as loadConfigFromBackend, saveConfig as saveConfigToBackend } from './services/apiService';
 import { SecurityService } from './services/securityService';
-import { io, Socket } from 'socket.io-client'; 
+import { io, Socket } from 'socket.io-client';
+import { getNationalHolidays, Holiday } from './services/holidaysService'; 
 
 // Carrega configuração padrão (será substituída quando usuário fizer login)
 const loadConfig = (): ApiConfig => {
@@ -234,6 +235,7 @@ const App: React.FC = () => {
   const [forceSelectChatId, setForceSelectChatId] = useState<string | null>(null);
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [upcomingHolidays, setUpcomingHolidays] = useState<Holiday[]>([]);
 
   // Configurações são salvas apenas via handleSaveConfig (endpoint /api/config)
   // Não salvar automaticamente aqui para evitar conflitos com configurações globais
@@ -401,6 +403,43 @@ const App: React.FC = () => {
 
     loadInitialData();
   }, []); // Executa apenas uma vez quando o componente montar
+
+  // Carrega feriados nacionais próximos para o dashboard
+  useEffect(() => {
+    const loadUpcomingHolidays = () => {
+      try {
+        const today = new Date();
+        const endDate = new Date(today);
+        endDate.setDate(today.getDate() + 30); // Próximos 30 dias
+
+        const currentYear = today.getFullYear();
+        const nextYear = endDate.getFullYear();
+        
+        const allNationalHolidays = [
+          ...getNationalHolidays(currentYear),
+          ...(nextYear > currentYear ? getNationalHolidays(nextYear) : [])
+        ];
+
+        // Filtra apenas os próximos 30 dias e ordena por data
+        const upcoming = allNationalHolidays
+          .filter(h => {
+            const holidayDate = new Date(h.date);
+            return holidayDate >= today && holidayDate <= endDate;
+          })
+          .sort((a, b) => a.date.localeCompare(b.date))
+          .slice(0, 5); // Apenas os 5 próximos
+
+        setUpcomingHolidays(upcoming);
+      } catch (error) {
+        console.error('[App] Erro ao carregar feriados:', error);
+      }
+    };
+
+    loadUpcomingHolidays();
+    // Atualiza uma vez por dia
+    const interval = setInterval(loadUpcomingHolidays, 24 * 60 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Verifica se o backend está disponível ao montar o componente
   useEffect(() => {
@@ -3914,6 +3953,77 @@ const App: React.FC = () => {
                 {currentUser.role === 'AGENT' && currentUser.allowGeneralConnection && <span className="block mt-2 font-medium text-emerald-600">Você tem permissão para acessar a Triagem (Geral).</span>}
               </p>
             </div>
+            {upcomingHolidays.length > 0 && (
+              <div className="col-span-1 md:col-span-3 bg-white p-6 rounded-lg shadow-sm border border-slate-200 mt-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                    <Flag size={20} />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-800">Próximos Feriados Nacionais</h3>
+                </div>
+                <div className="space-y-2">
+                  {upcomingHolidays.map((holiday, index) => {
+                    const holidayDate = new Date(holiday.date);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const daysUntil = Math.ceil((holidayDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                    const isToday = daysUntil === 0;
+                    const isTomorrow = daysUntil === 1;
+                    
+                    return (
+                      <div
+                        key={`${holiday.date}-${index}`}
+                        className={`flex items-center justify-between p-3 rounded-lg border ${
+                          isToday
+                            ? 'bg-emerald-50 border-emerald-200'
+                            : isTomorrow
+                            ? 'bg-blue-50 border-blue-200'
+                            : 'bg-slate-50 border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Calendar className={isToday ? 'text-emerald-600' : isTomorrow ? 'text-blue-600' : 'text-slate-400'} size={18} />
+                          <div>
+                            <p className="font-semibold text-slate-800">{holiday.name}</p>
+                            <p className="text-sm text-slate-600">
+                              {holidayDate.toLocaleDateString('pt-BR', { 
+                                weekday: 'long', 
+                                day: 'numeric', 
+                                month: 'long' 
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          {isToday ? (
+                            <span className="px-3 py-1 bg-emerald-600 text-white rounded-full text-xs font-semibold">
+                              Hoje
+                            </span>
+                          ) : isTomorrow ? (
+                            <span className="px-3 py-1 bg-blue-600 text-white rounded-full text-xs font-semibold">
+                              Amanhã
+                            </span>
+                          ) : (
+                            <span className="text-sm text-slate-600 font-medium">
+                              Em {daysUntil} {daysUntil === 1 ? 'dia' : 'dias'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-4 pt-4 border-t border-slate-200">
+                  <button
+                    onClick={() => setCurrentView('holidays')}
+                    className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                  >
+                    Ver todos os feriados
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         );
       case 'chat':
