@@ -7,6 +7,12 @@
 
 body {
   font-family: 'Inter', sans-serif;
+  background: 
+    radial-gradient(circle at center, rgba(0, 163, 204, 0.18) 0%, transparent 70%),
+    radial-gradient(ellipse at center, transparent 0%, rgba(5, 5, 6, 0.8) 100%),
+    #111317 !important;
+  background-attachment: fixed;
+  min-height: 100vh;
 }
 
 /* Background com vinheta radial e glow centralizado */
@@ -14,9 +20,8 @@ body {
   background: 
     radial-gradient(circle at center, rgba(0, 163, 204, 0.18) 0%, transparent 70%),
     radial-gradient(ellipse at center, transparent 0%, rgba(5, 5, 6, 0.8) 100%),
-    #111317;
+    #111317 !important;
   background-attachment: fixed;
-  min-height: 100vh;
 }
 
 /* Tipografia futurista para títulos */
