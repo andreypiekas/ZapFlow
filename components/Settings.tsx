@@ -338,49 +338,49 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                    <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
                       <Globe size={16} /> URL da API
                     </label>
                     <input 
                       type="text" 
                       value={formData.baseUrl}
                       onChange={(e) => setFormData({...formData, baseUrl: e.target.value})}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                      className="w-full px-4 py-2.5 border border-[#0D0F13] bg-[#111316] text-slate-100 rounded-lg focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500 text-base"
                       placeholder="https://api.seudominio.com.br"
                     />
                     <p className="text-xs text-slate-400 mt-1">Endereço base onde a API está instalada.</p>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                    <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
                       <Shield size={16} /> AUTHENTICATION_API_KEY (Servidor)
                     </label>
                     <input 
                       type="password" 
                       value={formData.authenticationApiKey || ''}
                       onChange={(e) => setFormData({...formData, authenticationApiKey: e.target.value})}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                      className="w-full px-4 py-2.5 border border-[#0D0F13] bg-[#111316] text-slate-100 rounded-lg focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500 text-base"
                       placeholder="B8349283-F143-429D-B6C2-9386E8016558"
                     />
                     <p className="text-xs text-slate-400 mt-1">Chave de autenticação do servidor (do docker-compose.yml). Usada para autenticar requisições HTTP.</p>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                    <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
                       <Shield size={16} /> Token da Instância (Opcional)
                     </label>
                     <input 
                       type="password" 
                       value={formData.apiKey}
                       onChange={(e) => setFormData({...formData, apiKey: e.target.value})}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                      className="w-full px-4 py-2.5 border border-[#0D0F13] bg-[#111316] text-slate-100 rounded-lg focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500 text-base"
                       placeholder="Deixe vazio para gerar automaticamente"
                     />
                     <p className="text-xs text-slate-400 mt-1">Token específico da instância. Se deixado vazio, será gerado automaticamente ao criar a instância.</p>
                   </div>
 
                   <div className="col-span-1 md:col-span-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                    <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
                       <Server size={16} /> Selecionar Instância
                     </label>
                     <div className="flex gap-2">
@@ -388,7 +388,7 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
                         value={selectedInstanceName}
                         onChange={(e) => handleInstanceSelect(e.target.value)}
                         disabled={isLoadingInstances}
-                        className="flex-1 px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none bg-white disabled:bg-slate-100 disabled:cursor-not-allowed"
+                        className="flex-1 px-4 py-2.5 border border-[#0D0F13] bg-[#111316] text-slate-100 rounded-lg focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none disabled:bg-[#0D0F13] disabled:text-slate-500 disabled:cursor-not-allowed text-base"
                       >
                         <option value="">-- Selecione uma instância --</option>
                         {instances.map((instance) => (
@@ -415,13 +415,13 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
                   </div>
 
                   <div className="col-span-1 md:col-span-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Nome da Instância</label>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Nome da Instância</label>
                     <input 
                       type="text" 
                       value={formData.instanceName}
                       readOnly
                       disabled
-                      className="w-full px-4 py-2 border border-slate-300 rounded-md bg-slate-50 text-slate-600 cursor-not-allowed"
+                      className="w-full px-4 py-2.5 border border-[#0D0F13] bg-[#0D0F13] text-slate-400 rounded-lg cursor-not-allowed text-base"
                       placeholder="Selecione uma instância acima"
                     />
                     <p className="text-xs text-slate-400 mt-1">
@@ -436,14 +436,14 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
                   </div>
                   
                   <div className="col-span-1 md:col-span-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                    <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
                       <UserIcon size={16} /> Google Client ID (OAuth 2.0)
                     </label>
                     <input 
                       type="text" 
                       value={formData.googleClientId || ''}
                       onChange={(e) => setFormData({...formData, googleClientId: e.target.value})}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                      className="w-full px-4 py-2.5 border border-[#0D0F13] bg-[#111316] text-slate-100 rounded-lg focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500 text-base"
                       placeholder="ex: 123456789-abcdefgh.apps.googleusercontent.com"
                     />
                     <p className="text-xs text-slate-400 mt-1">
@@ -452,14 +452,14 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
                   </div>
 
                   <div className="col-span-1 md:col-span-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                    <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
                       <Sparkles size={16} /> Google Gemini API Key
                     </label>
                     <input 
                       type="password" 
                       value={formData.geminiApiKey || ''}
                       onChange={(e) => setFormData({...formData, geminiApiKey: e.target.value})}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none"
+                      className="w-full px-4 py-2.5 border border-[#0D0F13] bg-[#111316] text-slate-100 rounded-lg focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500 text-base"
                       placeholder="ex: AIzaSy..."
                     />
                     <p className="text-xs text-slate-400 mt-1">
