@@ -234,13 +234,13 @@ export async function getMunicipalHolidaysByState(
     const state = BRAZILIAN_STATES.find(s => s.code === stateCode);
     const stateName = state?.name || stateCode;
 
-    // Limita a 100 municípios para não sobrecarregar a API
-    const maxCities = Math.min(cities.length, 100);
-    const citiesToProcess = cities.slice(0, maxCities);
+    // Processa TODAS as cidades do estado
+    const citiesToProcess = cities;
+    console.log(`[HolidaysService] 🔍 Buscando feriados municipais em ${citiesToProcess.length} cidades de ${stateName}...`);
 
     // Busca feriados de cada município
     const allHolidays: Holiday[] = [];
-    const batchSize = 5; // Processa 5 municípios por vez para não sobrecarregar
+    const batchSize = 3; // Processa 3 municípios por vez para não sobrecarregar a IA
     
     for (let i = 0; i < citiesToProcess.length; i += batchSize) {
       const batch = citiesToProcess.slice(i, i + batchSize);
@@ -258,11 +258,13 @@ export async function getMunicipalHolidaysByState(
         onProgress(Math.min(i + batchSize, citiesToProcess.length), citiesToProcess.length);
       }
       
-      // Pequeno delay para não sobrecarregar a API e IA
+      // Delay entre batches para não sobrecarregar a IA (aumentado para dar tempo à IA processar)
       if (i + batchSize < citiesToProcess.length) {
-        await new Promise(resolve => setTimeout(resolve, 500)); // Aumentado para 500ms para dar tempo à IA
+        await new Promise(resolve => setTimeout(resolve, 1000)); // 1 segundo entre batches
       }
     }
+    
+    console.log(`[HolidaysService] ✅ Processamento concluído: ${allHolidays.length} feriados municipais encontrados em ${stateName}`);
 
     // Remove duplicatas (mesmo feriado em múltiplos municípios)
     const uniqueHolidays = allHolidays.filter((h, index, self) =>
