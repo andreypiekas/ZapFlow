@@ -271,10 +271,10 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
   };
 
   const getStatusColor = (instanceStatus?: string) => {
-      if (instanceStatus === 'open') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-      if (instanceStatus === 'connecting') return 'bg-blue-100 text-blue-700 border-blue-200';
-      if (instanceStatus === 'qrcode') return 'bg-amber-100 text-amber-700 border-amber-200';
-      return 'bg-slate-200 text-slate-600 border-slate-300';
+      if (instanceStatus === 'open') return 'bg-[#00E0D1]/20 text-[#00E0D1] border-[#00E0D1]/30';
+      if (instanceStatus === 'connecting') return 'bg-[#0074FF]/20 text-[#0074FF] border-[#0074FF]/30';
+      if (instanceStatus === 'qrcode') return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+      return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
   };
 
   const getCurrentStatusLabel = () => {
@@ -293,15 +293,17 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
 
   return (
     <div className="max-w-7xl mx-auto py-8 px-4">
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="bg-[#16191F] rounded-xl shadow-lg neon-border overflow-hidden">
         {/* Header */}
-        <div className="bg-slate-50 p-6 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div className="bg-[#0D0F13] p-6 border-b border-[#111316] circuit-line flex flex-col sm:flex-row justify-between items-center gap-4">
           <div>
-            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                <Smartphone className="text-emerald-600" />
+            <h2 className="text-xl font-futuristic text-slate-200 flex items-center gap-3">
+                <div className="p-2 bg-gradient-to-br from-[#00C3FF]/30 to-[#00E0D1]/10 text-[#00E0D1] rounded-xl border border-[#00E0D1]/20">
+                  <Smartphone size={24} strokeWidth={2} />
+                </div>
                 Gerenciamento de Instâncias WhatsApp
             </h2>
-            <p className="text-slate-500 text-sm mt-1">
+            <p className="text-slate-400 text-sm mt-1">
               {config.isDemo ? 'Modo Simulação' : `Evolution API: ${config.baseUrl || 'Não configurado'}`}
             </p>
           </div>
@@ -310,15 +312,15 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
               <button
                 onClick={loadInstances}
                 disabled={isLoading}
-                className="px-4 py-2 bg-slate-200 text-slate-700 text-sm rounded-lg hover:bg-slate-300 flex items-center gap-2 disabled:opacity-50"
+                className="px-4 py-2 bg-[#111316] hover:bg-[#16191F] border border-[#0D0F13] text-slate-300 hover:text-[#00E0D1] hover:border-[#00E0D1]/30 text-sm rounded-lg flex items-center gap-2 disabled:opacity-50 transition-all"
               >
-                <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
+                <RefreshCw size={16} strokeWidth={2} className={isLoading ? 'animate-spin' : ''} />
                 Atualizar
               </button>
             )}
-            <div className={`px-4 py-1.5 rounded-full text-sm font-bold flex items-center gap-2 border ${getCurrentStatusColor()}`}>
-              {status === 'connected' ? <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> : 
-               status === 'connecting' ? <Clock size={14} className="animate-spin" /> : 
+            <div className={`px-4 py-1.5 rounded-full text-sm font-tech flex items-center gap-2 border ${getCurrentStatusColor()}`}>
+              {status === 'connected' ? <div className="w-2 h-2 rounded-full bg-[#00E0D1] animate-pulse" /> : 
+               status === 'connecting' ? <Clock size={14} strokeWidth={2} className="animate-spin" /> : 
                <div className="w-2 h-2 rounded-full bg-slate-500" />}
               {getCurrentStatusLabel()}
             </div>
@@ -327,17 +329,17 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
 
         {config.isDemo ? (
           <div className="p-8 text-center py-12">
-            <h3 className="font-bold mb-2">Modo Demonstração</h3>
-            <p className="text-sm text-slate-500">QR Code simulado.</p>
+            <h3 className="font-futuristic text-slate-200 mb-2">Modo Demonstração</h3>
+            <p className="text-sm text-slate-400">QR Code simulado.</p>
           </div>
         ) : !isConfigured ? (
           <div className="p-8 text-center py-12">
-            <AlertTriangle className="text-amber-500 mx-auto mb-4" size={48} />
-            <h3 className="font-bold mb-2">Configuração Necessária</h3>
-            <p className="text-sm text-slate-500 mb-4">Configure a URL e API Key do Evolution API nas configurações.</p>
+            <AlertTriangle className="text-amber-400 mx-auto mb-4" size={48} strokeWidth={2} />
+            <h3 className="font-futuristic text-slate-200 mb-2">Configuração Necessária</h3>
+            <p className="text-sm text-slate-400 mb-4">Configure a URL e API Key do Evolution API nas configurações.</p>
             <button
               onClick={onNavigateToSettings}
-              className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+              className="px-6 py-2 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] hover:from-[#00B0E6] hover:to-[#00C8B8] text-[#0D0F13] rounded-lg transition-all shadow-lg glow-gradient font-medium"
             >
               Ir para Configurações
             </button>
@@ -347,25 +349,25 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
             {/* Left Panel - Instance List */}
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <h3 className="text-lg font-bold text-slate-800">Instâncias ({instances.length})</h3>
+                <h3 className="text-lg font-futuristic text-slate-200">Instâncias ({instances.length})</h3>
                 <button
                   onClick={() => setShowCreateForm(!showCreateForm)}
-                  className="px-3 py-1.5 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 flex items-center gap-1"
+                  className="px-3 py-1.5 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] hover:from-[#00B0E6] hover:to-[#00C8B8] text-[#0D0F13] text-sm rounded-lg transition-all shadow-lg glow-gradient font-medium flex items-center gap-1"
                 >
-                  <Plus size={16} />
+                  <Plus size={16} strokeWidth={2.5} />
                   Nova Instância
                 </button>
               </div>
 
               {showCreateForm && (
-                <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="p-4 bg-[#0D0F13] rounded-xl border border-[#111316] neon-border">
                   <div className="flex justify-between items-center mb-3">
-                    <h4 className="font-semibold text-slate-800">Criar Nova Instância</h4>
+                    <h4 className="font-futuristic text-slate-200">Criar Nova Instância</h4>
                     <button
                       onClick={() => { setShowCreateForm(false); setNewInstanceName(''); }}
-                      className="text-slate-400 hover:text-slate-600"
+                      className="text-slate-400 hover:text-[#00E0D1] transition-colors"
                     >
-                      <X size={18} />
+                      <X size={18} strokeWidth={2} />
                     </button>
                   </div>
                   <input
@@ -373,20 +375,20 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                     value={newInstanceName}
                     onChange={(e) => setNewInstanceName(e.target.value)}
                     placeholder="Nome da instância (ex: ZapFlow)"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm mb-3"
+                    className="w-full px-3 py-2 border border-[#0D0F13] bg-[#111316] text-slate-200 rounded-lg text-sm mb-3 focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500"
                     onKeyDown={(e) => e.key === 'Enter' && handleCreateInstance()}
                   />
                   <div className="flex gap-2">
                     <button
                       onClick={handleCreateInstance}
                       disabled={isCreatingInstance}
-                      className="flex-1 px-4 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                      className="flex-1 px-4 py-2 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] hover:from-[#00B0E6] hover:to-[#00C8B8] text-[#0D0F13] text-sm rounded-lg transition-all shadow-lg glow-gradient font-medium disabled:opacity-50"
                     >
                       {isCreatingInstance ? 'Criando...' : 'Criar Instância'}
                     </button>
                     <button
                       onClick={() => { setShowCreateForm(false); setNewInstanceName(''); }}
-                      className="px-4 py-2 bg-slate-200 text-slate-700 text-sm rounded-lg hover:bg-slate-300"
+                      className="px-4 py-2 bg-[#111316] hover:bg-[#16191F] border border-[#0D0F13] text-slate-300 hover:text-[#00E0D1] hover:border-[#00E0D1]/30 text-sm rounded-lg transition-all"
                     >
                       Cancelar
                     </button>
@@ -400,17 +402,17 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                   return (
                     <div
                       key={instance.instanceName}
-                      className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all neon-border ${
                         isSelected
-                          ? 'border-emerald-500 bg-emerald-50 shadow-md'
-                          : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                          ? 'border-[#00E0D1] bg-[#00E0D1]/10 shadow-lg glow-cyan'
+                          : 'border-[#0D0F13] bg-[#111316] hover:border-[#00E0D1]/30 hover:bg-[#16191F]'
                       }`}
                       onClick={() => handleSelectInstance(instance.instanceName)}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <Smartphone className={isSelected ? 'text-emerald-600' : 'text-slate-400'} size={18} />
-                          <h4 className="font-bold text-slate-800">{instance.instanceName}</h4>
+                          <Smartphone className={isSelected ? 'text-[#00E0D1]' : 'text-slate-400'} size={18} strokeWidth={2} />
+                          <h4 className="font-futuristic text-slate-200">{instance.instanceName}</h4>
                         </div>
                         {!isSelected && (
                           <button
@@ -418,10 +420,10 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                               e.stopPropagation();
                               handleDeleteInstance(instance.instanceName);
                             }}
-                            className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                            className="p-1.5 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                             title="Deletar instância"
                           >
-                            <Trash2 size={16} />
+                            <Trash2 size={16} strokeWidth={2} />
                           </button>
                         )}
                       </div>
@@ -430,7 +432,7 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                 })}
                 {instances.length === 0 && (
                   <div className="text-center py-8 text-slate-400">
-                    <Smartphone className="mx-auto mb-2 text-slate-300" size={32} />
+                    <Smartphone className="mx-auto mb-2 text-slate-500" size={32} strokeWidth={1.5} />
                     <p className="text-sm">Nenhuma instância encontrada</p>
                     <p className="text-xs mt-1">Crie uma nova instância para começar</p>
                   </div>
@@ -443,21 +445,21 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
               {selectedInstance ? (
                 <>
                   <div>
-                    <h3 className="text-lg font-bold text-slate-800 mb-2">
+                    <h3 className="text-lg font-futuristic text-slate-200 mb-2">
                       Instância: {selectedInstance}
                     </h3>
                   </div>
 
                   {detectedName && detectedName !== config.instanceName && (
-                    <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg">
+                    <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-xl neon-border">
                       <div className="flex items-center gap-2 mb-2">
-                        <AlertTriangle className="text-amber-600" size={18} />
-                        <p className="text-sm text-amber-800 font-bold">Nome Incorreto Detectado</p>
+                        <AlertTriangle className="text-amber-400" size={18} strokeWidth={2} />
+                        <p className="text-sm text-amber-400 font-futuristic">Nome Incorreto Detectado</p>
                       </div>
-                      <p className="text-xs text-amber-700 mb-2">A API detectou um nome diferente: <strong>{detectedName}</strong></p>
+                      <p className="text-xs text-amber-300 mb-2">A API detectou um nome diferente: <strong>{detectedName}</strong></p>
                       <button 
                         onClick={handleFixName} 
-                        className="w-full px-4 py-2 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700"
+                        className="w-full px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-400 text-sm rounded-lg transition-all"
                       >
                         Corrigir para {detectedName}
                       </button>
@@ -465,44 +467,44 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                   )}
 
                   {status === 'connected' ? (
-                    <div className="bg-white p-8 rounded-xl border-2 border-emerald-200 text-center">
-                      <CheckCircle size={64} className="text-emerald-600 mx-auto mb-4" />
-                      <h3 className="text-2xl font-bold text-slate-800 mb-2">WhatsApp Conectado</h3>
-                      <p className="text-sm text-slate-500 mb-6">Esta instância está conectada e pronta para uso.</p>
+                    <div className="bg-[#111316] p-8 rounded-xl border-2 border-[#00E0D1]/30 text-center neon-border">
+                      <CheckCircle size={64} className="text-[#00E0D1] mx-auto mb-4" strokeWidth={2} />
+                      <h3 className="text-2xl font-futuristic text-slate-200 mb-2">WhatsApp Conectado</h3>
+                      <p className="text-sm text-slate-400 mb-6">Esta instância está conectada e pronta para uso.</p>
                       <button 
                         onClick={handleLogout} 
-                        className="px-6 py-2 border-2 border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-sm font-semibold"
+                        className="px-6 py-2 border-2 border-red-500/30 text-red-400 rounded-lg hover:bg-red-500/10 text-sm font-semibold transition-all"
                       >
                         Desconectar
                       </button>
                     </div>
                   ) : (
-                    <div className="bg-white p-6 rounded-xl border-2 border-slate-200">
-                      <h4 className="font-semibold text-slate-800 mb-4">Conectar WhatsApp</h4>
+                    <div className="bg-[#111316] p-6 rounded-xl border-2 border-[#0D0F13] neon-border">
+                      <h4 className="font-futuristic text-slate-200 mb-4">Conectar WhatsApp</h4>
                       
                       <div className="mb-4">
-                        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 w-full aspect-square max-w-[300px] mx-auto flex items-center justify-center relative">
+                        <div className="bg-[#0D0F13] p-4 rounded-lg border border-[#111316] w-full aspect-square max-w-[300px] mx-auto flex items-center justify-center relative">
                           {isLoading && !qrCode ? (
                             <div className="flex flex-col items-center gap-3">
-                              <Loader2 className="animate-spin text-emerald-600" size={40} />
-                              <span className="text-sm text-slate-500">Carregando QR Code...</span>
+                              <Loader2 className="animate-spin text-[#00E0D1]" size={40} strokeWidth={2} />
+                              <span className="text-sm text-slate-400">Carregando QR Code...</span>
                             </div>
                           ) : qrCode ? (
                             <>
                               <img src={qrCode} className="w-full h-full object-contain" alt="QR Code" />
                               {refreshTimer > 0 && (
-                                <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                                <div className="absolute top-2 right-2 bg-black/80 text-white text-xs px-2 py-1 rounded">
                                   {refreshTimer}s
                                 </div>
                               )}
                             </>
                           ) : (
                             <div className="text-center">
-                              <WifiOff className="text-slate-300 mx-auto mb-2" size={40} />
+                              <WifiOff className="text-slate-500 mx-auto mb-2" size={40} strokeWidth={2} />
                               <p className="text-sm text-slate-400">QR Code indisponível</p>
                               <button 
                                 onClick={() => checkStatus()} 
-                                className="text-emerald-600 underline text-xs mt-2"
+                                className="text-[#00E0D1] underline text-xs mt-2 hover:text-[#00C3FF] transition-colors"
                               >
                                 Recarregar
                               </button>
@@ -510,39 +512,39 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                           )}
                         </div>
                         {status === 'connecting' && qrCode && (
-                          <div className="mt-2 max-w-[300px] mx-auto bg-blue-500/90 text-white text-xs px-3 py-1.5 rounded text-center">
+                          <div className="mt-2 max-w-[300px] mx-auto bg-[#0074FF]/90 text-white text-xs px-3 py-1.5 rounded-lg text-center">
                             Sincronizando...
                           </div>
                         )}
                       </div>
 
-                      <div className="space-y-2 text-sm text-slate-600">
+                      <div className="space-y-2 text-sm text-slate-300">
                         <div className="flex items-start gap-2">
-                          <div className="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center font-bold text-emerald-700 text-xs flex-shrink-0 mt-0.5">1</div>
+                          <div className="w-6 h-6 bg-gradient-to-br from-[#00C3FF]/30 to-[#00E0D1]/10 rounded-full flex items-center justify-center font-bold text-[#00E0D1] text-xs flex-shrink-0 mt-0.5 border border-[#00E0D1]/30">1</div>
                           <p>Abra o WhatsApp no celular</p>
                         </div>
                         <div className="flex items-start gap-2">
-                          <div className="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center font-bold text-emerald-700 text-xs flex-shrink-0 mt-0.5">2</div>
+                          <div className="w-6 h-6 bg-gradient-to-br from-[#00C3FF]/30 to-[#00E0D1]/10 rounded-full flex items-center justify-center font-bold text-[#00E0D1] text-xs flex-shrink-0 mt-0.5 border border-[#00E0D1]/30">2</div>
                           <p>Menu → Aparelhos Conectados</p>
                         </div>
                         <div className="flex items-start gap-2">
-                          <div className="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center font-bold text-emerald-700 text-xs flex-shrink-0 mt-0.5">3</div>
+                          <div className="w-6 h-6 bg-gradient-to-br from-[#00C3FF]/30 to-[#00E0D1]/10 rounded-full flex items-center justify-center font-bold text-[#00E0D1] text-xs flex-shrink-0 mt-0.5 border border-[#00E0D1]/30">3</div>
                           <p>Escaneie o QR Code acima</p>
                         </div>
                       </div>
 
-                      <div className="mt-4 p-3 bg-slate-50 rounded-lg text-xs text-slate-500 border border-slate-200">
-                        <div className="flex items-center gap-2 mb-2 font-bold text-slate-700 border-b border-slate-200 pb-2">
-                          <Activity size={14} /> DIAGNÓSTICO
+                      <div className="mt-4 p-3 bg-[#0D0F13] rounded-lg text-xs text-slate-400 border border-[#111316]">
+                        <div className="flex items-center gap-2 mb-2 font-futuristic text-slate-300 border-b border-[#111316] pb-2">
+                          <Activity size={14} strokeWidth={2} /> DIAGNÓSTICO
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <span className="block uppercase text-slate-400 text-[10px]">Status API</span>
-                            <span className="font-mono text-xs">{detailedStatus}</span>
+                            <span className="block uppercase text-slate-500 text-[10px]">Status API</span>
+                            <span className="font-mono text-xs text-slate-300">{detailedStatus}</span>
                           </div>
                           <div>
-                            <span className="block uppercase text-slate-400 text-[10px]">Instância</span>
-                            <span className="font-mono text-xs">{selectedInstance}</span>
+                            <span className="block uppercase text-slate-500 text-[10px]">Instância</span>
+                            <span className="font-mono text-xs text-slate-300">{selectedInstance}</span>
                           </div>
                         </div>
                       </div>
@@ -550,14 +552,14 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                   )}
                 </>
               ) : (
-                <div className="bg-slate-50 p-8 rounded-xl border-2 border-dashed border-slate-300 text-center">
-                  <Smartphone className="text-slate-300 mx-auto mb-4" size={48} />
-                  <h3 className="text-lg font-semibold text-slate-600 mb-2">Nenhuma Instância Selecionada</h3>
-                  <p className="text-sm text-slate-500 mb-4">Selecione uma instância da lista ao lado ou crie uma nova.</p>
+                <div className="bg-[#0D0F13] p-8 rounded-xl border-2 border-dashed border-[#111316] text-center">
+                  <Smartphone className="text-slate-500 mx-auto mb-4" size={48} strokeWidth={1.5} />
+                  <h3 className="text-lg font-futuristic text-slate-300 mb-2">Nenhuma Instância Selecionada</h3>
+                  <p className="text-sm text-slate-400 mb-4">Selecione uma instância da lista ao lado ou crie uma nova.</p>
                   {instances.length === 0 && (
                     <button
                       onClick={() => setShowCreateForm(true)}
-                      className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+                      className="px-6 py-2 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] hover:from-[#00B0E6] hover:to-[#00C8B8] text-[#0D0F13] rounded-lg transition-all shadow-lg glow-gradient font-medium"
                     >
                       Criar Primeira Instância
                     </button>

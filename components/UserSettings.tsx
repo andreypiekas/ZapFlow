@@ -99,63 +99,68 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
     <div className="max-w-6xl mx-auto py-8 px-4">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
-           <h2 className="text-2xl font-bold text-slate-800">Gestão de Usuários</h2>
-           <p className="text-slate-500">Cadastre usuários, defina senhas e atribua departamentos.</p>
+           <h2 className="text-2xl font-futuristic text-slate-200 flex items-center gap-3">
+             <div className="p-2 bg-gradient-to-br from-[#00C3FF]/30 to-[#00E0D1]/10 text-[#00E0D1] rounded-xl border border-[#00E0D1]/20">
+               <UserIcon size={24} strokeWidth={2} />
+             </div>
+             Gestão de Usuários
+           </h2>
+           <p className="text-slate-400 mt-1">Cadastre usuários, defina senhas e atribua departamentos.</p>
         </div>
         <button 
           onClick={() => openModal()}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-md flex items-center gap-2 transition-colors shadow-sm font-medium w-full md:w-auto justify-center"
+          className="bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] hover:from-[#00B0E6] hover:to-[#00C8B8] text-[#0D0F13] px-5 py-2.5 rounded-lg flex items-center gap-2 transition-all shadow-lg glow-gradient font-medium w-full md:w-auto justify-center"
         >
-          <UserPlus size={18} /> Novo Usuário
+          <UserPlus size={18} strokeWidth={2.5} /> Novo Usuário
         </button>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+      <div className="bg-[#16191F] rounded-xl shadow-lg neon-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[600px]">
-            <thead className="bg-slate-50 border-b border-slate-200">
+            <thead className="bg-[#0D0F13] border-b border-[#111316]">
               <tr>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Usuário</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Função</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Departamento</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Permissões Extras</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase text-right">Ações</th>
+                <th className="px-6 py-4 text-xs font-futuristic text-slate-400 uppercase tracking-wider">Usuário</th>
+                <th className="px-6 py-4 text-xs font-futuristic text-slate-400 uppercase tracking-wider">Função</th>
+                <th className="px-6 py-4 text-xs font-futuristic text-slate-400 uppercase tracking-wider">Departamento</th>
+                <th className="px-6 py-4 text-xs font-futuristic text-slate-400 uppercase tracking-wider">Permissões Extras</th>
+                <th className="px-6 py-4 text-xs font-futuristic text-slate-400 uppercase tracking-wider text-right">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-[#0D0F13]">
               {users.map(user => (
-                <tr key={user.id} className="hover:bg-slate-50 transition-colors">
+                <tr key={user.id} className="hover:bg-[#111316] transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-full object-cover border border-slate-200" />
+                      <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-full object-cover border border-[#0D0F13]" />
                       <div>
-                        <h4 className="font-medium text-slate-800">{user.name}</h4>
-                        <p className="text-xs text-slate-500">{user.email}</p>
+                        <h4 className="font-medium text-slate-200">{user.name}</h4>
+                        <p className="text-xs text-slate-400">{user.email}</p>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     {user.role === UserRole.ADMIN ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 border border-purple-200">
-                        <Shield size={12} /> Admin
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                        <Shield size={12} strokeWidth={2} /> Admin
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 border border-blue-200">
-                        <UserIcon size={12} /> Agente
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#0074FF]/20 text-[#0074FF] border border-[#0074FF]/30">
+                        <UserIcon size={12} strokeWidth={2} /> Agente
                       </span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">
+                  <td className="px-6 py-4 text-sm text-slate-300">
                     {user.role === UserRole.ADMIN ? (
-                      <span className="text-slate-400 italic">Acesso Total</span>
+                      <span className="text-slate-500 italic">Acesso Total</span>
                     ) : (
                       getDepartmentName(user.departmentId)
                     )}
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">
+                  <td className="px-6 py-4 text-sm text-slate-300">
                     {user.allowGeneralConnection && (
-                        <span className="inline-flex items-center gap-1 text-xs bg-slate-100 px-2 py-1 rounded text-slate-600">
-                            <Eye size={12} /> Ver Triagem/Geral
+                        <span className="inline-flex items-center gap-1 text-xs bg-slate-500/20 px-2 py-1 rounded text-slate-300 border border-slate-500/30">
+                            <Eye size={12} strokeWidth={2} /> Ver Triagem/Geral
                         </span>
                     )}
                   </td>
@@ -163,16 +168,16 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
                     <div className="flex justify-end gap-2">
                       <button 
                         onClick={() => openModal(user)}
-                        className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        className="p-2 text-slate-400 hover:text-[#00E0D1] bg-[#111316] hover:bg-[#00E0D1]/10 border border-[#0D0F13] hover:border-[#00E0D1]/30 rounded-lg transition-all"
                       >
-                        <Edit2 size={18} />
+                        <Edit2 size={18} strokeWidth={2} />
                       </button>
                       <button 
                         onClick={() => onDeleteUser(user.id)}
-                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-2 text-slate-400 hover:text-red-400 bg-[#111316] hover:bg-red-500/10 border border-[#0D0F13] hover:border-red-500/30 rounded-lg transition-all"
                         title="Excluir"
                       >
-                        <Trash2 size={18} />
+                        <Trash2 size={18} strokeWidth={2} />
                       </button>
                     </div>
                   </td>
