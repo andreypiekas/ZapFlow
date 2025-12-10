@@ -1685,10 +1685,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                      </div>
                   ) : (
                     <div 
-                      className={`max-w-[85%] md:max-w-[70%] rounded-lg px-3 py-2 shadow-lg relative group ${
-                        msg.sender === 'user' ? 'bg-[#2D3748] text-white rounded-tl-none border border-[#4A5568]' : 'bg-gradient-to-r from-[#0074FF] to-[#00C3FF] text-white rounded-tr-none glow-blue'
+                      className={`max-w-[85%] md:max-w-[70%] rounded-lg px-4 py-3 shadow-lg relative group ${
+                        msg.sender === 'user' ? 'bg-[#374151] text-white rounded-tl-none border border-[#4B5563]' : 'bg-gradient-to-r from-[#0074FF] to-[#00C3FF] text-white rounded-tr-none glow-blue'
                       }`}
                       onDoubleClick={() => msg.sender !== 'system' && handleReplyToMessage(msg)}
+                      style={msg.sender === 'user' ? { 
+                        backgroundColor: '#374151',
+                        color: '#FFFFFF',
+                        borderColor: '#4B5563'
+                      } : {}}
                     >
                       {/* Mensagem citada (se for uma resposta) */}
                       {msg.replyTo && (
@@ -1722,20 +1727,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         );
                       })()}
                       
-                      <div className="px-2 pt-1">
+                      <div className={`px-2 pt-1 ${msg.sender === 'user' ? 'text-white' : ''}`}>
                         {renderMessageContent(msg)}
                       </div>
 
                       <div className="flex justify-between items-center gap-1 mt-1 pr-2 pb-1">
                         <button
                           onClick={() => handleReplyToMessage(msg)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-black/5 rounded"
+                          className={`opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded ${
+                            msg.sender === 'user' ? 'hover:bg-white/10' : 'hover:bg-black/5'
+                          }`}
                           title="Responder"
                         >
-                          <ArrowRightLeft size={12} className="text-slate-500" />
+                          <ArrowRightLeft size={12} className={msg.sender === 'user' ? 'text-slate-200' : 'text-slate-500'} />
                         </button>
                         <div className="flex items-center gap-1 ml-auto">
-                          <span className="text-[10px] text-slate-500">
+                          <span className={`text-[10px] font-medium ${msg.sender === 'user' ? 'text-slate-200' : 'text-slate-500'}`}>
                             {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                           {msg.sender === 'agent' && (
