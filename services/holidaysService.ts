@@ -2,7 +2,7 @@
 // Feriados nacionais: calculados localmente
 // Feriados municipais: buscados APENAS via IA (Gemini) - requer API key configurada
 
-import { searchMunicipalHolidaysWithAI } from './geminiService';
+import { searchMunicipalHolidaysWithAI, searchMunicipalHolidaysForStates } from './geminiService';
 
 export interface Holiday {
   date: string; // YYYY-MM-DD
@@ -319,28 +319,80 @@ export async function getUpcomingHolidays(
 
   holidays.push(...filteredNational);
 
-  // Se tiver estados selecionados, busca feriados municipais de todos os municípios desses estados
-  if (selectedStates && selectedStates.length > 0) {
+  // Se tiver estados selecionados, busca feriados municipais
+  if (selectedStates && selectedStates.length > 0 && geminiApiKey) {
     const allMunicipalHolidays: Holiday[] = [];
     
-    for (let i = 0; i < selectedStates.length; i++) {
-      const stateCode = selectedStates[i];
-      const state = BRAZILIAN_STATES.find(s => s.code === stateCode);
-      const stateName = state?.name || stateCode;
-      
+    // Estados principais (prioridade): SC, PR, RS - busca otimizada de uma vez
+    const priorityStates = ['SC', 'PR', 'RS'];
+    const priorityStatesToSearch = selectedStates.filter(s => priorityStates.includes(s));
+    const otherStates = selectedStates.filter(s => !priorityStates.includes(s));
+    
+    // Busca otimizada para estados principais usando Google Search
+    if (priorityStatesToSearch.length > 0) {
       if (onProgress) {
-        onProgress(`Buscando feriados de ${stateName} (${i + 1}/${selectedStates.length})...`);
+        onProgress(`Buscando feriados municipais dos estados principais (${priorityStatesToSearch.join(', ')})...`);
       }
       
-      const stateHolidays = [
-        ...await getMunicipalHolidaysByState(stateCode, currentYear, (current, total) => {
+      try {
+        const priorityHolidays = await searchMunicipalHolidaysForStates(
+          priorityStatesToSearch,
+          days,
+          geminiApiKey
+        );
+        
+        // Converte para formato Holiday
+        const formattedPriorityHolidays: Holiday[] = priorityHolidays.map(h => ({
+          date: h.date,
+          name: h.name,
+          type: 'municipal' as const,
+          city: h.city,
+          state: h.state
+        }));
+        
+        allMunicipalHolidays.push(...formattedPriorityHolidays);
+        console.log(`[HolidaysService] ✅ Encontrados ${formattedPriorityHolidays.length} feriados municipais dos estados principais`);
+      } catch (error) {
+        console.warn('[HolidaysService] Erro na busca otimizada dos estados principais, tentando método tradicional:', error);
+        // Fallback para método tradicional se a busca otimizada falhar
+        for (const stateCode of priorityStatesToSearch) {
+          const state = BRAZILIAN_STATES.find(s => s.code === stateCode);
+          const stateName = state?.name || stateCode;
+          
           if (onProgress) {
-            onProgress(`Processando ${stateName}: ${current}/${total} municípios...`);
+            onProgress(`Buscando feriados de ${stateName}...`);
           }
-        }, geminiApiKey),
-        ...(nextYear > currentYear ? await getMunicipalHolidaysByState(stateCode, nextYear, undefined, geminiApiKey) : [])
-      ];
-      allMunicipalHolidays.push(...stateHolidays);
+          
+          const stateHolidays = [
+            ...await getMunicipalHolidaysByState(stateCode, currentYear, undefined, geminiApiKey),
+            ...(nextYear > currentYear ? await getMunicipalHolidaysByState(stateCode, nextYear, undefined, geminiApiKey) : [])
+          ];
+          allMunicipalHolidays.push(...stateHolidays);
+        }
+      }
+    }
+    
+    // Busca tradicional cidade por cidade para os demais estados
+    if (otherStates.length > 0) {
+      for (let i = 0; i < otherStates.length; i++) {
+        const stateCode = otherStates[i];
+        const state = BRAZILIAN_STATES.find(s => s.code === stateCode);
+        const stateName = state?.name || stateCode;
+        
+        if (onProgress) {
+          onProgress(`Buscando feriados de ${stateName} (${i + 1}/${otherStates.length})...`);
+        }
+        
+        const stateHolidays = [
+          ...await getMunicipalHolidaysByState(stateCode, currentYear, (current, total) => {
+            if (onProgress) {
+              onProgress(`Processando ${stateName}: ${current}/${total} municípios...`);
+            }
+          }, geminiApiKey),
+          ...(nextYear > currentYear ? await getMunicipalHolidaysByState(stateCode, nextYear, undefined, geminiApiKey) : [])
+        ];
+        allMunicipalHolidays.push(...stateHolidays);
+      }
     }
 
     // Filtra apenas os feriados dentro do período
