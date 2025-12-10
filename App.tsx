@@ -1885,6 +1885,7 @@ const App: React.FC = () => {
                                             // ao invés de adicionar uma nova (evita duplicação)
                                             let messageIndex = -1;
                                             let shouldUpdate = false;
+                                            let updatedMessages: Message[] | undefined = undefined;
                                             
                                             // Para mensagens enviadas (agent), tenta encontrar mensagem local para atualizar
                                             if (mapped.sender === 'agent') {
@@ -2147,9 +2148,9 @@ const App: React.FC = () => {
                                                         .then(sent => {
                                                                     if (sent) {
                                                                         handleUpdateChat({
-                                                                        ...updatedChat,
-                                                                        awaitingDepartmentSelection: true,
-                                                                        departmentSelectionSent: true
+                                                                            ...updatedChat,
+                                                                            awaitingDepartmentSelection: true,
+                                                                            departmentSelectionSent: true
                                                                         });
                                                             }
                                                         }).catch(err => console.error('[App] Erro ao enviar seleção de setores:', err));
