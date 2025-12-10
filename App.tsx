@@ -4071,23 +4071,23 @@ const App: React.FC = () => {
                 </div>
                 </div>
                 {!apiConfig.isDemo && (
-                <div className="bg-[#16191F] p-6 rounded-lg shadow-sm border border-[#0D0F13]">
+                <div className="bg-[#16191F] p-6 rounded-xl shadow-lg neon-border hover-glow transition-all hover:border-[#00E0D1]/50 group">
                 <div className="flex items-center gap-4 mb-2">
-                    <div className={`p-3 rounded-lg ${
-                        wsStatus === 'connected' ? 'bg-[#00E0D1]/20 text-[#00E0D1]' :
-                        wsStatus === 'connecting' ? 'bg-amber-500/20 text-amber-400' :
-                        wsStatus === 'failed' ? 'bg-red-500/20 text-red-400' :
-                        'bg-slate-500/20 text-slate-400'
+                    <div className={`p-3 rounded-xl border transition-all ${
+                        wsStatus === 'connected' ? 'bg-gradient-to-br from-[#00E0D1]/30 to-[#00C3FF]/10 text-[#00E0D1] border-[#00E0D1]/20 group-hover:glow-cyan' :
+                        wsStatus === 'connecting' ? 'bg-amber-500/20 text-amber-400 border-amber-500/20' :
+                        wsStatus === 'failed' ? 'bg-red-500/20 text-red-400 border-red-500/20' :
+                        'bg-slate-500/20 text-slate-400 border-slate-500/20'
                     }`}>
-                        {wsStatus === 'connected' ? <MessageSquare /> :
-                         wsStatus === 'connecting' ? <MessageSquare className="animate-pulse" /> :
-                         <MessageSquare />}
+                        {wsStatus === 'connected' ? <MessageSquare size={24} strokeWidth={2} /> :
+                         wsStatus === 'connecting' ? <MessageSquare size={24} strokeWidth={2} className="animate-pulse" /> :
+                         <MessageSquare size={24} strokeWidth={2} />}
                     </div>
                     <div className="flex-1">
-                        <p className="text-slate-400 text-sm">Tempo Real (Socket.IO)</p>
+                        <p className="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Tempo Real (Socket.IO)</p>
                         <div className="flex items-center gap-2">
-                            <h3 className={`text-lg font-bold ${
-                                wsStatus === 'connected' ? 'text-[#00E0D1]' :
+                            <h3 className={`text-2xl font-tech ${
+                                wsStatus === 'connected' ? 'bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] bg-clip-text text-transparent' :
                                 wsStatus === 'connecting' ? 'text-amber-400' :
                                 wsStatus === 'failed' ? 'text-red-400' :
                                 'text-slate-400'
@@ -4106,7 +4106,7 @@ const App: React.FC = () => {
                                             console.error('[App] ❌ Erro ao reconectar Socket.IO:', err);
                                         });
                                     }}
-                                    className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                    className="text-xs px-3 py-1 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] rounded-lg hover:from-[#00B0E6] hover:to-[#00C8B8] font-medium transition-all"
                                     title="Tentar reconectar"
                                 >
                                     Reconectar
@@ -4124,20 +4124,20 @@ const App: React.FC = () => {
                 )}
                 </>
             )}
-            <div className="col-span-1 md:col-span-3 bg-[#16191F] p-6 rounded-lg shadow-sm border border-[#0D0F13] mt-4">
-              <h3 className="text-lg font-bold text-slate-200 mb-4">Olá, {currentUser.name} ({currentUser.role === 'ADMIN' ? 'Administrador' : 'Agente'})</h3>
+            <div className="col-span-1 md:col-span-3 bg-[#16191F] p-6 rounded-xl shadow-lg neon-border mt-4">
+              <h3 className="text-lg font-futuristic text-slate-200 mb-4">Olá, {currentUser.name} ({currentUser.role === 'ADMIN' ? 'Administrador' : 'Agente'})</h3>
               <p className="text-slate-400">
                 {currentUser.role === 'ADMIN' ? "Você tem acesso total ao sistema." : `Você está visualizando os atendimentos do setor: ${departments.find(d => d.id === currentUser.departmentId)?.name || 'Nenhum'}.`}
                 {currentUser.role === 'AGENT' && currentUser.allowGeneralConnection && <span className="block mt-2 font-medium text-[#00E0D1]">Você tem permissão para acessar a Triagem (Geral).</span>}
               </p>
             </div>
             {upcomingHolidays.length > 0 && (
-              <div className="col-span-1 md:col-span-3 bg-[#16191F] p-6 rounded-lg shadow-sm border border-[#0D0F13] mt-4">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-[#0074FF]/20 text-[#0074FF] rounded-lg">
-                    <Flag size={20} />
+              <div className="col-span-1 md:col-span-3 bg-[#16191F] p-6 rounded-xl shadow-lg neon-border mt-4">
+                <div className="flex items-center gap-3 mb-4 circuit-line pb-4">
+                  <div className="p-2 bg-gradient-to-br from-[#0074FF]/30 to-[#0074FF]/10 text-[#0074FF] rounded-xl border border-[#0074FF]/20">
+                    <Flag size={20} strokeWidth={2} />
                   </div>
-                  <h3 className="text-lg font-bold text-slate-200">Próximos Feriados</h3>
+                  <h3 className="text-lg font-futuristic text-slate-200">Próximos Feriados</h3>
                 </div>
                 <div className="space-y-2">
                   {upcomingHolidays.map((holiday, index) => {
@@ -4204,7 +4204,7 @@ const App: React.FC = () => {
                               Amanhã
                             </span>
                           ) : (
-                            <span className="text-sm text-slate-600 font-medium">
+                            <span className="text-sm text-slate-300 font-medium">
                               Em {daysUntil} {daysUntil === 1 ? 'dia' : 'dias'}
                             </span>
                           )}
@@ -4213,13 +4213,13 @@ const App: React.FC = () => {
                     );
                   })}
                 </div>
-                <div className="mt-4 pt-4 border-t border-slate-200">
+                <div className="mt-4 pt-4 border-t border-[#0D0F13]">
                   <button
                     onClick={() => setCurrentView('holidays')}
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                    className="text-sm text-[#00E0D1] hover:text-[#00C3FF] font-medium flex items-center gap-1 transition-colors"
                   >
                     Ver todos os feriados
-                    <ChevronRight size={16} />
+                    <ChevronRight size={16} strokeWidth={2} />
                   </button>
                 </div>
               </div>
