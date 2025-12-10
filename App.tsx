@@ -720,14 +720,15 @@ const App: React.FC = () => {
                             
                             console.log(`[App] 🔍 [DEBUG] syncChats: Nova mensagem detectada - chatId: ${realChat.id}, dbStatus: ${dbChatStatus}, lastMsgSender: ${lastMsg?.sender}, lastMsgContent: ${lastMsg?.content?.substring(0, 50)}`);
                             
-                            // Se o chat está fechado no banco e recebeu nova mensagem do usuário, reabre
+                            // Se o chat está fechado no banco e recebeu nova mensagem do usuário, reabre IMEDIATAMENTE
                             if (dbChatStatus === 'closed' && lastMsg.sender === 'user') {
-                                console.log(`[App] 🔄 [DEBUG] syncChats: Chat fechado ${realChat.id} recebeu nova mensagem do usuário, reabrindo...`);
+                                console.log(`[App] 🔄 [DEBUG] syncChats: Chat fechado ${realChat.id} recebeu nova mensagem do usuário, reabrindo IMEDIATAMENTE...`);
                                 
-                                // Atualiza status para pending e limpa assignedTo/departmentId
-                                // Isso será salvo no banco via handleUpdateChat abaixo
-                                setTimeout(async () => {
+                                // Atualiza status para pending e limpa assignedTo/departmentId IMEDIATAMENTE
+                                // Usa IIFE async para executar imediatamente sem bloquear
+                                (async () => {
                                     try {
+                                        // Atualiza banco IMEDIATAMENTE
                                         await apiService.updateChatStatus(realChat.id, 'pending', undefined, null);
                                         console.log(`[App] ✅ [DEBUG] syncChats: Chat ${realChat.id} reaberto e salvo no banco`);
                                         
@@ -834,7 +835,7 @@ const App: React.FC = () => {
                                     } catch (error) {
                                         console.error('[App] ❌ Erro ao reabrir chat fechado no syncChats:', error);
                                     }
-                                }, 500);
+                                })(); // IIFE async - executa imediatamente
                             }
                             
                             if (lastMsg.sender === 'user') {
@@ -1626,8 +1627,8 @@ const App: React.FC = () => {
       }, 100);
     });
     
-    // Polling a cada 5 segundos para evitar atualizações excessivas (era 2s)
-    intervalIdRef.current = setInterval(syncChats, 5000);
+    // Polling a cada 2 segundos para detectar mensagens rapidamente (reduzido de 5s)
+    intervalIdRef.current = setInterval(syncChats, 2000);
     
     // Inicializa Socket.IO de forma assíncrona
     const initWebSocket = async (isReconnect: boolean = false) => {
