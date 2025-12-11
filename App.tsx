@@ -3257,19 +3257,45 @@ const App: React.FC = () => {
         const contactNameChanged = oldChat && oldChat.contactName !== updatedChat.contactName;
         const contactAvatarChanged = oldChat && oldChat.contactAvatar !== updatedChat.contactAvatar;
         
+        // Verifica se as mensagens mudaram (novas mensagens foram adicionadas)
+        const messagesChanged = oldChat && (
+          updatedChat.messages.length !== oldChat.messages.length ||
+          (updatedChat.messages.length > 0 && oldChat.messages.length > 0 &&
+           updatedChat.messages[updatedChat.messages.length - 1].id !== oldChat.messages[oldChat.messages.length - 1].id)
+        );
+        
         console.log('[App] 🔍 [DEBUG] handleUpdateChat - Mudanças detectadas:', {
           statusChanged,
           assignedToChanged,
           departmentIdChanged,
           contactNameChanged,
           contactAvatarChanged,
-          willSave: !!(currentUser && (statusChanged || assignedToChanged || departmentIdChanged || contactNameChanged || contactAvatarChanged))
+          messagesChanged,
+          oldMsgCount: oldChat?.messages.length,
+          newMsgCount: updatedChat.messages.length,
+          willSave: !!(currentUser && (statusChanged || assignedToChanged || departmentIdChanged || contactNameChanged || contactAvatarChanged || messagesChanged))
         });
         
-        // Salva no banco se status, assignedTo, departmentId, contactName ou contactAvatar mudaram
-        if (currentUser && (statusChanged || assignedToChanged || departmentIdChanged || contactNameChanged || contactAvatarChanged)) {
+        // Se as mensagens mudaram, salva o chat completo (incluindo mensagens)
+        if (currentUser && messagesChanged) {
           try {
-            console.log('[App] 🔍 [DEBUG] handleUpdateChat - Salvando no banco:', {
+            console.log('[App] 🔍 [DEBUG] handleUpdateChat - Salvando chat completo com mensagens no banco:', {
+              chatId: updatedChat.id,
+              msgCount: updatedChat.messages.length
+            });
+            // Salva o chat completo usando saveData para incluir as mensagens
+            await apiService.saveData('chats', updatedChat.id, updatedChat);
+            console.log(`[App] ✅ [DEBUG] Chat completo salvo no banco: ${updatedChat.contactName} (${updatedChat.messages.length} mensagens)`);
+          } catch (error) {
+            console.error(`[App] ❌ [DEBUG] Erro ao salvar chat completo no banco:`, error);
+          }
+        }
+        
+        // Salva no banco se status, assignedTo, departmentId, contactName ou contactAvatar mudaram
+        // (mas não se já salvou o chat completo acima para evitar duplicação)
+        if (currentUser && (statusChanged || assignedToChanged || departmentIdChanged || contactNameChanged || contactAvatarChanged) && !messagesChanged) {
+          try {
+            console.log('[App] 🔍 [DEBUG] handleUpdateChat - Salvando apenas status/metadados no banco:', {
               chatId: updatedChat.id,
               status: updatedChat.status,
               assignedTo: updatedChat.assignedTo,
@@ -3294,15 +3320,25 @@ const App: React.FC = () => {
           } catch (error) {
             console.error(`[App] ❌ [DEBUG] Erro ao salvar chat no banco:`, error);
           }
-        } else {
-          console.log('[App] 🔍 [DEBUG] handleUpdateChat - NÃO salvou no banco:', {
+        } else if (currentUser && (statusChanged || assignedToChanged || departmentIdChanged || contactNameChanged || contactAvatarChanged) && messagesChanged) {
+          // Se tanto mensagens quanto status/metadados mudaram, já salvou o chat completo acima
+          // Mas ainda precisa atualizar status via updateChatStatus para garantir consistência
+          try {
+            await apiService.updateChatStatus(
+              updatedChat.id,
+              updatedChat.status,
+              updatedChat.assignedTo,
+              updatedChat.departmentId || null,
+              updatedChat.contactName,
+              updatedChat.contactAvatar
+            );
+          } catch (error) {
+            console.error(`[App] ❌ [DEBUG] Erro ao atualizar status após salvar chat completo:`, error);
+          }
+        } else if (!messagesChanged && !statusChanged && !assignedToChanged && !departmentIdChanged && !contactNameChanged && !contactAvatarChanged) {
+          console.log('[App] 🔍 [DEBUG] handleUpdateChat - NÃO salvou no banco (nenhuma mudança detectada):', {
             chatId: updatedChat.id,
-            hasUser: !!currentUser,
-            statusChanged,
-            assignedToChanged,
-            departmentIdChanged,
-            contactNameChanged,
-            contactAvatarChanged
+            hasUser: !!currentUser
           });
         }
         
