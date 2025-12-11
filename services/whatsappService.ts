@@ -1051,7 +1051,16 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
         let rawData: any = null;
         
-        // 2. Tenta buscar os dados com FALLBACK ROBUSTO
+        // 2. NOTA: Endpoint findChats está quebrado na Evolution API v2.3.6
+        // Erro 500: "Cannot read properties of null (reading 'mediaUrl')"
+        // Ocorre mesmo sem include: ['messages'] - bug na Evolution API
+        // Solução: Desabilitar fetchChats e usar apenas banco de dados + WebSocket
+        // Chats serão carregados do banco e mensagens virão via WebSocket em tempo real
+        
+        console.warn(`[fetchChats] Endpoint findChats desabilitado devido a bug na Evolution API v2.3.6. Usando apenas banco de dados e WebSocket.`);
+        return [];
+        
+        /* CÓDIGO DESABILITADO - Endpoint findChats quebrado na Evolution API v2.3.6
         try {
             // Tenta POST findChats (V2 padrão) - SEM include messages para evitar erro 500
             // O erro "Cannot read properties of null (reading 'mediaUrl')" ocorre quando
@@ -1116,6 +1125,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             console.error('[fetchChats] Falha na requisição:', e);
             return [];
         }
+        */
 
         if (!rawData) return [];
 
