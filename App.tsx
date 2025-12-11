@@ -2207,10 +2207,11 @@ const App: React.FC = () => {
             });
             
             const processSingleMessage = async (remoteJid: string, mapped: Message, messageData: any) => {
-                            // Debug: log para rastrear remoteJid recebido
-                            console.log(`[App] 🔍 [DEBUG] Mensagem recebida via Socket.IO: remoteJid=${remoteJid}, sender=${mapped?.sender}, content=${mapped?.content?.substring(0, 50)}`);
-                            
-                            if (mapped) {
+                try {
+                    // Debug: log para rastrear remoteJid recebido
+                    console.log(`[App] 🔍 [DEBUG] Mensagem recebida via Socket.IO: remoteJid=${remoteJid}, sender=${mapped?.sender}, content=${mapped?.content?.substring(0, 50)}`);
+                    
+                    if (mapped) {
                                 // Verifica se o chat já existe antes de processar
                                 let chatExistsBefore = false;
                                 let existingChatBefore: Chat | undefined = undefined;
@@ -3017,7 +3018,7 @@ const App: React.FC = () => {
                 } catch (err) {
                     console.error('[App] ❌ Erro ao processar mensagem Socket.IO:', err);
                 }
-            });
+            };
             
             // Event: messages.update - atualizações de status de mensagens
             socket.on('messages.update', (data: any) => {
