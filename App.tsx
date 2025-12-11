@@ -1322,9 +1322,10 @@ const App: React.FC = () => {
                                                             return timeDiff;
                                                         }
                                                         
-                                                        // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, mantém ordem de inserção
-                                                        // (retorna 0 para manter ordem estável quando senders são iguais)
-                                                        return 0;
+                                                        // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, usa timestamp real
+                                                        // Mesmo que a diferença seja muito pequena, usa o timestamp para garantir ordem cronológica correta
+                                                        // Isso evita que mensagens recebidas rapidamente (1, 2, 3, 4, 5, 6) apareçam na ordem errada (6, 5, 4, 3, 2, 1)
+                                                        return timeDiff;
                                                     });
                                                 
                                                 // Detecta se há novas mensagens recebidas
@@ -2629,9 +2630,10 @@ const App: React.FC = () => {
                                                         return timeDiff;
                                                     }
                                                     
-                                                    // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, mantém ordem de inserção
-                                                    // (retorna 0 para manter ordem estável quando senders são iguais)
-                                                    return 0;
+                                                    // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, usa timestamp real
+                                                    // Mesmo que a diferença seja muito pequena, usa o timestamp para garantir ordem cronológica correta
+                                                    // Isso evita que mensagens recebidas rapidamente (1, 2, 3, 4, 5, 6) apareçam na ordem errada (6, 5, 4, 3, 2, 1)
+                                                    return timeDiff;
                                                 });
                                                 
                                                 // Lógica para processar mensagens de clientes finalizados
@@ -2676,11 +2678,12 @@ const App: React.FC = () => {
                                                         return timeDiff;
                                                     }
                                                     
-                                                    // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, mantém ordem de inserção
-                                                    // (retorna 0 para manter ordem estável quando senders são iguais)
-                                                    return 0;
+                                                    // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, usa timestamp real
+                                                    // Mesmo que a diferença seja muito pequena, usa o timestamp para garantir ordem cronológica correta
+                                                    // Isso evita que mensagens recebidas rapidamente (1, 2, 3, 4, 5, 6) apareçam na ordem errada (6, 5, 4, 3, 2, 1)
+                                                    return timeDiff;
                                                 });
-                                                
+                                            
                                             // PRIORIDADE ABSOLUTA: Status do banco NUNCA é alterado via Socket.IO
                                             // Apenas adiciona mensagens, não altera status
                                                 let updatedChat = { ...chat };
@@ -3647,9 +3650,10 @@ const App: React.FC = () => {
                             return timeDiff;
                         }
                         
-                        // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, mantém ordem de inserção
-                        // (retorna 0 para manter ordem estável quando senders são iguais)
-                        return 0;
+                        // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, usa timestamp real
+                        // Mesmo que a diferença seja muito pequena, usa o timestamp para garantir ordem cronológica correta
+                        // Isso evita que mensagens recebidas rapidamente (1, 2, 3, 4, 5, 6) apareçam na ordem errada (6, 5, 4, 3, 2, 1)
+                        return timeDiff;
                     });
                     
                     return {

@@ -1967,6 +1967,8 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
             }
             
             // Para diferenças maiores ou quando não se aplica a lógica especial, usa timestamp real
+            // IMPORTANTE: Sempre usa timestamp real, mesmo que a diferença seja muito pequena
+            // Isso garante que mensagens recebidas rapidamente sejam ordenadas corretamente
             return timeDiff;
         });
         // Log apenas se não encontrou mensagens (para não poluir quando funciona)
