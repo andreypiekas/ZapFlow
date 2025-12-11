@@ -2176,6 +2176,51 @@ const App: React.FC = () => {
                 });
             };
             
+            socket.on('messages.upsert', (data: any) => {
+                try {
+                    // Extrai dados da mensagem
+                    const messageData = data.message || data;
+                    if (!messageData || !messageData.key) return;
+                    
+                    const remoteJid = normalizeJid(messageData.key.remoteJid || messageData.key.remoteJidAlt || '');
+                    if (!remoteJid) return;
+                    
+                    // Adiciona mensagem à fila para processamento em batch
+                    if (!messageQueue.has(remoteJid)) {
+                        messageQueue.set(remoteJid, []);
+                    }
+                    messageQueue.get(remoteJid)?.push(messageData);
+                    
+                    // Limpa timeout anterior e cria novo
+                    if (messageProcessTimeouts.has(remoteJid)) {
+                        clearTimeout(messageProcessTimeouts.get(remoteJid)!);
+                    }
+                    messageProcessTimeouts.set(remoteJid, setTimeout(() => {
+                        const messagesToProcess = messageQueue.get(remoteJid) || [];
+                        processMessageBatch(remoteJid, messagesToProcess);
+                        messageQueue.delete(remoteJid);
+                        messageProcessTimeouts.delete(remoteJid);
+                    }, 100));
+                } catch (err) {
+                    console.error('[App] ❌ Erro ao processar mensagem Socket.IO:', err);
+                }
+            });
+            
+            const processMessageBatch = (remoteJid: string, messages: any[]) => {
+                // Processa todas as mensagens do batch
+                messages.forEach(messageData => {
+                    try {
+                        const mapped = mapApiMessageToInternal(messageData);
+                        if (!mapped) return;
+                        
+                        // Processa mensagem individual (código existente abaixo)
+                        processSingleMessage(remoteJid, mapped, messageData);
+                    } catch (error) {
+                        console.error(`[App] ❌ Erro ao processar mensagem do batch:`, error);
+                    }
+                });
+            };
+            
             const processSingleMessage = async (remoteJid: string, mapped: Message, messageData: any) => {
                             // Debug: log para rastrear remoteJid recebido
                             console.log(`[App] 🔍 [DEBUG] Mensagem recebida via Socket.IO: remoteJid=${remoteJid}, sender=${mapped?.sender}, content=${mapped?.content?.substring(0, 50)}`);
