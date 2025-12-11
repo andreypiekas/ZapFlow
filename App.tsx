@@ -2111,17 +2111,29 @@ const App: React.FC = () => {
             
             // Event: connect
             socket.on('connect', () => {
+                // Protege eventNames() caso não esteja disponível
+                let allListeners: string[] = [];
+                try {
+                    if (socket.eventNames && typeof socket.eventNames === 'function') {
+                        allListeners = Array.from(socket.eventNames());
+                    }
+                } catch (e) {
+                    console.warn('[App] ⚠️ [DEBUG] socket.eventNames() não disponível:', e);
+                }
+                
                 console.log('[App] ✅ Socket.IO conectado com sucesso!', {
                     socketId: socket.id,
                     connected: socket.connected,
-                    hasMessagesUpsertHandler: socket.hasListeners('messages.upsert'),
-                    allListeners: Array.from(socket.eventNames())
+                    hasMessagesUpsertHandler: socket.hasListeners ? socket.hasListeners('messages.upsert') : 'unknown',
+                    allListeners: allListeners
                 });
                 wsReconnectAttemptsRef.current = 0;
                 setWsStatus('connected');
                 
                 // Loga todos os listeners registrados para debug
-                console.log('[App] 🔍 [DEBUG] Socket.IO listeners registrados:', Array.from(socket.eventNames()));
+                if (allListeners.length > 0) {
+                    console.log('[App] 🔍 [DEBUG] Socket.IO listeners registrados:', allListeners);
+                }
             });
             
             // Event: disconnect
@@ -2151,18 +2163,36 @@ const App: React.FC = () => {
             });
                     
             // Debug: Listener genérico para ver todos os eventos
-            socket.onAny((eventName, ...args) => {
-                // Loga TODOS os eventos para debug (não apenas mensagens)
-                console.log(`[App] 🔔 [DEBUG] Socket.IO evento recebido: ${eventName}`, {
-                    eventName,
-                    argsCount: args.length,
-                    firstArgType: args[0] ? typeof args[0] : 'undefined',
-                    firstArgKeys: args[0] && typeof args[0] === 'object' ? Object.keys(args[0]).slice(0, 10) : []
-                });
-            });
+            // IMPORTANTE: onAny pode não estar disponível em todas as versões do Socket.IO
+            try {
+                if (socket.onAny && typeof socket.onAny === 'function') {
+                    socket.onAny((eventName, ...args) => {
+                        // Loga TODOS os eventos para debug (não apenas mensagens)
+                        console.log(`[App] 🔔 [DEBUG] Socket.IO evento recebido: ${eventName}`, {
+                            eventName,
+                            argsCount: args.length,
+                            firstArgType: args[0] ? typeof args[0] : 'undefined',
+                            firstArgKeys: args[0] && typeof args[0] === 'object' ? Object.keys(args[0]).slice(0, 10) : []
+                        });
+                    });
+                    console.log('[App] ✅ [DEBUG] socket.onAny registrado com sucesso');
+                } else {
+                    console.warn('[App] ⚠️ [DEBUG] socket.onAny não está disponível nesta versão do Socket.IO');
+                }
+            } catch (e) {
+                console.error('[App] ❌ [DEBUG] Erro ao registrar socket.onAny:', e);
+            }
             
             // Event: messages.upsert - mensagens novas ou atualizadas
             console.log('[App] 🔧 [DEBUG] Registrando handler messages.upsert no Socket.IO');
+            
+            // Verifica se o socket está conectado antes de registrar handlers
+            if (!socket.connected) {
+                console.warn('[App] ⚠️ [DEBUG] Socket.IO não está conectado ao registrar handlers. Aguardando conexão...');
+                socket.once('connect', () => {
+                    console.log('[App] ✅ [DEBUG] Socket.IO conectado, handlers serão registrados agora');
+                });
+            }
             
             // Debounce para processar múltiplas mensagens rápidas em batch
             // Agrupa mensagens por remoteJid e processa em batch após 100ms
@@ -2207,6 +2237,14 @@ const App: React.FC = () => {
             };
             
             socket.on('messages.upsert', (data: any) => {
+                console.log('[App] 🎯 [DEBUG] Socket.IO messages.upsert HANDLER CHAMADO!', {
+                    hasData: !!data,
+                    dataType: typeof data,
+                    dataKeys: data && typeof data === 'object' ? Object.keys(data).slice(0, 10) : [],
+                    socketConnected: socket.connected,
+                    socketId: socket.id
+                });
+                
                 try {
                     // Extrai dados da mensagem
                     const messageData = data.message || data;
