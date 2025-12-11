@@ -1116,7 +1116,7 @@ const App: React.FC = () => {
                         if (!lastFetch || (now - parseInt(lastFetch)) > 5000) {
                             sessionStorage.setItem(lastFetchKey, now.toString());
                             
-                            fetchChatMessages(apiConfig, chatId, 100).then(apiMessages => {
+                            fetchChatMessages(apiConfig, chatId, 1000).then(apiMessages => {
                                 if (apiMessages.length > 0) {
                                     // Log removido para produção - muito verboso
                                     // console.log(`[App] 🔄 Buscou ${apiMessages.length} mensagens da API para ${chatId}`);

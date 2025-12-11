@@ -1065,7 +1065,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                     where: {}, 
                     // Removido include: ['messages'] para evitar erro 500
                     // Mensagens serão buscadas separadamente quando necessário
-                    limit: 100
+                    limit: 1000
                 })
             });
             
@@ -1080,7 +1080,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                     const resMsg = await fetch(`${config.baseUrl}/message/fetchMessages/${instanceName}`, {
                         method: 'POST',
                         headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ limit: 100 }) 
+                        body: JSON.stringify({ limit: 1000 }) 
                     });
                     
                     if (resMsg.ok) {
@@ -1671,7 +1671,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 };
 
 // Busca mensagens de um chat específico
-export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit: number = 100): Promise<Message[]> => {
+export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit: number = 1000): Promise<Message[]> => {
     // Logs de debug reduzidos
     
     if (config.isDemo || !config.baseUrl || !config.apiKey) {
@@ -1784,19 +1784,19 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
             // Endpoint 1: findChats com remoteJid (sem include messages para evitar erro 500)
             {
                 url: `${config.baseUrl}/chat/findChats/${instanceName}`,
-                body: { where: { remoteJid: chatId }, limit: 100 },
+                body: { where: { remoteJid: chatId }, limit: 1000 },
                 isFindChats: true
             },
             // Endpoint 2: findChats com remoteJid sem @s.whatsapp.net
             {
                 url: `${config.baseUrl}/chat/findChats/${instanceName}`,
-                body: { where: { remoteJid: phoneNumber }, limit: 100 },
+                body: { where: { remoteJid: phoneNumber }, limit: 1000 },
                 isFindChats: true
             },
             // Endpoint 3: findChats sem filtro (busca todos e filtra depois) - último recurso
             {
                 url: `${config.baseUrl}/chat/findChats/${instanceName}`,
-                body: { where: {}, limit: 100 },
+                body: { where: {}, limit: 1000 },
                 isFindChats: true
             }
         ];
