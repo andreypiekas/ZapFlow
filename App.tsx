@@ -1854,6 +1854,9 @@ const App: React.FC = () => {
                         
                         return newChat;
                     }
+                    
+                    // Se nenhum dos casos acima, retorna o realChat original
+                    return realChat;
                 });
                 // console.log(`[App] Merge concluído: ${mergedChats.length} chats no total`);
                 // VERIFICAÇÃO FINAL: Garante que status do banco seja SEMPRE preservado
