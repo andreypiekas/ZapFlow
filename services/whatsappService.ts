@@ -1051,16 +1051,9 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
 
         let rawData: any = null;
         
-        // 2. NOTA: Endpoint findChats está quebrado na Evolution API v2.3.6
-        // Erro 500: "Cannot read properties of null (reading 'mediaUrl')"
-        // Ocorre mesmo sem include: ['messages'] - bug na Evolution API
-        // Solução: Desabilitar fetchChats e usar apenas banco de dados + WebSocket
-        // Chats serão carregados do banco e mensagens virão via WebSocket em tempo real
-        
-        console.warn(`[fetchChats] Endpoint findChats desabilitado devido a bug na Evolution API v2.3.6. Usando apenas banco de dados e WebSocket.`);
-        return [];
-        
-        /* CÓDIGO DESABILITADO - Endpoint findChats quebrado na Evolution API v2.3.6
+        // 2. Tenta buscar os dados com FALLBACK ROBUSTO
+        // NOTA: Evolution API v2.3.6 tem bug que retorna erro 500 em alguns casos
+        // Mas ainda tentamos buscar, pois pode funcionar em alguns cenários
         try {
             // Tenta POST findChats (V2 padrão) - SEM include messages para evitar erro 500
             // O erro "Cannot read properties of null (reading 'mediaUrl')" ocorre quando
@@ -1078,13 +1071,34 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             
             if (res.ok) {
                 rawData = await res.json();
-            } else if (res.status === 500 || res.status === 404) {
-                // Se a API retornar 500 ou 404, não tenta fallbacks (evita spam de requisições)
-                console.warn(`[fetchChats] Evolution API retornou ${res.status} para findChats/${instanceName}. Pulando sincronização desta vez.`);
+            } else if (res.status === 500) {
+                // Erro 500 conhecido - tenta buscar mensagens via endpoint alternativo
+                console.warn(`[fetchChats] Evolution API retornou 500 para findChats/${instanceName}. Tentando buscar mensagens via endpoint alternativo...`);
+                
+                // Tenta buscar mensagens diretamente para construir chats
+                try {
+                    const resMsg = await fetch(`${config.baseUrl}/message/fetchMessages/${instanceName}`, {
+                        method: 'POST',
+                        headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ limit: 100 }) 
+                    });
+                    
+                    if (resMsg.ok) {
+                        rawData = await resMsg.json();
+                    } else {
+                        // Se fetchMessages também falhar, retorna vazio mas não bloqueia
+                        console.warn(`[fetchChats] Endpoint fetchMessages também falhou (${resMsg.status}). Continuando sem sincronização da Evolution API.`);
+                        return [];
+                    }
+                } catch (msgError) {
+                    console.warn(`[fetchChats] Erro ao tentar fetchMessages:`, msgError);
+                    return [];
+                }
+            } else if (res.status === 404) {
+                console.warn(`[fetchChats] Endpoint findChats não encontrado (404). Pulando sincronização.`);
                 return [];
             } else {
-                // Fallback: Se findChats falhar com outro erro, tenta fetchMessages
-                // console.log(`[fetchChats] findChats falhou (${res.status}), tentando fetchMessages...`);
+                // Outros erros - tenta fallback
                 try {
                     const resMsg = await fetch(`${config.baseUrl}/message/fetchMessages/${instanceName}`, {
                         method: 'POST',
@@ -1095,7 +1109,6 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                     if (resMsg.ok) {
                         rawData = await resMsg.json();
                     } else if (resMsg.status === 404) {
-                        // Endpoint não existe, retorna vazio
                         console.warn(`[fetchChats] Endpoint fetchMessages não encontrado (404). Pulando sincronização.`);
                         return [];
                     } else {
@@ -1125,7 +1138,6 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             console.error('[fetchChats] Falha na requisição:', e);
             return [];
         }
-        */
 
         if (!rawData) return [];
 
