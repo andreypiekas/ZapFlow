@@ -2783,6 +2783,21 @@ const App: React.FC = () => {
                                     
                                     if (chatUpdated) {
                                     console.log('[App] ✅ Chats atualizados com nova mensagem via Socket.IO');
+                                    
+                                    // Salva o chat atualizado no banco imediatamente para evitar que syncChats sobrescreva
+                                    // Encontra o chat atualizado e salva
+                                    const updatedChat = updatedChats.find(c => {
+                                        const chatJid = normalizeJid(c.id);
+                                        const messageJid = normalizeJid(remoteJid);
+                                        return chatJid === messageJid;
+                                    });
+                                    
+                                    if (updatedChat && currentUser) {
+                                        // Salva no banco de forma assíncrona para não bloquear a UI
+                                        handleUpdateChat(updatedChat).catch(err => {
+                                            console.error(`[App] ❌ Erro ao salvar chat após mensagem via Socket.IO:`, err);
+                                        });
+                                    }
                                     }
                                     
                                     return updatedChats;
