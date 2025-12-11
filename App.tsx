@@ -2936,85 +2936,84 @@ const App: React.FC = () => {
                     
                     // Se o chat não existia antes e é uma mensagem do usuário, cria o chat novo
                     if (!chatExistsBefore && mapped && mapped.sender === 'user') {
-                                    console.log(`[App] 🔍 [DEBUG] Socket.IO: Chat novo detectado - remoteJid=${remoteJid}, criando chat...`);
-                                    
-                                    // Extrai número do JID
-                                    const contactNumber = remoteJid.split('@')[0]?.replace(/\D/g, '') || '';
-                                    
-                                    if (contactNumber.length >= 10) {
-                                        // Cria novo chat
-                                        const newChat: Chat = {
-                                            id: remoteJid,
-                                            contactName: messageData?.pushName || messageData?.key?.pushName || contactNumber,
-                                            contactNumber: contactNumber,
-                                            contactAvatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(messageData?.pushName || messageData?.key?.pushName || contactNumber)}`,
-                                            departmentId: null,
-                                            unreadCount: 1,
-                                            lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
-                                            lastMessageTime: mapped.timestamp || new Date(),
-                                            status: 'pending',
-                                            messages: [mapped],
-                                            assignedTo: undefined,
-                                            departmentSelectionSent: false,
-                                            awaitingDepartmentSelection: false
-                                        };
-                                        
-                                        // Adiciona o chat ao estado
-                                        setChats(currentChats => {
-                                            // Verifica se já não foi adicionado (evita duplicatas)
-                                            const alreadyExists = currentChats.some(c => {
-                                                if (!c || !c.id) return false;
-                                                const chatJid = normalizeJid(c.id);
-                                                const messageJid = normalizeJid(remoteJid);
-                                                return chatJid === messageJid || 
-                                                       (c.contactNumber && typeof c.contactNumber === 'string' && 
-                                                        c.contactNumber.replace(/\D/g, '') === contactNumber);
-                                            });
-                                            if (alreadyExists) {
-                                                return currentChats;
-                                            }
-                                            return [newChat, ...currentChats];
-                                        });
-                                        
-                                        // Envia mensagem de seleção de departamento se houver departamentos configurados
-                                        if (departments.length > 0) {
-                                            console.log(`[App] 📤 [DEBUG] Socket.IO: Chat novo sem departamento - Enviando mensagem de seleção de departamento para ${remoteJid} (número: ${contactNumber})`);
-                                            sendDepartmentSelectionMessage(apiConfig, contactNumber, departments)
-                                                .then(sent => {
-                                                    if (sent) {
-                                                        // Adiciona mensagem de sistema
-                                                        const systemMessage: Message = {
-                                                            id: `sys_dept_selection_new_${Date.now()}`,
-                                                            content: 'department_selection_sent - Mensagem de seleção de departamento enviada',
-                                                            sender: 'system',
-                                                            timestamp: new Date(),
-                                                            status: MessageStatus.READ,
-                                                            type: 'text'
-                                                        };
-                                                        
-                                                        handleUpdateChat({
-                                                            ...newChat,
-                                                            departmentSelectionSent: true,
-                                                            awaitingDepartmentSelection: true,
-                                                            messages: [...newChat.messages, systemMessage]
-                                                        });
-                                                        console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada para novo chat ${remoteJid}`);
-                                                    } else {
-                                                        console.error(`[App] ❌ [DEBUG] Socket.IO: Falha ao enviar mensagem de seleção de departamento para novo chat ${remoteJid}`);
-                                                    }
-                                                })
-                                                .catch(err => {
-                                                    console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem de seleção de departamento para novo chat:`, err);
-                                                });
-                    } else {
-                                            console.warn(`[App] ⚠️ [DEBUG] Socket.IO: Não enviando mensagem de seleção - NENHUM DEPARTAMENTO CONFIGURADO para novo chat ${remoteJid}`);
-                                        }
-                                    } else {
-                                        console.warn(`[App] ⚠️ [DEBUG] Socket.IO: Não foi possível criar chat novo - número inválido: ${contactNumber} (remoteJid: ${remoteJid})`);
-                                    }
+                        console.log(`[App] 🔍 [DEBUG] Socket.IO: Chat novo detectado - remoteJid=${remoteJid}, criando chat...`);
+                        
+                        // Extrai número do JID
+                        const contactNumber = remoteJid.split('@')[0]?.replace(/\D/g, '') || '';
+                        
+                        if (contactNumber.length >= 10) {
+                            // Cria novo chat
+                            const newChat: Chat = {
+                                id: remoteJid,
+                                contactName: messageData?.pushName || messageData?.key?.pushName || contactNumber,
+                                contactNumber: contactNumber,
+                                contactAvatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(messageData?.pushName || messageData?.key?.pushName || contactNumber)}`,
+                                departmentId: null,
+                                unreadCount: 1,
+                                lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,
+                                lastMessageTime: mapped.timestamp || new Date(),
+                                status: 'pending',
+                                messages: [mapped],
+                                assignedTo: undefined,
+                                departmentSelectionSent: false,
+                                awaitingDepartmentSelection: false
+                            };
+                            
+                            // Adiciona o chat ao estado
+                            setChats(currentChats => {
+                                // Verifica se já não foi adicionado (evita duplicatas)
+                                const alreadyExists = currentChats.some(c => {
+                                    if (!c || !c.id) return false;
+                                    const chatJid = normalizeJid(c.id);
+                                    const messageJid = normalizeJid(remoteJid);
+                                    return chatJid === messageJid || 
+                                           (c.contactNumber && typeof c.contactNumber === 'string' && 
+                                            c.contactNumber.replace(/\D/g, '') === contactNumber);
+                                });
+                                if (alreadyExists) {
+                                    return currentChats;
                                 }
+                                return [newChat, ...currentChats];
+                            });
+                            
+                            // Envia mensagem de seleção de departamento se houver departamentos configurados
+                            if (departments.length > 0) {
+                                console.log(`[App] 📤 [DEBUG] Socket.IO: Chat novo sem departamento - Enviando mensagem de seleção de departamento para ${remoteJid} (número: ${contactNumber})`);
+                                sendDepartmentSelectionMessage(apiConfig, contactNumber, departments)
+                                    .then(sent => {
+                                        if (sent) {
+                                            // Adiciona mensagem de sistema
+                                            const systemMessage: Message = {
+                                                id: `sys_dept_selection_new_${Date.now()}`,
+                                                content: 'department_selection_sent - Mensagem de seleção de departamento enviada',
+                                                sender: 'system',
+                                                timestamp: new Date(),
+                                                status: MessageStatus.READ,
+                                                type: 'text'
+                                            };
+                                            
+                                            handleUpdateChat({
+                                                ...newChat,
+                                                departmentSelectionSent: true,
+                                                awaitingDepartmentSelection: true,
+                                                messages: [...newChat.messages, systemMessage]
+                                            });
+                                            console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada para novo chat ${remoteJid}`);
+                                        } else {
+                                            console.error(`[App] ❌ [DEBUG] Socket.IO: Falha ao enviar mensagem de seleção de departamento para novo chat ${remoteJid}`);
+                                        }
+                                    })
+                                    .catch(err => {
+                                        console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem de seleção de departamento para novo chat:`, err);
+                                    });
+                            } else {
+                                console.warn(`[App] ⚠️ [DEBUG] Socket.IO: Não enviando mensagem de seleção - NENHUM DEPARTAMENTO CONFIGURADO para novo chat ${remoteJid}`);
                             }
+                        } else {
+                            console.warn(`[App] ⚠️ [DEBUG] Socket.IO: Não foi possível criar chat novo - número inválido: ${contactNumber} (remoteJid: ${remoteJid})`);
+                        }
                     }
+                }
                 } catch (err) {
                     console.error('[App] ❌ Erro ao processar mensagem Socket.IO:', err);
                 }
