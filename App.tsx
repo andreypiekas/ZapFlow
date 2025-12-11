@@ -2161,22 +2161,7 @@ const App: React.FC = () => {
             const messageQueue = new Map<string, any[]>();
             const messageProcessTimeouts = new Map<string, NodeJS.Timeout>();
             
-            const processMessageBatch = (remoteJid: string, messages: any[]) => {
-                // Processa todas as mensagens do batch
-                messages.forEach(messageData => {
-                    try {
-                        const mapped = mapApiMessageToInternal(messageData);
-                        if (!mapped) return;
-                        
-                        // Processa mensagem individual (código existente abaixo)
-                        processSingleMessage(remoteJid, mapped, messageData);
-                    } catch (error) {
-                        console.error(`[App] ❌ Erro ao processar mensagem do batch:`, error);
-                    }
-                });
-            };
-            
-            socket.on('messages.upsert', (data: any) => {
+            const processSingleMessage = async (remoteJid: string, mapped: Message, messageData: any) => {
                 try {
                     // Extrai dados da mensagem
                     const messageData = data.message || data;
@@ -2205,21 +2190,6 @@ const App: React.FC = () => {
                     console.error('[App] ❌ Erro ao processar mensagem Socket.IO:', err);
                 }
             });
-            
-            const processMessageBatch = (remoteJid: string, messages: any[]) => {
-                // Processa todas as mensagens do batch
-                messages.forEach(messageData => {
-                    try {
-                        const mapped = mapApiMessageToInternal(messageData);
-                        if (!mapped) return;
-                        
-                        // Processa mensagem individual (código existente abaixo)
-                        processSingleMessage(remoteJid, mapped, messageData);
-                    } catch (error) {
-                        console.error(`[App] ❌ Erro ao processar mensagem do batch:`, error);
-                    }
-                });
-            };
             
             const processSingleMessage = async (remoteJid: string, mapped: Message, messageData: any) => {
                             // Debug: log para rastrear remoteJid recebido
