@@ -1066,24 +1066,47 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             
             if (res.ok) {
                 rawData = await res.json();
+            } else if (res.status === 500 || res.status === 404) {
+                // Se a API retornar 500 ou 404, não tenta fallbacks (evita spam de requisições)
+                console.warn(`[fetchChats] Evolution API retornou ${res.status} para findChats/${instanceName}. Pulando sincronização desta vez.`);
+                return [];
             } else {
-                // Fallback: Se findChats falhar, busca mensagens diretamente via fetchMessages
+                // Fallback: Se findChats falhar com outro erro, tenta fetchMessages
                 // console.log(`[fetchChats] findChats falhou (${res.status}), tentando fetchMessages...`);
-                const resMsg = await fetch(`${config.baseUrl}/message/fetchMessages/${instanceName}`, {
-                    method: 'POST',
-                    headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ limit: 50 }) 
-                });
-                
-                if (resMsg.ok) {
-                    rawData = await resMsg.json();
-                } else {
-                    // Fallback Final: fetchAllMessages (V2 antigo)
-                    const resAll = await fetch(`${config.baseUrl}/message/fetchAllMessages/${instanceName}`, {
-                        method: 'GET',
-                        headers: { 'apikey': getAuthKey(config) }
+                try {
+                    const resMsg = await fetch(`${config.baseUrl}/message/fetchMessages/${instanceName}`, {
+                        method: 'POST',
+                        headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ limit: 50 }) 
                     });
-                    if (resAll.ok) rawData = await resAll.json();
+                    
+                    if (resMsg.ok) {
+                        rawData = await resMsg.json();
+                    } else if (resMsg.status === 404) {
+                        // Endpoint não existe, retorna vazio
+                        console.warn(`[fetchChats] Endpoint fetchMessages não encontrado (404). Pulando sincronização.`);
+                        return [];
+                    } else {
+                        // Fallback Final: fetchAllMessages (V2 antigo)
+                        try {
+                            const resAll = await fetch(`${config.baseUrl}/message/fetchAllMessages/${instanceName}`, {
+                                method: 'GET',
+                                headers: { 'apikey': getAuthKey(config) }
+                            });
+                            if (resAll.ok) {
+                                rawData = await resAll.json();
+                            } else if (resAll.status === 404) {
+                                console.warn(`[fetchChats] Endpoint fetchAllMessages não encontrado (404). Pulando sincronização.`);
+                                return [];
+                            }
+                        } catch (fallbackError) {
+                            console.warn(`[fetchChats] Erro no fallback fetchAllMessages:`, fallbackError);
+                            return [];
+                        }
+                    }
+                } catch (msgError) {
+                    console.warn(`[fetchChats] Erro ao tentar fetchMessages:`, msgError);
+                    return [];
                 }
             }
         } catch (e) {

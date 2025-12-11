@@ -698,8 +698,19 @@ const App: React.FC = () => {
       return;
     }
 
+    // Flag para evitar múltiplas execuções simultâneas
+    let isSyncing = false;
+
     const syncChats = async () => {
-        console.log('[App] 🔍 [DEBUG] Iniciando syncChats...');
+        // Evita múltiplas execuções simultâneas
+        if (isSyncing) {
+            console.log('[App] ⏸️ [DEBUG] syncChats já em execução, pulando...');
+            return;
+        }
+        
+        isSyncing = true;
+        try {
+            console.log('[App] 🔍 [DEBUG] Iniciando syncChats...');
         // PASSO 1: Carrega chats do banco PRIMEIRO para ter status fixo
         let dbChatsMap = new Map<string, Chat>();
         try {
@@ -742,8 +753,15 @@ const App: React.FC = () => {
             console.error('[App] ❌ [DEBUG] Erro ao carregar chats do banco antes da sincronização:', error);
         }
 
-        // PASSO 2: Busca chats da API
-        const realChats = await fetchChats(apiConfig);
+        // PASSO 2: Busca chats da API (com tratamento de erro)
+        let realChats: Chat[] = [];
+        try {
+            realChats = await fetchChats(apiConfig);
+        } catch (error) {
+            console.error('[App] ❌ [DEBUG] Erro ao buscar chats da Evolution API:', error);
+            // Continua com os chats do banco mesmo se a API falhar
+            realChats = [];
+        }
         
         if (realChats.length > 0) {
             setChats(currentChats => {
@@ -1759,6 +1777,11 @@ const App: React.FC = () => {
         } else {
             // console.log('[App] Nenhum chat retornado da API, mantendo estado atual');
         }
+        } catch (error) {
+            console.error('[App] ❌ [DEBUG] Erro em syncChats:', error);
+        } finally {
+            isSyncing = false;
+        }
     };
 
     // Carrega chats individuais do banco ANTES da sincronização
@@ -1884,10 +1907,10 @@ const App: React.FC = () => {
       }, 100);
     });
     
-    // Polling a cada 2 segundos para detectar mensagens rapidamente (reduzido de 5s)
+    // Polling a cada 10 segundos para detectar mensagens (aumentado para reduzir carga)
     // IMPORTANTE: Só cria novo intervalo se não existir um já rodando
     if (!intervalIdRef.current) {
-      intervalIdRef.current = setInterval(syncChats, 2000);
+      intervalIdRef.current = setInterval(syncChats, 10000);
     }
     
     // Inicializa Socket.IO de forma assíncrona
