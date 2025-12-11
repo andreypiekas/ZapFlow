@@ -2114,10 +2114,14 @@ const App: React.FC = () => {
                 console.log('[App] ✅ Socket.IO conectado com sucesso!', {
                     socketId: socket.id,
                     connected: socket.connected,
-                    hasMessagesUpsertHandler: socket.hasListeners('messages.upsert')
+                    hasMessagesUpsertHandler: socket.hasListeners('messages.upsert'),
+                    allListeners: Array.from(socket.eventNames())
                 });
                 wsReconnectAttemptsRef.current = 0;
                 setWsStatus('connected');
+                
+                // Loga todos os listeners registrados para debug
+                console.log('[App] 🔍 [DEBUG] Socket.IO listeners registrados:', Array.from(socket.eventNames()));
             });
             
             // Event: disconnect
@@ -2148,9 +2152,13 @@ const App: React.FC = () => {
                     
             // Debug: Listener genérico para ver todos os eventos
             socket.onAny((eventName, ...args) => {
-                if (eventName.includes('message') || eventName.includes('Message')) {
-                    console.log(`[App] 🔔 [DEBUG] Socket.IO evento recebido: ${eventName}`, args);
-                }
+                // Loga TODOS os eventos para debug (não apenas mensagens)
+                console.log(`[App] 🔔 [DEBUG] Socket.IO evento recebido: ${eventName}`, {
+                    eventName,
+                    argsCount: args.length,
+                    firstArgType: args[0] ? typeof args[0] : 'undefined',
+                    firstArgKeys: args[0] && typeof args[0] === 'object' ? Object.keys(args[0]).slice(0, 10) : []
+                });
             });
             
             // Event: messages.upsert - mensagens novas ou atualizadas
