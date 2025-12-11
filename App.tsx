@@ -1723,7 +1723,7 @@ const App: React.FC = () => {
                         }
                         
                         return mergedChat;
-                    } else {
+                    } else if (realChat) {
                         // Novo chat encontrado - verifica se precisa enviar mensagem de seleção de setores
                         const hasUserMessages = realChat.messages.some(m => m.sender === 'user');
                         const needsDepartmentSelection = hasUserMessages && 
