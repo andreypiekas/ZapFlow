@@ -1014,16 +1014,82 @@ const App: React.FC = () => {
                         );
                         const shouldUpdateId = existingIdIsGenerated && realIdIsValid;
 
-                        // Merge inteligente de mensagens: combina mensagens locais e da API, removendo duplicatas
-                        // PRIORIDADE: Mensagens locais têm prioridade sobre API quando há mais mensagens locais
+                        // Merge inteligente de mensagens: combina mensagens locais, do banco e da API, removendo duplicatas
+                        // PRIORIDADE: Mensagens do banco > Mensagens locais > Mensagens da API
                         const mergedMessages: Message[] = [];
                         const messageMap = new Map<string, Message>();
                         
-                        // Se o estado local tem mais mensagens que a API, prioriza mensagens locais
-                        // Isso evita perder mensagens recebidas via Socket.IO que ainda não foram sincronizadas pela API
+                        // Verifica se o banco tem mensagens e se tem mais que a API
+                        const dbMessages = dbChat?.messages || [];
+                        const hasMoreDbMessages = dbMessages.length > realChat.messages.length;
                         const hasMoreLocalMessages = existingChat.messages.length > realChat.messages.length;
                         
-                        if (hasMoreLocalMessages) {
+                        // PRIORIDADE 1: Se o banco tem mais mensagens que a API, usa mensagens do banco como base
+                        if (hasMoreDbMessages && dbMessages.length > 0) {
+                            // Adiciona mensagens do banco primeiro (têm mais mensagens)
+                            dbMessages.forEach(msg => {
+                                const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
+                                if (!messageMap.has(msgKey)) {
+                                    messageMap.set(msgKey, msg);
+                                }
+                            });
+                            
+                            // Depois adiciona mensagens da API que não estão no banco
+                            realChat.messages.forEach(msg => {
+                                const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
+                                const existsInDb = Array.from(messageMap.values()).some(dbMsg => {
+                                    if (dbMsg.whatsappMessageId && msg.whatsappMessageId && 
+                                        dbMsg.whatsappMessageId === msg.whatsappMessageId) {
+                                        return true;
+                                    }
+                                    if (dbMsg.id && msg.id && dbMsg.id === msg.id) {
+                                        return true;
+                                    }
+                                    if (dbMsg.content && msg.content && dbMsg.sender === msg.sender) {
+                                        const contentMatch = dbMsg.content.trim() === msg.content.trim();
+                                        const timeWindow = msg.sender === 'agent' ? 30000 : 10000;
+                                        const timeMatch = dbMsg.timestamp && msg.timestamp && 
+                                            Math.abs(dbMsg.timestamp.getTime() - msg.timestamp.getTime()) < timeWindow;
+                                        if (contentMatch && timeMatch) {
+                                            return true;
+                                        }
+                                    }
+                                    return false;
+                                });
+                                
+                                if (!existsInDb && !messageMap.has(msgKey)) {
+                                    messageMap.set(msgKey, msg);
+                                }
+                            });
+                            
+                            // Por último, adiciona mensagens locais que não estão no banco nem na API
+                            existingChat.messages.forEach(msg => {
+                                const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
+                                const existsInMap = Array.from(messageMap.values()).some(m => {
+                                    if (m.whatsappMessageId && msg.whatsappMessageId && 
+                                        m.whatsappMessageId === msg.whatsappMessageId) {
+                                        return true;
+                                    }
+                                    if (m.id && msg.id && m.id === msg.id) {
+                                        return true;
+                                    }
+                                    if (m.content && msg.content && m.sender === msg.sender) {
+                                        const contentMatch = m.content.trim() === msg.content.trim();
+                                        const timeWindow = msg.sender === 'agent' ? 30000 : 10000;
+                                        const timeMatch = m.timestamp && msg.timestamp && 
+                                            Math.abs(m.timestamp.getTime() - msg.timestamp.getTime()) < timeWindow;
+                                        if (contentMatch && timeMatch) {
+                                            return true;
+                                        }
+                                    }
+                                    return false;
+                                });
+                                
+                                if (!existsInMap && !messageMap.has(msgKey)) {
+                                    messageMap.set(msgKey, msg);
+                                }
+                            });
+                        } else if (hasMoreLocalMessages) {
                             // PRIORIDADE: Adiciona mensagens locais primeiro (têm mais mensagens)
                             existingChat.messages.forEach(msg => {
                                 const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
@@ -2083,44 +2149,28 @@ const App: React.FC = () => {
             
             // Event: messages.upsert - mensagens novas ou atualizadas
             console.log('[App] 🔧 [DEBUG] Registrando handler messages.upsert no Socket.IO');
-            socket.on('messages.upsert', (data: any) => {
-                try {
-                    // Log inicial para rastrear recebimento de dados
-                    console.log(`[App] 📨 [DEBUG] Socket.IO messages.upsert recebido:`, {
-                        hasData: !!data,
-                        dataKeys: data ? Object.keys(data) : [],
-                        hasDataKey: !!(data?.data),
-                        hasKey: !!(data?.key),
-                        rawData: JSON.stringify(data).substring(0, 200),
-                        socketConnected: socket.connected,
-                        socketId: socket.id
-                    });
-                    
-                    // Log adicional para debug
-                    if (data && (data.key || data.data)) {
-                        const key = data.key || data.data?.key;
-                        if (key && key.remoteJid) {
-                            console.log(`[App] 🔍 [DEBUG] Socket.IO: Mensagem detectada - remoteJid=${key.remoteJid}, fromMe=${key.fromMe}`);
-                        }
-                    }
-                    
-                    // Processa mensagens recebidas - múltiplos formatos possíveis
-                    // Formato 1: { key: {...}, message: {...} }
-                    // Formato 2: { data: { key: {...}, message: {...} } }
-                    let messageData: any = null;
-                    
-                    if (data.data && data.data.key) {
-                        messageData = data.data;
-                    } else if (data.key) {
-                        messageData = data;
-                    } else {
-                        messageData = data;
-                    }
+            
+            // Debounce para processar múltiplas mensagens rápidas em batch
+            // Agrupa mensagens por remoteJid e processa em batch após 100ms
+            const messageQueue = new Map<string, any[]>();
+            const messageProcessTimeouts = new Map<string, NodeJS.Timeout>();
+            
+            const processMessageBatch = (remoteJid: string, messages: any[]) => {
+                // Processa todas as mensagens do batch
+                messages.forEach(messageData => {
+                    try {
+                        const mapped = mapApiMessageToInternal(messageData);
+                        if (!mapped) return;
                         
-                        if (messageData && messageData.key && messageData.key.remoteJid) {
-                            const remoteJid = normalizeJid(messageData.key.remoteJid);
-                            const mapped = mapApiMessageToInternal(messageData);
-                            
+                        // Processa mensagem individual (código existente abaixo)
+                        processSingleMessage(remoteJid, mapped, messageData);
+                    } catch (error) {
+                        console.error(`[App] ❌ Erro ao processar mensagem do batch:`, error);
+                    }
+                });
+            };
+            
+            const processSingleMessage = async (remoteJid: string, mapped: Message, messageData: any) => {
                             // Debug: log para rastrear remoteJid recebido
                             console.log(`[App] 🔍 [DEBUG] Mensagem recebida via Socket.IO: remoteJid=${remoteJid}, sender=${mapped?.sender}, content=${mapped?.content?.substring(0, 50)}`);
                             
