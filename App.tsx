@@ -2212,29 +2212,29 @@ const App: React.FC = () => {
                     console.log(`[App] 🔍 [DEBUG] Mensagem recebida via Socket.IO: remoteJid=${remoteJid}, sender=${mapped?.sender}, content=${mapped?.content?.substring(0, 50)}`);
                     
                     if (mapped) {
-                                // Verifica se o chat já existe antes de processar
-                                let chatExistsBefore = false;
-                                let existingChatBefore: Chat | undefined = undefined;
-                                setChats(currentChats => {
-                                    // Verifica se chat existe antes de processar
-                                    const existingChat = currentChats.find(c => {
-                                        if (!c || !c.id) return false;
-                                        const chatJid = normalizeJid(c.id);
-                                        const messageJid = normalizeJid(remoteJid);
-                                        return chatJid === messageJid || 
-                                               (c.contactNumber && typeof c.contactNumber === 'string' && 
-                                                c.contactNumber.replace(/\D/g, '') === remoteJid.split('@')[0]?.replace(/\D/g, ''));
-                                    });
-                                    chatExistsBefore = !!existingChat;
-                                    existingChatBefore = existingChat;
-                                    return currentChats;
-                                });
-                                
-                                // VERIFICAÇÃO CRÍTICA: Se é mensagem do usuário, verifica no banco se chat está fechado
-                                // e envia mensagem de seleção IMEDIATAMENTE, mesmo se chat não estiver no estado
-                                console.log(`[App] 🔍 [DEBUG] Socket.IO: Verificando mensagem - sender=${mapped?.sender}, remoteJid=${remoteJid}, departments.length=${departments.length}`);
-                                
-                                if (mapped.sender === 'user' && departments.length > 0) {
+                        // Verifica se o chat já existe antes de processar
+                        let chatExistsBefore = false;
+                        let existingChatBefore: Chat | undefined = undefined;
+                        setChats(currentChats => {
+                            // Verifica se chat existe antes de processar
+                            const existingChat = currentChats.find(c => {
+                                if (!c || !c.id) return false;
+                                const chatJid = normalizeJid(c.id);
+                                const messageJid = normalizeJid(remoteJid);
+                                return chatJid === messageJid || 
+                                       (c.contactNumber && typeof c.contactNumber === 'string' && 
+                                        c.contactNumber.replace(/\D/g, '') === remoteJid.split('@')[0]?.replace(/\D/g, ''));
+                            });
+                            chatExistsBefore = !!existingChat;
+                            existingChatBefore = existingChat;
+                            return currentChats;
+                        });
+                        
+                        // VERIFICAÇÃO CRÍTICA: Se é mensagem do usuário, verifica no banco se chat está fechado
+                        // e envia mensagem de seleção IMEDIATAMENTE, mesmo se chat não estiver no estado
+                        console.log(`[App] 🔍 [DEBUG] Socket.IO: Verificando mensagem - sender=${mapped?.sender}, remoteJid=${remoteJid}, departments.length=${departments.length}`);
+                        
+                        if (mapped.sender === 'user' && departments.length > 0) {
                                     const contactNumber = remoteJid.split('@')[0]?.replace(/\D/g, '') || '';
                                     
                                     // Verifica se chat existe no estado
@@ -2329,24 +2329,24 @@ const App: React.FC = () => {
                                             console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao buscar chat no banco:`, err);
                                         });
                                     }
-                                }
+                        }
+                        
+                        setChats(currentChats => {
+                            let chatUpdated = false;
+                            let foundChat = false;
+                            
+                            const updatedChats = currentChats.map(chat => {
+                                // Encontra o chat pelo JID
+                                const chatJid = normalizeJid(chat.id);
+                                const messageJid = normalizeJid(remoteJid);
                                 
-                                setChats(currentChats => {
-                                    let chatUpdated = false;
-                                    let foundChat = false;
-                                    
-                                    const updatedChats = currentChats.map(chat => {
-                                        // Encontra o chat pelo JID
-                                        const chatJid = normalizeJid(chat.id);
-                                        const messageJid = normalizeJid(remoteJid);
-                                        
-                                        // Comparação mais flexível de JIDs
-                                        const chatNumber = (chat.contactNumber && typeof chat.contactNumber === 'string') ? chat.contactNumber.replace(/\D/g, '') : '';
-                                        const chatIdNumber = (chatJid && typeof chatJid === 'string') ? chatJid.split('@')[0]?.replace(/\D/g, '') || '' : '';
-                                        const messageNumber = (messageJid && typeof messageJid === 'string') ? messageJid.split('@')[0]?.replace(/\D/g, '') || '' : '';
-                                        
-                                        // Match exato por JID
-                                        const exactMatch = chatJid === messageJid;
+                                // Comparação mais flexível de JIDs
+                                const chatNumber = (chat.contactNumber && typeof chat.contactNumber === 'string') ? chat.contactNumber.replace(/\D/g, '') : '';
+                                const chatIdNumber = (chatJid && typeof chatJid === 'string') ? chatJid.split('@')[0]?.replace(/\D/g, '') || '' : '';
+                                const messageNumber = (messageJid && typeof messageJid === 'string') ? messageJid.split('@')[0]?.replace(/\D/g, '') || '' : '';
+                                
+                                // Match exato por JID
+                                const exactMatch = chatJid === messageJid;
                                         
                                         // Match por número completo (todos os dígitos)
                                         const fullNumberMatch = chatNumber && messageNumber && (
@@ -2909,33 +2909,33 @@ const App: React.FC = () => {
                                                 };
                                             }
                                         }
-                                        return chat;
-                                    });
-                                    
-                                    if (chatUpdated) {
-                                    console.log('[App] ✅ Chats atualizados com nova mensagem via Socket.IO');
-                                    
-                                    // Salva o chat atualizado no banco imediatamente para evitar que syncChats sobrescreva
-                                    // Encontra o chat atualizado e salva
-                                    const updatedChat = updatedChats.find(c => {
-                                        const chatJid = normalizeJid(c.id);
-                                        const messageJid = normalizeJid(remoteJid);
-                                        return chatJid === messageJid;
-                                    });
-                                    
-                                    if (updatedChat && currentUser) {
-                                        // Salva no banco de forma assíncrona para não bloquear a UI
-                                        handleUpdateChat(updatedChat).catch(err => {
-                                            console.error(`[App] ❌ Erro ao salvar chat após mensagem via Socket.IO:`, err);
-                                        });
-                                    }
-                                    }
-                                    
-                                    return updatedChats;
+                            return chat;
+                        });
+                        
+                        if (chatUpdated) {
+                            console.log('[App] ✅ Chats atualizados com nova mensagem via Socket.IO');
+                            
+                            // Salva o chat atualizado no banco imediatamente para evitar que syncChats sobrescreva
+                            // Encontra o chat atualizado e salva
+                            const updatedChat = updatedChats.find(c => {
+                                const chatJid = normalizeJid(c.id);
+                                const messageJid = normalizeJid(remoteJid);
+                                return chatJid === messageJid;
+                            });
+                            
+                            if (updatedChat && currentUser) {
+                                // Salva no banco de forma assíncrona para não bloquear a UI
+                                handleUpdateChat(updatedChat).catch(err => {
+                                    console.error(`[App] ❌ Erro ao salvar chat após mensagem via Socket.IO:`, err);
                                 });
-                                
-                                // Se o chat não existia antes e é uma mensagem do usuário, cria o chat novo
-                                if (!chatExistsBefore && mapped && mapped.sender === 'user') {
+                            }
+                        }
+                        
+                        return updatedChats;
+                    });
+                    
+                    // Se o chat não existia antes e é uma mensagem do usuário, cria o chat novo
+                    if (!chatExistsBefore && mapped && mapped.sender === 'user') {
                                     console.log(`[App] 🔍 [DEBUG] Socket.IO: Chat novo detectado - remoteJid=${remoteJid}, criando chat...`);
                                     
                                     // Extrai número do JID
