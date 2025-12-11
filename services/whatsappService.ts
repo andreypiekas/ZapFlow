@@ -1053,14 +1053,17 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         
         // 2. Tenta buscar os dados com FALLBACK ROBUSTO
         try {
-            // Tenta POST findChats (V2 padrão) - busca com mensagens
+            // Tenta POST findChats (V2 padrão) - SEM include messages para evitar erro 500
+            // O erro "Cannot read properties of null (reading 'mediaUrl')" ocorre quando
+            // a Evolution API tenta processar mensagens com mídia que tem mediaUrl null
             const res = await fetch(`${config.baseUrl}/chat/findChats/${instanceName}`, {
                 method: 'POST',
                 headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     where: {}, 
-                    include: ['messages'],
-                    limit: 100 // Limite de mensagens por chat
+                    // Removido include: ['messages'] para evitar erro 500
+                    // Mensagens serão buscadas separadamente quando necessário
+                    limit: 100
                 })
             });
             
@@ -1751,23 +1754,27 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         // NOTA: A Evolution API pode não retornar mensagens no findChats mesmo com include: ['messages']
         // Isso pode ser uma limitação da versão da API ou configuração do servidor
         // Endpoint /message/fetchMessages não existe nesta versão (retorna 404)
+        // NOTA: Removido include: ['messages'] de todos os endpoints para evitar erro 500
+        // O erro "Cannot read properties of null (reading 'mediaUrl')" ocorre quando
+        // a Evolution API tenta processar mensagens com mídia que tem mediaUrl null
+        // Mensagens serão buscadas via WebSocket ou endpoints alternativos
         const endpoints = [
-            // Endpoint 1: findChats com remoteJid (prioridade - sabemos que funciona)
+            // Endpoint 1: findChats com remoteJid (sem include messages para evitar erro 500)
             {
                 url: `${config.baseUrl}/chat/findChats/${instanceName}`,
-                body: { where: { remoteJid: chatId }, include: ['messages'], limit: 100 },
+                body: { where: { remoteJid: chatId }, limit: 100 },
                 isFindChats: true
             },
             // Endpoint 2: findChats com remoteJid sem @s.whatsapp.net
             {
                 url: `${config.baseUrl}/chat/findChats/${instanceName}`,
-                body: { where: { remoteJid: phoneNumber }, include: ['messages'], limit: 100 },
+                body: { where: { remoteJid: phoneNumber }, limit: 100 },
                 isFindChats: true
             },
             // Endpoint 3: findChats sem filtro (busca todos e filtra depois) - último recurso
             {
                 url: `${config.baseUrl}/chat/findChats/${instanceName}`,
-                body: { where: {}, include: ['messages'], limit: 100 },
+                body: { where: {}, limit: 100 },
                 isFindChats: true
             }
         ];
