@@ -2161,7 +2161,22 @@ const App: React.FC = () => {
             const messageQueue = new Map<string, any[]>();
             const messageProcessTimeouts = new Map<string, NodeJS.Timeout>();
             
-            const processSingleMessage = async (remoteJid: string, mapped: Message, messageData: any) => {
+            const processMessageBatch = (remoteJid: string, messages: any[]) => {
+                // Processa todas as mensagens do batch
+                messages.forEach(messageData => {
+                    try {
+                        const mapped = mapApiMessageToInternal(messageData);
+                        if (!mapped) return;
+                        
+                        // Processa mensagem individual (código existente abaixo)
+                        processSingleMessage(remoteJid, mapped, messageData);
+                    } catch (error) {
+                        console.error(`[App] ❌ Erro ao processar mensagem do batch:`, error);
+                    }
+                });
+            };
+            
+            socket.on('messages.upsert', (data: any) => {
                 try {
                     // Extrai dados da mensagem
                     const messageData = data.message || data;
