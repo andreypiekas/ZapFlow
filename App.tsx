@@ -1015,21 +1015,65 @@ const App: React.FC = () => {
                         const shouldUpdateId = existingIdIsGenerated && realIdIsValid;
 
                         // Merge inteligente de mensagens: combina mensagens locais e da API, removendo duplicatas
+                        // PRIORIDADE: Mensagens locais têm prioridade sobre API quando há mais mensagens locais
                         const mergedMessages: Message[] = [];
                         const messageMap = new Map<string, Message>();
                         
-                        // Primeiro, adiciona todas as mensagens da API (histórico real)
-                        realChat.messages.forEach(msg => {
-                            // Usa ID da mensagem ou gera um baseado em timestamp + conteúdo para evitar duplicatas
-                            const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
-                            if (!messageMap.has(msgKey)) {
-                                messageMap.set(msgKey, msg);
-                            }
-                        });
+                        // Se o estado local tem mais mensagens que a API, prioriza mensagens locais
+                        // Isso evita perder mensagens recebidas via Socket.IO que ainda não foram sincronizadas pela API
+                        const hasMoreLocalMessages = existingChat.messages.length > realChat.messages.length;
                         
-                        // Depois, adiciona mensagens locais que não estão na API (mensagens enviadas recentemente)
-                        // Se uma mensagem local existe na API, prioriza a local se for mais recente
-                        existingChat.messages.forEach(msg => {
+                        if (hasMoreLocalMessages) {
+                            // PRIORIDADE: Adiciona mensagens locais primeiro (têm mais mensagens)
+                            existingChat.messages.forEach(msg => {
+                                const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
+                                if (!messageMap.has(msgKey)) {
+                                    messageMap.set(msgKey, msg);
+                                }
+                            });
+                            
+                            // Depois adiciona mensagens da API que não estão nas locais
+                            realChat.messages.forEach(msg => {
+                                const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
+                                // Verifica se já existe nas mensagens locais
+                                const existsInLocal = Array.from(messageMap.values()).some(localMsg => {
+                                    if (localMsg.whatsappMessageId && msg.whatsappMessageId && 
+                                        localMsg.whatsappMessageId === msg.whatsappMessageId) {
+                                        return true;
+                                    }
+                                    if (localMsg.id && msg.id && localMsg.id === msg.id) {
+                                        return true;
+                                    }
+                                    if (localMsg.content && msg.content && localMsg.sender === msg.sender) {
+                                        const contentMatch = localMsg.content.trim() === msg.content.trim();
+                                        const timeWindow = msg.sender === 'agent' ? 30000 : 10000;
+                                        const timeMatch = localMsg.timestamp && msg.timestamp && 
+                                            Math.abs(localMsg.timestamp.getTime() - msg.timestamp.getTime()) < timeWindow;
+                                        if (contentMatch && timeMatch) {
+                                            return true;
+                                        }
+                                    }
+                                    return false;
+                                });
+                                
+                                if (!existsInLocal && !messageMap.has(msgKey)) {
+                                    messageMap.set(msgKey, msg);
+                                }
+                            });
+                        } else {
+                            // Se API tem mais ou igual mensagens, usa ordem padrão (API primeiro, depois locais)
+                            // Primeiro, adiciona todas as mensagens da API (histórico real)
+                            realChat.messages.forEach(msg => {
+                                // Usa ID da mensagem ou gera um baseado em timestamp + conteúdo para evitar duplicatas
+                                const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
+                                if (!messageMap.has(msgKey)) {
+                                    messageMap.set(msgKey, msg);
+                                }
+                            });
+                            
+                            // Depois, adiciona mensagens locais que não estão na API (mensagens enviadas recentemente)
+                            // Se uma mensagem local existe na API, prioriza a local se for mais recente
+                            existingChat.messages.forEach(msg => {
                             // Verifica se a mensagem já existe na API (pode ter sido sincronizada)
                             const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
                             const existingApiMsg = realChat.messages.find(apiMsg => {
