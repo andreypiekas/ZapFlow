@@ -2163,10 +2163,32 @@ const App: React.FC = () => {
             
             const processMessageBatch = (remoteJid: string, messages: any[]) => {
                 // Processa todas as mensagens do batch
-                messages.forEach(messageData => {
+                messages.forEach((messageData, index) => {
                     try {
+                        console.log(`[App] 🔍 [DEBUG] processMessageBatch: Processando mensagem ${index + 1}/${messages.length} para ${remoteJid}`, {
+                            hasKey: !!messageData.key,
+                            hasMessage: !!messageData.message,
+                            status: messageData.status,
+                            fromMe: messageData.key?.fromMe,
+                            conversation: messageData.message?.conversation
+                        });
+                        
                         const mapped = mapApiMessageToInternal(messageData);
-                        if (!mapped) return;
+                        if (!mapped) {
+                            console.log(`[App] ⚠️ [DEBUG] processMessageBatch: mapApiMessageToInternal retornou null para mensagem ${index + 1}`, {
+                                hasKey: !!messageData.key,
+                                hasMessage: !!messageData.message,
+                                conversation: messageData.message?.conversation,
+                                status: messageData.status
+                            });
+                            return;
+                        }
+                        
+                        console.log(`[App] ✅ [DEBUG] processMessageBatch: Mensagem mapeada com sucesso`, {
+                            sender: mapped.sender,
+                            content: mapped.content?.substring(0, 50),
+                            type: mapped.type
+                        });
                         
                         // Processa mensagem individual (código existente abaixo)
                         processSingleMessage(remoteJid, mapped, messageData);
@@ -2180,10 +2202,22 @@ const App: React.FC = () => {
                 try {
                     // Extrai dados da mensagem
                     const messageData = data.message || data;
-                    if (!messageData || !messageData.key) return;
+                    if (!messageData || !messageData.key) {
+                        console.log('[App] 🔍 [DEBUG] Socket.IO messages.upsert: messageData ou key ausente', { hasMessage: !!data.message, hasData: !!data, hasKey: !!messageData?.key });
+                        return;
+                    }
                     
                     const remoteJid = normalizeJid(messageData.key.remoteJid || messageData.key.remoteJidAlt || '');
-                    if (!remoteJid) return;
+                    if (!remoteJid) {
+                        console.log('[App] 🔍 [DEBUG] Socket.IO messages.upsert: remoteJid ausente', { key: messageData.key });
+                        return;
+                    }
+                    
+                    // Log para debug
+                    const messageContent = messageData.message?.conversation || messageData.message?.extendedTextMessage?.text || messageData.message?.imageMessage?.caption || 'sem conteúdo';
+                    const messageStatus = messageData.status || 'sem status';
+                    const fromMe = messageData.key?.fromMe || false;
+                    console.log(`[App] 🔍 [DEBUG] Socket.IO messages.upsert recebido: remoteJid=${remoteJid}, fromMe=${fromMe}, status=${messageStatus}, content=${messageContent.substring(0, 50)}`);
                     
                     // Adiciona mensagem à fila para processamento em batch
                     if (!messageQueue.has(remoteJid)) {
@@ -2197,6 +2231,7 @@ const App: React.FC = () => {
                     }
                     messageProcessTimeouts.set(remoteJid, setTimeout(() => {
                         const messagesToProcess = messageQueue.get(remoteJid) || [];
+                        console.log(`[App] 🔍 [DEBUG] Socket.IO: Processando batch de ${messagesToProcess.length} mensagens para ${remoteJid}`);
                         processMessageBatch(remoteJid, messagesToProcess);
                         messageQueue.delete(remoteJid);
                         messageProcessTimeouts.delete(remoteJid);
