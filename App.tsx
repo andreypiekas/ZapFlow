@@ -1417,6 +1417,7 @@ const App: React.FC = () => {
                                 console.error(`[App] Erro ao buscar mensagens do chat ${chatId}:`, err);
                             });
                         }
+                        }
                         
                         // Converte para array e ordena por timestamp
                         // Preserva ordem de mensagens locais quando timestamps são muito próximos
