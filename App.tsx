@@ -2076,10 +2076,10 @@ const App: React.FC = () => {
       }, 100);
     });
     
-    // Polling a cada 1 segundo para detectar mensagens
+    // Polling a cada 250ms para detectar mensagens
     // IMPORTANTE: Só cria novo intervalo se não existir um já rodando
     if (!intervalIdRef.current) {
-      intervalIdRef.current = setInterval(syncChats, 1000);
+      intervalIdRef.current = setInterval(syncChats, 250);
     }
     
     // Inicializa Socket.IO de forma assíncrona
