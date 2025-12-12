@@ -1951,7 +1951,7 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
             const timeDiff = timeA - timeB;
             const absTimeDiff = Math.abs(timeDiff);
             
-            // Se timestamps são muito próximos (< 10 segundos) e senders diferentes
+            // PRIORIDADE 1: Se timestamps são muito próximos (< 10 segundos) e senders diferentes
             // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
             // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
             // independentemente de pequenas diferenças de sincronização de relógio
@@ -1966,9 +1966,22 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                 }
             }
             
-            // Para diferenças maiores ou quando não se aplica a lógica especial, usa timestamp real
-            // IMPORTANTE: Sempre usa timestamp real, mesmo que a diferença seja muito pequena
-            // Isso garante que mensagens recebidas rapidamente sejam ordenadas corretamente
+            // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
+            if (absTimeDiff >= 10000) {
+                return timeDiff;
+            }
+            
+            // PRIORIDADE 3: Se timestamps são idênticos (timeDiff === 0) e mesmo sender, mantém ordem original
+            // IMPORTANTE: Só mantém ordem original quando timeDiff === 0 exatamente
+            // Se houver qualquer diferença (mesmo que muito pequena), usa timestamp para garantir ordem cronológica
+            // Isso evita que mensagens recebidas rapidamente (1, 2, 3, 4, 5, 6) apareçam na ordem errada (6, 5, 4, 3, 2, 1)
+            if (timeDiff === 0 && a.sender === b.sender) {
+                return 0; // Mantém ordem original
+            }
+            
+            // PRIORIDADE 4: Se chegou aqui, timestamps são muito próximos mas não idênticos, ou senders são diferentes
+            // e a PRIORIDADE 1 não se aplicou. Nesses casos, usa o timestamp real para garantir a ordem cronológica.
+            // Isso garante que mensagens recebidas rapidamente sejam sempre ordenadas corretamente por timestamp.
             return timeDiff;
         });
         // Log apenas se não encontrou mensagens (para não poluir quando funciona)
