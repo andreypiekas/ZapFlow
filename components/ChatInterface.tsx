@@ -374,10 +374,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         return timeB - timeA;
     });
 
-  const scrollToBottom = () => {
-    // Só faz scroll se o usuário estiver no final (ou muito próximo)
-    if (isAtBottomRef.current) {
+  const scrollToBottom = (force: boolean = false) => {
+    // Se force=true, sempre faz scroll (usado quando volta para o chat)
+    // Caso contrário, só faz scroll se o usuário estiver no final (ou muito próximo)
+    if (force || isAtBottomRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      if (force) {
+        // Atualiza o estado para indicar que está no final
+        isAtBottomRef.current = true;
+      }
     }
   };
 
@@ -432,8 +437,25 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     // Quando o chat selecionado muda, sempre vai para o final
     if (selectedChatId) {
       isAtBottomRef.current = true;
-      setTimeout(() => scrollToBottom(), 100);
+      setTimeout(() => scrollToBottom(true), 100);
     }
+  }, [selectedChatId]);
+
+  // Detecta quando o usuário volta para a aba/página (troca de tela)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      // Quando a página volta a ficar visível e há um chat selecionado
+      if (!document.hidden && selectedChatId) {
+        // Força scroll para o final após um pequeno delay para garantir que o DOM está atualizado
+        setTimeout(() => {
+          isAtBottomRef.current = true;
+          scrollToBottom(true);
+        }, 200);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [selectedChatId]);
 
   useEffect(() => {
