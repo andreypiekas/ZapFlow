@@ -1984,10 +1984,11 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
             // Isso garante que mensagens recebidas rapidamente sejam sempre ordenadas corretamente por timestamp.
             return timeDiff;
         });
-        // Log apenas se não encontrou mensagens (para não poluir quando funciona)
+        // Log para diagnóstico
         if (sortedMessages.length === 0) {
-            // Log removido para produção - muito verboso
-            // console.warn(`[fetchChatMessages] ⚠️ Nenhuma mensagem encontrada para ${chatId}`);
+            console.warn(`[fetchChatMessages] ⚠️ Nenhuma mensagem encontrada para ${chatId} após tentar ${endpoints.length} endpoints`);
+        } else {
+            console.log(`[fetchChatMessages] ✅ Encontrou ${sortedMessages.length} mensagens para ${chatId}`);
         }
         return sortedMessages;
     } catch (error) {
