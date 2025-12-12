@@ -263,6 +263,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const isUserScrollingRef = useRef(false);
   const isAtBottomRef = useRef(true);
   const dragCounter = useRef(0);
+  const justReturnedToViewRef = useRef(false);
 
   const selectedChat = chats.find(c => c.id === selectedChatId);
 
@@ -375,11 +376,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         return timeB - timeA;
     });
 
-  const scrollToBottom = (force: boolean = false) => {
+  const scrollToBottom = (force: boolean = false, instant: boolean = false) => {
     // Se force=true, sempre faz scroll (usado quando volta para o chat)
     // Caso contrário, só faz scroll se o usuário estiver no final (ou muito próximo)
     if (force || isAtBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      const behavior = (force && instant) ? "auto" : "smooth";
+      messagesEndRef.current?.scrollIntoView({ behavior });
       if (force) {
         // Atualiza o estado para indicar que está no final
         isAtBottomRef.current = true;
@@ -438,7 +440,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     // Quando o chat selecionado muda, sempre vai para o final
     if (selectedChatId) {
       isAtBottomRef.current = true;
-      setTimeout(() => scrollToBottom(true), 100);
+      // Usa scroll instantâneo quando muda de chat para garantir que vai para o final imediatamente
+      setTimeout(() => scrollToBottom(true, true), 100);
+      // Scroll adicional após delay maior como fallback
+      setTimeout(() => scrollToBottom(true, true), 300);
     }
   }, [selectedChatId]);
 
@@ -447,11 +452,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     const handleVisibilityChange = () => {
       // Quando a página volta a ficar visível e há um chat selecionado
       if (!document.hidden && selectedChatId && isViewActive) {
-        // Força scroll para o final após um pequeno delay para garantir que o DOM está atualizado
+        // Marca que acabou de voltar para a view (para forçar scroll quando mensagens mudarem)
+        justReturnedToViewRef.current = true;
+        
+        // Força scroll para o final após delays progressivos para garantir que o DOM está atualizado
+        // Primeiro scroll instantâneo após um pequeno delay
         setTimeout(() => {
           isAtBottomRef.current = true;
-          scrollToBottom(true);
-        }, 200);
+          scrollToBottom(true, true); // instant = true para scroll imediato
+        }, 100);
+        
+        // Segundo scroll após um delay maior para garantir que mensagens foram renderizadas
+        setTimeout(() => {
+          isAtBottomRef.current = true;
+          scrollToBottom(true, true);
+        }, 300);
+        
+        // Terceiro scroll após delay ainda maior como fallback
+        setTimeout(() => {
+          isAtBottomRef.current = true;
+          scrollToBottom(true, true);
+        }, 500);
       }
     };
 
@@ -464,11 +485,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   useEffect(() => {
     // Se a view estava inativa e agora está ativa, e há um chat selecionado
     if (!prevIsViewActiveRef.current && isViewActive && selectedChatId) {
-      // Força scroll para o final após um pequeno delay
+      // Marca que acabou de voltar para a view (para forçar scroll quando mensagens mudarem)
+      justReturnedToViewRef.current = true;
+      
+      // Força scroll para o final após delays progressivos para garantir que o DOM está renderizado
+      // Primeiro scroll instantâneo após um pequeno delay
       setTimeout(() => {
         isAtBottomRef.current = true;
-        scrollToBottom(true);
-      }, 200);
+        scrollToBottom(true, true); // instant = true para scroll imediato
+      }, 100);
+      
+      // Segundo scroll após um delay maior para garantir que mensagens foram renderizadas
+      setTimeout(() => {
+        isAtBottomRef.current = true;
+        scrollToBottom(true, true);
+      }, 300);
+      
+      // Terceiro scroll após delay ainda maior como fallback
+      setTimeout(() => {
+        isAtBottomRef.current = true;
+        scrollToBottom(true, true);
+      }, 500);
     }
     prevIsViewActiveRef.current = isViewActive;
   }, [isViewActive, selectedChatId]);
@@ -477,7 +514,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     // Quando mensagens mudam, só faz scroll se estiver no final
     checkIfAtBottom();
     scrollToBottom();
-  }, [selectedChat?.messages, messageSearchTerm]);
+    
+    // Se acabou de voltar para a view e há mensagens, força scroll para o final (apenas uma vez)
+    if (isViewActive && selectedChatId && selectedChat?.messages && selectedChat.messages.length > 0 && justReturnedToViewRef.current) {
+      // Usa um delay para garantir que as mensagens foram renderizadas
+      setTimeout(() => {
+        // Só força se ainda estiver na view ativa (não mudou de tela)
+        if (isViewActive) {
+          isAtBottomRef.current = true;
+          scrollToBottom(true, true);
+        }
+        // Reseta a flag após fazer scroll
+        justReturnedToViewRef.current = false;
+      }, 200);
+    }
+  }, [selectedChat?.messages, messageSearchTerm, isViewActive, selectedChatId]);
 
   // --- RESIZE HANDLER LOGIC ---
   const startResizing = useCallback((e: React.MouseEvent) => {
