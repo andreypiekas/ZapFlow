@@ -763,6 +763,35 @@ const App: React.FC = () => {
             realChats = [];
         }
         
+        // PASSO 2.5: Busca mensagens separadamente para chats que precisam
+        // NOTA: fetchChats não retorna mensagens (removemos include: ['messages'] para evitar erro 500)
+        // Busca mensagens em paralelo para chats que têm poucas mensagens na API
+        const chatsNeedingMessages = realChats.filter(realChat => {
+            if (!realChat || !realChat.id) return false;
+            const dbChat = dbChatsMap.get(realChat.id);
+            const dbMessages = dbChat?.messages || [];
+            const maxExpectedMessages = Math.max(dbMessages.length, realChat.messages.length);
+            // Se a API retornou muito menos mensagens que o esperado, precisa buscar separadamente
+            return realChat.messages.length < maxExpectedMessages * 0.5 && maxExpectedMessages > 5;
+        });
+        
+        // Busca mensagens em paralelo para os chats que precisam
+        const messagesMap = new Map<string, Message[]>();
+        if (chatsNeedingMessages.length > 0) {
+            console.log(`[App] 🔍 [DEBUG] syncChats: Buscando mensagens separadamente para ${chatsNeedingMessages.length} chats...`);
+            await Promise.all(chatsNeedingMessages.map(async (realChat) => {
+                try {
+                    const fetchedMessages = await fetchChatMessages(apiConfig, realChat.id, 1000);
+                    if (fetchedMessages.length > realChat.messages.length) {
+                        console.log(`[App] ✅ [DEBUG] syncChats: Buscou ${fetchedMessages.length} mensagens separadamente para ${realChat.id}`);
+                        messagesMap.set(realChat.id, fetchedMessages);
+                    }
+                } catch (error) {
+                    console.warn(`[App] ⚠️ [DEBUG] syncChats: Erro ao buscar mensagens separadamente para ${realChat.id}:`, error);
+                }
+            }));
+        }
+        
         if (realChats.length > 0) {
             setChats(currentChats => {
                 const mergedChats = realChats
@@ -821,27 +850,8 @@ const App: React.FC = () => {
                     
                     if (existingChat && realChat) {
                         // NOTA: fetchChats não retorna mensagens (removemos include: ['messages'] para evitar erro 500)
-                        // Se a API retornou poucas ou nenhuma mensagem, busca mensagens separadamente
-                        let apiMessages = realChat.messages;
-                        const dbMessages = dbChat?.messages || [];
-                        const localMessages = existingChat.messages || [];
-                        const maxExpectedMessages = Math.max(dbMessages.length, localMessages.length);
-                        
-                        // Se a API retornou muito menos mensagens que o esperado, busca separadamente
-                        if (apiMessages.length < maxExpectedMessages * 0.5 && maxExpectedMessages > 5) {
-                            console.log(`[App] 🔍 [DEBUG] syncChats: API retornou poucas mensagens (${apiMessages.length} vs esperado ${maxExpectedMessages}), buscando separadamente...`);
-                            try {
-                                const fetchedMessages = await fetchChatMessages(apiConfig, realChat.id, 1000);
-                                if (fetchedMessages.length > apiMessages.length) {
-                                    console.log(`[App] ✅ [DEBUG] syncChats: Buscou ${fetchedMessages.length} mensagens separadamente para ${realChat.id}`);
-                                    apiMessages = fetchedMessages;
-                                    // Atualiza realChat com as mensagens buscadas
-                                    realChat = { ...realChat, messages: apiMessages };
-                                }
-                            } catch (error) {
-                                console.warn(`[App] ⚠️ [DEBUG] syncChats: Erro ao buscar mensagens separadamente para ${realChat.id}:`, error);
-                            }
-                        }
+                        // Usa mensagens buscadas separadamente se disponíveis, senão usa as da API
+                        let apiMessages = messagesMap.get(realChat.id) || realChat.messages;
                         
                         const newMsgCount = apiMessages.length;
                         const oldMsgCount = existingChat.messages.length;
