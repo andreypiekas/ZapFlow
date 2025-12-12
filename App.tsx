@@ -820,7 +820,30 @@ const App: React.FC = () => {
                     });
                     
                     if (existingChat && realChat) {
-                        const newMsgCount = realChat.messages.length;
+                        // NOTA: fetchChats não retorna mensagens (removemos include: ['messages'] para evitar erro 500)
+                        // Se a API retornou poucas ou nenhuma mensagem, busca mensagens separadamente
+                        let apiMessages = realChat.messages;
+                        const dbMessages = dbChat?.messages || [];
+                        const localMessages = existingChat.messages || [];
+                        const maxExpectedMessages = Math.max(dbMessages.length, localMessages.length);
+                        
+                        // Se a API retornou muito menos mensagens que o esperado, busca separadamente
+                        if (apiMessages.length < maxExpectedMessages * 0.5 && maxExpectedMessages > 5) {
+                            console.log(`[App] 🔍 [DEBUG] syncChats: API retornou poucas mensagens (${apiMessages.length} vs esperado ${maxExpectedMessages}), buscando separadamente...`);
+                            try {
+                                const fetchedMessages = await fetchChatMessages(apiConfig, realChat.id, 1000);
+                                if (fetchedMessages.length > apiMessages.length) {
+                                    console.log(`[App] ✅ [DEBUG] syncChats: Buscou ${fetchedMessages.length} mensagens separadamente para ${realChat.id}`);
+                                    apiMessages = fetchedMessages;
+                                    // Atualiza realChat com as mensagens buscadas
+                                    realChat = { ...realChat, messages: apiMessages };
+                                }
+                            } catch (error) {
+                                console.warn(`[App] ⚠️ [DEBUG] syncChats: Erro ao buscar mensagens separadamente para ${realChat.id}:`, error);
+                            }
+                        }
+                        
+                        const newMsgCount = apiMessages.length;
                         const oldMsgCount = existingChat.messages.length;
                         
                         // Log para rastrear contagem de mensagens
@@ -830,7 +853,7 @@ const App: React.FC = () => {
                         
                         // COMPARAÇÃO ROBUSTA: Verifica se há novas mensagens do usuário comparando as mensagens reais
                         // Filtra apenas mensagens do usuário e agente (ignora mensagens de sistema)
-                        const realUserMessages = realChat.messages.filter(m => m.sender === 'user' || m.sender === 'agent');
+                        const realUserMessages = apiMessages.filter(m => m.sender === 'user' || m.sender === 'agent');
                         const existingUserMessages = existingChat.messages.filter(m => m.sender === 'user' || m.sender === 'agent');
                         
                         // Encontra a última mensagem do usuário na API
@@ -850,7 +873,7 @@ const App: React.FC = () => {
                         const hasNewMessages = newMsgCount > oldMsgCount || hasNewUserMessage;
                         
                         if (hasNewMessages) {
-                            const lastMsg = realChat.messages[realChat.messages.length - 1];
+                            const lastMsg = apiMessages[apiMessages.length - 1];
                             const dbChatStatus = dbChat?.status;
                             
                             console.log(`[App] 🔍 [DEBUG] syncChats: Nova mensagem detectada - chatId: ${realChat.id}, dbStatus: ${dbChatStatus}, lastMsgSender: ${lastMsg?.sender}, lastMsgContent: ${lastMsg?.content?.substring(0, 50)}, hasNewUserMessage: ${hasNewUserMessage}`);
@@ -1019,10 +1042,13 @@ const App: React.FC = () => {
                         const mergedMessages: Message[] = [];
                         const messageMap = new Map<string, Message>();
                         
+                        // Usa mensagens da API (que podem ter sido buscadas separadamente)
+                        const apiMessagesForMerge = apiMessages;
+                        
                         // Verifica se o banco tem mensagens e se tem mais que a API
                         const dbMessages = dbChat?.messages || [];
-                        const hasMoreDbMessages = dbMessages.length > realChat.messages.length;
-                        const hasMoreLocalMessages = existingChat.messages.length > realChat.messages.length;
+                        const hasMoreDbMessages = dbMessages.length > apiMessagesForMerge.length;
+                        const hasMoreLocalMessages = existingChat.messages.length > apiMessagesForMerge.length;
                         
                         // PRIORIDADE 1: Se o banco tem mais mensagens que a API, usa mensagens do banco como base
                         if (hasMoreDbMessages && dbMessages.length > 0) {
@@ -1035,7 +1061,7 @@ const App: React.FC = () => {
                             });
                             
                             // Depois adiciona mensagens da API que não estão no banco
-                            realChat.messages.forEach(msg => {
+                            apiMessagesForMerge.forEach(msg => {
                                 const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
                                 const existsInDb = Array.from(messageMap.values()).some(dbMsg => {
                                     if (dbMsg.whatsappMessageId && msg.whatsappMessageId && 
@@ -1099,7 +1125,7 @@ const App: React.FC = () => {
                             });
                             
                             // Depois adiciona mensagens da API que não estão nas locais
-                            realChat.messages.forEach(msg => {
+                            apiMessagesForMerge.forEach(msg => {
                                 const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
                                 // Verifica se já existe nas mensagens locais
                                 const existsInLocal = Array.from(messageMap.values()).some(localMsg => {
@@ -1129,7 +1155,7 @@ const App: React.FC = () => {
                         } else {
                             // Se API tem mais ou igual mensagens, usa ordem padrão (API primeiro, depois locais)
                             // Primeiro, adiciona todas as mensagens da API (histórico real)
-                            realChat.messages.forEach(msg => {
+                            apiMessagesForMerge.forEach(msg => {
                                 // Usa ID da mensagem ou gera um baseado em timestamp + conteúdo para evitar duplicatas
                                 const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
                                 if (!messageMap.has(msgKey)) {
@@ -1142,7 +1168,7 @@ const App: React.FC = () => {
                             existingChat.messages.forEach(msg => {
                             // Verifica se a mensagem já existe na API (pode ter sido sincronizada)
                             const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
-                            const existingApiMsg = realChat.messages.find(apiMsg => {
+                            const existingApiMsg = apiMessagesForMerge.find(apiMsg => {
                                 // Verifica por ID do WhatsApp (mais confiável)
                                 if (apiMsg.whatsappMessageId && msg.whatsappMessageId && 
                                     apiMsg.whatsappMessageId === msg.whatsappMessageId) {
