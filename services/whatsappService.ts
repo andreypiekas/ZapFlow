@@ -993,6 +993,7 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         // 3. imageMsg.directPath (caminho relativo)
         // 4. apiMsg.url (nível superior)
         // 5. Base64 data URL (data:image/...)
+        // 6. apiMsg.message.imageMessage.url (estrutura aninhada completa)
         mediaUrl = imageMsg.url || 
                    imageMsg.mediaUrl ||
                    imageMsg.directPath || // Caminho direto (pode precisar de base URL)
@@ -1001,6 +1002,10 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
                    // Verifica também na estrutura pai (algumas versões da API podem colocar a URL no nível superior)
                    msgObj.url ||
                    msgObj.mediaUrl ||
+                   // Verifica diretamente na estrutura apiMsg.message.imageMessage (caso msgObj não capture)
+                   apiMsg.message?.imageMessage?.url ||
+                   apiMsg.message?.imageMessage?.mediaUrl ||
+                   apiMsg.message?.imageMessage?.directPath ||
                    apiMsg.url ||
                    apiMsg.mediaUrl ||
                    // Verifica se há uma URL no contexto da mensagem

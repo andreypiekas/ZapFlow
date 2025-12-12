@@ -1466,51 +1466,83 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         // Log detalhado da estrutura do rawMessage para debug
         console.log('[ChatInterface] renderMessageContent: 🔍 Tentando extrair URL do rawMessage:', {
           hasRawMessage: !!rawMsg,
-          rawMessageKeys: rawMsg ? Object.keys(rawMsg).slice(0, 15) : [],
+          rawMessageKeys: rawMsg ? Object.keys(rawMsg).slice(0, 20) : [],
           hasMessage: !!rawMsg.message,
-          messageKeys: rawMsg.message ? Object.keys(rawMsg.message).slice(0, 15) : [],
+          messageKeys: rawMsg.message ? Object.keys(rawMsg.message).slice(0, 20) : [],
           hasImageMessage: !!(rawMsg.message?.imageMessage || rawMsg.imageMessage),
           hasUrl: !!(rawMsg.message?.imageMessage?.url || rawMsg.imageMessage?.url),
           urlValue: rawMsg.message?.imageMessage?.url || rawMsg.imageMessage?.url || rawMsg.url || 'não encontrado'
         });
         
-        // Tenta múltiplas formas de encontrar a imagem
-        const rawImageMsg = rawMsg.message?.imageMessage || rawMsg.imageMessage;
-        if (rawImageMsg) {
-          // Tenta todas as possíveis localizações da URL
-          imageUrl = rawImageMsg.url || 
-                     rawImageMsg.mediaUrl || 
-                     rawImageMsg.directPath ||
-                     rawMsg.message?.url ||
-                     rawMsg.message?.mediaUrl ||
-                     rawMsg.url || 
-                     rawMsg.mediaUrl;
+        // Função auxiliar para buscar URL recursivamente em um objeto
+        const findImageUrl = (obj: any, depth: number = 0, maxDepth: number = 5): string | undefined => {
+          if (!obj || depth > maxDepth) return undefined;
           
-          if (imageUrl) {
-            console.log('[ChatInterface] renderMessageContent: ✅ URL extraída do rawMessage:', {
-              url: imageUrl.substring(0, 100),
-              source: rawImageMsg.url ? 'rawImageMsg.url' :
-                     rawImageMsg.mediaUrl ? 'rawImageMsg.mediaUrl' :
-                     rawImageMsg.directPath ? 'rawImageMsg.directPath' :
-                     rawMsg.message?.url ? 'rawMsg.message.url' :
-                     rawMsg.url ? 'rawMsg.url' : 'other'
-            });
-            // Atualiza a mensagem com a URL encontrada (não persiste, apenas para exibição)
-            msg.mediaUrl = imageUrl;
-          } else {
-            // Log completo da estrutura se não encontrar URL
-            console.warn('[ChatInterface] renderMessageContent: ⚠️ rawImageMsg encontrado mas sem URL:', {
-              rawImageMsgKeys: Object.keys(rawImageMsg).slice(0, 20),
-              hasUrl: !!rawImageMsg.url,
-              hasMediaUrl: !!rawImageMsg.mediaUrl,
-              hasDirectPath: !!rawImageMsg.directPath,
-              rawImageMsgStructure: JSON.stringify(rawImageMsg).substring(0, 500)
-            });
+          // Verifica propriedades diretas
+          if (obj.url && typeof obj.url === 'string' && obj.url.length > 0) return obj.url;
+          if (obj.mediaUrl && typeof obj.mediaUrl === 'string' && obj.mediaUrl.length > 0) return obj.mediaUrl;
+          if (obj.directPath && typeof obj.directPath === 'string' && obj.directPath.length > 0) return obj.directPath;
+          
+          // Verifica imageMessage especificamente
+          if (obj.imageMessage) {
+            const imgUrl = findImageUrl(obj.imageMessage, depth + 1, maxDepth);
+            if (imgUrl) return imgUrl;
           }
+          
+          // Verifica propriedade message
+          if (obj.message) {
+            const msgUrl = findImageUrl(obj.message, depth + 1, maxDepth);
+            if (msgUrl) return msgUrl;
+          }
+          
+          // Verifica propriedade media
+          if (obj.media) {
+            const mediaUrl = findImageUrl(obj.media, depth + 1, maxDepth);
+            if (mediaUrl) return mediaUrl;
+          }
+          
+          return undefined;
+        };
+        
+        // Tenta encontrar a URL usando busca recursiva
+        imageUrl = findImageUrl(rawMsg);
+        
+        // Se não encontrou com busca recursiva, tenta caminhos específicos conhecidos
+        if (!imageUrl) {
+          const rawImageMsg = rawMsg.message?.imageMessage || rawMsg.imageMessage;
+          if (rawImageMsg) {
+            // Tenta todas as possíveis localizações da URL
+            imageUrl = rawImageMsg.url || 
+                       rawImageMsg.mediaUrl || 
+                       rawImageMsg.directPath ||
+                       rawImageMsg.media?.url ||
+                       rawImageMsg.media?.mediaUrl ||
+                       rawMsg.message?.url ||
+                       rawMsg.message?.mediaUrl ||
+                       rawMsg.url || 
+                       rawMsg.mediaUrl;
+          }
+        }
+        
+        if (imageUrl) {
+          console.log('[ChatInterface] renderMessageContent: ✅ URL extraída do rawMessage:', {
+            url: imageUrl.substring(0, 100),
+            urlLength: imageUrl.length,
+            isAbsolute: imageUrl.startsWith('http://') || imageUrl.startsWith('https://'),
+            isRelative: imageUrl.startsWith('/'),
+            isBase64: imageUrl.startsWith('data:')
+          });
+          // Atualiza a mensagem com a URL encontrada (não persiste, apenas para exibição)
+          msg.mediaUrl = imageUrl;
         } else {
-          // Log se não encontrar imageMessage no rawMessage
-          console.warn('[ChatInterface] renderMessageContent: ⚠️ rawMessage não contém imageMessage:', {
-            rawMessageStructure: JSON.stringify(rawMsg).substring(0, 1000)
+          // Log completo da estrutura se não encontrar URL - mostra estrutura completa
+          console.warn('[ChatInterface] renderMessageContent: ⚠️ Não foi possível extrair URL do rawMessage:', {
+            rawMessageType: typeof rawMsg,
+            rawMessageKeys: rawMsg ? Object.keys(rawMsg) : [],
+            hasMessage: !!rawMsg.message,
+            messageKeys: rawMsg.message ? Object.keys(rawMsg.message) : [],
+            hasImageMessage: !!(rawMsg.message?.imageMessage || rawMsg.imageMessage),
+            rawMessageStructure: rawMsg ? JSON.stringify(rawMsg, null, 2).substring(0, 2000) : 'null'
           });
         }
       }
