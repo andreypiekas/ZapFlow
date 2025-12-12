@@ -903,15 +903,24 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     const msgObj = apiMsg.message || apiMsg;
     
     // Extração robusta de texto
+    // Para mensagens de mídia, prioriza o caption, mas não define texto padrão se houver URL de mídia
+    const hasImage = !!msgObj.imageMessage;
+    const hasVideo = !!msgObj.videoMessage;
+    const hasAudio = !!msgObj.audioMessage;
+    const hasSticker = !!msgObj.stickerMessage;
+    const hasDocument = !!msgObj.documentMessage;
+    const hasMedia = hasImage || hasVideo || hasAudio || hasSticker || hasDocument;
+    
     const content = 
         msgObj.conversation || 
         msgObj.extendedTextMessage?.text || 
         msgObj.imageMessage?.caption ||
         msgObj.videoMessage?.caption ||
         msgObj.documentMessage?.caption ||
-        (msgObj.imageMessage ? 'Imagem' : '') ||
-        (msgObj.audioMessage ? 'Áudio' : '') ||
-        (msgObj.stickerMessage ? 'Sticker' : '') ||
+        // Só define texto padrão se não houver URL de mídia (para não mostrar "Imagem" quando a imagem está sendo exibida)
+        (hasImage && !msgObj.imageMessage?.url && !msgObj.imageMessage?.mediaUrl ? 'Imagem' : '') ||
+        (hasAudio && !msgObj.audioMessage?.url && !msgObj.audioMessage?.mediaUrl ? 'Áudio' : '') ||
+        (hasSticker && !msgObj.stickerMessage?.url && !msgObj.stickerMessage?.mediaUrl ? 'Sticker' : '') ||
         (typeof msgObj.text === 'string' ? msgObj.text : '') || 
         '';
     
@@ -925,11 +934,35 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     const timestamp = new Date(tsNum * (tsNum < 2000000000 ? 1000 : 1));
 
     let type: any = 'text';
-    if (msgObj.imageMessage) type = 'image';
-    else if (msgObj.audioMessage) type = 'audio';
-    else if (msgObj.videoMessage) type = 'video';
-    else if (msgObj.stickerMessage) type = 'sticker';
-    else if (msgObj.documentMessage) type = 'document';
+    let mediaUrl: string | undefined = undefined;
+    
+    if (msgObj.imageMessage) {
+        type = 'image';
+        // Extrai URL da imagem - a Evolution API fornece a URL completa no campo 'url'
+        mediaUrl = msgObj.imageMessage.url || 
+                   msgObj.imageMessage.mediaUrl ||
+                   undefined;
+    } else if (msgObj.audioMessage) {
+        type = 'audio';
+        mediaUrl = msgObj.audioMessage.url || 
+                   msgObj.audioMessage.mediaUrl ||
+                   undefined;
+    } else if (msgObj.videoMessage) {
+        type = 'video';
+        mediaUrl = msgObj.videoMessage.url || 
+                   msgObj.videoMessage.mediaUrl ||
+                   undefined;
+    } else if (msgObj.stickerMessage) {
+        type = 'sticker';
+        mediaUrl = msgObj.stickerMessage.url || 
+                   msgObj.stickerMessage.mediaUrl ||
+                   undefined;
+    } else if (msgObj.documentMessage) {
+        type = 'document';
+        mediaUrl = msgObj.documentMessage.url || 
+                   msgObj.documentMessage.mediaUrl ||
+                   undefined;
+    }
 
     // Determina o autor real (importante para grupos ou chats com ID errado)
     // Sempre normaliza o JID para garantir formato correto
@@ -1029,6 +1062,7 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         timestamp,
         status: mapStatus(apiMsg.status),
         type,
+        mediaUrl: mediaUrl, // URL da mídia (imagem, vídeo, áudio, documento, sticker)
         author: author, // Salva o JID real para correção automática (sempre normalizado)
         whatsappMessageId: key.id, // Salva o ID real do WhatsApp para respostas
         rawMessage: apiMsg, // Salva o objeto completo para respostas (Evolution API precisa do objeto completo)
