@@ -1462,15 +1462,56 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       let imageUrl = msg.mediaUrl;
       if (!imageUrl && msg.rawMessage) {
         const rawMsg = msg.rawMessage;
+        
+        // Log detalhado da estrutura do rawMessage para debug
+        console.log('[ChatInterface] renderMessageContent: 🔍 Tentando extrair URL do rawMessage:', {
+          hasRawMessage: !!rawMsg,
+          rawMessageKeys: rawMsg ? Object.keys(rawMsg).slice(0, 15) : [],
+          hasMessage: !!rawMsg.message,
+          messageKeys: rawMsg.message ? Object.keys(rawMsg.message).slice(0, 15) : [],
+          hasImageMessage: !!(rawMsg.message?.imageMessage || rawMsg.imageMessage),
+          hasUrl: !!(rawMsg.message?.imageMessage?.url || rawMsg.imageMessage?.url),
+          urlValue: rawMsg.message?.imageMessage?.url || rawMsg.imageMessage?.url || rawMsg.url || 'não encontrado'
+        });
+        
+        // Tenta múltiplas formas de encontrar a imagem
         const rawImageMsg = rawMsg.message?.imageMessage || rawMsg.imageMessage;
         if (rawImageMsg) {
-          imageUrl = rawImageMsg.url || rawImageMsg.mediaUrl || rawImageMsg.directPath || 
-                     rawMsg.url || rawMsg.mediaUrl;
+          // Tenta todas as possíveis localizações da URL
+          imageUrl = rawImageMsg.url || 
+                     rawImageMsg.mediaUrl || 
+                     rawImageMsg.directPath ||
+                     rawMsg.message?.url ||
+                     rawMsg.message?.mediaUrl ||
+                     rawMsg.url || 
+                     rawMsg.mediaUrl;
+          
           if (imageUrl) {
-            console.log('[ChatInterface] renderMessageContent: ✅ URL extraída do rawMessage:', imageUrl.substring(0, 100));
+            console.log('[ChatInterface] renderMessageContent: ✅ URL extraída do rawMessage:', {
+              url: imageUrl.substring(0, 100),
+              source: rawImageMsg.url ? 'rawImageMsg.url' :
+                     rawImageMsg.mediaUrl ? 'rawImageMsg.mediaUrl' :
+                     rawImageMsg.directPath ? 'rawImageMsg.directPath' :
+                     rawMsg.message?.url ? 'rawMsg.message.url' :
+                     rawMsg.url ? 'rawMsg.url' : 'other'
+            });
             // Atualiza a mensagem com a URL encontrada (não persiste, apenas para exibição)
             msg.mediaUrl = imageUrl;
+          } else {
+            // Log completo da estrutura se não encontrar URL
+            console.warn('[ChatInterface] renderMessageContent: ⚠️ rawImageMsg encontrado mas sem URL:', {
+              rawImageMsgKeys: Object.keys(rawImageMsg).slice(0, 20),
+              hasUrl: !!rawImageMsg.url,
+              hasMediaUrl: !!rawImageMsg.mediaUrl,
+              hasDirectPath: !!rawImageMsg.directPath,
+              rawImageMsgStructure: JSON.stringify(rawImageMsg).substring(0, 500)
+            });
           }
+        } else {
+          // Log se não encontrar imageMessage no rawMessage
+          console.warn('[ChatInterface] renderMessageContent: ⚠️ rawMessage não contém imageMessage:', {
+            rawMessageStructure: JSON.stringify(rawMsg).substring(0, 1000)
+          });
         }
       }
       

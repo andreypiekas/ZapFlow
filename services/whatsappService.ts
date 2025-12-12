@@ -954,26 +954,35 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         // Tenta múltiplas formas de obter a URL
         const imageMsg = msgObj.imageMessage;
         
-        // Log completo da estrutura da mensagem de imagem para diagnóstico
-        // IMPORTANTE: Log apenas se não encontrar URL para não poluir o console
+        // Log SEMPRE para imagens (para debug do problema)
+        console.log('[mapApiMessageToInternal] 🖼️ [DEBUG] Processando imageMessage:', {
+            hasImageMsg: !!imageMsg,
+            imageMsgType: typeof imageMsg,
+            imageMsgKeys: imageMsg ? Object.keys(imageMsg).slice(0, 20) : [],
+            hasUrl: !!imageMsg.url,
+            hasMediaUrl: !!imageMsg.mediaUrl,
+            hasDirectPath: !!imageMsg.directPath,
+            urlValue: imageMsg.url ? imageMsg.url.substring(0, 100) : 'não encontrado',
+            mediaUrlValue: imageMsg.mediaUrl ? imageMsg.mediaUrl.substring(0, 100) : 'não encontrado',
+            directPathValue: imageMsg.directPath ? imageMsg.directPath.substring(0, 100) : 'não encontrado',
+            // Verifica também na estrutura completa da mensagem
+            apiMsgHasUrl: !!(apiMsg.url || apiMsg.mediaUrl),
+            apiMsgUrl: apiMsg.url ? apiMsg.url.substring(0, 100) : 'não encontrado',
+            msgObjHasUrl: !!(msgObj.url || msgObj.mediaUrl),
+            msgObjUrl: msgObj.url ? msgObj.url.substring(0, 100) : 'não encontrado',
+            // Log da estrutura completa para debug (limitado a 1000 chars)
+            imageMsgStructure: imageMsg ? JSON.stringify(imageMsg).substring(0, 1000) : 'null'
+        });
+        
+        // Log completo da estrutura completa da mensagem
         const hasAnyUrl = !!(imageMsg.url || imageMsg.mediaUrl || imageMsg.directPath || 
                             msgObj.url || msgObj.mediaUrl || apiMsg.url || apiMsg.mediaUrl);
         
         if (!hasAnyUrl) {
-            console.log('[mapApiMessageToInternal] 🔍 Analisando imageMessage SEM URL:', {
-                hasUrl: !!imageMsg.url,
-                hasMediaUrl: !!imageMsg.mediaUrl,
-                hasDirectPath: !!imageMsg.directPath,
-                hasMimetype: !!imageMsg.mimetype,
-                hasFileLength: !!imageMsg.fileLength,
-                hasFileSha256: !!imageMsg.fileSha256,
-                hasMediaKey: !!imageMsg.mediaKey,
-                allKeys: imageMsg ? Object.keys(imageMsg) : [],
-                // Verifica também na estrutura completa da mensagem
-                apiMsgHasUrl: !!(apiMsg.url || apiMsg.mediaUrl),
-                msgObjHasUrl: !!(msgObj.url || msgObj.mediaUrl),
-                // Log da estrutura completa para debug (limitado a 500 chars)
-                imageMsgStructure: imageMsg ? JSON.stringify(imageMsg).substring(0, 500) : 'null'
+            console.warn('[mapApiMessageToInternal] ⚠️ [DEBUG] imageMessage SEM URL em nenhum lugar:', {
+                apiMsgKeys: Object.keys(apiMsg).slice(0, 20),
+                msgObjKeys: Object.keys(msgObj).slice(0, 20),
+                fullApiMsgStructure: JSON.stringify(apiMsg).substring(0, 2000)
             });
         }
         
