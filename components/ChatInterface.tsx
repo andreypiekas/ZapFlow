@@ -1480,30 +1480,49 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         };
         
         // Função auxiliar para buscar URL recursivamente em um objeto
-        const findImageUrl = (obj: any, depth: number = 0, maxDepth: number = 5): string | undefined => {
+        const findImageUrl = (obj: any, depth: number = 0, maxDepth: number = 5, visited: Set<any> = new Set()): string | undefined => {
           if (!obj || depth > maxDepth) return undefined;
           
-          // Verifica propriedades diretas
+          // Evita loops infinitos
+          if (visited.has(obj)) return undefined;
+          visited.add(obj);
+          
+          // Verifica propriedades diretas comuns
           if (isValidUrl(obj.url)) return obj.url;
           if (isValidUrl(obj.mediaUrl)) return obj.mediaUrl;
           if (isValidUrl(obj.directPath)) return obj.directPath;
           
-          // Verifica imageMessage especificamente
-          if (obj.imageMessage) {
-            const imgUrl = findImageUrl(obj.imageMessage, depth + 1, maxDepth);
-            if (imgUrl) return imgUrl;
+          // Se é um array, itera pelos elementos
+          if (Array.isArray(obj)) {
+            for (const item of obj) {
+              const url = findImageUrl(item, depth + 1, maxDepth, visited);
+              if (url) return url;
+            }
+            return undefined;
           }
           
-          // Verifica propriedade message
-          if (obj.message) {
-            const msgUrl = findImageUrl(obj.message, depth + 1, maxDepth);
-            if (msgUrl) return msgUrl;
-          }
-          
-          // Verifica propriedade media
-          if (obj.media) {
-            const mediaUrl = findImageUrl(obj.media, depth + 1, maxDepth);
-            if (mediaUrl) return mediaUrl;
+          // Se é um objeto, itera por todas as propriedades
+          if (typeof obj === 'object') {
+            // Primeiro verifica propriedades específicas conhecidas (prioridade)
+            const priorityProps = ['imageMessage', 'message', 'media', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'];
+            for (const prop of priorityProps) {
+              if (obj[prop]) {
+                const url = findImageUrl(obj[prop], depth + 1, maxDepth, visited);
+                if (url) return url;
+              }
+            }
+            
+            // Depois itera por todas as outras propriedades
+            for (const key in obj) {
+              if (obj.hasOwnProperty(key) && !priorityProps.includes(key)) {
+                // Ignora propriedades que não são objetos/arrays ou que são muito grandes
+                const value = obj[key];
+                if (value && typeof value === 'object' && !(value instanceof Date) && !(value instanceof RegExp)) {
+                  const url = findImageUrl(value, depth + 1, maxDepth, visited);
+                  if (url) return url;
+                }
+              }
+            }
           }
           
           return undefined;

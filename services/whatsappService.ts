@@ -1002,24 +1002,34 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         };
         
         // Tenta todas as possíveis localizações em ordem de prioridade
+        // IMPORTANTE: Verifica múltiplas estruturas possíveis da Evolution API
         const possibleUrls = [
+            // 1. Estrutura direta do imageMessage
             imageMsg.url,
             imageMsg.mediaUrl,
             imageMsg.directPath,
             imageMsg.media?.url,
             imageMsg.media?.mediaUrl,
+            // 2. Estrutura do msgObj (apiMsg.message)
             msgObj.url,
             msgObj.mediaUrl,
+            // 3. Estrutura completa aninhada (apiMsg.message.imageMessage)
             apiMsg.message?.imageMessage?.url,
             apiMsg.message?.imageMessage?.mediaUrl,
             apiMsg.message?.imageMessage?.directPath,
+            // 4. Estrutura no nível superior do apiMsg
             apiMsg.url,
             apiMsg.mediaUrl,
             apiMsg.imageMessage?.url, // Caso imageMessage esteja no nível superior
             apiMsg.imageMessage?.mediaUrl,
             apiMsg.imageMessage?.directPath,
+            // 5. Estrutura de mensagens citadas
             apiMsg.contextInfo?.quotedMessage?.imageMessage?.url,
-            typeof imageMsg === 'string' ? imageMsg : undefined
+            // 6. Casos especiais
+            typeof imageMsg === 'string' ? imageMsg : undefined,
+            // 7. Verifica também em data.message.imageMessage (estrutura do Socket.IO)
+            (apiMsg as any).data?.message?.imageMessage?.url,
+            (apiMsg as any).data?.message?.imageMessage?.mediaUrl
         ];
         
         // Encontra a primeira URL válida
@@ -1041,30 +1051,49 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         
         // Se ainda não encontrou, tenta busca recursiva na estrutura completa
         if (!mediaUrl) {
-            const findUrlRecursive = (obj: any, depth: number = 0, maxDepth: number = 5): string | undefined => {
+            const findUrlRecursive = (obj: any, depth: number = 0, maxDepth: number = 5, visited: Set<any> = new Set()): string | undefined => {
                 if (!obj || depth > maxDepth) return undefined;
                 
-                // Verifica propriedades diretas
+                // Evita loops infinitos
+                if (visited.has(obj)) return undefined;
+                visited.add(obj);
+                
+                // Verifica propriedades diretas comuns
                 if (isValidUrl(obj.url)) return obj.url;
                 if (isValidUrl(obj.mediaUrl)) return obj.mediaUrl;
                 if (isValidUrl(obj.directPath)) return obj.directPath;
                 
-                // Verifica imageMessage especificamente
-                if (obj.imageMessage) {
-                    const imgUrl = findUrlRecursive(obj.imageMessage, depth + 1, maxDepth);
-                    if (imgUrl) return imgUrl;
+                // Se é um array, itera pelos elementos
+                if (Array.isArray(obj)) {
+                    for (const item of obj) {
+                        const url = findUrlRecursive(item, depth + 1, maxDepth, visited);
+                        if (url) return url;
+                    }
+                    return undefined;
                 }
                 
-                // Verifica propriedade message
-                if (obj.message) {
-                    const msgUrl = findUrlRecursive(obj.message, depth + 1, maxDepth);
-                    if (msgUrl) return msgUrl;
-                }
-                
-                // Verifica propriedade media
-                if (obj.media) {
-                    const mediaUrl = findUrlRecursive(obj.media, depth + 1, maxDepth);
-                    if (mediaUrl) return mediaUrl;
+                // Se é um objeto, itera por todas as propriedades
+                if (typeof obj === 'object') {
+                    // Primeiro verifica propriedades específicas conhecidas (prioridade)
+                    const priorityProps = ['imageMessage', 'message', 'media', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'];
+                    for (const prop of priorityProps) {
+                        if (obj[prop]) {
+                            const url = findUrlRecursive(obj[prop], depth + 1, maxDepth, visited);
+                            if (url) return url;
+                        }
+                    }
+                    
+                    // Depois itera por todas as outras propriedades
+                    for (const key in obj) {
+                        if (obj.hasOwnProperty(key) && !priorityProps.includes(key)) {
+                            // Ignora propriedades que não são objetos/arrays ou que são muito grandes
+                            const value = obj[key];
+                            if (value && typeof value === 'object' && !(value instanceof Date) && !(value instanceof RegExp)) {
+                                const url = findUrlRecursive(value, depth + 1, maxDepth, visited);
+                                if (url) return url;
+                            }
+                        }
+                    }
                 }
                 
                 return undefined;
@@ -1073,6 +1102,8 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
             mediaUrl = findUrlRecursive(apiMsg);
             if (mediaUrl) {
                 console.log('[mapApiMessageToInternal] ✅ URL encontrada via busca recursiva:', mediaUrl.substring(0, 100));
+            } else {
+                console.warn('[mapApiMessageToInternal] ⚠️ Busca recursiva não encontrou URL. Estrutura completa:', JSON.stringify(apiMsg).substring(0, 2000));
             }
         }
         
