@@ -16,9 +16,10 @@ interface ChatInterfaceProps {
   workflows?: Workflow[];
   contacts?: Contact[];
   forceSelectChatId?: string | null; // Força a seleção de um chat específico
+  isViewActive?: boolean; // Indica se a view de chats está ativa
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, currentUser, onUpdateChat, apiConfig, quickReplies = [], workflows = [], contacts = [], forceSelectChatId }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, currentUser, onUpdateChat, apiConfig, quickReplies = [], workflows = [], contacts = [], forceSelectChatId, isViewActive = true }) => {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   
   // Ref para rastrear o último forceSelectChatId processado
@@ -441,11 +442,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     }
   }, [selectedChatId]);
 
-  // Detecta quando o usuário volta para a aba/página (troca de tela)
+  // Detecta quando o usuário volta para a aba/página (troca de tela do navegador)
   useEffect(() => {
     const handleVisibilityChange = () => {
       // Quando a página volta a ficar visível e há um chat selecionado
-      if (!document.hidden && selectedChatId) {
+      if (!document.hidden && selectedChatId && isViewActive) {
         // Força scroll para o final após um pequeno delay para garantir que o DOM está atualizado
         setTimeout(() => {
           isAtBottomRef.current = true;
@@ -456,7 +457,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [selectedChatId]);
+  }, [selectedChatId, isViewActive]);
+
+  // Detecta quando volta para a view de chats dentro da aplicação
+  const prevIsViewActiveRef = useRef(isViewActive);
+  useEffect(() => {
+    // Se a view estava inativa e agora está ativa, e há um chat selecionado
+    if (!prevIsViewActiveRef.current && isViewActive && selectedChatId) {
+      // Força scroll para o final após um pequeno delay
+      setTimeout(() => {
+        isAtBottomRef.current = true;
+        scrollToBottom(true);
+      }, 200);
+    }
+    prevIsViewActiveRef.current = isViewActive;
+  }, [isViewActive, selectedChatId]);
 
   useEffect(() => {
     // Quando mensagens mudam, só faz scroll se estiver no final
