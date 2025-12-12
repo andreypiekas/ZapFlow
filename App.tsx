@@ -2278,7 +2278,12 @@ const App: React.FC = () => {
                         console.log(`[App] ✅ [DEBUG] processMessageBatch: Mensagem mapeada com sucesso`, {
                             sender: mapped.sender,
                             content: mapped.content?.substring(0, 50),
-                            type: mapped.type
+                            type: mapped.type,
+                            hasMediaUrl: !!mapped.mediaUrl,
+                            mediaUrl: mapped.mediaUrl?.substring(0, 100),
+                            // Log completo da estrutura original para imagens
+                            originalHasImageMessage: !!(messageData.message?.imageMessage || messageData.imageMessage),
+                            originalImageUrl: messageData.message?.imageMessage?.url || messageData.imageMessage?.url || messageData.url || 'não encontrado'
                         });
                         
                         // Processa mensagem individual (código existente abaixo)
@@ -2316,7 +2321,9 @@ const App: React.FC = () => {
                     const messageContent = messageData.message?.conversation || messageData.message?.extendedTextMessage?.text || messageData.message?.imageMessage?.caption || 'sem conteúdo';
                     const messageStatus = messageData.status || 'sem status';
                     const fromMe = messageData.key?.fromMe || false;
-                    console.log(`[App] 🔍 [DEBUG] Socket.IO messages.upsert recebido: remoteJid=${remoteJid}, fromMe=${fromMe}, status=${messageStatus}, content=${messageContent.substring(0, 50)}`);
+                    const hasImageMessage = !!(messageData.message?.imageMessage || messageData.imageMessage);
+                    const imageUrl = messageData.message?.imageMessage?.url || messageData.imageMessage?.url || messageData.url || 'não encontrado';
+                    console.log(`[App] 🔍 [DEBUG] Socket.IO messages.upsert recebido: remoteJid=${remoteJid}, fromMe=${fromMe}, status=${messageStatus}, content=${messageContent.substring(0, 50)}, hasImage=${hasImageMessage}, imageUrl=${typeof imageUrl === 'string' ? imageUrl.substring(0, 100) : imageUrl}`);
                     
                     // Adiciona mensagem à fila para processamento em batch
                     if (!messageQueue.has(remoteJid)) {

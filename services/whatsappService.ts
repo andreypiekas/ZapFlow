@@ -900,6 +900,18 @@ const mapStatus = (status: any): MessageStatus => {
 
 export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     if (!apiMsg) return null;
+    
+    // Log inicial para debug de imagens
+    const hasImageAtTopLevel = !!(apiMsg.imageMessage || apiMsg.message?.imageMessage);
+    if (hasImageAtTopLevel) {
+        console.log('[mapApiMessageToInternal] 🖼️ [DEBUG] Imagem detectada no nível superior:', {
+            hasApiMsgImageMessage: !!apiMsg.imageMessage,
+            hasMessageImageMessage: !!apiMsg.message?.imageMessage,
+            apiMsgKeys: Object.keys(apiMsg).slice(0, 15),
+            messageKeys: apiMsg.message ? Object.keys(apiMsg.message).slice(0, 15) : []
+        });
+    }
+    
     const msgObj = apiMsg.message || apiMsg;
     
     // Extração robusta de texto
@@ -943,24 +955,35 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         const imageMsg = msgObj.imageMessage;
         
         // Log completo da estrutura da mensagem de imagem para diagnóstico
-        console.log('[mapApiMessageToInternal] 🔍 Analisando imageMessage:', {
-            hasUrl: !!imageMsg.url,
-            hasMediaUrl: !!imageMsg.mediaUrl,
-            hasDirectPath: !!imageMsg.directPath,
-            hasMimetype: !!imageMsg.mimetype,
-            hasFileLength: !!imageMsg.fileLength,
-            hasFileSha256: !!imageMsg.fileSha256,
-            hasMediaKey: !!imageMsg.mediaKey,
-            allKeys: imageMsg ? Object.keys(imageMsg) : [],
-            urlValue: imageMsg.url,
-            mediaUrlValue: imageMsg.mediaUrl,
-            directPathValue: imageMsg.directPath,
-            // Verifica também na estrutura completa da mensagem
-            apiMsgHasUrl: !!(apiMsg.url || apiMsg.mediaUrl),
-            msgObjHasUrl: !!(msgObj.url || msgObj.mediaUrl)
-        });
+        // IMPORTANTE: Log apenas se não encontrar URL para não poluir o console
+        const hasAnyUrl = !!(imageMsg.url || imageMsg.mediaUrl || imageMsg.directPath || 
+                            msgObj.url || msgObj.mediaUrl || apiMsg.url || apiMsg.mediaUrl);
+        
+        if (!hasAnyUrl) {
+            console.log('[mapApiMessageToInternal] 🔍 Analisando imageMessage SEM URL:', {
+                hasUrl: !!imageMsg.url,
+                hasMediaUrl: !!imageMsg.mediaUrl,
+                hasDirectPath: !!imageMsg.directPath,
+                hasMimetype: !!imageMsg.mimetype,
+                hasFileLength: !!imageMsg.fileLength,
+                hasFileSha256: !!imageMsg.fileSha256,
+                hasMediaKey: !!imageMsg.mediaKey,
+                allKeys: imageMsg ? Object.keys(imageMsg) : [],
+                // Verifica também na estrutura completa da mensagem
+                apiMsgHasUrl: !!(apiMsg.url || apiMsg.mediaUrl),
+                msgObjHasUrl: !!(msgObj.url || msgObj.mediaUrl),
+                // Log da estrutura completa para debug (limitado a 500 chars)
+                imageMsgStructure: imageMsg ? JSON.stringify(imageMsg).substring(0, 500) : 'null'
+            });
+        }
         
         // Tenta extrair URL de múltiplas localizações
+        // IMPORTANTE: A Evolution API pode retornar a URL em diferentes formatos:
+        // 1. imageMsg.url (mais comum)
+        // 2. imageMsg.mediaUrl
+        // 3. imageMsg.directPath (caminho relativo)
+        // 4. apiMsg.url (nível superior)
+        // 5. Base64 data URL (data:image/...)
         mediaUrl = imageMsg.url || 
                    imageMsg.mediaUrl ||
                    imageMsg.directPath || // Caminho direto (pode precisar de base URL)
@@ -971,8 +994,26 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
                    msgObj.mediaUrl ||
                    apiMsg.url ||
                    apiMsg.mediaUrl ||
+                   // Verifica se há uma URL no contexto da mensagem
+                   (apiMsg.contextInfo?.quotedMessage?.imageMessage?.url) ||
                    (typeof imageMsg === 'string' ? imageMsg : undefined) ||
                    undefined;
+        
+        // Se encontrou uma URL, tenta normalizar
+        if (mediaUrl && typeof mediaUrl === 'string') {
+            // Se é uma URL base64, mantém como está
+            if (mediaUrl.startsWith('data:')) {
+                console.log('[mapApiMessageToInternal] ✅ URL base64 detectada para imagem');
+            }
+            // Se é uma URL relativa (começa com /), pode precisar de baseUrl
+            else if (mediaUrl.startsWith('/')) {
+                console.log('[mapApiMessageToInternal] ⚠️ URL relativa detectada para imagem:', mediaUrl.substring(0, 100));
+            }
+            // Se é uma URL absoluta, mantém como está
+            else if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
+                console.log('[mapApiMessageToInternal] ✅ URL absoluta detectada para imagem:', mediaUrl.substring(0, 100));
+            }
+        }
         
         // Log de diagnóstico para imagens sem URL
         if (!mediaUrl) {

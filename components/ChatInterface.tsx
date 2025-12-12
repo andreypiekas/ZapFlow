@@ -1454,15 +1454,33 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         hasMediaUrl: !!msg.mediaUrl,
         mediaUrl: msg.mediaUrl?.substring(0, 100),
         content: msg.content?.substring(0, 50),
-        sender: msg.sender
+        sender: msg.sender,
+        hasRawMessage: !!msg.rawMessage
       });
       
-      if (!msg.mediaUrl) {
+      // Se não tem mediaUrl, tenta extrair do rawMessage como fallback
+      let imageUrl = msg.mediaUrl;
+      if (!imageUrl && msg.rawMessage) {
+        const rawMsg = msg.rawMessage;
+        const rawImageMsg = rawMsg.message?.imageMessage || rawMsg.imageMessage;
+        if (rawImageMsg) {
+          imageUrl = rawImageMsg.url || rawImageMsg.mediaUrl || rawImageMsg.directPath || 
+                     rawMsg.url || rawMsg.mediaUrl;
+          if (imageUrl) {
+            console.log('[ChatInterface] renderMessageContent: ✅ URL extraída do rawMessage:', imageUrl.substring(0, 100));
+            // Atualiza a mensagem com a URL encontrada (não persiste, apenas para exibição)
+            msg.mediaUrl = imageUrl;
+          }
+        }
+      }
+      
+      if (!imageUrl) {
         console.warn('[ChatInterface] renderMessageContent: Imagem sem mediaUrl:', {
           type: msg.type,
           content: msg.content,
           sender: msg.sender,
-          hasRawMessage: !!msg.rawMessage
+          hasRawMessage: !!msg.rawMessage,
+          rawMessageKeys: msg.rawMessage ? Object.keys(msg.rawMessage).slice(0, 10) : []
         });
         return (
           <div className="flex flex-col">
@@ -1476,9 +1494,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         );
       }
       
-      const imageUrl = getMediaUrl(msg.mediaUrl);
-      if (!imageUrl) {
-        console.error('[ChatInterface] renderMessageContent: getMediaUrl retornou undefined para:', msg.mediaUrl?.substring(0, 100));
+      const finalImageUrl = getMediaUrl(imageUrl);
+      if (!finalImageUrl) {
+        console.error('[ChatInterface] renderMessageContent: getMediaUrl retornou undefined para:', imageUrl?.substring(0, 100));
         return (
           <div className="flex flex-col">
             <div className="p-4 bg-slate-700/50 rounded-lg text-sm text-slate-300">
@@ -1491,21 +1509,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         );
       }
       
-      console.log('[ChatInterface] renderMessageContent: Renderizando imagem com URL:', imageUrl.substring(0, 100));
+      console.log('[ChatInterface] renderMessageContent: Renderizando imagem com URL:', finalImageUrl.substring(0, 100));
       
       return (
         <div className="flex flex-col">
           <img 
-            src={imageUrl} 
+            src={finalImageUrl} 
             alt="Imagem enviada" 
             className="rounded-lg max-w-full sm:max-w-sm mb-1 object-cover max-h-64 cursor-pointer hover:opacity-95" 
-            onClick={() => window.open(imageUrl, '_blank')}
+            onClick={() => window.open(finalImageUrl, '_blank')}
             onLoad={() => {
-              console.log('[ChatInterface] ✅ Imagem carregada com sucesso:', imageUrl.substring(0, 100));
+              console.log('[ChatInterface] ✅ Imagem carregada com sucesso:', finalImageUrl.substring(0, 100));
             }}
             onError={(e) => {
               console.error('[ChatInterface] ❌ Erro ao carregar imagem:', {
-                imageUrl: imageUrl.substring(0, 100),
+                imageUrl: finalImageUrl.substring(0, 100),
                 msgId: msg.id,
                 msgType: msg.type,
                 msgSender: msg.sender,
@@ -1519,7 +1537,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 parent.innerHTML = `
                   <div class="p-4 bg-slate-700/50 rounded-lg text-sm text-slate-300">
                     Erro ao carregar imagem<br/>
-                    <span class="text-xs opacity-70">URL: ${imageUrl.substring(0, 50)}...</span>
+                    <span class="text-xs opacity-70">URL: ${finalImageUrl.substring(0, 50)}...</span>
                   </div>
                 `;
               }
