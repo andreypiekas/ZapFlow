@@ -994,24 +994,87 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         // 4. apiMsg.url (nível superior)
         // 5. Base64 data URL (data:image/...)
         // 6. apiMsg.message.imageMessage.url (estrutura aninhada completa)
-        mediaUrl = imageMsg.url || 
-                   imageMsg.mediaUrl ||
-                   imageMsg.directPath || // Caminho direto (pode precisar de base URL)
-                   imageMsg.media?.url || // Algumas versões da API podem ter media.url
-                   imageMsg.media?.mediaUrl ||
-                   // Verifica também na estrutura pai (algumas versões da API podem colocar a URL no nível superior)
-                   msgObj.url ||
-                   msgObj.mediaUrl ||
-                   // Verifica diretamente na estrutura apiMsg.message.imageMessage (caso msgObj não capture)
-                   apiMsg.message?.imageMessage?.url ||
-                   apiMsg.message?.imageMessage?.mediaUrl ||
-                   apiMsg.message?.imageMessage?.directPath ||
-                   apiMsg.url ||
-                   apiMsg.mediaUrl ||
-                   // Verifica se há uma URL no contexto da mensagem
-                   (apiMsg.contextInfo?.quotedMessage?.imageMessage?.url) ||
-                   (typeof imageMsg === 'string' ? imageMsg : undefined) ||
-                   undefined;
+        // 7. data.message.imageMessage.url (estrutura do Socket.IO)
+        
+        // Função auxiliar para verificar se uma string é uma URL válida
+        const isValidUrl = (url: any): url is string => {
+            return typeof url === 'string' && url.length > 0 && url.trim().length > 0;
+        };
+        
+        // Tenta todas as possíveis localizações em ordem de prioridade
+        const possibleUrls = [
+            imageMsg.url,
+            imageMsg.mediaUrl,
+            imageMsg.directPath,
+            imageMsg.media?.url,
+            imageMsg.media?.mediaUrl,
+            msgObj.url,
+            msgObj.mediaUrl,
+            apiMsg.message?.imageMessage?.url,
+            apiMsg.message?.imageMessage?.mediaUrl,
+            apiMsg.message?.imageMessage?.directPath,
+            apiMsg.url,
+            apiMsg.mediaUrl,
+            apiMsg.imageMessage?.url, // Caso imageMessage esteja no nível superior
+            apiMsg.imageMessage?.mediaUrl,
+            apiMsg.imageMessage?.directPath,
+            apiMsg.contextInfo?.quotedMessage?.imageMessage?.url,
+            typeof imageMsg === 'string' ? imageMsg : undefined
+        ];
+        
+        // Encontra a primeira URL válida
+        for (const url of possibleUrls) {
+            if (isValidUrl(url)) {
+                mediaUrl = url;
+                console.log('[mapApiMessageToInternal] ✅ URL encontrada em:', {
+                    url: url.substring(0, 100),
+                    source: url === imageMsg.url ? 'imageMsg.url' :
+                           url === imageMsg.mediaUrl ? 'imageMsg.mediaUrl' :
+                           url === imageMsg.directPath ? 'imageMsg.directPath' :
+                           url === apiMsg.message?.imageMessage?.url ? 'apiMsg.message.imageMessage.url' :
+                           url === apiMsg.imageMessage?.url ? 'apiMsg.imageMessage.url' :
+                           'other'
+                });
+                break;
+            }
+        }
+        
+        // Se ainda não encontrou, tenta busca recursiva na estrutura completa
+        if (!mediaUrl) {
+            const findUrlRecursive = (obj: any, depth: number = 0, maxDepth: number = 5): string | undefined => {
+                if (!obj || depth > maxDepth) return undefined;
+                
+                // Verifica propriedades diretas
+                if (isValidUrl(obj.url)) return obj.url;
+                if (isValidUrl(obj.mediaUrl)) return obj.mediaUrl;
+                if (isValidUrl(obj.directPath)) return obj.directPath;
+                
+                // Verifica imageMessage especificamente
+                if (obj.imageMessage) {
+                    const imgUrl = findUrlRecursive(obj.imageMessage, depth + 1, maxDepth);
+                    if (imgUrl) return imgUrl;
+                }
+                
+                // Verifica propriedade message
+                if (obj.message) {
+                    const msgUrl = findUrlRecursive(obj.message, depth + 1, maxDepth);
+                    if (msgUrl) return msgUrl;
+                }
+                
+                // Verifica propriedade media
+                if (obj.media) {
+                    const mediaUrl = findUrlRecursive(obj.media, depth + 1, maxDepth);
+                    if (mediaUrl) return mediaUrl;
+                }
+                
+                return undefined;
+            };
+            
+            mediaUrl = findUrlRecursive(apiMsg);
+            if (mediaUrl) {
+                console.log('[mapApiMessageToInternal] ✅ URL encontrada via busca recursiva:', mediaUrl.substring(0, 100));
+            }
+        }
         
         // Se encontrou uma URL, tenta normalizar
         if (mediaUrl && typeof mediaUrl === 'string') {

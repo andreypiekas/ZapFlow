@@ -2283,7 +2283,14 @@ const App: React.FC = () => {
                             mediaUrl: mapped.mediaUrl?.substring(0, 100),
                             // Log completo da estrutura original para imagens
                             originalHasImageMessage: !!(messageData.message?.imageMessage || messageData.imageMessage),
-                            originalImageUrl: messageData.message?.imageMessage?.url || messageData.imageMessage?.url || messageData.url || 'não encontrado'
+                            originalImageUrl: messageData.message?.imageMessage?.url || messageData.imageMessage?.url || messageData.url || 'não encontrado',
+                            // Log detalhado da estrutura completa para debug de imagens
+                            messageDataKeys: Object.keys(messageData).slice(0, 20),
+                            hasMessage: !!messageData.message,
+                            messageKeys: messageData.message ? Object.keys(messageData.message).slice(0, 20) : [],
+                            // Log completo da estrutura imageMessage se existir
+                            imageMessageStructure: messageData.message?.imageMessage ? JSON.stringify(messageData.message.imageMessage).substring(0, 500) : 
+                                                  messageData.imageMessage ? JSON.stringify(messageData.imageMessage).substring(0, 500) : 'não encontrado'
                         });
                         
                         // Processa mensagem individual (código existente abaixo)

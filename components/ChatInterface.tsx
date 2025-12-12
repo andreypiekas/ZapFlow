@@ -1474,14 +1474,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
           urlValue: rawMsg.message?.imageMessage?.url || rawMsg.imageMessage?.url || rawMsg.url || 'não encontrado'
         });
         
+        // Função auxiliar para verificar se uma string é uma URL válida
+        const isValidUrl = (url: any): url is string => {
+          return typeof url === 'string' && url.length > 0 && url.trim().length > 0;
+        };
+        
         // Função auxiliar para buscar URL recursivamente em um objeto
         const findImageUrl = (obj: any, depth: number = 0, maxDepth: number = 5): string | undefined => {
           if (!obj || depth > maxDepth) return undefined;
           
           // Verifica propriedades diretas
-          if (obj.url && typeof obj.url === 'string' && obj.url.length > 0) return obj.url;
-          if (obj.mediaUrl && typeof obj.mediaUrl === 'string' && obj.mediaUrl.length > 0) return obj.mediaUrl;
-          if (obj.directPath && typeof obj.directPath === 'string' && obj.directPath.length > 0) return obj.directPath;
+          if (isValidUrl(obj.url)) return obj.url;
+          if (isValidUrl(obj.mediaUrl)) return obj.mediaUrl;
+          if (isValidUrl(obj.directPath)) return obj.directPath;
           
           // Verifica imageMessage especificamente
           if (obj.imageMessage) {
@@ -1504,23 +1509,39 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
           return undefined;
         };
         
-        // Tenta encontrar a URL usando busca recursiva
-        imageUrl = findImageUrl(rawMsg);
+        // Tenta todas as possíveis localizações em ordem de prioridade antes da busca recursiva
+        const possibleUrls = [
+          rawMsg.message?.imageMessage?.url,
+          rawMsg.message?.imageMessage?.mediaUrl,
+          rawMsg.message?.imageMessage?.directPath,
+          rawMsg.imageMessage?.url,
+          rawMsg.imageMessage?.mediaUrl,
+          rawMsg.imageMessage?.directPath,
+          rawMsg.message?.url,
+          rawMsg.message?.mediaUrl,
+          rawMsg.url,
+          rawMsg.mediaUrl
+        ];
         
-        // Se não encontrou com busca recursiva, tenta caminhos específicos conhecidos
+        // Encontra a primeira URL válida
+        for (const url of possibleUrls) {
+          if (isValidUrl(url)) {
+            imageUrl = url;
+            console.log('[ChatInterface] renderMessageContent: ✅ URL encontrada em caminho direto:', {
+              url: url.substring(0, 100),
+              source: url === rawMsg.message?.imageMessage?.url ? 'rawMsg.message.imageMessage.url' :
+                     url === rawMsg.imageMessage?.url ? 'rawMsg.imageMessage.url' :
+                     'other'
+            });
+            break;
+          }
+        }
+        
+        // Se não encontrou com caminhos diretos, tenta busca recursiva
         if (!imageUrl) {
-          const rawImageMsg = rawMsg.message?.imageMessage || rawMsg.imageMessage;
-          if (rawImageMsg) {
-            // Tenta todas as possíveis localizações da URL
-            imageUrl = rawImageMsg.url || 
-                       rawImageMsg.mediaUrl || 
-                       rawImageMsg.directPath ||
-                       rawImageMsg.media?.url ||
-                       rawImageMsg.media?.mediaUrl ||
-                       rawMsg.message?.url ||
-                       rawMsg.message?.mediaUrl ||
-                       rawMsg.url || 
-                       rawMsg.mediaUrl;
+          imageUrl = findImageUrl(rawMsg);
+          if (imageUrl) {
+            console.log('[ChatInterface] renderMessageContent: ✅ URL encontrada via busca recursiva:', imageUrl.substring(0, 100));
           }
         }
         
