@@ -1354,9 +1354,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       originalUrl: url.substring(0, 100),
       isAbsolute: url.startsWith('http://') || url.startsWith('https://'),
       isRelative: url.startsWith('/'),
+      isBase64: url.startsWith('data:'),
       hasBaseUrl: !!apiConfig.baseUrl,
       baseUrl: apiConfig.baseUrl
     });
+    
+    // Se é uma URL base64 (data:image/, data:video/, etc.), retorna como está
+    if (url.startsWith('data:')) {
+      console.log('[ChatInterface] getMediaUrl: URL base64 retornada como está');
+      return url;
+    }
     
     // Se já é uma URL absoluta (http:// ou https://), retorna como está
     if (url.startsWith('http://') || url.startsWith('https://')) {

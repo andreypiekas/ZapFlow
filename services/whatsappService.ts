@@ -954,14 +954,23 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
             allKeys: imageMsg ? Object.keys(imageMsg) : [],
             urlValue: imageMsg.url,
             mediaUrlValue: imageMsg.mediaUrl,
-            directPathValue: imageMsg.directPath
+            directPathValue: imageMsg.directPath,
+            // Verifica também na estrutura completa da mensagem
+            apiMsgHasUrl: !!(apiMsg.url || apiMsg.mediaUrl),
+            msgObjHasUrl: !!(msgObj.url || msgObj.mediaUrl)
         });
         
+        // Tenta extrair URL de múltiplas localizações
         mediaUrl = imageMsg.url || 
                    imageMsg.mediaUrl ||
                    imageMsg.directPath || // Caminho direto (pode precisar de base URL)
                    imageMsg.media?.url || // Algumas versões da API podem ter media.url
                    imageMsg.media?.mediaUrl ||
+                   // Verifica também na estrutura pai (algumas versões da API podem colocar a URL no nível superior)
+                   msgObj.url ||
+                   msgObj.mediaUrl ||
+                   apiMsg.url ||
+                   apiMsg.mediaUrl ||
                    (typeof imageMsg === 'string' ? imageMsg : undefined) ||
                    undefined;
         
@@ -971,7 +980,10 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
                 hasImageMessage: !!imageMsg,
                 imageMessageKeys: imageMsg ? Object.keys(imageMsg) : [],
                 imageMessageType: typeof imageMsg,
-                fullImageMessage: imageMsg ? JSON.stringify(imageMsg).substring(0, 500) : 'null'
+                // Log da estrutura completa para debug
+                fullImageMessage: imageMsg ? JSON.stringify(imageMsg).substring(0, 1000) : 'null',
+                fullMsgObj: msgObj ? JSON.stringify(msgObj).substring(0, 500) : 'null',
+                apiMsgKeys: apiMsg ? Object.keys(apiMsg).slice(0, 20) : []
             });
         } else {
             // Log quando encontrar URL (para debug)
@@ -979,7 +991,12 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
                 url: mediaUrl.substring(0, 100),
                 isAbsolute: mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://'),
                 isRelative: mediaUrl.startsWith('/'),
-                length: mediaUrl.length
+                length: mediaUrl.length,
+                source: imageMsg.url ? 'imageMsg.url' : 
+                       imageMsg.mediaUrl ? 'imageMsg.mediaUrl' :
+                       imageMsg.directPath ? 'imageMsg.directPath' :
+                       msgObj.url ? 'msgObj.url' :
+                       apiMsg.url ? 'apiMsg.url' : 'other'
             });
         }
     } else if (msgObj.audioMessage) {
