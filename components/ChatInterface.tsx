@@ -258,6 +258,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const isUserScrollingRef = useRef(false);
+  const isAtBottomRef = useRef(true);
   const dragCounter = useRef(0);
 
   const selectedChat = chats.find(c => c.id === selectedChatId);
@@ -372,8 +375,41 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     });
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Só faz scroll se o usuário estiver no final (ou muito próximo)
+    if (isAtBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   };
+
+  // Verifica se o usuário está no final do scroll
+  const checkIfAtBottom = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return false;
+    
+    const threshold = 100; // Considera "no final" se estiver a 100px do final
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+    isAtBottomRef.current = isAtBottom;
+    return isAtBottom;
+  };
+
+  // Event listener para detectar scroll manual do usuário
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      isUserScrollingRef.current = true;
+      checkIfAtBottom();
+      
+      // Reset flag após um tempo para permitir scroll automático novamente
+      setTimeout(() => {
+        isUserScrollingRef.current = false;
+      }, 150);
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [selectedChatId]);
 
   // Atualiza o chat selecionado quando o array de chats é atualizado
   useEffect(() => {
@@ -382,15 +418,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       const updatedMessages = updatedChat?.messages || [];
       const selectedMessages = selectedChat?.messages || [];
       if (updatedChat && updatedMessages.length !== selectedMessages.length) {
-        // Chat foi atualizado com novas mensagens - força re-render
-        // O selectedChat já é derivado, então isso deve funcionar automaticamente
-        // Mas garantimos que o scroll aconteça
-        setTimeout(() => scrollToBottom(), 100);
+        // Chat foi atualizado com novas mensagens
+        // Só faz scroll se o usuário estiver no final
+        setTimeout(() => {
+          checkIfAtBottom();
+          scrollToBottom();
+        }, 100);
       }
     }
   }, [chats, selectedChatId]);
 
   useEffect(() => {
+    // Quando o chat selecionado muda, sempre vai para o final
+    if (selectedChatId) {
+      isAtBottomRef.current = true;
+      setTimeout(() => scrollToBottom(), 100);
+    }
+  }, [selectedChatId]);
+
+  useEffect(() => {
+    // Quando mensagens mudam, só faz scroll se estiver no final
+    checkIfAtBottom();
     scrollToBottom();
   }, [selectedChat?.messages, messageSearchTerm]);
 
@@ -1672,7 +1720,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             )}
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 relative" style={{ 
+            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 relative" style={{ 
               background: 'linear-gradient(135deg, #111316 0%, #0D0F13 100%)',
               backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(0, 227, 209, 0.04) 1px, transparent 0)',
               backgroundSize: '40px 40px'
