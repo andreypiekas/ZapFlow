@@ -1343,6 +1343,34 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Helper para transformar URL relativa em absoluta se necessário
+  const getMediaUrl = (url: string | undefined): string | undefined => {
+    if (!url) return undefined;
+    
+    // Se já é uma URL absoluta (http:// ou https://), retorna como está
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    
+    // Se é uma URL relativa e temos baseUrl configurado, transforma em absoluta
+    if (apiConfig.baseUrl && !url.startsWith('/')) {
+      // Remove trailing slash do baseUrl se houver
+      const baseUrl = apiConfig.baseUrl.replace(/\/$/, '');
+      // Remove leading slash da URL se houver
+      const cleanUrl = url.startsWith('/') ? url.substring(1) : url;
+      return `${baseUrl}/${cleanUrl}`;
+    }
+    
+    // Se começa com /, adiciona baseUrl
+    if (url.startsWith('/') && apiConfig.baseUrl) {
+      const baseUrl = apiConfig.baseUrl.replace(/\/$/, '');
+      return `${baseUrl}${url}`;
+    }
+    
+    // Retorna como está se não conseguir transformar
+    return url;
+  };
+
   const renderMessageContent = (msg: Message) => {
     // Search Highlight
     const content = msg.content;
@@ -1364,17 +1392,50 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     };
 
     if (msg.type === 'sticker' && msg.mediaUrl) {
-        return <img src={msg.mediaUrl} alt="Sticker" className="w-32 h-32 object-contain" />;
+        const stickerUrl = getMediaUrl(msg.mediaUrl);
+        if (!stickerUrl) return <span className="text-sm opacity-70">Sticker (URL não disponível)</span>;
+        return <img src={stickerUrl} alt="Sticker" className="w-32 h-32 object-contain" onError={(e) => {
+          console.error('[ChatInterface] Erro ao carregar sticker:', stickerUrl);
+          (e.target as HTMLImageElement).style.display = 'none';
+        }} />;
     }
 
     if (msg.type === 'image' && msg.mediaUrl) {
+      const imageUrl = getMediaUrl(msg.mediaUrl);
+      if (!imageUrl) {
+        return (
+          <div className="flex flex-col">
+            <div className="p-4 bg-slate-700/50 rounded-lg text-sm text-slate-300">
+              Imagem (URL não disponível)
+            </div>
+            {msg.content && msg.content !== 'Imagem' && (
+              <p className={`text-sm mt-1 ${isUserMessage ? 'text-white' : ''}`}>{highlightedContent(msg.content)}</p>
+            )}
+          </div>
+        );
+      }
+      
       return (
         <div className="flex flex-col">
           <img 
-            src={msg.mediaUrl} 
+            src={imageUrl} 
             alt="Imagem enviada" 
             className="rounded-lg max-w-full sm:max-w-sm mb-1 object-cover max-h-64 cursor-pointer hover:opacity-95" 
-            onClick={() => window.open(msg.mediaUrl, '_blank')}
+            onClick={() => window.open(imageUrl, '_blank')}
+            onError={(e) => {
+              console.error('[ChatInterface] Erro ao carregar imagem:', imageUrl, msg);
+              // Substitui a imagem por uma mensagem de erro
+              const imgElement = e.target as HTMLImageElement;
+              const parent = imgElement.parentElement;
+              if (parent) {
+                parent.innerHTML = `
+                  <div class="p-4 bg-slate-700/50 rounded-lg text-sm text-slate-300">
+                    Erro ao carregar imagem<br/>
+                    <span class="text-xs opacity-70">URL: ${imageUrl.substring(0, 50)}...</span>
+                  </div>
+                `;
+              }
+            }}
           />
           {msg.content && msg.content !== 'Imagem' && (
              <p className={`text-sm mt-1 ${isUserMessage ? 'text-white' : ''}`}>{highlightedContent(msg.content)}</p>
@@ -1383,13 +1444,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       );
     }
     if (msg.type === 'audio' && msg.mediaUrl) {
+      const audioUrl = getMediaUrl(msg.mediaUrl);
+      if (!audioUrl) {
+        return <span className="text-sm opacity-70">Áudio (URL não disponível)</span>;
+      }
       return (
         <div className="flex items-center gap-2 min-w-[200px]">
-           <audio controls src={msg.mediaUrl} className="w-full h-8" />
+           <audio controls src={audioUrl} className="w-full h-8" onError={(e) => {
+             console.error('[ChatInterface] Erro ao carregar áudio:', audioUrl);
+           }} />
         </div>
       );
     }
     if (msg.type === 'document') {
+       const docUrl = getMediaUrl(msg.mediaUrl);
        return (
            <div className={`flex items-center gap-3 p-3 rounded-lg ${isUserMessage ? 'bg-white/10' : 'bg-black/5'}`}>
                <div className={`p-2 rounded-full ${isUserMessage ? 'bg-white/20 text-white' : 'bg-white text-emerald-600'}`}>
@@ -1399,8 +1467,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                    <p className={`text-sm font-medium truncate ${isUserMessage ? 'text-white' : ''}`}>{msg.fileName || 'Documento'}</p>
                    <p className={`text-xs uppercase ${isUserMessage ? 'text-slate-300' : 'opacity-70'}`}>{msg.mimeType?.split('/')[1] || 'FILE'}</p>
                </div>
-               {msg.mediaUrl && (
-                  <a href={msg.mediaUrl} download={msg.fileName} className={`p-2 rounded-full ${isUserMessage ? 'text-white hover:bg-white/20' : 'text-emerald-700 hover:bg-emerald-100'}`}>
+               {docUrl && (
+                  <a href={docUrl} download={msg.fileName} className={`p-2 rounded-full ${isUserMessage ? 'text-white hover:bg-white/20' : 'text-emerald-700 hover:bg-emerald-100'}`}>
                       <ArrowRightLeft className="rotate-90" size={16} />
                   </a>
                )}

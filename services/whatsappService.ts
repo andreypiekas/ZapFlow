@@ -938,29 +938,54 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     
     if (msgObj.imageMessage) {
         type = 'image';
-        // Extrai URL da imagem - a Evolution API fornece a URL completa no campo 'url'
-        mediaUrl = msgObj.imageMessage.url || 
-                   msgObj.imageMessage.mediaUrl ||
+        // Extrai URL da imagem - a Evolution API pode fornecer a URL em diferentes campos
+        // Tenta múltiplas formas de obter a URL
+        const imageMsg = msgObj.imageMessage;
+        mediaUrl = imageMsg.url || 
+                   imageMsg.mediaUrl ||
+                   imageMsg.directPath || // Caminho direto (pode precisar de base URL)
+                   (typeof imageMsg === 'string' ? imageMsg : undefined) ||
                    undefined;
+        
+        // Log de diagnóstico para imagens sem URL
+        if (!mediaUrl) {
+            console.warn('[mapApiMessageToInternal] ⚠️ Imagem sem URL detectada:', {
+                hasImageMessage: !!imageMsg,
+                imageMessageKeys: imageMsg ? Object.keys(imageMsg).slice(0, 10) : [],
+                imageMessageType: typeof imageMsg,
+                sample: imageMsg ? JSON.stringify(imageMsg).substring(0, 200) : 'null'
+            });
+        } else {
+            // Log apenas quando encontrar URL (para debug)
+            console.log('[mapApiMessageToInternal] ✅ URL de imagem extraída:', mediaUrl.substring(0, 100));
+        }
     } else if (msgObj.audioMessage) {
         type = 'audio';
-        mediaUrl = msgObj.audioMessage.url || 
-                   msgObj.audioMessage.mediaUrl ||
+        const audioMsg = msgObj.audioMessage;
+        mediaUrl = audioMsg.url || 
+                   audioMsg.mediaUrl ||
+                   audioMsg.directPath ||
                    undefined;
     } else if (msgObj.videoMessage) {
         type = 'video';
-        mediaUrl = msgObj.videoMessage.url || 
-                   msgObj.videoMessage.mediaUrl ||
+        const videoMsg = msgObj.videoMessage;
+        mediaUrl = videoMsg.url || 
+                   videoMsg.mediaUrl ||
+                   videoMsg.directPath ||
                    undefined;
     } else if (msgObj.stickerMessage) {
         type = 'sticker';
-        mediaUrl = msgObj.stickerMessage.url || 
-                   msgObj.stickerMessage.mediaUrl ||
+        const stickerMsg = msgObj.stickerMessage;
+        mediaUrl = stickerMsg.url || 
+                   stickerMsg.mediaUrl ||
+                   stickerMsg.directPath ||
                    undefined;
     } else if (msgObj.documentMessage) {
         type = 'document';
-        mediaUrl = msgObj.documentMessage.url || 
-                   msgObj.documentMessage.mediaUrl ||
+        const docMsg = msgObj.documentMessage;
+        mediaUrl = docMsg.url || 
+                   docMsg.mediaUrl ||
+                   docMsg.directPath ||
                    undefined;
     }
 
