@@ -2311,6 +2311,23 @@ const App: React.FC = () => {
                 });
                 
                 try {
+                    // Log detalhado da estrutura original ANTES de processar
+                    if (data && typeof data === 'object') {
+                        const hasImageInData = !!(data.message?.imageMessage || data.imageMessage);
+                        if (hasImageInData) {
+                            console.log('[App] 🖼️ [DEBUG] Socket.IO: Estrutura ORIGINAL do data recebido:', {
+                                hasDataMessage: !!data.message,
+                                hasDataImageMessage: !!data.imageMessage,
+                                dataMessageKeys: data.message ? Object.keys(data.message).slice(0, 20) : [],
+                                dataImageMessageKeys: data.imageMessage ? Object.keys(data.imageMessage).slice(0, 20) : [],
+                                dataMessageImageMessageKeys: data.message?.imageMessage ? Object.keys(data.message.imageMessage).slice(0, 20) : [],
+                                dataMessageImageMessageUrl: data.message?.imageMessage?.url || 'não encontrado',
+                                dataImageMessageUrl: data.imageMessage?.url || 'não encontrado',
+                                fullDataStructure: JSON.stringify(data).substring(0, 3000)
+                            });
+                        }
+                    }
+                    
                     // Extrai dados da mensagem
                     const messageData = data.message || data;
                     if (!messageData || !messageData.key) {
@@ -2330,7 +2347,35 @@ const App: React.FC = () => {
                     const fromMe = messageData.key?.fromMe || false;
                     const hasImageMessage = !!(messageData.message?.imageMessage || messageData.imageMessage);
                     const imageUrl = messageData.message?.imageMessage?.url || messageData.imageMessage?.url || messageData.url || 'não encontrado';
+                    
+                    // Log detalhado para imagens
+                    if (hasImageMessage) {
+                        console.log('[App] 🖼️ [DEBUG] Socket.IO: Imagem detectada na mensagem recebida:', {
+                            hasMessageImageMessage: !!messageData.message?.imageMessage,
+                            hasImageMessage: !!messageData.imageMessage,
+                            messageImageMessageKeys: messageData.message?.imageMessage ? Object.keys(messageData.message.imageMessage) : [],
+                            imageMessageKeys: messageData.imageMessage ? Object.keys(messageData.imageMessage) : [],
+                            messageImageMessageUrl: messageData.message?.imageMessage?.url || 'não encontrado',
+                            imageMessageUrl: messageData.imageMessage?.url || 'não encontrado',
+                            messageImageMessageDirectPath: messageData.message?.imageMessage?.directPath || 'não encontrado',
+                            imageMessageDirectPath: messageData.imageMessage?.directPath || 'não encontrado',
+                            fullMessageDataStructure: JSON.stringify(messageData).substring(0, 2000)
+                        });
+                    }
+                    
                     console.log(`[App] 🔍 [DEBUG] Socket.IO messages.upsert recebido: remoteJid=${remoteJid}, fromMe=${fromMe}, status=${messageStatus}, content=${messageContent.substring(0, 50)}, hasImage=${hasImageMessage}, imageUrl=${typeof imageUrl === 'string' ? imageUrl.substring(0, 100) : imageUrl}`);
+                    
+                    // Se é uma imagem e encontrou URL, garante que ela seja preservada na estrutura
+                    if (hasImageMessage && imageUrl && imageUrl !== 'não encontrado' && typeof imageUrl === 'string') {
+                        // Garante que a URL esteja na estrutura correta antes de processar
+                        if (messageData.message?.imageMessage && !messageData.message.imageMessage.url) {
+                            messageData.message.imageMessage.url = imageUrl;
+                            console.log('[App] ✅ [DEBUG] Socket.IO: URL preservada em message.imageMessage.url');
+                        } else if (messageData.imageMessage && !messageData.imageMessage.url) {
+                            messageData.imageMessage.url = imageUrl;
+                            console.log('[App] ✅ [DEBUG] Socket.IO: URL preservada em imageMessage.url');
+                        }
+                    }
                     
                     // Adiciona mensagem à fila para processamento em batch
                     if (!messageQueue.has(remoteJid)) {
