@@ -1345,10 +1345,31 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
   // Helper para transformar URL relativa em absoluta se necessário
   const getMediaUrl = (url: string | undefined): string | undefined => {
-    if (!url) return undefined;
+    if (!url) {
+      console.warn('[ChatInterface] getMediaUrl: URL vazia ou undefined');
+      return undefined;
+    }
+    
+    console.log('[ChatInterface] getMediaUrl: Processando URL:', {
+      originalUrl: url.substring(0, 100),
+      isAbsolute: url.startsWith('http://') || url.startsWith('https://'),
+      isRelative: url.startsWith('/'),
+      hasBaseUrl: !!apiConfig.baseUrl,
+      baseUrl: apiConfig.baseUrl
+    });
     
     // Se já é uma URL absoluta (http:// ou https://), retorna como está
     if (url.startsWith('http://') || url.startsWith('https://')) {
+      // Se é uma URL da Evolution API e temos API key, adiciona como query parameter
+      // Evolution API pode requerer autenticação para acessar mídia
+      if (apiConfig.baseUrl && url.includes(apiConfig.baseUrl.replace(/^https?:\/\//, '').split(':')[0]) && apiConfig.apiKey) {
+        const urlObj = new URL(url);
+        urlObj.searchParams.set('apikey', apiConfig.apiKey);
+        const finalUrl = urlObj.toString();
+        console.log('[ChatInterface] getMediaUrl: URL absoluta com autenticação adicionada:', finalUrl.substring(0, 100));
+        return finalUrl;
+      }
+      console.log('[ChatInterface] getMediaUrl: URL absoluta retornada como está:', url.substring(0, 100));
       return url;
     }
     
@@ -1358,16 +1379,37 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       const baseUrl = apiConfig.baseUrl.replace(/\/$/, '');
       // Remove leading slash da URL se houver
       const cleanUrl = url.startsWith('/') ? url.substring(1) : url;
-      return `${baseUrl}/${cleanUrl}`;
+      const finalUrl = `${baseUrl}/${cleanUrl}`;
+      // Adiciona API key se disponível
+      if (apiConfig.apiKey) {
+        const urlObj = new URL(finalUrl);
+        urlObj.searchParams.set('apikey', apiConfig.apiKey);
+        const authenticatedUrl = urlObj.toString();
+        console.log('[ChatInterface] getMediaUrl: URL relativa transformada com autenticação:', authenticatedUrl.substring(0, 100));
+        return authenticatedUrl;
+      }
+      console.log('[ChatInterface] getMediaUrl: URL relativa transformada:', finalUrl.substring(0, 100));
+      return finalUrl;
     }
     
     // Se começa com /, adiciona baseUrl
     if (url.startsWith('/') && apiConfig.baseUrl) {
       const baseUrl = apiConfig.baseUrl.replace(/\/$/, '');
-      return `${baseUrl}${url}`;
+      const finalUrl = `${baseUrl}${url}`;
+      // Adiciona API key se disponível
+      if (apiConfig.apiKey) {
+        const urlObj = new URL(finalUrl);
+        urlObj.searchParams.set('apikey', apiConfig.apiKey);
+        const authenticatedUrl = urlObj.toString();
+        console.log('[ChatInterface] getMediaUrl: URL com / transformada com autenticação:', authenticatedUrl.substring(0, 100));
+        return authenticatedUrl;
+      }
+      console.log('[ChatInterface] getMediaUrl: URL com / transformada:', finalUrl.substring(0, 100));
+      return finalUrl;
     }
     
     // Retorna como está se não conseguir transformar
+    console.warn('[ChatInterface] getMediaUrl: Não foi possível transformar URL, retornando como está:', url.substring(0, 100));
     return url;
   };
 
@@ -1400,9 +1442,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         }} />;
     }
 
-    if (msg.type === 'image' && msg.mediaUrl) {
-      const imageUrl = getMediaUrl(msg.mediaUrl);
-      if (!imageUrl) {
+    if (msg.type === 'image') {
+      console.log('[ChatInterface] renderMessageContent: Renderizando imagem:', {
+        hasMediaUrl: !!msg.mediaUrl,
+        mediaUrl: msg.mediaUrl?.substring(0, 100),
+        content: msg.content?.substring(0, 50),
+        sender: msg.sender
+      });
+      
+      if (!msg.mediaUrl) {
+        console.warn('[ChatInterface] renderMessageContent: Imagem sem mediaUrl:', {
+          type: msg.type,
+          content: msg.content,
+          sender: msg.sender,
+          hasRawMessage: !!msg.rawMessage
+        });
         return (
           <div className="flex flex-col">
             <div className="p-4 bg-slate-700/50 rounded-lg text-sm text-slate-300">
@@ -1415,6 +1469,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         );
       }
       
+      const imageUrl = getMediaUrl(msg.mediaUrl);
+      if (!imageUrl) {
+        console.error('[ChatInterface] renderMessageContent: getMediaUrl retornou undefined para:', msg.mediaUrl?.substring(0, 100));
+        return (
+          <div className="flex flex-col">
+            <div className="p-4 bg-slate-700/50 rounded-lg text-sm text-slate-300">
+              Imagem (URL não disponível)
+            </div>
+            {msg.content && msg.content !== 'Imagem' && (
+              <p className={`text-sm mt-1 ${isUserMessage ? 'text-white' : ''}`}>{highlightedContent(msg.content)}</p>
+            )}
+          </div>
+        );
+      }
+      
+      console.log('[ChatInterface] renderMessageContent: Renderizando imagem com URL:', imageUrl.substring(0, 100));
+      
       return (
         <div className="flex flex-col">
           <img 
@@ -1422,8 +1493,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             alt="Imagem enviada" 
             className="rounded-lg max-w-full sm:max-w-sm mb-1 object-cover max-h-64 cursor-pointer hover:opacity-95" 
             onClick={() => window.open(imageUrl, '_blank')}
+            onLoad={() => {
+              console.log('[ChatInterface] ✅ Imagem carregada com sucesso:', imageUrl.substring(0, 100));
+            }}
             onError={(e) => {
-              console.error('[ChatInterface] Erro ao carregar imagem:', imageUrl, msg);
+              console.error('[ChatInterface] ❌ Erro ao carregar imagem:', {
+                imageUrl: imageUrl.substring(0, 100),
+                msgId: msg.id,
+                msgType: msg.type,
+                msgSender: msg.sender,
+                originalMediaUrl: msg.mediaUrl?.substring(0, 100),
+                error: e
+              });
               // Substitui a imagem por uma mensagem de erro
               const imgElement = e.target as HTMLImageElement;
               const parent = imgElement.parentElement;

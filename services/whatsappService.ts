@@ -941,9 +941,27 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         // Extrai URL da imagem - a Evolution API pode fornecer a URL em diferentes campos
         // Tenta múltiplas formas de obter a URL
         const imageMsg = msgObj.imageMessage;
+        
+        // Log completo da estrutura da mensagem de imagem para diagnóstico
+        console.log('[mapApiMessageToInternal] 🔍 Analisando imageMessage:', {
+            hasUrl: !!imageMsg.url,
+            hasMediaUrl: !!imageMsg.mediaUrl,
+            hasDirectPath: !!imageMsg.directPath,
+            hasMimetype: !!imageMsg.mimetype,
+            hasFileLength: !!imageMsg.fileLength,
+            hasFileSha256: !!imageMsg.fileSha256,
+            hasMediaKey: !!imageMsg.mediaKey,
+            allKeys: imageMsg ? Object.keys(imageMsg) : [],
+            urlValue: imageMsg.url,
+            mediaUrlValue: imageMsg.mediaUrl,
+            directPathValue: imageMsg.directPath
+        });
+        
         mediaUrl = imageMsg.url || 
                    imageMsg.mediaUrl ||
                    imageMsg.directPath || // Caminho direto (pode precisar de base URL)
+                   imageMsg.media?.url || // Algumas versões da API podem ter media.url
+                   imageMsg.media?.mediaUrl ||
                    (typeof imageMsg === 'string' ? imageMsg : undefined) ||
                    undefined;
         
@@ -951,13 +969,18 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         if (!mediaUrl) {
             console.warn('[mapApiMessageToInternal] ⚠️ Imagem sem URL detectada:', {
                 hasImageMessage: !!imageMsg,
-                imageMessageKeys: imageMsg ? Object.keys(imageMsg).slice(0, 10) : [],
+                imageMessageKeys: imageMsg ? Object.keys(imageMsg) : [],
                 imageMessageType: typeof imageMsg,
-                sample: imageMsg ? JSON.stringify(imageMsg).substring(0, 200) : 'null'
+                fullImageMessage: imageMsg ? JSON.stringify(imageMsg).substring(0, 500) : 'null'
             });
         } else {
-            // Log apenas quando encontrar URL (para debug)
-            console.log('[mapApiMessageToInternal] ✅ URL de imagem extraída:', mediaUrl.substring(0, 100));
+            // Log quando encontrar URL (para debug)
+            console.log('[mapApiMessageToInternal] ✅ URL de imagem extraída:', {
+                url: mediaUrl.substring(0, 100),
+                isAbsolute: mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://'),
+                isRelative: mediaUrl.startsWith('/'),
+                length: mediaUrl.length
+            });
         }
     } else if (msgObj.audioMessage) {
         type = 'audio';
