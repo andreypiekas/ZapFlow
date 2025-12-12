@@ -1123,6 +1123,26 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
             }
         }
         
+        // Se ainda não encontrou URL mas tem directPath, tenta construir URL usando baseUrl
+        if (!mediaUrl && imageMsg && typeof imageMsg === 'object') {
+            const directPath = imageMsg.directPath || apiMsg.message?.imageMessage?.directPath || apiMsg.imageMessage?.directPath;
+            if (directPath && typeof directPath === 'string' && directPath.length > 0) {
+                // Se directPath começa com /, pode ser um caminho relativo que precisa de baseUrl
+                // Mas geralmente directPath já é um caminho completo do WhatsApp
+                // Tenta construir URL usando o padrão do WhatsApp: https://mmg.whatsapp.net + directPath
+                if (directPath.startsWith('/')) {
+                    // Remove o / inicial se houver e constrói URL completa
+                    const cleanPath = directPath.startsWith('/') ? directPath.substring(1) : directPath;
+                    mediaUrl = `https://mmg.whatsapp.net/${cleanPath}`;
+                    console.log('[mapApiMessageToInternal] ✅ URL construída a partir de directPath:', mediaUrl.substring(0, 100));
+                } else if (directPath.startsWith('http://') || directPath.startsWith('https://')) {
+                    // Se directPath já é uma URL completa, usa diretamente
+                    mediaUrl = directPath;
+                    console.log('[mapApiMessageToInternal] ✅ URL encontrada em directPath (já é URL completa):', mediaUrl.substring(0, 100));
+                }
+            }
+        }
+        
         // Log de diagnóstico para imagens sem URL
         if (!mediaUrl) {
             console.warn('[mapApiMessageToInternal] ⚠️ Imagem sem URL detectada:', {
@@ -1964,6 +1984,20 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                     const normalizedJid = normalizeJid(item.key.remoteJid);
                     // Aceita mensagens que correspondem ao JID completo ou contém o número
                     if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
+                        // Log para debug de imagens sem URL
+                        if (item.message?.imageMessage || item.imageMessage) {
+                            const hasUrl = !!(item.message?.imageMessage?.url || item.imageMessage?.url);
+                            if (!hasUrl) {
+                                console.warn('[fetchChatMessages] ⚠️ Imagem sem URL detectada na resposta REST:', {
+                                    messageId: item.key?.id,
+                                    hasMessageImageMessage: !!item.message?.imageMessage,
+                                    hasImageMessage: !!item.imageMessage,
+                                    imageMessageKeys: item.message?.imageMessage ? Object.keys(item.message.imageMessage) : 
+                                                    item.imageMessage ? Object.keys(item.imageMessage) : [],
+                                    fullItem: JSON.stringify(item).substring(0, 1000)
+                                });
+                            }
+                        }
                         const mapped = mapApiMessageToInternal(item);
                         if (mapped) {
                             messages.push(mapped);
