@@ -1470,16 +1470,18 @@ const App: React.FC = () => {
                                 return timeDiff;
                             }
                             
-                            // PRIORIDADE 3: Se timestamps são idênticos ou muito próximos e mesmo sender, usa ordem de inserção
-                            // Mas só aplica se os senders forem iguais (caso contrário, a PRIORIDADE 1 já foi aplicada)
-                            if (a.sender === b.sender) {
+                            // PRIORIDADE 3: Se timestamps são idênticos (timeDiff === 0) e mesmo sender, usa ordem de inserção
+                            // Mas se houver qualquer diferença (mesmo que pequena), usa timestamp para garantir ordem cronológica
+                            // Isso evita que mensagens recebidas rapidamente (1, 2, 3, 4, 5, 6) apareçam na ordem errada (6, 5, 4, 3, 2, 1)
+                            if (timeDiff === 0 && a.sender === b.sender) {
+                                // Timestamps exatamente idênticos: usa ordem de inserção como fallback
                                 const orderA = (a as any)._sortOrder ?? 0;
                                 const orderB = (b as any)._sortOrder ?? 0;
                                 return orderA - orderB;
                             }
                             
-                            // Se chegou aqui, os senders são diferentes mas a PRIORIDADE 1 não foi aplicada
-                            // Isso não deveria acontecer, mas como fallback, usa timestamp
+                            // Se houver qualquer diferença de timestamp (mesmo que pequena), usa timestamp
+                            // Isso garante ordem cronológica correta mesmo para mensagens recebidas rapidamente
                             return timeDiff;
                         });
                         
