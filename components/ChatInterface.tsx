@@ -1575,6 +1575,43 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 remoteJid,
                 hasApiConfig: !!(apiConfig.baseUrl && apiConfig.apiKey)
               });
+              
+              // Tenta buscar URL da mídia usando messageId (async, não bloqueia renderização)
+              if (apiConfig.baseUrl && apiConfig.apiKey) {
+                // Usa uma flag para evitar múltiplas buscas para a mesma mensagem
+                const fetchKey = `fetch_${messageId}`;
+                if (!(window as any)[fetchKey]) {
+                  (window as any)[fetchKey] = true;
+                  
+                  fetchMediaUrlByMessageId(apiConfig, messageId, remoteJid, 'image')
+                    .then(url => {
+                      if (url) {
+                        console.log('[ChatInterface] ✅ URL encontrada via messageId:', url.substring(0, 100));
+                        // Atualiza a mensagem com a URL encontrada
+                        msg.mediaUrl = url;
+                        // Tenta atualizar no chat para forçar re-render
+                        const chat = chats.find(c => c.id === (selectedChatId || ''));
+                        if (chat) {
+                          const messageIndex = chat.messages.findIndex(m => m.id === msg.id || m.whatsappMessageId === messageId);
+                          if (messageIndex >= 0) {
+                            const updatedMessages = [...chat.messages];
+                            updatedMessages[messageIndex] = { ...updatedMessages[messageIndex], mediaUrl: url };
+                            // Atualiza o chat localmente
+                            onUpdateChat({ ...chat, messages: updatedMessages });
+                          }
+                        }
+                      } else {
+                        console.log('[ChatInterface] ⚠️ URL não encontrada via messageId - imageMessage pode estar realmente vazio');
+                      }
+                      // Remove a flag após um tempo para permitir nova tentativa se necessário
+                      setTimeout(() => delete (window as any)[fetchKey], 60000);
+                    })
+                    .catch(error => {
+                      console.error('[ChatInterface] Erro ao buscar URL via messageId:', error);
+                      setTimeout(() => delete (window as any)[fetchKey], 30000);
+                    });
+                }
+              }
             }
           }
         }
