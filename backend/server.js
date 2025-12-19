@@ -1426,9 +1426,23 @@ app.post('/api/webhook/evolution', async (req, res) => {
     
     console.log(`[WEBHOOK] Evento recebido: ${eventType}`);
     
-    // Processa apenas eventos de mensagens
-    if (eventType === 'messages.upsert' || event.event === 'messages.upsert') {
-      const messages = event.data?.messages || event.messages || (event.data ? [event.data] : []);
+    // Processa eventos de mensagens
+    // A Evolution API pode enviar eventos em diferentes formatos:
+    // - eventType: 'messages.upsert', 'MESSAGES_UPSERT', etc.
+    // - event.event: 'messages.upsert'
+    // - Estrutura: event.data?.messages ou event.messages ou event.data
+    const isMessagesEvent = eventType?.toLowerCase().includes('messages.upsert') || 
+                           eventType?.toUpperCase().includes('MESSAGES_UPSERT') ||
+                           event.event?.toLowerCase() === 'messages.upsert' ||
+                           event.event?.toUpperCase() === 'MESSAGES_UPSERT';
+    
+    if (isMessagesEvent) {
+      // Tenta extrair mensagens de diferentes estruturas possíveis
+      const messages = event.data?.messages || 
+                      event.messages || 
+                      event.data?.data?.messages ||
+                      (event.data && !Array.isArray(event.data) ? [event.data] : []) ||
+                      (Array.isArray(event.data) ? event.data : []);
       
       if (!Array.isArray(messages)) {
         return res.status(200).json({ received: true, processed: 0 });
