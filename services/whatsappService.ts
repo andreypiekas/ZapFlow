@@ -979,7 +979,7 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         // Tenta todas as possíveis localizações em ordem de prioridade
         // IMPORTANTE: Verifica múltiplas estruturas possíveis da Evolution API
         const possibleUrls = [
-            // 1. Estrutura direta do imageMessage
+            // 1. Estrutura direta do imageMessage (mais comum)
             imageMsg.url,
             imageMsg.mediaUrl,
             imageMsg.directPath,
@@ -988,6 +988,7 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
             // 2. Estrutura do msgObj (apiMsg.message)
             msgObj.url,
             msgObj.mediaUrl,
+            msgObj.directPath,
             // 3. Estrutura completa aninhada (apiMsg.message.imageMessage)
             apiMsg.message?.imageMessage?.url,
             apiMsg.message?.imageMessage?.mediaUrl,
@@ -995,16 +996,23 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
             // 4. Estrutura no nível superior do apiMsg
             apiMsg.url,
             apiMsg.mediaUrl,
+            apiMsg.directPath,
             apiMsg.imageMessage?.url, // Caso imageMessage esteja no nível superior
             apiMsg.imageMessage?.mediaUrl,
             apiMsg.imageMessage?.directPath,
             // 5. Estrutura de mensagens citadas
             apiMsg.contextInfo?.quotedMessage?.imageMessage?.url,
+            apiMsg.contextInfo?.quotedMessage?.imageMessage?.mediaUrl,
             // 6. Casos especiais
             typeof imageMsg === 'string' ? imageMsg : undefined,
             // 7. Verifica também em data.message.imageMessage (estrutura do Socket.IO)
             (apiMsg as any).data?.message?.imageMessage?.url,
-            (apiMsg as any).data?.message?.imageMessage?.mediaUrl
+            (apiMsg as any).data?.message?.imageMessage?.mediaUrl,
+            (apiMsg as any).data?.imageMessage?.url,
+            (apiMsg as any).data?.imageMessage?.mediaUrl,
+            // 8. Verifica em propriedades aninhadas adicionais
+            (apiMsg as any).messageData?.imageMessage?.url,
+            (apiMsg as any).messageData?.imageMessage?.mediaUrl
         ];
         
         // Encontra a primeira URL válida
@@ -1091,7 +1099,18 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
             }
         }
         
-        // Log reduzido - apenas quando realmente não há URL e imageMessage não está vazio
+        // Log temporário para debug - quando não encontra URL mas há imageMessage
+        if (!mediaUrl && imageMsg && typeof imageMsg === 'object' && Object.keys(imageMsg).length > 0) {
+            console.warn('[mapApiMessageToInternal] ⚠️ Imagem detectada mas URL não encontrada:', {
+                messageId: key?.id,
+                imageMsgKeys: Object.keys(imageMsg),
+                imageMsgValues: Object.entries(imageMsg).slice(0, 5).map(([k, v]) => [k, typeof v === 'string' ? v.substring(0, 50) : v]),
+                hasMimetype: !!imageMsg.mimetype,
+                hasFileLength: !!imageMsg.fileLength,
+                hasJpegThumbnail: !!imageMsg.jpegThumbnail,
+                apiMsgKeys: Object.keys(apiMsg).slice(0, 10)
+            });
+        }
         // Quando imageMessage está vazio, isso é esperado na sincronização inicial
         // A URL será atualizada quando os dados completos chegarem via WebSocket
     } else if (msgObj.audioMessage) {

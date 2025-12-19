@@ -1511,7 +1511,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
           rawMsg.message?.url,
           rawMsg.message?.mediaUrl,
           rawMsg.url,
-          rawMsg.mediaUrl
+          rawMsg.mediaUrl,
+          // Verifica também em estruturas aninhadas adicionais
+          (rawMsg as any).data?.message?.imageMessage?.url,
+          (rawMsg as any).data?.message?.imageMessage?.mediaUrl,
+          (rawMsg as any).data?.imageMessage?.url,
+          (rawMsg as any).data?.imageMessage?.mediaUrl
         ];
         
         // Encontra a primeira URL válida
@@ -1530,14 +1535,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         // Se encontrou URL, atualiza a mensagem (não persiste, apenas para exibição)
         if (imageUrl) {
           msg.mediaUrl = imageUrl;
+        } else {
+          // Log temporário para debug - quando não encontra URL mas há rawMessage
+          console.warn('[ChatInterface] ⚠️ Imagem sem URL no rawMessage:', {
+            msgId: msg.id,
+            msgType: msg.type,
+            hasRawMessage: !!rawMsg,
+            rawMsgKeys: rawMsg ? Object.keys(rawMsg).slice(0, 10) : [],
+            hasMessage: !!rawMsg?.message,
+            messageKeys: rawMsg?.message ? Object.keys(rawMsg.message).slice(0, 10) : [],
+            hasImageMessage: !!(rawMsg?.message?.imageMessage || rawMsg?.imageMessage),
+            imageMessageKeys: rawMsg?.message?.imageMessage ? Object.keys(rawMsg.message.imageMessage).slice(0, 10) : 
+                            rawMsg?.imageMessage ? Object.keys(rawMsg.imageMessage).slice(0, 10) : []
+          });
         }
-        // Log removido - muito verboso para produção
-        // Quando imageMessage está vazio, isso é esperado na sincronização inicial
-        // A URL será atualizada quando os dados completos chegarem via WebSocket
       }
       
       if (!imageUrl) {
-        // Log removido - quando não tem URL, simplesmente exibe placeholder
+        // Log temporário para debug - quando não tem URL após todas as tentativas
         // A URL será atualizada quando os dados completos chegarem via WebSocket
         return (
           <div className="flex flex-col">
