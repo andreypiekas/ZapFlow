@@ -1424,7 +1424,20 @@ app.post('/api/webhook/evolution', async (req, res) => {
     const event = req.body;
     const eventType = event.event || event.type || 'unknown';
     
+    // Log detalhado para debug
     console.log(`[WEBHOOK] Evento recebido: ${eventType}`);
+    console.log(`[WEBHOOK] Payload keys: ${Object.keys(event).join(', ')}`);
+    
+    // Se for evento de mensagens, log adicional
+    if (eventType?.toLowerCase().includes('messages') || event.event?.toLowerCase().includes('messages')) {
+      console.log(`[WEBHOOK] Evento de mensagens detectado: ${eventType}`);
+      if (event.data) {
+        console.log(`[WEBHOOK] event.data existe, tipo: ${typeof event.data}, é array: ${Array.isArray(event.data)}`);
+      }
+      if (event.messages) {
+        console.log(`[WEBHOOK] event.messages existe, tipo: ${typeof event.messages}, é array: ${Array.isArray(event.messages)}, length: ${Array.isArray(event.messages) ? event.messages.length : 'N/A'}`);
+      }
+    }
     
     // Processa eventos de mensagens
     // A Evolution API pode enviar eventos em diferentes formatos:
@@ -1468,6 +1481,11 @@ app.post('/api/webhook/evolution', async (req, res) => {
           const videoMsg = messageObj.videoMessage || messageObj.message?.videoMessage;
           const audioMsg = messageObj.audioMessage || messageObj.message?.audioMessage;
           const documentMsg = messageObj.documentMessage || messageObj.message?.documentMessage;
+          
+          // Log para debug de mídia
+          if (imageMsg || videoMsg || audioMsg || documentMsg) {
+            console.log(`[WEBHOOK] Mensagem de mídia encontrada - messageId: ${messageId}, imageMsg: ${imageMsg ? 'sim' : 'não'}, base64: ${imageMsg?.base64 ? 'presente' : 'ausente'}`);
+          }
           
           // Se for mensagem de mídia e tiver base64, salva no banco
           if ((imageMsg || videoMsg || audioMsg || documentMsg) && 
