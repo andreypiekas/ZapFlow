@@ -6,6 +6,13 @@ Este projeto é compatível com as seguintes versões da Evolution API:
 - **v2.3.4** (✅ Recomendada - Versão estável)
 - **v2.3.6** (⚠️ Versão com problemas conhecidos)
 
+**Fonte da Imagem Docker**: [evoapicloud/evolution-api no Docker Hub](https://hub.docker.com/r/evoapicloud/evolution-api)
+
+As imagens oficiais estão disponíveis no Docker Hub e podem ser baixadas usando:
+```bash
+docker pull evoapicloud/evolution-api:2.3.4
+```
+
 ## Problemas Conhecidos da Versão 2.3.6
 
 A versão 2.3.6 da Evolution API apresenta os seguintes problemas relatados:

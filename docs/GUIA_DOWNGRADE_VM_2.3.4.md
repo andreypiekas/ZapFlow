@@ -12,6 +12,15 @@ A versão 2.3.6 apresenta problemas conhecidos:
 
 A versão 2.3.4 é mais estável e recomendada.
 
+## 📦 Fonte da Imagem Docker
+
+A imagem oficial da Evolution API está disponível no Docker Hub:
+- **Repositório**: [evoapicloud/evolution-api](https://hub.docker.com/r/evoapicloud/evolution-api)
+- **Versão utilizada**: `2.3.4`
+- **Tag completa**: `evoapicloud/evolution-api:2.3.4`
+
+Você pode verificar todas as versões disponíveis diretamente no Docker Hub.
+
 ## 📋 Pré-requisitos
 
 - Acesso SSH à VM
