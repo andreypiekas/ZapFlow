@@ -1418,14 +1418,19 @@ app.delete('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res
 // Recebe eventos da Evolution API quando webhook está habilitado
 // Quando "Webhook Base64" está ativado, a mídia vem em base64 no payload
 // Isso resolve o problema de imageMessage vazio em mensagens antigas do banco
+// 
+// Suporta duas formas de URL:
+// - /api/webhook/evolution (quando "Webhook by Events" está OFF)
+// - /api/webhook/evolution/:eventName (quando "Webhook by Events" está ON)
 // ============================================================================
-app.post('/api/webhook/evolution', async (req, res) => {
+const handleWebhookEvolution = async (req, res) => {
   try {
     const event = req.body;
-    const eventType = event.event || event.type || 'unknown';
+    const eventType = event.event || event.type || req.params.eventName || 'unknown';
     
     // Log detalhado para debug
-    console.log(`[WEBHOOK] Evento recebido: ${eventType}`);
+    const eventNameFromUrl = req.params.eventName ? ` (URL: ${req.params.eventName})` : '';
+    console.log(`[WEBHOOK] Evento recebido: ${eventType}${eventNameFromUrl}`);
     console.log(`[WEBHOOK] Payload keys: ${Object.keys(event).join(', ')}`);
     
     // Se for evento de mensagens, log adicional
