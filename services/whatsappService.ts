@@ -2281,69 +2281,27 @@ export const fetchMediaUrlByMessageId = async (
             return null;
         }
 
-        // NOTA: A Evolution API v2.3.4 tem um problema conhecido onde imageMessage vem vazio
-        // quando mensagens são buscadas via REST API. A URL só está disponível quando:
-        // 1. Mensagem é recebida via WebSocket (em tempo real)
-        // 2. Mensagem é buscada diretamente do servidor WhatsApp (não do banco)
+        // ⚠️ LIMITAÇÃO CONHECIDA: Evolution API v2.3.4/v2.3.6
+        // 
+        // A Evolution API v2.3.4 tem um problema conhecido onde imageMessage vem vazio ({})
+        // quando mensagens são buscadas via REST API do banco de dados.
+        // 
+        // URLs de mídia só estão disponíveis quando:
+        // 1. Mensagem é recebida via WebSocket (em tempo real) ✅
+        // 2. Mensagem é sincronizada diretamente do WhatsApp (não do banco) ✅
+        // 
+        // Endpoints REST que NÃO existem na v2.3.4:
+        // - /message/downloadMedia/{instanceName} ❌ (retorna 404)
+        // - /message/fetchMessages/{instanceName} ❌ (retorna 404)
+        // 
+        // SOLUÇÃO:
+        // - Mensagens antigas do banco podem não ter URL inicialmente
+        // - URLs serão atualizadas automaticamente quando chegarem via WebSocket
+        // - Esta função tenta buscar via findChats como último recurso (pode não funcionar)
         
-        // Tentativa 1: Endpoint de download de mídia direto (se disponível)
-        // Evolution API pode ter endpoint: /message/downloadMedia/{instanceName}
-        try {
-            const downloadResponse = await fetch(`${config.baseUrl}/message/downloadMedia/${instanceName}?messageId=${messageId}&remoteJid=${encodeURIComponent(remoteJid)}`, {
-                method: 'GET',
-                headers: {
-                    'apikey': getAuthKey(config)
-                }
-            });
-            
-            if (downloadResponse.ok) {
-                const mediaData = await downloadResponse.json();
-                if (mediaData.url || mediaData.base64) {
-                    // Se retornou base64, converte para data URL
-                    if (mediaData.base64) {
-                        return `data:image/jpeg;base64,${mediaData.base64}`;
-                    }
-                    return mediaData.url;
-                }
-            }
-        } catch (e) {
-            // Endpoint não existe ou falhou, continua para próxima tentativa
-        }
+        // Tentativa única: Buscar via findChats (pode não retornar URLs porque vem do banco)
 
-        // Tentativa 2: Buscar mensagem específica via endpoint de mensagens
-        // Tenta usar fetchMessages com filtro por messageId
-        try {
-            const messagesResponse = await fetch(`${config.baseUrl}/message/fetchMessages/${instanceName}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': getAuthKey(config)
-                },
-                body: JSON.stringify({
-                    where: { 
-                        key: { id: messageId, remoteJid: remoteJid }
-                    },
-                    limit: 1
-                })
-            });
-            
-            if (messagesResponse.ok) {
-                const messagesData = await messagesResponse.json();
-                if (messagesData && Array.isArray(messagesData) && messagesData.length > 0) {
-                    const msg = messagesData[0];
-                    const imageMsg = msg.message?.imageMessage || msg.imageMessage;
-                    if (imageMsg && (imageMsg.url || imageMsg.mediaUrl || imageMsg.directPath)) {
-                        return imageMsg.url || imageMsg.mediaUrl || 
-                               (imageMsg.directPath ? `https://mmg.whatsapp.net/${imageMsg.directPath.replace(/^\//, '')}` : null);
-                    }
-                }
-            }
-        } catch (e) {
-            // Endpoint não existe, continua
-        }
-
-        // Tentativa 3: Buscar via findChats (última tentativa - menos eficiente)
-        // Este método pode não retornar URLs porque vem do banco
+        // Buscar via findChats (pode não retornar URLs porque vem do banco)
         const response = await fetch(`${config.baseUrl}/chat/findChats/${instanceName}`, {
             method: 'POST',
             headers: {
@@ -2399,9 +2357,10 @@ export const fetchMediaUrlByMessageId = async (
             }
         }
 
-        // Se nenhuma tentativa funcionou, retorna null
-        // A URL será atualizada quando a mensagem for recebida via WebSocket
-        console.warn(`[fetchMediaUrlByMessageId] Não foi possível obter URL para messageId ${messageId} - mensagem pode ser antiga ou URL indisponível`);
+        // Se não funcionou, retorna null
+        // A URL será atualizada automaticamente quando a mensagem for recebida/atualizada via WebSocket
+        // Isso é esperado para mensagens antigas do banco na Evolution API v2.3.4
+        // Log reduzido - apenas em modo debug se necessário
         return null;
     } catch (error) {
         console.error('[fetchMediaUrlByMessageId] Erro ao buscar URL da mídia:', error);
