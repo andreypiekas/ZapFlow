@@ -2034,13 +2034,16 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         };
         
         // Tenta múltiplos endpoints e formatos de query
-        // NOTA: A Evolution API pode não retornar mensagens no findChats mesmo com include: ['messages']
-        // Isso pode ser uma limitação da versão da API ou configuração do servidor
-        // Endpoint /message/fetchMessages não existe nesta versão (retorna 404)
+        // NOTA IMPORTANTE: Problemas conhecidos com Evolution API 2.3.6:
+        // - imageMessage pode vir vazio ({}) ao buscar mensagens via REST API (findChats)
+        // - Incluir 'messages' no include pode causar erro 500 em ambas as versões (2.3.4 e 2.3.6)
+        // - Mensagens de mídia podem não ter URL na resposta REST inicial
+        // SOLUÇÃO: Mensagens serão atualizadas via WebSocket quando os dados completos chegarem
+        // ou via busca automática usando fetchMediaUrlByMessageId quando messageId estiver disponível
+        // 
+        // Endpoint /message/fetchMessages não existe (retorna 404) em ambas as versões
         // NOTA: Removido include: ['messages'] de todos os endpoints para evitar erro 500
-        // O erro "Cannot read properties of null (reading 'mediaUrl')" ocorre quando
-        // a Evolution API tenta processar mensagens com mídia que tem mediaUrl null
-        // Mensagens serão buscadas via WebSocket ou endpoints alternativos
+        // Versões afetadas: 2.3.4 e 2.3.6 (problema mais comum na 2.3.6)
         const endpoints = [
             // Endpoint 1: findChats com remoteJid (sem include messages para evitar erro 500)
             {
