@@ -10,7 +10,8 @@ Este projeto é compatível com as seguintes versões da Evolution API:
 
 As imagens oficiais estão disponíveis no Docker Hub e podem ser baixadas usando:
 ```bash
-docker pull evoapicloud/evolution-api:2.3.4
+# ✅ Tag correta confirmada: v2.3.4 (com prefixo v)
+docker pull evoapicloud/evolution-api:v2.3.4
 ```
 
 ## Problemas Conhecidos da Versão 2.3.6

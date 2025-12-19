@@ -58,7 +58,7 @@ fi
 cat > docker-compose.yml <<EOL
 services:
   evolution_api:
-    image: evoapicloud/evolution-api:2.3.4
+    image: evoapicloud/evolution-api:v2.3.4
     container_name: evolution_api
     restart: always
     shm_size: '2gb'

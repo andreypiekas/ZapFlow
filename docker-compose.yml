@@ -1,11 +1,10 @@
 services:
   evolution_api:
-    # NOTA: Se a tag 2.3.4 não existir, você pode tentar:
-    # - evoapicloud/evolution-api:v2.3.4 (com prefixo v)
+    # Tag correta confirmada: v2.3.4 (com prefixo v)
+    # Alternativas se necessário:
     # - evoapicloud/evolution-api:2.3.3 ou v2.3.3 (versão anterior)
-    # - atendai/evolution-api:2.3.4 (imagem alternativa, mais popular no Docker Hub)
-    # Use o script install/verificar_tags_evolution.sh para verificar tags disponíveis
-    image: evoapicloud/evolution-api:2.3.4
+    # - atendai/evolution-api:v2.3.4 (imagem alternativa, mais popular no Docker Hub)
+    image: evoapicloud/evolution-api:v2.3.4
     container_name: evolution_api
     restart: always
     shm_size: '2gb'

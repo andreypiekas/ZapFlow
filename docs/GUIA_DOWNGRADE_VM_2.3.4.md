@@ -20,7 +20,7 @@ Existem múltiplas imagens da Evolution API disponíveis no Docker Hub:
 - **Repositório**: `evoapicloud/evolution-api`
 - **Docker Hub**: [evoapicloud/evolution-api](https://hub.docker.com/r/evoapicloud/evolution-api)
 - **Stars**: 66 ⭐
-- **Versão utilizada**: `2.3.4` (ou tag alternativa disponível)
+- **Versão utilizada**: `v2.3.4` (✅ tag confirmada - com prefixo v)
 
 ### Imagem Alternativa (Mais Popular)
 - **Repositório**: `atendai/evolution-api`
@@ -97,8 +97,10 @@ vi docker-compose.yml
 
 **Alterar para:**
 ```yaml
-    image: evoapicloud/evolution-api:2.3.4
+    image: evoapicloud/evolution-api:v2.3.4
 ```
+
+**⚠️ IMPORTANTE**: A tag correta é `v2.3.4` (com prefixo `v`), não `2.3.4`.
 
 **Salvar e sair:**
 - Nano: `Ctrl + X`, depois `Y`, depois `Enter`
@@ -130,8 +132,10 @@ curl -s "https://hub.docker.com/v2/repositories/evoapicloud/evolution-api/tags?p
 
 **Opção 4: Tentar baixar e ver o erro**
 ```bash
-docker pull evoapicloud/evolution-api:2.3.4 2>&1 | head -5
+docker pull evoapicloud/evolution-api:v2.3.4 2>&1 | head -5
 ```
+
+**✅ TAG CONFIRMADA**: A tag correta é `v2.3.4` (com prefixo `v`)
 
 **Tags possíveis para testar:**
 - `v2.3.4` (com prefixo v)
@@ -141,9 +145,9 @@ docker pull evoapicloud/evolution-api:2.3.4 2>&1 | head -5
 - `latest` (pode ser 2.3.6 - **NÃO RECOMENDADO**)
 
 **Alternativa - Tentar imagem `atendai/evolution-api` (mais popular):**
-- A imagem `atendai/evolution-api` tem mais estrelas e pode ter a versão 2.3.4 disponível
+- A imagem `atendai/evolution-api` tem mais estrelas e pode ter a versão v2.3.4 disponível
 - Verifique: https://hub.docker.com/r/atendai/evolution-api/tags
-- Se usar esta imagem, altere no docker-compose.yml: `atendai/evolution-api:2.3.4`
+- Se usar esta imagem, altere no docker-compose.yml: `atendai/evolution-api:v2.3.4`
 
 ### 7. Remover a Imagem Antiga (Opcional)
 
@@ -159,15 +163,17 @@ docker image prune -a
 
 ### 8. Baixar a Imagem Correta
 
-**⚠️ ATENÇÃO**: Se `2.3.4` não estiver disponível em `evoapicloud/evolution-api`, você tem duas opções:
+**✅ TAG CONFIRMADA**: A tag correta é `v2.3.4` (com prefixo `v`)
+
+**Se por algum motivo `v2.3.4` não estiver disponível, você tem duas opções:**
 
 #### Opção A: Tentar tags alternativas em evoapicloud/evolution-api
 
 ```bash
-# Tentar 2.3.4 primeiro
-docker pull evoapicloud/evolution-api:2.3.4 || \
-# Se falhar, tentar com prefixo v
+# ✅ TAG CONFIRMADA: v2.3.4 (com prefixo v)
 docker pull evoapicloud/evolution-api:v2.3.4 || \
+# Se falhar, tentar sem prefixo v (não recomendado)
+docker pull evoapicloud/evolution-api:2.3.4 || \
 # Se falhar, tentar 2.3.3
 docker pull evoapicloud/evolution-api:2.3.3 || \
 # Se falhar, tentar v2.3.3
@@ -183,9 +189,9 @@ docker pull evoapicloud/evolution-api:v2.2.0
 #### Opção B: Tentar a imagem alternativa atendai/evolution-api (mais popular)
 
 ```bash
-# Verificar se 2.3.4 existe na imagem alternativa
-docker pull atendai/evolution-api:2.3.4 || \
+# Verificar se v2.3.4 existe na imagem alternativa
 docker pull atendai/evolution-api:v2.3.4 || \
+docker pull atendai/evolution-api:2.3.4 || \
 docker pull atendai/evolution-api:2.3.3 || \
 docker pull atendai/evolution-api:v2.3.3
 ```
@@ -207,7 +213,7 @@ Você deve ver algo como:
 evoapicloud/evolution-api    <tag>    abc123def456   2 weeks ago   2.5GB
 ```
 
-**Após baixar, atualize o docker-compose.yml com a tag correta que funcionou!**
+**✅ Após confirmar que `v2.3.4` funciona, o docker-compose.yml já estará correto!**
 
 ### 9. Recriar e Iniciar os Containers
 
