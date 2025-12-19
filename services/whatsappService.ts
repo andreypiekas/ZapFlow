@@ -984,51 +984,59 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
             return typeof url === 'string' && url.length > 0 && url.trim().length > 0;
         };
         
-        // Tenta todas as possíveis localizações em ordem de prioridade
-        // IMPORTANTE: Verifica múltiplas estruturas possíveis da Evolution API
-        const possibleUrls = [
-            // 1. Estrutura direta do imageMessage (mais comum)
-            imageMsg.url,
-            imageMsg.mediaUrl,
-            imageMsg.directPath,
-            imageMsg.media?.url,
-            imageMsg.media?.mediaUrl,
-            // 2. Estrutura do msgObj (apiMsg.message)
-            msgObj.url,
-            msgObj.mediaUrl,
-            msgObj.directPath,
-            // 3. Estrutura completa aninhada (apiMsg.message.imageMessage)
-            apiMsg.message?.imageMessage?.url,
-            apiMsg.message?.imageMessage?.mediaUrl,
-            apiMsg.message?.imageMessage?.directPath,
-            // 4. Estrutura no nível superior do apiMsg
-            apiMsg.url,
-            apiMsg.mediaUrl,
-            apiMsg.directPath,
-            apiMsg.imageMessage?.url, // Caso imageMessage esteja no nível superior
-            apiMsg.imageMessage?.mediaUrl,
-            apiMsg.imageMessage?.directPath,
-            // 5. Estrutura de mensagens citadas
-            apiMsg.contextInfo?.quotedMessage?.imageMessage?.url,
-            apiMsg.contextInfo?.quotedMessage?.imageMessage?.mediaUrl,
-            // 6. Casos especiais
-            typeof imageMsg === 'string' ? imageMsg : undefined,
-            // 7. Verifica também em data.message.imageMessage (estrutura do Socket.IO)
-            (apiMsg as any).data?.message?.imageMessage?.url,
-            (apiMsg as any).data?.message?.imageMessage?.mediaUrl,
-            (apiMsg as any).data?.imageMessage?.url,
-            (apiMsg as any).data?.imageMessage?.mediaUrl,
-            // 8. Verifica em propriedades aninhadas adicionais
-            (apiMsg as any).messageData?.imageMessage?.url,
-            (apiMsg as any).messageData?.imageMessage?.mediaUrl
-        ];
+        // ✅ NOVA PRIORIDADE: Base64 do Webhook (quando Webhook Base64 está habilitado)
+        // Se imageMessage tem base64, cria data URL diretamente (resolve problema de URLs ausentes)
+        if (imageMsg?.base64 && typeof imageMsg.base64 === 'string' && imageMsg.base64.length > 0) {
+            const mimeType = imageMsg.mimetype || 'image/jpeg';
+            mediaUrl = `data:${mimeType};base64,${imageMsg.base64}`;
+            // Log reduzido - apenas em debug se necessário
+        }
         
-        // Encontra a primeira URL válida
-        for (const url of possibleUrls) {
-            if (isValidUrl(url)) {
-                mediaUrl = url;
-                // Log removido - muito verboso para produção
-                break;
+        // Se não tem base64, tenta todas as possíveis localizações de URL
+        if (!mediaUrl) {
+            const possibleUrls = [
+                // 1. Estrutura direta do imageMessage (mais comum)
+                imageMsg.url,
+                imageMsg.mediaUrl,
+                imageMsg.directPath,
+                imageMsg.media?.url,
+                imageMsg.media?.mediaUrl,
+                // 2. Estrutura do msgObj (apiMsg.message)
+                msgObj.url,
+                msgObj.mediaUrl,
+                msgObj.directPath,
+                // 3. Estrutura completa aninhada (apiMsg.message.imageMessage)
+                apiMsg.message?.imageMessage?.url,
+                apiMsg.message?.imageMessage?.mediaUrl,
+                apiMsg.message?.imageMessage?.directPath,
+                // 4. Estrutura no nível superior do apiMsg
+                apiMsg.url,
+                apiMsg.mediaUrl,
+                apiMsg.directPath,
+                apiMsg.imageMessage?.url, // Caso imageMessage esteja no nível superior
+                apiMsg.imageMessage?.mediaUrl,
+                apiMsg.imageMessage?.directPath,
+                // 5. Estrutura de mensagens citadas
+                apiMsg.contextInfo?.quotedMessage?.imageMessage?.url,
+                apiMsg.contextInfo?.quotedMessage?.imageMessage?.mediaUrl,
+                // 6. Casos especiais
+                typeof imageMsg === 'string' ? imageMsg : undefined,
+                // 7. Verifica também em data.message.imageMessage (estrutura do Socket.IO)
+                (apiMsg as any).data?.message?.imageMessage?.url,
+                (apiMsg as any).data?.message?.imageMessage?.mediaUrl,
+                (apiMsg as any).data?.imageMessage?.url,
+                (apiMsg as any).data?.imageMessage?.mediaUrl,
+                // 8. Verifica em propriedades aninhadas adicionais
+                (apiMsg as any).messageData?.imageMessage?.url,
+                (apiMsg as any).messageData?.imageMessage?.mediaUrl
+            ];
+            
+            // Encontra a primeira URL válida
+            for (const url of possibleUrls) {
+                if (isValidUrl(url)) {
+                    mediaUrl = url;
+                    break;
+                }
             }
         }
         
@@ -1150,31 +1158,55 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     } else if (msgObj.audioMessage) {
         type = 'audio';
         const audioMsg = msgObj.audioMessage;
-        mediaUrl = audioMsg.url || 
-                   audioMsg.mediaUrl ||
-                   audioMsg.directPath ||
-                   undefined;
+        // ✅ PRIORIDADE: Base64 do Webhook (quando Webhook Base64 está habilitado)
+        if (audioMsg?.base64 && typeof audioMsg.base64 === 'string' && audioMsg.base64.length > 0) {
+            const mimeType = audioMsg.mimetype || 'audio/ogg; codecs=opus';
+            mediaUrl = `data:${mimeType};base64,${audioMsg.base64}`;
+        } else {
+            mediaUrl = audioMsg.url || 
+                       audioMsg.mediaUrl ||
+                       audioMsg.directPath ||
+                       undefined;
+        }
     } else if (msgObj.videoMessage) {
         type = 'video';
         const videoMsg = msgObj.videoMessage;
-        mediaUrl = videoMsg.url || 
-                   videoMsg.mediaUrl ||
-                   videoMsg.directPath ||
-                   undefined;
+        // ✅ PRIORIDADE: Base64 do Webhook (quando Webhook Base64 está habilitado)
+        if (videoMsg?.base64 && typeof videoMsg.base64 === 'string' && videoMsg.base64.length > 0) {
+            const mimeType = videoMsg.mimetype || 'video/mp4';
+            mediaUrl = `data:${mimeType};base64,${videoMsg.base64}`;
+        } else {
+            mediaUrl = videoMsg.url || 
+                       videoMsg.mediaUrl ||
+                       videoMsg.directPath ||
+                       undefined;
+        }
     } else if (msgObj.stickerMessage) {
         type = 'sticker';
         const stickerMsg = msgObj.stickerMessage;
-        mediaUrl = stickerMsg.url || 
-                   stickerMsg.mediaUrl ||
-                   stickerMsg.directPath ||
-                   undefined;
+        // ✅ PRIORIDADE: Base64 do Webhook (quando Webhook Base64 está habilitado)
+        if (stickerMsg?.base64 && typeof stickerMsg.base64 === 'string' && stickerMsg.base64.length > 0) {
+            const mimeType = stickerMsg.mimetype || 'image/webp';
+            mediaUrl = `data:${mimeType};base64,${stickerMsg.base64}`;
+        } else {
+            mediaUrl = stickerMsg.url || 
+                       stickerMsg.mediaUrl ||
+                       stickerMsg.directPath ||
+                       undefined;
+        }
     } else if (msgObj.documentMessage) {
         type = 'document';
         const docMsg = msgObj.documentMessage;
-        mediaUrl = docMsg.url || 
-                   docMsg.mediaUrl ||
-                   docMsg.directPath ||
-                   undefined;
+        // ✅ PRIORIDADE: Base64 do Webhook (quando Webhook Base64 está habilitado)
+        if (docMsg?.base64 && typeof docMsg.base64 === 'string' && docMsg.base64.length > 0) {
+            const mimeType = docMsg.mimetype || 'application/pdf';
+            mediaUrl = `data:${mimeType};base64,${docMsg.base64}`;
+        } else {
+            mediaUrl = docMsg.url || 
+                       docMsg.mediaUrl ||
+                       docMsg.directPath ||
+                       undefined;
+        }
     }
 
     // Determina o autor real (importante para grupos ou chats com ID errado)

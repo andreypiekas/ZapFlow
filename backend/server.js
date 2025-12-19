@@ -1412,6 +1412,128 @@ app.delete('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res
   }
 });
 
+// ============================================================================
+// WEBHOOK ENDPOINT - Evolution API Events
+// ============================================================================
+// Recebe eventos da Evolution API quando webhook está habilitado
+// Quando "Webhook Base64" está ativado, a mídia vem em base64 no payload
+// Isso resolve o problema de imageMessage vazio em mensagens antigas do banco
+// ============================================================================
+app.post('/api/webhook/evolution', async (req, res) => {
+  try {
+    const event = req.body;
+    const eventType = event.event || event.type || 'unknown';
+    
+    console.log(`[WEBHOOK] Evento recebido: ${eventType}`);
+    
+    // Processa apenas eventos de mensagens
+    if (eventType === 'messages.upsert' || event.event === 'messages.upsert') {
+      const messages = event.data?.messages || event.messages || (event.data ? [event.data] : []);
+      
+      if (!Array.isArray(messages)) {
+        return res.status(200).json({ received: true, processed: 0 });
+      }
+      
+      let processed = 0;
+      
+      for (const messageData of messages) {
+        try {
+          // Extrai informações da mensagem
+          const messageObj = messageData.message || messageData;
+          const key = messageObj.key || messageData.key;
+          
+          if (!key || !key.remoteJid) {
+            continue;
+          }
+          
+          const remoteJid = key.remoteJid;
+          const messageId = key.id;
+          
+          // Verifica se é mensagem de mídia
+          const imageMsg = messageObj.imageMessage || messageObj.message?.imageMessage;
+          const videoMsg = messageObj.videoMessage || messageObj.message?.videoMessage;
+          const audioMsg = messageObj.audioMessage || messageObj.message?.audioMessage;
+          const documentMsg = messageObj.documentMessage || messageObj.message?.documentMessage;
+          
+          // Se for mensagem de mídia e tiver base64, salva no banco
+          if ((imageMsg || videoMsg || audioMsg || documentMsg) && 
+              (imageMsg?.base64 || videoMsg?.base64 || audioMsg?.base64 || documentMsg?.base64)) {
+            
+            // Extrai base64 e cria data URL
+            let base64Data = null;
+            let mimeType = 'image/jpeg';
+            
+            if (imageMsg?.base64) {
+              base64Data = imageMsg.base64;
+              mimeType = imageMsg.mimetype || 'image/jpeg';
+            } else if (videoMsg?.base64) {
+              base64Data = videoMsg.base64;
+              mimeType = videoMsg.mimetype || 'video/mp4';
+            } else if (audioMsg?.base64) {
+              base64Data = audioMsg.base64;
+              mimeType = audioMsg.mimetype || 'audio/ogg; codecs=opus';
+            } else if (documentMsg?.base64) {
+              base64Data = documentMsg.base64;
+              mimeType = documentMsg.mimetype || 'application/pdf';
+            }
+            
+            if (base64Data) {
+              const dataUrl = `data:${mimeType};base64,${base64Data}`;
+              
+              // Busca ou cria o chat no banco
+              const chatResult = await pool.query(
+                `SELECT id FROM chats WHERE id = $1`,
+                [remoteJid]
+              );
+              
+              if (chatResult.rows.length > 0) {
+                // Atualiza mensagem existente ou cria nova no banco
+                // Salva a mensagem completa com base64 para uso posterior
+                await pool.query(
+                  `INSERT INTO user_data (user_id, data_type, data_key, data_value)
+                   VALUES (NULL, 'webhook_messages', $1, $2)
+                   ON CONFLICT (COALESCE(user_id, 0), data_type, data_key)
+                   DO UPDATE SET data_value = $2, updated_at = CURRENT_TIMESTAMP`,
+                  [messageId, JSON.stringify({
+                    messageId,
+                    remoteJid,
+                    dataUrl,
+                    mimeType,
+                    timestamp: new Date().toISOString(),
+                    rawMessage: messageData
+                  })]
+                );
+                
+                processed++;
+                console.log(`[WEBHOOK] ✅ Mensagem com base64 salva: ${messageId} (${mimeType})`);
+              }
+            }
+          }
+        } catch (msgError) {
+          console.error('[WEBHOOK] Erro ao processar mensagem:', msgError);
+          // Continua processando outras mensagens
+        }
+      }
+      
+      return res.status(200).json({ 
+        received: true, 
+        processed,
+        event: eventType 
+      });
+    }
+    
+    // Para outros eventos, apenas confirma recebimento
+    res.status(200).json({ received: true, event: eventType });
+  } catch (error) {
+    console.error('[WEBHOOK] Erro ao processar webhook:', error);
+    // Sempre retorna 200 para não causar retry infinito na Evolution API
+    res.status(200).json({ 
+      received: true, 
+      error: 'Erro interno (ignorado)' 
+    });
+  }
+});
+
 // Rota raiz
 app.get('/', (req, res) => {
   res.json({ 
