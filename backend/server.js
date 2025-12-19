@@ -20,27 +20,41 @@ const pool = new Pool({
 
 // Middleware CORS
 const corsOrigins = process.env.CORS_ORIGIN?.split(',').map(o => o.trim()) || ['http://localhost:5173', 'http://localhost:3000'];
+const serverIP = process.env.SERVER_IP || '192.168.101.234'; // IP padrão da VM
+
 app.use(cors({
   origin: (origin, callback) => {
-    // Permitir requisições sem origin (Postman, curl, etc)
-    if (!origin) return callback(null, true);
+    // Permitir requisições sem origin (Postman, curl, webhooks da Evolution API, etc)
+    if (!origin) {
+      return callback(null, true);
+    }
     
     // Verificar se origin está na lista permitida
     if (corsOrigins.includes(origin) || corsOrigins.includes('*')) {
       return callback(null, true);
     }
     
-    // Permitir se origin contém localhost ou IP do servidor
-    const serverIP = process.env.SERVER_IP || 'localhost';
-    if (origin.includes('localhost') || origin.includes(serverIP)) {
+    // Permitir se origin contém localhost
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
       return callback(null, true);
     }
     
-    callback(new Error('Not allowed by CORS'));
+    // Permitir se origin contém o IP do servidor (frontend e outros serviços na mesma rede)
+    if (serverIP && (origin.includes(serverIP) || origin.includes('192.168.101.234'))) {
+      return callback(null, true);
+    }
+    
+    // Permitir requisições da mesma rede local (192.168.x.x)
+    if (origin.match(/^https?:\/\/192\.168\./)) {
+      return callback(null, true);
+    }
+    
+    // Se chegou aqui, rejeita (mas não loga como erro para evitar spam)
+    callback(null, false); // Retorna false ao invés de Error para evitar stack trace
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'apikey']
 }));
 // Aumentar limite do body parser para permitir payloads grandes (chats com muitas mensagens)
 app.use(express.json({ limit: '50mb' }));
