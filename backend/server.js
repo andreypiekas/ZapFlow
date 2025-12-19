@@ -1512,15 +1512,9 @@ app.post('/api/webhook/evolution', async (req, res) => {
             if (base64Data) {
               const dataUrl = `data:${mimeType};base64,${base64Data}`;
               
-              // Busca ou cria o chat no banco
-              const chatResult = await pool.query(
-                `SELECT id FROM chats WHERE id = $1`,
-                [remoteJid]
-              );
-              
-              if (chatResult.rows.length > 0) {
-                // Atualiza mensagem existente ou cria nova no banco
-                // Salva a mensagem completa com base64 para uso posterior
+              // Salva base64 independente de chat existir (pode ser usado depois quando chat for criado)
+              // Salva a mensagem completa com base64 para uso posterior
+              try {
                 await pool.query(
                   `INSERT INTO user_data (user_id, data_type, data_key, data_value)
                    VALUES (NULL, 'webhook_messages', $1, $2)
@@ -1537,8 +1531,12 @@ app.post('/api/webhook/evolution', async (req, res) => {
                 );
                 
                 processed++;
-                console.log(`[WEBHOOK] ✅ Mensagem com base64 salva: ${messageId} (${mimeType})`);
+                console.log(`[WEBHOOK] ✅ Mensagem com base64 salva: ${messageId} (${mimeType}) para remoteJid: ${remoteJid}`);
+              } catch (dbError) {
+                console.error(`[WEBHOOK] Erro ao salvar base64 no banco para ${messageId}:`, dbError);
               }
+            } else {
+              console.log(`[WEBHOOK] ⚠️ Mensagem de mídia sem base64 - messageId: ${messageId}, imageMsg: ${imageMsg ? 'existe' : 'não'}, videoMsg: ${videoMsg ? 'existe' : 'não'}`);
             }
           }
         } catch (msgError) {
