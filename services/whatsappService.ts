@@ -2251,6 +2251,93 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
     }
 };
 
+// Busca URL de mídia usando messageId quando imageMessage está vazio
+export const fetchMediaUrlByMessageId = async (
+    config: ApiConfig,
+    messageId: string,
+    remoteJid: string,
+    mediaType: 'image' | 'video' | 'audio' | 'document' = 'image'
+): Promise<string | null> => {
+    if (config.isDemo || !config.baseUrl || !config.apiKey || !messageId || !remoteJid) {
+        return null;
+    }
+
+    try {
+        const active = await findActiveInstance(config);
+        const instanceName = active?.instanceName || config.instanceName;
+        
+        if (!instanceName) {
+            return null;
+        }
+
+        // Tenta buscar a mensagem completa usando o messageId
+        // Evolution API pode ter um endpoint para buscar mensagem por ID
+        // Vamos tentar buscar usando findChats com filtro de mensagens
+        const response = await fetch(`${config.baseUrl}/chat/findChats/${instanceName}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': getAuthKey(config)
+            },
+            body: JSON.stringify({
+                where: { remoteJid: remoteJid },
+                limit: 1000
+            })
+        });
+
+        if (!response.ok) {
+            console.warn(`[fetchMediaUrlByMessageId] Erro ao buscar mensagem: ${response.status}`);
+            return null;
+        }
+
+        const data = await response.json();
+        
+        // Procura a mensagem com o messageId nos resultados
+        const findMessageInResponse = (obj: any): any | null => {
+            if (!obj || typeof obj !== 'object') return null;
+            
+            // Verifica se é uma mensagem com o ID correto
+            if (obj.key?.id === messageId || obj.id === messageId) {
+                return obj;
+            }
+            
+            // Verifica se tem mensagens aninhadas
+            if (obj.messages && Array.isArray(obj.messages)) {
+                for (const msg of obj.messages) {
+                    const found = findMessageInResponse(msg);
+                    if (found) return found;
+                }
+            }
+            
+            // Itera por todas as propriedades
+            for (const key in obj) {
+                if (obj.hasOwnProperty(key)) {
+                    const found = findMessageInResponse(obj[key]);
+                    if (found) return found;
+                }
+            }
+            
+            return null;
+        };
+
+        const message = findMessageInResponse(data);
+        
+        if (message) {
+            // Extrai URL do imageMessage se estiver presente
+            const imageMsg = message.message?.imageMessage || message.imageMessage;
+            if (imageMsg && (imageMsg.url || imageMsg.mediaUrl || imageMsg.directPath)) {
+                return imageMsg.url || imageMsg.mediaUrl || 
+                       (imageMsg.directPath ? `https://mmg.whatsapp.net/${imageMsg.directPath.replace(/^\//, '')}` : null);
+            }
+        }
+
+        return null;
+    } catch (error) {
+        console.error('[fetchMediaUrlByMessageId] Erro ao buscar URL da mídia:', error);
+        return null;
+    }
+};
+
 // --- DEPARTMENT SELECTION MESSAGE ---
 
 // Gera saudação baseada no horário do dia
