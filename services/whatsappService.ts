@@ -1132,6 +1132,10 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
                 msgObjHasUrl: !!(msgObj.url || msgObj.mediaUrl),
                 apiMsgKeys: Object.keys(apiMsg).slice(0, 15)
             });
+            
+            // Log adicional com objeto completo para forçar visualização no console
+            console.log('[mapApiMessageToInternal] 🔍 imageMessage COMPLETO:', imageMsg);
+            console.log('[mapApiMessageToInternal] 🔍 apiMsg COMPLETO:', apiMsg);
         }
         // Quando imageMessage está vazio, isso é esperado na sincronização inicial
         // A URL será atualizada quando os dados completos chegarem via WebSocket

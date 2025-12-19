@@ -1538,6 +1538,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         } else {
           // Log temporário para debug - quando não encontra URL mas há rawMessage
           const imageMsgObj = rawMsg?.message?.imageMessage || rawMsg?.imageMessage;
+          
+          // Log completo para debug - força exibição de todos os detalhes
           console.warn('[ChatInterface] ⚠️ Imagem sem URL no rawMessage:', {
             msgId: msg.id,
             msgType: msg.type,
@@ -1558,6 +1560,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             mediaUrlValue: imageMsgObj?.mediaUrl ? imageMsgObj.mediaUrl.substring(0, 100) : 'não encontrado',
             directPathValue: imageMsgObj?.directPath ? imageMsgObj.directPath.substring(0, 100) : 'não encontrado'
           });
+          
+          // Log adicional com estrutura completa para debug (força visualização no console)
+          if (imageMsgObj) {
+            console.log('[ChatInterface] 🔍 ESTRUTURA COMPLETA DO imageMessage:', imageMsgObj);
+            console.log('[ChatInterface] 🔍 rawMessage COMPLETO:', rawMsg);
+          }
         }
       }
       
