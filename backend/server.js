@@ -1567,7 +1567,14 @@ const handleWebhookEvolution = async (req, res) => {
       error: 'Erro interno (ignorado)' 
     });
   }
-});
+};
+
+// Rota base para webhook (sem nome de evento)
+app.post('/api/webhook/evolution', handleWebhookEvolution);
+
+// Rota com nome de evento (quando "Webhook by Events" está ON)
+// Aceita qualquer nome de evento: /api/webhook/evolution/messages.upsert, /api/webhook/evolution/contacts-update, etc.
+app.post('/api/webhook/evolution/:eventName', handleWebhookEvolution);
 
 // Rota raiz
 app.get('/', (req, res) => {
