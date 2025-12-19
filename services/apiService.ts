@@ -582,10 +582,33 @@ export const deleteUserData = (dataType: string, key: string) => {
 
 // Métodos específicos para configurações (ApiConfig)
 export const saveConfig = async (config: any): Promise<boolean> => {
-  return apiService.request<{ success: boolean }>('/api/config', {
-    method: 'PUT',
-    body: JSON.stringify({ config }),
-  }).then(response => response.success || false);
+  try {
+    console.log('[ApiService] 💾 Salvando configuração no backend:', {
+      hasBaseUrl: !!config.baseUrl,
+      hasApiKey: !!config.apiKey,
+      instanceName: config.instanceName || 'não definido'
+    });
+    
+    const response = await apiService.request<{ success: boolean }>('/api/config', {
+      method: 'PUT',
+      body: JSON.stringify({ config }),
+    });
+    
+    if (response?.success) {
+      console.log('[ApiService] ✅ Configuração salva com sucesso no backend');
+      return true;
+    } else {
+      console.warn('[ApiService] ⚠️ Resposta do backend não indica sucesso:', response);
+      return false;
+    }
+  } catch (error: any) {
+    console.error('[ApiService] ❌ Erro ao salvar configuração no backend:', {
+      message: error?.message,
+      status: error?.status,
+      error: error
+    });
+    return false;
+  }
 };
 
 export const loadConfig = async (): Promise<any | null> => {
@@ -593,10 +616,26 @@ export const loadConfig = async (): Promise<any | null> => {
     const response = await apiService.request<{ success: boolean; config: any }>('/api/config', {
       method: 'GET',
     });
-    return response.config || null;
-  } catch (error) {
-    // Se não conseguir carregar do backend, retorna null
-    console.error('[ApiService] Erro ao carregar configurações do backend:', error);
+    
+    // Log para debug
+    if (response && response.config) {
+      console.log('[ApiService] ✅ Configuração carregada do backend:', {
+        hasBaseUrl: !!response.config.baseUrl,
+        hasApiKey: !!response.config.apiKey,
+        instanceName: response.config.instanceName || 'não definido'
+      });
+    } else {
+      console.warn('[ApiService] ⚠️ Resposta do backend não contém config:', response);
+    }
+    
+    return response?.config || null;
+  } catch (error: any) {
+    // Se não conseguir carregar do backend, loga o erro e retorna null
+    console.error('[ApiService] ❌ Erro ao carregar configurações do backend:', {
+      message: error?.message,
+      status: error?.status,
+      error: error
+    });
     return null;
   }
 };

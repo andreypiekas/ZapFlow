@@ -540,19 +540,38 @@ const App: React.FC = () => {
           storageService.load<Chat[]>('chats'),
         ]);
 
-        // Atualiza apenas se os dados vieram da API (não são null)
-        // Para config, faz merge completo para preservar valores padrão
-        if (apiConfigData) {
-          setApiConfig({
+        // Atualiza configuração - sempre atualiza mesmo que venha com valores vazios
+        // Isso garante que os valores do banco sejam aplicados
+        if (apiConfigData !== null) {
+          // Sempre atualiza, mesmo se alguns campos estiverem vazios
+          const loadedConfig = {
             baseUrl: apiConfigData.baseUrl || '',
             apiKey: apiConfigData.apiKey || '',
             authenticationApiKey: apiConfigData.authenticationApiKey || '',
             instanceName: apiConfigData.instanceName || 'zapflow',
             isDemo: apiConfigData.isDemo || false,
             googleClientId: apiConfigData.googleClientId || '',
-            geminiApiKey: apiConfigData.geminiApiKey || ''
-          });
-          console.log('[App] ✅ Configurações carregadas do banco de dados (useEffect)');
+            geminiApiKey: apiConfigData.geminiApiKey || '',
+            holidayStates: apiConfigData.holidayStates || []
+          };
+          
+          // Verifica se há pelo menos um campo não vazio para considerar como configuração válida
+          const hasConfig = loadedConfig.baseUrl || loadedConfig.apiKey || loadedConfig.geminiApiKey;
+          
+          setApiConfig(loadedConfig);
+          
+          if (hasConfig) {
+            console.log('[App] ✅ Configurações carregadas do banco de dados:', {
+              hasBaseUrl: !!loadedConfig.baseUrl,
+              hasApiKey: !!loadedConfig.apiKey,
+              instanceName: loadedConfig.instanceName,
+              hasGeminiApiKey: !!loadedConfig.geminiApiKey
+            });
+          } else {
+            console.warn('[App] ⚠️ Configuração carregada do banco está vazia - usuário precisa configurar');
+          }
+        } else {
+          console.warn('[App] ⚠️ Não foi possível carregar configuração do banco de dados (retornou null)');
         }
         if (departmentsData && departmentsData.length > 0) {
           setDepartments(departmentsData);

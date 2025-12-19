@@ -1487,8 +1487,16 @@ app.get('/api/config', authenticateToken, dataLimiter, async (req, res) => {
       const config = typeof result.rows[0].data_value === 'string' 
         ? JSON.parse(result.rows[0].data_value)
         : result.rows[0].data_value;
+      
+      console.log(`[GET /api/config] ✅ Configuração encontrada no banco:`, {
+        hasBaseUrl: !!config.baseUrl,
+        hasApiKey: !!config.apiKey,
+        instanceName: config.instanceName || 'não definido'
+      });
+      
       res.json({ success: true, config });
     } else {
+      console.log(`[GET /api/config] ℹ️ Nenhuma configuração encontrada no banco, retornando padrão`);
       // Retorna configuração padrão se não existir
       res.json({ 
         success: true, 
@@ -1529,17 +1537,24 @@ app.put('/api/config', authenticateToken, dataLimiter, async (req, res) => {
     }
 
     // Remove qualquer configuração global existente (NULL ou 0)
-    await pool.query(
+    const deleteResult = await pool.query(
       `DELETE FROM user_data 
        WHERE (user_id IS NULL OR user_id = 0) AND data_type = 'config' AND data_key = 'apiConfig'`
     );
+    console.log(`[PUT /api/config] Removidas ${deleteResult.rowCount} configuração(ões) existente(s)`);
     
     // Insere como configuração global (user_id = NULL)
-    await pool.query(
+    const insertResult = await pool.query(
       `INSERT INTO user_data (user_id, data_type, data_key, data_value)
        VALUES (NULL, 'config', 'apiConfig', $1)`,
       [JSON.stringify(config)]
     );
+    
+    console.log(`[PUT /api/config] ✅ Configuração salva com sucesso:`, {
+      hasBaseUrl: !!config.baseUrl,
+      hasApiKey: !!config.apiKey,
+      instanceName: config.instanceName || 'não definido'
+    });
 
     res.json({ success: true });
   } catch (error) {
