@@ -1576,41 +1576,62 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 hasApiConfig: !!(apiConfig.baseUrl && apiConfig.apiKey)
               });
               
-              // Tenta buscar URL da mídia usando messageId (async, não bloqueia renderização)
-              if (apiConfig.baseUrl && apiConfig.apiKey) {
-                // Usa uma flag para evitar múltiplas buscas para a mesma mensagem
-                const fetchKey = `fetch_${messageId}`;
-                if (!(window as any)[fetchKey]) {
-                  (window as any)[fetchKey] = true;
-                  
-                  fetchMediaUrlByMessageId(apiConfig, messageId, remoteJid, 'image')
-                    .then(url => {
-                      if (url) {
-                        console.log('[ChatInterface] ✅ URL encontrada via messageId:', url.substring(0, 100));
-                        // Atualiza a mensagem com a URL encontrada
-                        msg.mediaUrl = url;
-                        // Tenta atualizar no chat para forçar re-render
-                        const chat = chats.find(c => c.id === (selectedChatId || ''));
-                        if (chat) {
-                          const messageIndex = chat.messages.findIndex(m => m.id === msg.id || m.whatsappMessageId === messageId);
-                          if (messageIndex >= 0) {
-                            const updatedMessages = [...chat.messages];
-                            updatedMessages[messageIndex] = { ...updatedMessages[messageIndex], mediaUrl: url };
-                            // Atualiza o chat localmente
-                            onUpdateChat({ ...chat, messages: updatedMessages });
-                          }
+              // Tenta buscar URL/base64 da mídia usando messageId (async, não bloqueia renderização)
+              // Usa uma flag para evitar múltiplas buscas para a mesma mensagem
+              const fetchKey = `fetch_${messageId}`;
+              if (!(window as any)[fetchKey]) {
+                (window as any)[fetchKey] = true;
+                
+                // PRIORIDADE 1: Buscar base64 salvo pelo webhook no banco
+                loadUserData<{ messageId: string; dataUrl: string; mimeType: string }>('webhook_messages', messageId)
+                  .then(webhookData => {
+                    if (webhookData?.dataUrl) {
+                      console.log('[ChatInterface] ✅ Base64 encontrado no banco (webhook):', messageId);
+                      msg.mediaUrl = webhookData.dataUrl;
+                      // Atualiza o chat para forçar re-render
+                      const chat = chats.find(c => c.id === (selectedChatId || ''));
+                      if (chat) {
+                        const messageIndex = chat.messages.findIndex(m => m.id === msg.id || m.whatsappMessageId === messageId);
+                        if (messageIndex >= 0) {
+                          const updatedMessages = [...chat.messages];
+                          updatedMessages[messageIndex] = { ...updatedMessages[messageIndex], mediaUrl: webhookData.dataUrl };
+                          onUpdateChat({ ...chat, messages: updatedMessages });
                         }
-                      } else {
-                        console.log('[ChatInterface] ⚠️ URL não encontrada via messageId - imageMessage pode estar realmente vazio');
                       }
-                      // Remove a flag após um tempo para permitir nova tentativa se necessário
                       setTimeout(() => delete (window as any)[fetchKey], 60000);
-                    })
-                    .catch(error => {
-                      console.error('[ChatInterface] Erro ao buscar URL via messageId:', error);
-                      setTimeout(() => delete (window as any)[fetchKey], 30000);
-                    });
-                }
+                      return null; // Base64 encontrado, não precisa buscar URL
+                    }
+                    
+                    // PRIORIDADE 2: Buscar URL via Evolution API (se configurado)
+                    if (apiConfig.baseUrl && apiConfig.apiKey) {
+                      return fetchMediaUrlByMessageId(apiConfig, messageId, remoteJid, 'image');
+                    }
+                    return null;
+                  })
+                  .then(url => {
+                    if (url && !msg.mediaUrl) { // Se não foi definido pelo base64 acima
+                      console.log('[ChatInterface] ✅ URL encontrada via messageId:', url.substring(0, 100));
+                      msg.mediaUrl = url;
+                      // Tenta atualizar no chat para forçar re-render
+                      const chat = chats.find(c => c.id === (selectedChatId || ''));
+                      if (chat) {
+                        const messageIndex = chat.messages.findIndex(m => m.id === msg.id || m.whatsappMessageId === messageId);
+                        if (messageIndex >= 0) {
+                          const updatedMessages = [...chat.messages];
+                          updatedMessages[messageIndex] = { ...updatedMessages[messageIndex], mediaUrl: url };
+                          onUpdateChat({ ...chat, messages: updatedMessages });
+                        }
+                      }
+                    } else if (!url && !msg.mediaUrl) {
+                      console.log('[ChatInterface] ⚠️ URL não encontrada via messageId - imageMessage pode estar realmente vazio');
+                    }
+                    // Remove a flag após um tempo para permitir nova tentativa se necessário
+                    setTimeout(() => delete (window as any)[fetchKey], 60000);
+                  })
+                  .catch(error => {
+                    console.error('[ChatInterface] Erro ao buscar URL/base64 via messageId:', error);
+                    setTimeout(() => delete (window as any)[fetchKey], 30000);
+                  });
               }
             }
           }
