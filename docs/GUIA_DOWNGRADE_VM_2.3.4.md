@@ -14,12 +14,22 @@ A versão 2.3.4 é mais estável e recomendada.
 
 ## 📦 Fonte da Imagem Docker
 
-A imagem oficial da Evolution API está disponível no Docker Hub:
-- **Repositório**: [evoapicloud/evolution-api](https://hub.docker.com/r/evoapicloud/evolution-api)
-- **Versão utilizada**: `2.3.4`
-- **Tag completa**: `evoapicloud/evolution-api:2.3.4`
+Existem múltiplas imagens da Evolution API disponíveis no Docker Hub:
 
-Você pode verificar todas as versões disponíveis diretamente no Docker Hub.
+### Imagem Principal (Recomendada)
+- **Repositório**: `evoapicloud/evolution-api`
+- **Docker Hub**: [evoapicloud/evolution-api](https://hub.docker.com/r/evoapicloud/evolution-api)
+- **Stars**: 66 ⭐
+- **Versão utilizada**: `2.3.4` (ou tag alternativa disponível)
+
+### Imagem Alternativa (Mais Popular)
+- **Repositório**: `atendai/evolution-api`
+- **Docker Hub**: [atendai/evolution-api](https://hub.docker.com/r/atendai/evolution-api)
+- **Stars**: 136 ⭐ (mais popular)
+- **Nota**: Pode ter tags diferentes, verifique antes de usar
+
+### Verificar Tags Disponíveis
+Você pode verificar todas as versões disponíveis diretamente no Docker Hub ou usar o script fornecido abaixo.
 
 ## 📋 Pré-requisitos
 
@@ -94,23 +104,99 @@ vi docker-compose.yml
 - Nano: `Ctrl + X`, depois `Y`, depois `Enter`
 - Vi: `Esc`, depois `:wq`, depois `Enter`
 
-### 6. Remover a Imagem Antiga (Opcional)
+### 6. Verificar Tags Disponíveis no Docker Hub
+
+**⚠️ IMPORTANTE**: A versão `2.3.4` pode não estar disponível no Docker Hub. Verifique primeiro quais tags estão disponíveis:
+
+**Opção 1: Usar o script auxiliar (recomendado)**
+```bash
+# Baixar o script (se ainda não estiver no servidor)
+wget -O /tmp/verificar_tags_evolution.sh https://raw.githubusercontent.com/andreypiekas/ZapFlow/main/install/verificar_tags_evolution.sh
+chmod +x /tmp/verificar_tags_evolution.sh
+/tmp/verificar_tags_evolution.sh
+```
+
+**Opção 2: Verificar manualmente via curl**
+```bash
+# Requer jq instalado: apt-get install jq
+curl -s "https://hub.docker.com/v2/repositories/evoapicloud/evolution-api/tags?page_size=100" | jq -r '.results[].name' | grep -E "2\.3|v2\.3"
+
+# Ou ver todas as tags
+curl -s "https://hub.docker.com/v2/repositories/evoapicloud/evolution-api/tags?page_size=100" | jq -r '.results[].name' | sort -V
+```
+
+**Opção 3: Acessar diretamente no navegador**
+- URL: https://hub.docker.com/r/evoapicloud/evolution-api/tags
+
+**Opção 4: Tentar baixar e ver o erro**
+```bash
+docker pull evoapicloud/evolution-api:2.3.4 2>&1 | head -5
+```
+
+**Tags possíveis para testar:**
+- `v2.3.4` (com prefixo v)
+- `2.3.3` ou `v2.3.3` (versão anterior)
+- `2.3.2` ou `v2.3.2`
+- `2.2.0` ou `v2.2.0` (versão anterior estável)
+- `latest` (pode ser 2.3.6 - **NÃO RECOMENDADO**)
+
+**Alternativa - Tentar imagem `atendai/evolution-api` (mais popular):**
+- A imagem `atendai/evolution-api` tem mais estrelas e pode ter a versão 2.3.4 disponível
+- Verifique: https://hub.docker.com/r/atendai/evolution-api/tags
+- Se usar esta imagem, altere no docker-compose.yml: `atendai/evolution-api:2.3.4`
+
+### 7. Remover a Imagem Antiga (Opcional)
 
 Para garantir que a nova versão será baixada:
 
 ```bash
 # Remover a imagem latest (opcional, mas recomendado)
-docker rmi evoapicloud/evolution-api:latest
+docker rmi evoapicloud/evolution-api:latest 2>/dev/null || true
 
 # Ou remover todas as imagens não utilizadas
 docker image prune -a
 ```
 
-### 7. Baixar a Imagem 2.3.4
+### 8. Baixar a Imagem Correta
+
+**⚠️ ATENÇÃO**: Se `2.3.4` não estiver disponível em `evoapicloud/evolution-api`, você tem duas opções:
+
+#### Opção A: Tentar tags alternativas em evoapicloud/evolution-api
 
 ```bash
-# Baixar a versão 2.3.4
-docker pull evoapicloud/evolution-api:2.3.4
+# Tentar 2.3.4 primeiro
+docker pull evoapicloud/evolution-api:2.3.4 || \
+# Se falhar, tentar com prefixo v
+docker pull evoapicloud/evolution-api:v2.3.4 || \
+# Se falhar, tentar 2.3.3
+docker pull evoapicloud/evolution-api:2.3.3 || \
+# Se falhar, tentar v2.3.3
+docker pull evoapicloud/evolution-api:v2.3.3 || \
+# Se falhar, tentar 2.3.2
+docker pull evoapicloud/evolution-api:2.3.2 || \
+# Se falhar, tentar v2.3.2
+docker pull evoapicloud/evolution-api:v2.3.2 || \
+# Última alternativa: versão anterior estável
+docker pull evoapicloud/evolution-api:v2.2.0
+```
+
+#### Opção B: Tentar a imagem alternativa atendai/evolution-api (mais popular)
+
+```bash
+# Verificar se 2.3.4 existe na imagem alternativa
+docker pull atendai/evolution-api:2.3.4 || \
+docker pull atendai/evolution-api:v2.3.4 || \
+docker pull atendai/evolution-api:2.3.3 || \
+docker pull atendai/evolution-api:v2.3.3
+```
+
+**Se usar a imagem `atendai/evolution-api`, lembre-se de atualizar o docker-compose.yml!**
+
+**OU** verificar manualmente e baixar:
+
+```bash
+# Baixar a versão disponível (substitua pela tag correta encontrada)
+docker pull evoapicloud/evolution-api:<TAG_ENCONTRADA>
 
 # Verificar se foi baixada
 docker images | grep evolution-api
@@ -118,10 +204,12 @@ docker images | grep evolution-api
 
 Você deve ver algo como:
 ```
-evoapicloud/evolution-api    2.3.4    abc123def456   2 weeks ago   2.5GB
+evoapicloud/evolution-api    <tag>    abc123def456   2 weeks ago   2.5GB
 ```
 
-### 8. Recriar e Iniciar os Containers
+**Após baixar, atualize o docker-compose.yml com a tag correta que funcionou!**
+
+### 9. Recriar e Iniciar os Containers
 
 ```bash
 # Recriar os containers com a nova versão
