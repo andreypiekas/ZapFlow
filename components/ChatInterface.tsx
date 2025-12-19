@@ -1565,6 +1565,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
           if (imageMsgObj) {
             console.log('[ChatInterface] 🔍 ESTRUTURA COMPLETA DO imageMessage:', imageMsgObj);
             console.log('[ChatInterface] 🔍 rawMessage COMPLETO:', rawMsg);
+            
+            // Verifica se há messageId ou key.id que possa ser usado para buscar a URL
+            const messageId = msg.whatsappMessageId || rawMsg?.key?.id;
+            const remoteJid = rawMsg?.key?.remoteJid || rawMsg?.key?.remoteJidAlt;
+            if (messageId && remoteJid) {
+              console.log('[ChatInterface] 🔍 Possível buscar URL usando:', {
+                messageId,
+                remoteJid,
+                hasApiConfig: !!(apiConfig.baseUrl && apiConfig.apiKey)
+              });
+            }
           }
         }
       }
