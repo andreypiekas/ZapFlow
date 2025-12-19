@@ -2687,15 +2687,18 @@ const App: React.FC = () => {
                                                 }
                                             }
                                             
-                                            // Verifica se a mensagem já existe (para mensagens recebidas ou já atualizadas)
-                                            const exists = !shouldUpdate && chat.messages.some(m => {
+                                            // Verifica se a mensagem já existe e encontra seu índice para possível atualização
+                                            let existingMessageIndex = -1;
+                                            const exists = !shouldUpdate && chat.messages.some((m, idx) => {
                                                 // Verifica por ID do WhatsApp (mais confiável)
                                                 if (m.whatsappMessageId && mapped.whatsappMessageId && 
                                                     m.whatsappMessageId === mapped.whatsappMessageId) {
+                                                    existingMessageIndex = idx;
                                                     return true;
                                                 }
                                                 // Verifica por ID interno
                                                 if (m.id && mapped.id && m.id === mapped.id) {
+                                                    existingMessageIndex = idx;
                                                     return true;
                                                 }
                                                 // Para mensagens do agente, verifica também por conteúdo + timestamp (pode ter sido atualizada)
@@ -2705,6 +2708,7 @@ const App: React.FC = () => {
                                                     const timeMatch = m.timestamp && mapped.timestamp && 
                                                         Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 30000;
                                                     if (contentMatch && timeMatch) {
+                                                        existingMessageIndex = idx;
                                                         return true;
                                                     }
                                                 }
@@ -2714,23 +2718,43 @@ const App: React.FC = () => {
                                                     m.sender === mapped.sender &&
                                                     m.timestamp && mapped.timestamp && 
                                                     Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 1000) {
+                                                    existingMessageIndex = idx;
                                                     return true;
                                                 }
                                                 return false;
                                             });
                                             
+                                            // Se mensagem já existe mas não tem mediaUrl e a nova tem, atualiza
+                                            if (exists && existingMessageIndex >= 0) {
+                                                const existingMsg = chat.messages[existingMessageIndex];
+                                                // Se a mensagem existente não tem mediaUrl mas a nova tem, atualiza
+                                                if (!existingMsg.mediaUrl && mapped.mediaUrl) {
+                                                    console.log(`[App] 🔄 [DEBUG] Socket.IO: Atualizando mediaUrl de mensagem existente: ${existingMsg.id}`, {
+                                                        existingHasMediaUrl: !!existingMsg.mediaUrl,
+                                                        newHasMediaUrl: !!mapped.mediaUrl,
+                                                        newMediaUrl: mapped.mediaUrl.substring(0, 100)
+                                                    });
+                                                    shouldUpdate = true;
+                                                    messageIndex = existingMessageIndex;
+                                                }
+                                            }
+                                            
                                             if (shouldUpdate && messageIndex >= 0) {
-                                                // Atualiza mensagem local existente com dados da API (inclui whatsappMessageId)
+                                                // Atualiza mensagem local existente com dados da API (inclui whatsappMessageId e mediaUrl)
                                                 chatUpdated = true;
                                             // Log removido para produção - muito verboso
                                             // console.log(`[App] 🔄 Mensagem enviada atualizada com ID do WhatsApp no chat ${chat.contactName}`);
                                                 const updatedMessages = [...chat.messages];
+                                                // IMPORTANTE: Atualiza mediaUrl se estiver presente na mensagem mapeada
+                                                // Isso garante que URLs de mídia sejam atualizadas quando chegarem via WebSocket
                                                 updatedMessages[messageIndex] = {
                                                     ...updatedMessages[messageIndex],
                                                     whatsappMessageId: mapped.whatsappMessageId,
                                                     id: mapped.whatsappMessageId || updatedMessages[messageIndex].id, // Usa ID do WhatsApp se disponível
                                                     rawMessage: mapped.rawMessage,
-                                                    status: mapped.status // Atualiza status (pode ter mudado)
+                                                    status: mapped.status, // Atualiza status (pode ter mudado)
+                                                    // Atualiza mediaUrl se a nova mensagem tiver URL (importante para imagens que chegam sem URL inicialmente)
+                                                    mediaUrl: mapped.mediaUrl || updatedMessages[messageIndex].mediaUrl
                                                 };
                                                 
                                                 // Reordena após atualização
