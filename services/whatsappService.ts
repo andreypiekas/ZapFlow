@@ -984,11 +984,20 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
             return typeof url === 'string' && url.length > 0 && url.trim().length > 0;
         };
         
-        // ✅ NOVA PRIORIDADE: Base64 do Webhook (quando Webhook Base64 está habilitado)
+        // ✅ PRIORIDADE 1: Base64 do Webhook (quando Webhook Base64 está habilitado)
         // Se imageMessage tem base64, cria data URL diretamente (resolve problema de URLs ausentes)
-        if (imageMsg?.base64 && typeof imageMsg.base64 === 'string' && imageMsg.base64.length > 0) {
-            const mimeType = imageMsg.mimetype || 'image/jpeg';
-            mediaUrl = `data:${mimeType};base64,${imageMsg.base64}`;
+        // O base64 pode vir:
+        // 1. Diretamente no imageMessage.base64 (via WebSocket ou Webhook)
+        // 2. Em apiMsg.base64 (nível superior)
+        // 3. Em apiMsg.data?.imageMessage?.base64 (estrutura do Webhook)
+        const base64Data = imageMsg?.base64 || 
+                          (apiMsg as any).base64 || 
+                          (apiMsg as any).data?.imageMessage?.base64 ||
+                          (apiMsg as any).data?.base64;
+        
+        if (base64Data && typeof base64Data === 'string' && base64Data.length > 0) {
+            const mimeType = imageMsg?.mimetype || (apiMsg as any).mimetype || 'image/jpeg';
+            mediaUrl = `data:${mimeType};base64,${base64Data}`;
             // Log reduzido - apenas em debug se necessário
         }
         

@@ -3,7 +3,7 @@ import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLe
 import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow, Contact } from '../types';
 import { generateSmartReply } from '../services/geminiService';
 import { sendRealMessage, sendRealMediaMessage, blobToBase64, sendRealContact, sendDepartmentSelectionMessage, fetchMediaUrlByMessageId } from '../services/whatsappService';
-import { deleteChat as deleteChatApi } from '../services/apiService';
+import { deleteChat as deleteChatApi, loadUserData } from '../services/apiService';
 import { AVAILABLE_TAGS, EMOJIS, STICKERS } from '../constants';
 
 interface ChatInterfaceProps {
