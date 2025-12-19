@@ -1537,16 +1537,26 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
           msg.mediaUrl = imageUrl;
         } else {
           // Log temporário para debug - quando não encontra URL mas há rawMessage
+          const imageMsgObj = rawMsg?.message?.imageMessage || rawMsg?.imageMessage;
           console.warn('[ChatInterface] ⚠️ Imagem sem URL no rawMessage:', {
             msgId: msg.id,
             msgType: msg.type,
             hasRawMessage: !!rawMsg,
-            rawMsgKeys: rawMsg ? Object.keys(rawMsg).slice(0, 10) : [],
+            rawMsgKeys: rawMsg ? Object.keys(rawMsg).slice(0, 15) : [],
             hasMessage: !!rawMsg?.message,
-            messageKeys: rawMsg?.message ? Object.keys(rawMsg.message).slice(0, 10) : [],
-            hasImageMessage: !!(rawMsg?.message?.imageMessage || rawMsg?.imageMessage),
-            imageMessageKeys: rawMsg?.message?.imageMessage ? Object.keys(rawMsg.message.imageMessage).slice(0, 10) : 
-                            rawMsg?.imageMessage ? Object.keys(rawMsg.imageMessage).slice(0, 10) : []
+            messageKeys: rawMsg?.message ? Object.keys(rawMsg.message).slice(0, 15) : [],
+            hasImageMessage: !!imageMsgObj,
+            imageMessageType: imageMsgObj ? typeof imageMsgObj : 'n/a',
+            imageMessageIsEmpty: imageMsgObj ? Object.keys(imageMsgObj).length === 0 : true,
+            imageMessageKeys: imageMsgObj && typeof imageMsgObj === 'object' ? Object.keys(imageMsgObj) : [],
+            imageMessageContent: imageMsgObj ? JSON.stringify(imageMsgObj).substring(0, 500) : 'n/a',
+            // Verifica valores específicos
+            hasUrl: !!(imageMsgObj?.url),
+            hasMediaUrl: !!(imageMsgObj?.mediaUrl),
+            hasDirectPath: !!(imageMsgObj?.directPath),
+            urlValue: imageMsgObj?.url ? imageMsgObj.url.substring(0, 100) : 'não encontrado',
+            mediaUrlValue: imageMsgObj?.mediaUrl ? imageMsgObj.mediaUrl.substring(0, 100) : 'não encontrado',
+            directPathValue: imageMsgObj?.directPath ? imageMsgObj.directPath.substring(0, 100) : 'não encontrado'
           });
         }
       }

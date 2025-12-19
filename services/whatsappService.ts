@@ -1104,11 +1104,33 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
             console.warn('[mapApiMessageToInternal] ⚠️ Imagem detectada mas URL não encontrada:', {
                 messageId: key?.id,
                 imageMsgKeys: Object.keys(imageMsg),
-                imageMsgValues: Object.entries(imageMsg).slice(0, 5).map(([k, v]) => [k, typeof v === 'string' ? v.substring(0, 50) : v]),
+                imageMsgType: typeof imageMsg,
+                imageMsgIsEmpty: Object.keys(imageMsg).length === 0,
+                imageMsgContent: JSON.stringify(imageMsg).substring(0, 1000),
+                imageMsgValues: Object.entries(imageMsg).slice(0, 10).map(([k, v]) => {
+                    if (typeof v === 'string') {
+                        return [k, v.length > 100 ? v.substring(0, 100) + '...' : v];
+                    } else if (v && typeof v === 'object') {
+                        return [k, `[object com ${Object.keys(v).length} chaves]`];
+                    }
+                    return [k, v];
+                }),
+                // Verifica valores específicos
+                hasUrl: !!(imageMsg.url),
+                hasMediaUrl: !!(imageMsg.mediaUrl),
+                hasDirectPath: !!(imageMsg.directPath),
+                urlValue: imageMsg.url ? imageMsg.url.substring(0, 100) : 'não encontrado',
+                mediaUrlValue: imageMsg.mediaUrl ? imageMsg.mediaUrl.substring(0, 100) : 'não encontrado',
+                directPathValue: imageMsg.directPath ? imageMsg.directPath.substring(0, 100) : 'não encontrado',
                 hasMimetype: !!imageMsg.mimetype,
+                mimetype: imageMsg.mimetype,
                 hasFileLength: !!imageMsg.fileLength,
+                fileLength: imageMsg.fileLength,
                 hasJpegThumbnail: !!imageMsg.jpegThumbnail,
-                apiMsgKeys: Object.keys(apiMsg).slice(0, 10)
+                // Verifica também na estrutura completa
+                apiMsgHasUrl: !!(apiMsg.url || apiMsg.mediaUrl),
+                msgObjHasUrl: !!(msgObj.url || msgObj.mediaUrl),
+                apiMsgKeys: Object.keys(apiMsg).slice(0, 15)
             });
         }
         // Quando imageMessage está vazio, isso é esperado na sincronização inicial
