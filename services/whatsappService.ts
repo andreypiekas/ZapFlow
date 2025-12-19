@@ -2281,9 +2281,69 @@ export const fetchMediaUrlByMessageId = async (
             return null;
         }
 
-        // Tenta buscar a mensagem completa usando o messageId
-        // Evolution API pode ter um endpoint para buscar mensagem por ID
-        // Vamos tentar buscar usando findChats com filtro de mensagens
+        // NOTA: A Evolution API v2.3.4 tem um problema conhecido onde imageMessage vem vazio
+        // quando mensagens são buscadas via REST API. A URL só está disponível quando:
+        // 1. Mensagem é recebida via WebSocket (em tempo real)
+        // 2. Mensagem é buscada diretamente do servidor WhatsApp (não do banco)
+        
+        // Tentativa 1: Endpoint de download de mídia direto (se disponível)
+        // Evolution API pode ter endpoint: /message/downloadMedia/{instanceName}
+        try {
+            const downloadResponse = await fetch(`${config.baseUrl}/message/downloadMedia/${instanceName}?messageId=${messageId}&remoteJid=${encodeURIComponent(remoteJid)}`, {
+                method: 'GET',
+                headers: {
+                    'apikey': getAuthKey(config)
+                }
+            });
+            
+            if (downloadResponse.ok) {
+                const mediaData = await downloadResponse.json();
+                if (mediaData.url || mediaData.base64) {
+                    // Se retornou base64, converte para data URL
+                    if (mediaData.base64) {
+                        return `data:image/jpeg;base64,${mediaData.base64}`;
+                    }
+                    return mediaData.url;
+                }
+            }
+        } catch (e) {
+            // Endpoint não existe ou falhou, continua para próxima tentativa
+        }
+
+        // Tentativa 2: Buscar mensagem específica via endpoint de mensagens
+        // Tenta usar fetchMessages com filtro por messageId
+        try {
+            const messagesResponse = await fetch(`${config.baseUrl}/message/fetchMessages/${instanceName}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': getAuthKey(config)
+                },
+                body: JSON.stringify({
+                    where: { 
+                        key: { id: messageId, remoteJid: remoteJid }
+                    },
+                    limit: 1
+                })
+            });
+            
+            if (messagesResponse.ok) {
+                const messagesData = await messagesResponse.json();
+                if (messagesData && Array.isArray(messagesData) && messagesData.length > 0) {
+                    const msg = messagesData[0];
+                    const imageMsg = msg.message?.imageMessage || msg.imageMessage;
+                    if (imageMsg && (imageMsg.url || imageMsg.mediaUrl || imageMsg.directPath)) {
+                        return imageMsg.url || imageMsg.mediaUrl || 
+                               (imageMsg.directPath ? `https://mmg.whatsapp.net/${imageMsg.directPath.replace(/^\//, '')}` : null);
+                    }
+                }
+            }
+        } catch (e) {
+            // Endpoint não existe, continua
+        }
+
+        // Tentativa 3: Buscar via findChats (última tentativa - menos eficiente)
+        // Este método pode não retornar URLs porque vem do banco
         const response = await fetch(`${config.baseUrl}/chat/findChats/${instanceName}`, {
             method: 'POST',
             headers: {
@@ -2296,52 +2356,52 @@ export const fetchMediaUrlByMessageId = async (
             })
         });
 
-        if (!response.ok) {
-            console.warn(`[fetchMediaUrlByMessageId] Erro ao buscar mensagem: ${response.status}`);
-            return null;
-        }
-
-        const data = await response.json();
-        
-        // Procura a mensagem com o messageId nos resultados
-        const findMessageInResponse = (obj: any): any | null => {
-            if (!obj || typeof obj !== 'object') return null;
+        if (response.ok) {
+            const data = await response.json();
             
-            // Verifica se é uma mensagem com o ID correto
-            if (obj.key?.id === messageId || obj.id === messageId) {
-                return obj;
-            }
-            
-            // Verifica se tem mensagens aninhadas
-            if (obj.messages && Array.isArray(obj.messages)) {
-                for (const msg of obj.messages) {
-                    const found = findMessageInResponse(msg);
-                    if (found) return found;
+            // Procura a mensagem com o messageId nos resultados
+            const findMessageInResponse = (obj: any): any | null => {
+                if (!obj || typeof obj !== 'object') return null;
+                
+                // Verifica se é uma mensagem com o ID correto
+                if (obj.key?.id === messageId || obj.id === messageId) {
+                    return obj;
                 }
-            }
-            
-            // Itera por todas as propriedades
-            for (const key in obj) {
-                if (obj.hasOwnProperty(key)) {
-                    const found = findMessageInResponse(obj[key]);
-                    if (found) return found;
+                
+                // Verifica se tem mensagens aninhadas
+                if (obj.messages && Array.isArray(obj.messages)) {
+                    for (const msg of obj.messages) {
+                        const found = findMessageInResponse(msg);
+                        if (found) return found;
+                    }
                 }
-            }
-            
-            return null;
-        };
+                
+                // Itera por todas as propriedades
+                for (const key in obj) {
+                    if (obj.hasOwnProperty(key)) {
+                        const found = findMessageInResponse(obj[key]);
+                        if (found) return found;
+                    }
+                }
+                
+                return null;
+            };
 
-        const message = findMessageInResponse(data);
-        
-        if (message) {
-            // Extrai URL do imageMessage se estiver presente
-            const imageMsg = message.message?.imageMessage || message.imageMessage;
-            if (imageMsg && (imageMsg.url || imageMsg.mediaUrl || imageMsg.directPath)) {
-                return imageMsg.url || imageMsg.mediaUrl || 
-                       (imageMsg.directPath ? `https://mmg.whatsapp.net/${imageMsg.directPath.replace(/^\//, '')}` : null);
+            const message = findMessageInResponse(data);
+            
+            if (message) {
+                // Extrai URL do imageMessage se estiver presente
+                const imageMsg = message.message?.imageMessage || message.imageMessage;
+                if (imageMsg && (imageMsg.url || imageMsg.mediaUrl || imageMsg.directPath)) {
+                    return imageMsg.url || imageMsg.mediaUrl || 
+                           (imageMsg.directPath ? `https://mmg.whatsapp.net/${imageMsg.directPath.replace(/^\//, '')}` : null);
+                }
             }
         }
 
+        // Se nenhuma tentativa funcionou, retorna null
+        // A URL será atualizada quando a mensagem for recebida via WebSocket
+        console.warn(`[fetchMediaUrlByMessageId] Não foi possível obter URL para messageId ${messageId} - mensagem pode ser antiga ou URL indisponível`);
         return null;
     } catch (error) {
         console.error('[fetchMediaUrlByMessageId] Erro ao buscar URL da mídia:', error);
