@@ -1,7 +1,15 @@
 import { ApiConfig, Chat, Message, MessageStatus, Department } from "../types";
 
-// Serviço compatível com Evolution API v1.x/v2.x (usando versão latest)
+// Serviço compatível com Evolution API v1.x/v2.x
+// Compatível com versões: 2.3.4 (recomendada) e 2.3.6
 // Documentação base: https://doc.evolution-api.com/
+// 
+// NOTA: A versão 2.3.6 apresenta alguns problemas conhecidos:
+// - Problemas com QR Code (carregamento infinito)
+// - Falhas no envio de mensagens para alguns números
+// - Interrupção de webhooks (n8n, etc.)
+// - imageMessage pode vir vazio ({}) ao buscar mensagens via REST API
+// Recomendação: Use a versão 2.3.4 para maior estabilidade
 
 // --- UTILS ---
 
@@ -613,7 +621,7 @@ export const sendRealMediaMessage = async (
   let endpoint = 'sendMedia';
   if (mediaType === 'audio') endpoint = 'sendWhatsAppAudio'; 
 
-  // Evolution API v2.3.6 espera mediatype no nível raiz, não dentro de mediaMessage
+  // Evolution API v2.3.4 e v2.3.6 esperam mediatype no nível raiz, não dentro de mediaMessage
   const body: any = {
       number: cleanPhone,
       delay: 1200,
