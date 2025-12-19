@@ -956,7 +956,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         // MAS apenas se o chat ainda não foi assumido por um operador (status: 'pending' ou sem assignedTo)
         if (success && selectedChat && !selectedChat.departmentId && !selectedChat.departmentSelectionSent && departments.length > 0 && 
             (selectedChat.status === 'pending' || !selectedChat.assignedTo)) {
-            console.log(`[ChatInterface] 📤 Chat sem departamento após envio de mensagem - Enviando mensagem de seleção de departamento para ${selectedChat.id}`);
+            // console.log(`[ChatInterface] 📤 Chat sem departamento após envio de mensagem - Enviando mensagem de seleção de departamento para ${selectedChat.id}`);
             sendDepartmentSelectionMessage(apiConfig, targetNumber, departments)
                 .then(sent => {
                     if (sent) {
@@ -976,13 +976,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                             awaitingDepartmentSelection: true,
                             messages: [...(selectedChat.messages || []), systemMessage]
                         });
-                        console.log(`[ChatInterface] ✅ Mensagem de seleção de departamento enviada para ${selectedChat.id}`);
-                    } else {
-                        console.error(`[ChatInterface] ❌ Falha ao enviar mensagem de seleção de departamento para ${selectedChat.id}`);
+                        // console.log(`[ChatInterface] ✅ Mensagem de seleção de departamento enviada para ${selectedChat.id}`);
+                        } else {
+                        // console.error(`[ChatInterface] ❌ Falha ao enviar mensagem de seleção de departamento para ${selectedChat.id}`);
                     }
                 })
                 .catch(err => {
-                    console.error(`[ChatInterface] ❌ Erro ao enviar mensagem de seleção de departamento:`, err);
+                    // console.error(`[ChatInterface] ❌ Erro ao enviar mensagem de seleção de departamento:`, err);
                 });
         }
     } catch (error: any) {
@@ -1102,11 +1102,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
   const handleTransfer = (deptId: string) => {
     if (!selectedChat) return;
-    console.log('[ChatInterface] 🔍 [DEBUG] handleTransfer chamado para chat:', {
-      chatId: selectedChat.id,
-      currentDepartmentId: selectedChat.departmentId,
-      newDepartmentId: deptId
-    });
+    // Log de debug comentado - descomente se necessário para análise
+    // console.log('[ChatInterface] 🔍 [DEBUG] handleTransfer chamado para chat:', {
+    //   chatId: selectedChat.id,
+    //   currentDepartmentId: selectedChat.departmentId,
+    //   newDepartmentId: deptId
+    // });
     const updatedChat = {
       ...selectedChat,
       departmentId: deptId,
@@ -1123,11 +1124,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         }
       ]
     };
-    console.log('[ChatInterface] 🔍 [DEBUG] handleTransfer - Chamando onUpdateChat com:', {
-      chatId: updatedChat.id,
-      departmentId: updatedChat.departmentId,
-      assignedTo: updatedChat.assignedTo
-    });
+    // console.log('[ChatInterface] 🔍 [DEBUG] handleTransfer - Chamando onUpdateChat com:', {
+    //   chatId: updatedChat.id,
+    //   departmentId: updatedChat.departmentId,
+    //   assignedTo: updatedChat.assignedTo
+    // });
     onUpdateChat(updatedChat);
     setIsTransferModalOpen(false);
   };
@@ -1135,12 +1136,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const handleFinishChat = (withSurvey: boolean) => {
     if (!selectedChat) return;
 
-    console.log('[ChatInterface] 🔍 [DEBUG] handleFinishChat chamado para chat:', {
-      chatId: selectedChat.id,
-      currentStatus: selectedChat.status,
-      currentAssignedTo: selectedChat.assignedTo,
-      withSurvey
-    });
+    // Log de debug comentado - descomente se necessário para análise
+    // console.log('[ChatInterface] 🔍 [DEBUG] handleFinishChat chamado para chat:', {
+    //   chatId: selectedChat.id,
+    //   currentStatus: selectedChat.status,
+    //   currentAssignedTo: selectedChat.assignedTo,
+    //   withSurvey
+    // });
 
     const endMessage = withSurvey 
       ? 'Atendimento finalizado. Enviamos uma pesquisa de satisfação para o cliente.' 
@@ -1167,11 +1169,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       ]
     };
     
-    console.log('[ChatInterface] 🔍 [DEBUG] handleFinishChat - Chamando onUpdateChat com:', {
-      chatId: updatedChat.id,
-      status: updatedChat.status,
-      assignedTo: updatedChat.assignedTo
-    });
+    // console.log('[ChatInterface] 🔍 [DEBUG] handleFinishChat - Chamando onUpdateChat com:', {
+    //   chatId: updatedChat.id,
+    //   status: updatedChat.status,
+    //   assignedTo: updatedChat.assignedTo
+    // });
     
     // Atualiza o chat
     onUpdateChat(updatedChat);
@@ -1212,12 +1214,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   // --- ASSIGNMENT & GREETING LOGIC ---
   const handleAssumeChat = () => {
       if (!selectedChat) return;
-      console.log('[ChatInterface] 🔍 [DEBUG] handleAssumeChat chamado para chat:', {
-        chatId: selectedChat.id,
-        currentStatus: selectedChat.status,
-        currentAssignedTo: selectedChat.assignedTo,
-        newAssignedTo: currentUser.id
-      });
+      // Log de debug comentado - descomente se necessário para análise
+      // console.log('[ChatInterface] 🔍 [DEBUG] handleAssumeChat chamado para chat:', {
+      //   chatId: selectedChat.id,
+      //   currentStatus: selectedChat.status,
+      //   currentAssignedTo: selectedChat.assignedTo,
+      //   newAssignedTo: currentUser.id
+      // });
       const updatedChat: Chat = {
           ...selectedChat,
           assignedTo: currentUser.id,
@@ -1234,11 +1237,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
               }
           ]
       };
-      console.log('[ChatInterface] 🔍 [DEBUG] handleAssumeChat - Chamando onUpdateChat com:', {
-        chatId: updatedChat.id,
-        status: updatedChat.status,
-        assignedTo: updatedChat.assignedTo
-      });
+      // console.log('[ChatInterface] 🔍 [DEBUG] handleAssumeChat - Chamando onUpdateChat com:', {
+      //   chatId: updatedChat.id,
+      //   status: updatedChat.status,
+      //   assignedTo: updatedChat.assignedTo
+      // });
       onUpdateChat(updatedChat);
   };
 
@@ -1346,22 +1349,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   // Helper para transformar URL relativa em absoluta se necessário
   const getMediaUrl = (url: string | undefined): string | undefined => {
     if (!url) {
-      console.warn('[ChatInterface] getMediaUrl: URL vazia ou undefined');
       return undefined;
     }
     
-    console.log('[ChatInterface] getMediaUrl: Processando URL:', {
-      originalUrl: url.substring(0, 100),
-      isAbsolute: url.startsWith('http://') || url.startsWith('https://'),
-      isRelative: url.startsWith('/'),
-      isBase64: url.startsWith('data:'),
-      hasBaseUrl: !!apiConfig.baseUrl,
-      baseUrl: apiConfig.baseUrl
-    });
-    
     // Se é uma URL base64 (data:image/, data:video/, etc.), retorna como está
     if (url.startsWith('data:')) {
-      console.log('[ChatInterface] getMediaUrl: URL base64 retornada como está');
       return url;
     }
     
@@ -1372,11 +1364,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       if (apiConfig.baseUrl && url.includes(apiConfig.baseUrl.replace(/^https?:\/\//, '').split(':')[0]) && apiConfig.apiKey) {
         const urlObj = new URL(url);
         urlObj.searchParams.set('apikey', apiConfig.apiKey);
-        const finalUrl = urlObj.toString();
-        console.log('[ChatInterface] getMediaUrl: URL absoluta com autenticação adicionada:', finalUrl.substring(0, 100));
-        return finalUrl;
+        return urlObj.toString();
       }
-      console.log('[ChatInterface] getMediaUrl: URL absoluta retornada como está:', url.substring(0, 100));
       return url;
     }
     
@@ -1392,10 +1381,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         const urlObj = new URL(finalUrl);
         urlObj.searchParams.set('apikey', apiConfig.apiKey);
         const authenticatedUrl = urlObj.toString();
-        console.log('[ChatInterface] getMediaUrl: URL relativa transformada com autenticação:', authenticatedUrl.substring(0, 100));
+        // console.log('[ChatInterface] getMediaUrl: URL relativa transformada com autenticação:', authenticatedUrl.substring(0, 100));
         return authenticatedUrl;
       }
-      console.log('[ChatInterface] getMediaUrl: URL relativa transformada:', finalUrl.substring(0, 100));
+      // console.log('[ChatInterface] getMediaUrl: URL relativa transformada:', finalUrl.substring(0, 100));
       return finalUrl;
     }
     
@@ -1408,15 +1397,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         const urlObj = new URL(finalUrl);
         urlObj.searchParams.set('apikey', apiConfig.apiKey);
         const authenticatedUrl = urlObj.toString();
-        console.log('[ChatInterface] getMediaUrl: URL com / transformada com autenticação:', authenticatedUrl.substring(0, 100));
+        // console.log('[ChatInterface] getMediaUrl: URL com / transformada com autenticação:', authenticatedUrl.substring(0, 100));
         return authenticatedUrl;
       }
-      console.log('[ChatInterface] getMediaUrl: URL com / transformada:', finalUrl.substring(0, 100));
+      // console.log('[ChatInterface] getMediaUrl: URL com / transformada:', finalUrl.substring(0, 100));
       return finalUrl;
     }
     
     // Retorna como está se não conseguir transformar
-    console.warn('[ChatInterface] getMediaUrl: Não foi possível transformar URL, retornando como está:', url.substring(0, 100));
+    // console.warn('[ChatInterface] getMediaUrl: Não foi possível transformar URL, retornando como está:', url.substring(0, 100));
     return url;
   };
 
@@ -1444,35 +1433,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         const stickerUrl = getMediaUrl(msg.mediaUrl);
         if (!stickerUrl) return <span className="text-sm opacity-70">Sticker (URL não disponível)</span>;
         return <img src={stickerUrl} alt="Sticker" className="w-32 h-32 object-contain" onError={(e) => {
-          console.error('[ChatInterface] Erro ao carregar sticker:', stickerUrl);
+          // console.error('[ChatInterface] Erro ao carregar sticker:', stickerUrl);
           (e.target as HTMLImageElement).style.display = 'none';
         }} />;
     }
 
     if (msg.type === 'image') {
-      console.log('[ChatInterface] renderMessageContent: Renderizando imagem:', {
-        hasMediaUrl: !!msg.mediaUrl,
-        mediaUrl: msg.mediaUrl?.substring(0, 100),
-        content: msg.content?.substring(0, 50),
-        sender: msg.sender,
-        hasRawMessage: !!msg.rawMessage
-      });
-      
       // Se não tem mediaUrl, tenta extrair do rawMessage como fallback
       let imageUrl = msg.mediaUrl;
       if (!imageUrl && msg.rawMessage) {
         const rawMsg = msg.rawMessage;
         
-        // Log detalhado da estrutura do rawMessage para debug
-        console.log('[ChatInterface] renderMessageContent: 🔍 Tentando extrair URL do rawMessage:', {
-          hasRawMessage: !!rawMsg,
-          rawMessageKeys: rawMsg ? Object.keys(rawMsg).slice(0, 20) : [],
-          hasMessage: !!rawMsg.message,
-          messageKeys: rawMsg.message ? Object.keys(rawMsg.message).slice(0, 20) : [],
-          hasImageMessage: !!(rawMsg.message?.imageMessage || rawMsg.imageMessage),
-          hasUrl: !!(rawMsg.message?.imageMessage?.url || rawMsg.imageMessage?.url),
-          urlValue: rawMsg.message?.imageMessage?.url || rawMsg.imageMessage?.url || rawMsg.url || 'não encontrado'
-        });
+        // Log reduzido - apenas quando realmente não encontra URL
         
         // Função auxiliar para verificar se uma string é uma URL válida
         const isValidUrl = (url: any): url is string => {
@@ -1546,12 +1518,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         for (const url of possibleUrls) {
           if (isValidUrl(url)) {
             imageUrl = url;
-            console.log('[ChatInterface] renderMessageContent: ✅ URL encontrada em caminho direto:', {
-              url: url.substring(0, 100),
-              source: url === rawMsg.message?.imageMessage?.url ? 'rawMsg.message.imageMessage.url' :
-                     url === rawMsg.imageMessage?.url ? 'rawMsg.imageMessage.url' :
-                     'other'
-            });
             break;
           }
         }
@@ -1559,42 +1525,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         // Se não encontrou com caminhos diretos, tenta busca recursiva
         if (!imageUrl) {
           imageUrl = findImageUrl(rawMsg);
-          if (imageUrl) {
-            console.log('[ChatInterface] renderMessageContent: ✅ URL encontrada via busca recursiva:', imageUrl.substring(0, 100));
-          }
         }
         
+        // Se encontrou URL, atualiza a mensagem (não persiste, apenas para exibição)
         if (imageUrl) {
-          console.log('[ChatInterface] renderMessageContent: ✅ URL extraída do rawMessage:', {
-            url: imageUrl.substring(0, 100),
-            urlLength: imageUrl.length,
-            isAbsolute: imageUrl.startsWith('http://') || imageUrl.startsWith('https://'),
-            isRelative: imageUrl.startsWith('/'),
-            isBase64: imageUrl.startsWith('data:')
-          });
-          // Atualiza a mensagem com a URL encontrada (não persiste, apenas para exibição)
           msg.mediaUrl = imageUrl;
-        } else {
-          // Log completo da estrutura se não encontrar URL - mostra estrutura completa
-          console.warn('[ChatInterface] renderMessageContent: ⚠️ Não foi possível extrair URL do rawMessage:', {
-            rawMessageType: typeof rawMsg,
-            rawMessageKeys: rawMsg ? Object.keys(rawMsg) : [],
-            hasMessage: !!rawMsg.message,
-            messageKeys: rawMsg.message ? Object.keys(rawMsg.message) : [],
-            hasImageMessage: !!(rawMsg.message?.imageMessage || rawMsg.imageMessage),
-            rawMessageStructure: rawMsg ? JSON.stringify(rawMsg, null, 2).substring(0, 2000) : 'null'
-          });
         }
+        // Log removido - muito verboso para produção
+        // Quando imageMessage está vazio, isso é esperado na sincronização inicial
+        // A URL será atualizada quando os dados completos chegarem via WebSocket
       }
       
       if (!imageUrl) {
-        console.warn('[ChatInterface] renderMessageContent: Imagem sem mediaUrl:', {
-          type: msg.type,
-          content: msg.content,
-          sender: msg.sender,
-          hasRawMessage: !!msg.rawMessage,
-          rawMessageKeys: msg.rawMessage ? Object.keys(msg.rawMessage).slice(0, 10) : []
-        });
+        // Log removido - quando não tem URL, simplesmente exibe placeholder
+        // A URL será atualizada quando os dados completos chegarem via WebSocket
         return (
           <div className="flex flex-col">
             <div className="p-4 bg-slate-700/50 rounded-lg text-sm text-slate-300">
@@ -1609,7 +1553,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       
       const finalImageUrl = getMediaUrl(imageUrl);
       if (!finalImageUrl) {
-        console.error('[ChatInterface] renderMessageContent: getMediaUrl retornou undefined para:', imageUrl?.substring(0, 100));
+        // Log removido - muito verboso para produção
         return (
           <div className="flex flex-col">
             <div className="p-4 bg-slate-700/50 rounded-lg text-sm text-slate-300">
@@ -1622,7 +1566,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         );
       }
       
-      console.log('[ChatInterface] renderMessageContent: Renderizando imagem com URL:', finalImageUrl.substring(0, 100));
+      // console.log('[ChatInterface] renderMessageContent: Renderizando imagem com URL:', finalImageUrl.substring(0, 100));
       
       return (
         <div className="flex flex-col">
@@ -1632,17 +1576,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             className="rounded-lg max-w-full sm:max-w-sm mb-1 object-cover max-h-64 cursor-pointer hover:opacity-95" 
             onClick={() => window.open(finalImageUrl, '_blank')}
             onLoad={() => {
-              console.log('[ChatInterface] ✅ Imagem carregada com sucesso:', finalImageUrl.substring(0, 100));
+              // console.log('[ChatInterface] ✅ Imagem carregada com sucesso:', finalImageUrl.substring(0, 100));
             }}
             onError={(e) => {
-              console.error('[ChatInterface] ❌ Erro ao carregar imagem:', {
-                imageUrl: finalImageUrl.substring(0, 100),
-                msgId: msg.id,
-                msgType: msg.type,
-                msgSender: msg.sender,
-                originalMediaUrl: msg.mediaUrl?.substring(0, 100),
-                error: e
-              });
+              // console.error('[ChatInterface] ❌ Erro ao carregar imagem:', {
+              //   imageUrl: finalImageUrl.substring(0, 100),
+              //   msgId: msg.id,
+              //   msgType: msg.type,
+              //   msgSender: msg.sender,
+              //   originalMediaUrl: msg.mediaUrl?.substring(0, 100),
+              //   error: e
+              // });
               // Substitui a imagem por uma mensagem de erro
               const imgElement = e.target as HTMLImageElement;
               const parent = imgElement.parentElement;
@@ -1670,7 +1614,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       return (
         <div className="flex items-center gap-2 min-w-[200px]">
            <audio controls src={audioUrl} className="w-full h-8" onError={(e) => {
-             console.error('[ChatInterface] Erro ao carregar áudio:', audioUrl);
+             // console.error('[ChatInterface] Erro ao carregar áudio:', audioUrl);
            }} />
         </div>
       );

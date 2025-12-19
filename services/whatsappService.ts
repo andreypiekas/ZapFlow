@@ -901,16 +901,8 @@ const mapStatus = (status: any): MessageStatus => {
 export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     if (!apiMsg) return null;
     
-    // Log inicial para debug de imagens
-    const hasImageAtTopLevel = !!(apiMsg.imageMessage || apiMsg.message?.imageMessage);
-    if (hasImageAtTopLevel) {
-        console.log('[mapApiMessageToInternal] 🖼️ [DEBUG] Imagem detectada no nível superior:', {
-            hasApiMsgImageMessage: !!apiMsg.imageMessage,
-            hasMessageImageMessage: !!apiMsg.message?.imageMessage,
-            apiMsgKeys: Object.keys(apiMsg).slice(0, 15),
-            messageKeys: apiMsg.message ? Object.keys(apiMsg.message).slice(0, 15) : []
-        });
-    }
+    // Log reduzido - apenas em caso de problema
+    // const hasImageAtTopLevel = !!(apiMsg.imageMessage || apiMsg.message?.imageMessage);
     
     const msgObj = apiMsg.message || apiMsg;
     
@@ -954,37 +946,20 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         // Tenta múltiplas formas de obter a URL
         const imageMsg = msgObj.imageMessage;
         
-        // Log SEMPRE para imagens (para debug do problema)
-        console.log('[mapApiMessageToInternal] 🖼️ [DEBUG] Processando imageMessage:', {
-            hasImageMsg: !!imageMsg,
-            imageMsgType: typeof imageMsg,
-            imageMsgKeys: imageMsg ? Object.keys(imageMsg).slice(0, 20) : [],
-            hasUrl: !!imageMsg.url,
-            hasMediaUrl: !!imageMsg.mediaUrl,
-            hasDirectPath: !!imageMsg.directPath,
-            urlValue: imageMsg.url ? imageMsg.url.substring(0, 100) : 'não encontrado',
-            mediaUrlValue: imageMsg.mediaUrl ? imageMsg.mediaUrl.substring(0, 100) : 'não encontrado',
-            directPathValue: imageMsg.directPath ? imageMsg.directPath.substring(0, 100) : 'não encontrado',
-            // Verifica também na estrutura completa da mensagem
-            apiMsgHasUrl: !!(apiMsg.url || apiMsg.mediaUrl),
-            apiMsgUrl: apiMsg.url ? apiMsg.url.substring(0, 100) : 'não encontrado',
-            msgObjHasUrl: !!(msgObj.url || msgObj.mediaUrl),
-            msgObjUrl: msgObj.url ? msgObj.url.substring(0, 100) : 'não encontrado',
-            // Log da estrutura completa para debug (limitado a 1000 chars)
-            imageMsgStructure: imageMsg ? JSON.stringify(imageMsg).substring(0, 1000) : 'null'
-        });
-        
-        // Log completo da estrutura completa da mensagem
-        const hasAnyUrl = !!(imageMsg.url || imageMsg.mediaUrl || imageMsg.directPath || 
+        // Verifica se imageMessage está vazio (isso é comum na sincronização inicial)
+        // A URL será atualizada quando os dados completos chegarem via WebSocket
+        const isImageMessageEmpty = !imageMsg || (typeof imageMsg === 'object' && Object.keys(imageMsg).length === 0);
+        const hasAnyUrl = !!(imageMsg?.url || imageMsg?.mediaUrl || imageMsg?.directPath || 
                             msgObj.url || msgObj.mediaUrl || apiMsg.url || apiMsg.mediaUrl);
         
-        if (!hasAnyUrl) {
-            console.warn('[mapApiMessageToInternal] ⚠️ [DEBUG] imageMessage SEM URL em nenhum lugar:', {
-                apiMsgKeys: Object.keys(apiMsg).slice(0, 20),
-                msgObjKeys: Object.keys(msgObj).slice(0, 20),
-                fullApiMsgStructure: JSON.stringify(apiMsg).substring(0, 2000)
-            });
-        }
+        // Log apenas quando não tem URL E não está vazio (indicando possível problema real)
+        // Comentado para reduzir verbosidade - descomente para debug
+        // if (!hasAnyUrl && !isImageMessageEmpty) {
+        //     console.warn('[mapApiMessageToInternal] ⚠️ imageMessage sem URL detectado:', {
+        //         messageId: key?.id,
+        //         imageMsgKeys: imageMsg ? Object.keys(imageMsg) : []
+        //     });
+        // }
         
         // Tenta extrair URL de múltiplas localizações
         // IMPORTANTE: A Evolution API pode retornar a URL em diferentes formatos:
@@ -1036,15 +1011,7 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         for (const url of possibleUrls) {
             if (isValidUrl(url)) {
                 mediaUrl = url;
-                console.log('[mapApiMessageToInternal] ✅ URL encontrada em:', {
-                    url: url.substring(0, 100),
-                    source: url === imageMsg.url ? 'imageMsg.url' :
-                           url === imageMsg.mediaUrl ? 'imageMsg.mediaUrl' :
-                           url === imageMsg.directPath ? 'imageMsg.directPath' :
-                           url === apiMsg.message?.imageMessage?.url ? 'apiMsg.message.imageMessage.url' :
-                           url === apiMsg.imageMessage?.url ? 'apiMsg.imageMessage.url' :
-                           'other'
-                });
+                // Log removido - muito verboso para produção
                 break;
             }
         }
@@ -1100,28 +1067,11 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
             };
             
             mediaUrl = findUrlRecursive(apiMsg);
-            if (mediaUrl) {
-                console.log('[mapApiMessageToInternal] ✅ URL encontrada via busca recursiva:', mediaUrl.substring(0, 100));
-            } else {
-                console.warn('[mapApiMessageToInternal] ⚠️ Busca recursiva não encontrou URL. Estrutura completa:', JSON.stringify(apiMsg).substring(0, 2000));
-            }
+            // Log removido - muito verboso para produção
+            // Se não encontrou URL mas imageMessage está vazio, isso é esperado (será atualizado via WebSocket)
         }
         
-        // Se encontrou uma URL, tenta normalizar
-        if (mediaUrl && typeof mediaUrl === 'string') {
-            // Se é uma URL base64, mantém como está
-            if (mediaUrl.startsWith('data:')) {
-                console.log('[mapApiMessageToInternal] ✅ URL base64 detectada para imagem');
-            }
-            // Se é uma URL relativa (começa com /), pode precisar de baseUrl
-            else if (mediaUrl.startsWith('/')) {
-                console.log('[mapApiMessageToInternal] ⚠️ URL relativa detectada para imagem:', mediaUrl.substring(0, 100));
-            }
-            // Se é uma URL absoluta, mantém como está
-            else if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
-                console.log('[mapApiMessageToInternal] ✅ URL absoluta detectada para imagem:', mediaUrl.substring(0, 100));
-            }
-        }
+        // Log de normalização removido - muito verboso
         
         // Se ainda não encontrou URL mas tem directPath, tenta construir URL usando baseUrl
         if (!mediaUrl && imageMsg && typeof imageMsg === 'object') {
@@ -1134,40 +1084,16 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
                     // Remove o / inicial se houver e constrói URL completa
                     const cleanPath = directPath.startsWith('/') ? directPath.substring(1) : directPath;
                     mediaUrl = `https://mmg.whatsapp.net/${cleanPath}`;
-                    console.log('[mapApiMessageToInternal] ✅ URL construída a partir de directPath:', mediaUrl.substring(0, 100));
                 } else if (directPath.startsWith('http://') || directPath.startsWith('https://')) {
                     // Se directPath já é uma URL completa, usa diretamente
                     mediaUrl = directPath;
-                    console.log('[mapApiMessageToInternal] ✅ URL encontrada em directPath (já é URL completa):', mediaUrl.substring(0, 100));
                 }
             }
         }
         
-        // Log de diagnóstico para imagens sem URL
-        if (!mediaUrl) {
-            console.warn('[mapApiMessageToInternal] ⚠️ Imagem sem URL detectada:', {
-                hasImageMessage: !!imageMsg,
-                imageMessageKeys: imageMsg ? Object.keys(imageMsg) : [],
-                imageMessageType: typeof imageMsg,
-                // Log da estrutura completa para debug
-                fullImageMessage: imageMsg ? JSON.stringify(imageMsg).substring(0, 1000) : 'null',
-                fullMsgObj: msgObj ? JSON.stringify(msgObj).substring(0, 500) : 'null',
-                apiMsgKeys: apiMsg ? Object.keys(apiMsg).slice(0, 20) : []
-            });
-        } else {
-            // Log quando encontrar URL (para debug)
-            console.log('[mapApiMessageToInternal] ✅ URL de imagem extraída:', {
-                url: mediaUrl.substring(0, 100),
-                isAbsolute: mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://'),
-                isRelative: mediaUrl.startsWith('/'),
-                length: mediaUrl.length,
-                source: imageMsg.url ? 'imageMsg.url' : 
-                       imageMsg.mediaUrl ? 'imageMsg.mediaUrl' :
-                       imageMsg.directPath ? 'imageMsg.directPath' :
-                       msgObj.url ? 'msgObj.url' :
-                       apiMsg.url ? 'apiMsg.url' : 'other'
-            });
-        }
+        // Log reduzido - apenas quando realmente não há URL e imageMessage não está vazio
+        // Quando imageMessage está vazio, isso é esperado na sincronização inicial
+        // A URL será atualizada quando os dados completos chegarem via WebSocket
     } else if (msgObj.audioMessage) {
         type = 'audio';
         const audioMsg = msgObj.audioMessage;
