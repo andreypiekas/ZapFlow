@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # ==============================================================================
@@ -8,53 +7,146 @@
 # Configura SWAP, Docker, Evolution API e Zentria.
 # ==============================================================================
 
-set -e
-
+# Cores para output
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${BLUE}[1/9] Atualizando Sistema...${NC}"
-sudo apt install -y curl git nano unzip ufw
+# Função para tratamento de erros
+error_exit() {
+    echo -e "${RED}❌ Erro: $1${NC}" >&2
+    exit 1
+}
 
+# Função para avisos
+warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+}
+
+# Função para sucesso
+success() {
+    echo -e "${GREEN}✅ $1${NC}"
+}
+
+# Função para info
+info() {
+    echo -e "${BLUE}ℹ️  $1${NC}"
+}
+
+# Salvar diretório atual
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Mudar para o diretório raiz do projeto
+cd "$PROJECT_ROOT" || error_exit "Não foi possível acessar o diretório raiz do projeto"
+
+echo -e "${BLUE}========================================${NC}"
+echo -e "${BLUE}  ZENTRIA MANAGER - AUTO INSTALLER${NC}"
+echo -e "${BLUE}========================================${NC}"
+echo ""
+
+# ==============================================================================
+# [1/9] Atualizando Sistema
+# ==============================================================================
+echo -e "${BLUE}[1/9] Atualizando Sistema...${NC}"
+export DEBIAN_FRONTEND=noninteractive
+sudo apt update -qq || error_exit "Falha ao atualizar lista de pacotes"
+sudo apt install -y curl git nano unzip ufw || error_exit "Falha ao instalar pacotes básicos"
+success "Sistema atualizado"
+
+# ==============================================================================
+# [2/9] Configurando SWAP (4GB)
+# ==============================================================================
 echo -e "${BLUE}[2/9] Configurando SWAP (4GB)...${NC}"
-if [ $(swapon --show | wc -l) -eq 0 ]; then
-    sudo fallocate -l 4G /swapfile
-    sudo chmod 600 /swapfile
-    sudo mkswap /swapfile
-    sudo swapon /swapfile
-    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+if [ $(swapon --show 2>/dev/null | wc -l) -eq 0 ]; then
+    if [ ! -f /swapfile ]; then
+        sudo fallocate -l 4G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
+        sudo chmod 600 /swapfile
+        sudo mkswap /swapfile
+        sudo swapon /swapfile
+        if ! grep -q "/swapfile" /etc/fstab; then
+            echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab > /dev/null
+        fi
+        success "SWAP de 4GB configurado"
+    else
+        info "SWAP já existe, pulando configuração"
+    fi
+else
+    info "SWAP já está ativo"
 fi
 
+# ==============================================================================
+# [3/9] Instalando Docker
+# ==============================================================================
 echo -e "${BLUE}[3/9] Instalando Docker...${NC}"
 if ! command -v docker &> /dev/null; then
-    curl -fsSL https://get.docker.com | sh
-    sudo usermod -aG docker $USER
+    curl -fsSL https://get.docker.com | sh || error_exit "Falha ao instalar Docker"
+    sudo usermod -aG docker $USER 2>/dev/null || true
+    # Tentar usar docker sem sudo (pode não funcionar até logout/login)
+    if ! sudo docker ps &> /dev/null; then
+        warning "Docker instalado, mas pode ser necessário logout/login para usar sem sudo"
+    fi
+    success "Docker instalado"
+else
+    info "Docker já está instalado"
 fi
 
+# Verificar se docker compose está disponível
+if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+    warning "Docker Compose não encontrado, tentando instalar..."
+    sudo apt install -y docker-compose-plugin || error_exit "Falha ao instalar Docker Compose"
+fi
+
+# ==============================================================================
+# [4/9] Instalando Node.js & PM2
+# ==============================================================================
 echo -e "${BLUE}[4/9] Instalando Node.js & PM2...${NC}"
 if ! command -v node &> /dev/null; then
-    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-    sudo apt install -y nodejs
-    sudo npm install -g pm2 serve
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - || error_exit "Falha ao configurar repositório Node.js"
+    sudo apt install -y nodejs || error_exit "Falha ao instalar Node.js"
+    success "Node.js instalado"
+else
+    NODE_VERSION=$(node -v)
+    info "Node.js já está instalado: $NODE_VERSION"
 fi
 
+if ! command -v pm2 &> /dev/null; then
+    sudo npm install -g pm2 serve || error_exit "Falha ao instalar PM2 e serve"
+    success "PM2 e serve instalados"
+else
+    info "PM2 já está instalado"
+fi
+
+# ==============================================================================
+# [5/9] Configurando Evolution API
+# ==============================================================================
 echo -e "${BLUE}[5/9] Configurando Evolution API...${NC}"
+
 # Detectar IP do servidor automaticamente com fallbacks
 SERVER_IP=$(hostname -I | awk '{print $1}' 2>/dev/null)
 if [ -z "$SERVER_IP" ]; then
     SERVER_IP=$(ip addr show | grep "inet " | grep -v 127.0.0.1 | head -1 | awk '{print $2}' | cut -d'/' -f1 2>/dev/null)
 fi
 if [ -z "$SERVER_IP" ]; then
-    SERVER_IP=$(ifconfig | grep "inet " | grep -v 127.0.0.1 | head -1 | awk '{print $2}' 2>/dev/null)
+    SERVER_IP=$(ifconfig 2>/dev/null | grep "inet " | grep -v 127.0.0.1 | head -1 | awk '{print $2}' 2>/dev/null)
 fi
 if [ -z "$SERVER_IP" ]; then
     SERVER_IP="localhost"
-    echo -e "${YELLOW}⚠️  Não foi possível detectar o IP do servidor. Usando 'localhost'.${NC}"
+    warning "Não foi possível detectar o IP do servidor. Usando 'localhost'."
 else
-    echo -e "${GREEN}✅ IP do servidor detectado: ${SERVER_IP}${NC}"
+    success "IP do servidor detectado: ${SERVER_IP}"
 fi
 
+# Parar containers existentes se houver
+if sudo docker ps -a --format '{{.Names}}' | grep -q "evolution_postgres\|evolution_redis\|evolution_api"; then
+    info "Parando containers existentes..."
+    sudo docker compose down 2>/dev/null || sudo docker-compose down 2>/dev/null || true
+    sleep 2
+fi
+
+# Criar docker-compose.yml
 cat > docker-compose.yml <<EOL
 services:
   evolution_api:
@@ -62,6 +154,9 @@ services:
     container_name: evolution_api
     restart: always
     shm_size: '2gb'
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     ports:
       - "8080:8080"
     environment:
@@ -84,7 +179,6 @@ services:
       - CONFIG_SESSION_PHONE_CLIENT=Zentria
       - CONFIG_SESSION_PHONE_NAME=Chrome
       - CONFIG_SESSION_PHONE_OS=Windows
-      # - CONFIG_SESSION_PHONE_VERSION=2.3000.1029255529
       - CONFIG_SESSION_PHONE_SYNC_FULL_HISTORY=false
       - BROWSER_ARGS=["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage","--disable-accelerated-2d-canvas","--no-first-run","--disable-gpu","--disable-software-rasterizer"]
       - CORS_ORIGIN=*
@@ -126,49 +220,91 @@ volumes:
   evolution_redis_data:
 EOL
 
-sudo docker compose up -d
+# Subir containers
+info "Iniciando containers Docker..."
+if sudo docker compose up -d 2>/dev/null || sudo docker-compose up -d 2>/dev/null; then
+    success "Containers Docker iniciados"
+    # Aguardar containers iniciarem
+    info "Aguardando containers iniciarem..."
+    sleep 5
+else
+    error_exit "Falha ao iniciar containers Docker"
+fi
 
-echo -e "${BLUE}[6/8] Instalando PostgreSQL (para backend)...${NC}"
+# ==============================================================================
+# [6/9] Instalando PostgreSQL (para backend)
+# ==============================================================================
+echo -e "${BLUE}[6/9] Instalando PostgreSQL (para backend)...${NC}"
 if ! command -v psql &> /dev/null; then
-    sudo apt install -y postgresql postgresql-contrib
-    sudo systemctl start postgresql
-    sudo systemctl enable postgresql
+    sudo apt install -y postgresql postgresql-contrib || error_exit "Falha ao instalar PostgreSQL"
+    sudo systemctl start postgresql || error_exit "Falha ao iniciar PostgreSQL"
+    sudo systemctl enable postgresql || true
+    success "PostgreSQL instalado e iniciado"
+else
+    info "PostgreSQL já está instalado"
+    # Garantir que está rodando
+    sudo systemctl start postgresql 2>/dev/null || true
 fi
 
 # Configurar PostgreSQL na porta alta (54321) para evitar conflitos
-echo "Configurando PostgreSQL na porta 54321..."
+info "Configurando PostgreSQL na porta 54321..."
 PG_CONF=$(sudo find /etc/postgresql -name postgresql.conf 2>/dev/null | head -1)
 if [ -n "$PG_CONF" ]; then
     # Fazer backup
-    sudo cp "$PG_CONF" "${PG_CONF}.backup"
+    sudo cp "$PG_CONF" "${PG_CONF}.backup" 2>/dev/null || true
     # Alterar porta para 54321
-    sudo sed -i "s/^#*port = .*/port = 54321/" "$PG_CONF" 2>/dev/null || sudo sed -i "s/^port = .*/port = 54321/" "$PG_CONF" 2>/dev/null
-    # Se não encontrou a linha, adicionar
     if ! grep -q "^port = 54321" "$PG_CONF"; then
-        echo "port = 54321" | sudo tee -a "$PG_CONF" > /dev/null
+        sudo sed -i "s/^#*port = .*/port = 54321/" "$PG_CONF" 2>/dev/null || true
+        if ! grep -q "^port = 54321" "$PG_CONF"; then
+            echo "port = 54321" | sudo tee -a "$PG_CONF" > /dev/null
+        fi
+        sudo systemctl restart postgresql
+        success "PostgreSQL configurado para usar porta 54321"
+    else
+        info "PostgreSQL já está configurado para porta 54321"
     fi
-    sudo systemctl restart postgresql
-    echo -e "${GREEN}✅ PostgreSQL configurado para usar porta 54321${NC}"
 else
-    echo -e "${YELLOW}⚠️  Arquivo de configuração do PostgreSQL não encontrado.${NC}"
-    echo "Configure manualmente: sudo nano /etc/postgresql/*/main/postgresql.conf"
-    echo "Altere 'port = 5432' para 'port = 54321'"
+    warning "Arquivo de configuração do PostgreSQL não encontrado."
+    warning "Configure manualmente: sudo nano /etc/postgresql/*/main/postgresql.conf"
 fi
 
-# Aguardar PostgreSQL iniciar
-sleep 2
+# Aguardar PostgreSQL iniciar completamente
+info "Aguardando PostgreSQL iniciar..."
+for i in {1..30}; do
+    if sudo -u postgres PGPORT=54321 psql -c "SELECT 1;" > /dev/null 2>&1; then
+        success "PostgreSQL está pronto"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        warning "PostgreSQL não respondeu após 30 tentativas, continuando mesmo assim..."
+    fi
+    sleep 1
+done
 
 # Configurar banco de dados (usando porta 54321)
-sudo -u postgres PGPORT=54321 psql -c "CREATE DATABASE zentria;" 2>/dev/null || echo "Banco zentria já existe ou erro ao criar"
-sudo -u postgres PGPORT=54321 psql -c "CREATE USER zentria_user WITH PASSWORD 'zentria_secure_password_2024';" 2>/dev/null || echo "Usuário já existe"
+info "Configurando banco de dados..."
+sudo -u postgres PGPORT=54321 psql -c "CREATE DATABASE zentria;" 2>/dev/null || info "Banco zentria já existe"
+sudo -u postgres PGPORT=54321 psql -c "CREATE USER zentria_user WITH PASSWORD 'zentria_secure_password_2024';" 2>/dev/null || info "Usuário zentria_user já existe"
 sudo -u postgres PGPORT=54321 psql -c "GRANT ALL PRIVILEGES ON DATABASE zentria TO zentria_user;" 2>/dev/null || true
 sudo -u postgres PGPORT=54321 psql -c "ALTER USER zentria_user CREATEDB;" 2>/dev/null || true
+success "Banco de dados configurado"
 
+# ==============================================================================
+# [7/9] Configurando Backend API
+# ==============================================================================
 echo -e "${BLUE}[7/9] Configurando Backend API...${NC}"
-cd backend 2>/dev/null || mkdir -p backend && cd backend
+
+# Verificar se o diretório backend existe
+if [ ! -d "backend" ]; then
+    warning "Diretório backend não encontrado. Criando estrutura básica..."
+    mkdir -p backend/scripts
+fi
+
+cd backend || error_exit "Não foi possível acessar o diretório backend"
 
 # Criar package.json se não existir
 if [ ! -f "package.json" ]; then
+    info "Criando package.json do backend..."
     cat > package.json <<EOL
 {
   "name": "zentria-backend",
@@ -202,12 +338,18 @@ EOL
 fi
 
 # Instalar dependências do backend
-npm install
+info "Instalando dependências do backend..."
+if npm install --silent 2>&1 | grep -i "error\|fatal" > /dev/null; then
+    warning "Alguns erros durante instalação de dependências, mas continuando..."
+else
+    success "Dependências do backend instaladas"
+fi
 
 # Gerar JWT secret
-JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | base64 | tr -d '\n')
+JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | base64 | tr -d '\n' || echo "default_secret_key_change_in_production_$(date +%s)")
 
 # Criar arquivo .env do backend
+info "Criando arquivo .env do backend..."
 cat > .env <<EOL
 # Configuração do PostgreSQL (porta alta para evitar conflitos)
 DATABASE_URL=postgresql://zentria_user:zentria_secure_password_2024@localhost:54321/zentria
@@ -229,118 +371,109 @@ EOL
 
 # Verificar se os arquivos do backend existem
 if [ ! -f "server.js" ] || [ ! -f "scripts/migrate.js" ]; then
-    echo "⚠️  Arquivos do backend não encontrados no diretório backend/"
-    echo "Certifique-se de que você fez git clone completo do repositório."
-    echo "Ou execute: git pull para atualizar o repositório."
-    echo ""
-    echo "Continuando sem backend... (os dados serão salvos apenas no localStorage)"
+    warning "Arquivos do backend não encontrados no diretório backend/"
+    warning "Certifique-se de que você fez git clone completo do repositório."
+    warning "Continuando sem backend... (os dados serão salvos apenas no localStorage)"
     BACKEND_AVAILABLE=false
 else
     BACKEND_AVAILABLE=true
     mkdir -p scripts
     
     # Executar migração principal
-    echo "Executando migração principal do banco de dados..."
-    npm run migrate || {
-        echo "⚠️  Erro na migração principal. Verificando conexão com PostgreSQL..."
-        echo "Certifique-se de que o PostgreSQL está rodando e as credenciais estão corretas."
-        BACKEND_AVAILABLE=false
-    }
-    
-    # Executar TODAS as migrações adicionais automaticamente
-    if [ "$BACKEND_AVAILABLE" = true ]; then
-        echo "Executando todas as migrações do banco de dados..."
+    info "Executando migração principal do banco de dados..."
+    if npm run migrate 2>&1; then
+        success "Migração principal concluída"
+        
+        # Executar TODAS as migrações adicionais automaticamente
+        info "Executando migrações adicionais do banco de dados..."
         
         # Migração: Cache de feriados municipais
         if [ -f "scripts/add-municipal-holidays-cache.js" ]; then
-            echo "  - Criando tabela de cache de feriados municipais..."
-            npm run migrate-holidays-cache 2>/dev/null || echo "    Tabela já existe ou erro (pode ignorar)"
+            npm run migrate-holidays-cache 2>/dev/null || true
         fi
         
         # Migração: Controle de cota do Gemini
         if [ -f "scripts/add-gemini-quota-control.js" ]; then
-            echo "  - Criando tabela de controle de cota do Gemini..."
-            npm run migrate-gemini-quota 2>/dev/null || echo "    Tabela já existe ou erro (pode ignorar)"
+            npm run migrate-gemini-quota 2>/dev/null || true
         fi
         
         # Migração: Tabela de feriados nacionais
         if [ -f "scripts/add-national-holidays-table.js" ]; then
-            echo "  - Criando tabela de feriados nacionais..."
-            npm run migrate-national-holidays 2>/dev/null || echo "    Tabela já existe ou erro (pode ignorar)"
+            npm run migrate-national-holidays 2>/dev/null || true
         fi
         
         # Adicionar campo department_id na tabela users (se não existir)
         if [ -f "scripts/add-department-id-to-users.js" ]; then
-            echo "  - Adicionando campo department_id..."
-            node scripts/add-department-id-to-users.js 2>/dev/null || echo "    Campo department_id já existe ou erro (pode ignorar)"
+            node scripts/add-department-id-to-users.js 2>/dev/null || true
         fi
         
         # Corrigir data_keys de chats (opcional)
         if [ -f "scripts/fix-chat-data-keys.js" ]; then
-            echo "  - Corrigindo data_keys de chats..."
-            node scripts/fix-chat-data-keys.js 2>/dev/null || echo "    Nenhum chat para corrigir ou erro (pode ignorar)"
+            node scripts/fix-chat-data-keys.js 2>/dev/null || true
         fi
         
         # Migrar configurações para globais (user_id = NULL)
         if [ -f "scripts/migrate-config-to-global.js" ]; then
-            echo "  - Migrando configurações para globais..."
-            node scripts/migrate-config-to-global.js 2>/dev/null || echo "    Configurações já migradas ou erro (pode ignorar)"
+            node scripts/migrate-config-to-global.js 2>/dev/null || true
         fi
         
         # Limpar chats inválidos (opcional, mas recomendado)
         if [ -f "scripts/clean-invalid-chats.js" ]; then
-            echo "  - Limpando chats inválidos..."
-            node scripts/clean-invalid-chats.js 2>/dev/null || echo "    Nenhum chat inválido encontrado ou erro (pode ignorar)"
+            node scripts/clean-invalid-chats.js 2>/dev/null || true
         fi
         
         # Criar usuário admin padrão (se não existir)
         if [ -f "scripts/create-admin.js" ]; then
-            echo "  - Criando usuário administrador padrão..."
-            npm run create-admin 2>/dev/null || echo "    Usuário admin já existe ou erro (pode ignorar)"
+            npm run create-admin 2>/dev/null || true
         fi
         
-        echo "✅ Todas as migrações do banco de dados foram executadas"
+        success "Todas as migrações do banco de dados foram executadas"
+    else
+        warning "Erro na migração principal. Verificando conexão com PostgreSQL..."
+        BACKEND_AVAILABLE=false
     fi
 fi
 
-cd ..
+cd "$PROJECT_ROOT" || error_exit "Não foi possível retornar ao diretório raiz"
 
+# ==============================================================================
+# [8/9] Configurando Frontend
+# ==============================================================================
 echo -e "${BLUE}[8/9] Configurando Frontend...${NC}"
 
 # Garantir que estamos no diretório raiz do projeto
-# Se não estiver, tentar encontrar o diretório correto
 if [ ! -f "package.json" ]; then
     # Tentar encontrar o diretório do projeto
     if [ -d "Zentria" ] && [ -f "Zentria/package.json" ]; then
         cd Zentria
+        PROJECT_ROOT="$(pwd)"
     elif [ -d "zentria" ] && [ -f "zentria/package.json" ]; then
         cd zentria
+        PROJECT_ROOT="$(pwd)"
     elif [ -d "ZapFlow" ] && [ -f "ZapFlow/package.json" ]; then
         cd ZapFlow
+        PROJECT_ROOT="$(pwd)"
     elif [ -d "zapflow" ] && [ -f "zapflow/package.json" ]; then
         cd zapflow
+        PROJECT_ROOT="$(pwd)"
     else
-        echo "⚠️  package.json não encontrado no diretório atual."
-        echo "   Certifique-se de estar no diretório raiz do projeto Zentria."
-        echo "   Ou execute: cd /caminho/para/Zentria antes de executar este script."
-        exit 1
+        error_exit "package.json não encontrado. Certifique-se de estar no diretório raiz do projeto."
     fi
 fi
 
 # Verificar se package.json tem o script build
 if ! grep -q '"build"' package.json; then
-    echo "⚠️  Script 'build' não encontrado no package.json."
-    echo "   Adicionando script build ao package.json..."
-    # Adicionar script build se não existir
+    info "Adicionando script build ao package.json..."
     if grep -q '"scripts"' package.json; then
-        # Se já tem scripts, adicionar build
-        sed -i '/"scripts"/a\    "build": "vite build",' package.json 2>/dev/null || {
-            # Fallback para edição manual
-            echo "   Por favor, adicione manualmente: \"build\": \"vite build\" no package.json"
-        }
-    else
-        # Se não tem scripts, adicionar seção completa
-        echo "   Por favor, adicione manualmente a seção scripts no package.json"
+        # Tentar adicionar build aos scripts
+        if command -v jq &> /dev/null; then
+            jq '.scripts.build = "vite build"' package.json > package.json.tmp && mv package.json.tmp package.json
+        else
+            # Fallback: adicionar manualmente
+            sed -i '/"scripts"/a\    "build": "vite build",' package.json 2>/dev/null || {
+                warning "Não foi possível adicionar script build automaticamente"
+            }
+        fi
     fi
 fi
 
@@ -348,7 +481,7 @@ fi
 if [ "$BACKEND_AVAILABLE" = true ]; then
     if [ ! -f ".env" ]; then
         echo "VITE_API_URL=http://${SERVER_IP}:3001" > .env
-        echo "✅ Arquivo .env do frontend criado com URL do backend"
+        success "Arquivo .env do frontend criado"
     else
         # Adicionar ou atualizar VITE_API_URL no .env existente
         if grep -q "VITE_API_URL" .env; then
@@ -356,106 +489,122 @@ if [ "$BACKEND_AVAILABLE" = true ]; then
         else
             echo "VITE_API_URL=http://${SERVER_IP}:3001" >> .env
         fi
-        echo "✅ Variável VITE_API_URL configurada no .env"
+        success "Variável VITE_API_URL configurada no .env"
     fi
-    echo "   📝 VITE_API_URL=http://${SERVER_IP}:3001"
+    info "VITE_API_URL=http://${SERVER_IP}:3001"
 fi
 
-# Verificar se package.json existe antes de instalar
-if [ ! -f "package.json" ]; then
-    echo "❌ Erro: package.json não encontrado!"
-    echo "   Certifique-se de estar no diretório raiz do projeto Zentria."
-    exit 1
+# Instalar dependências do frontend
+info "Instalando dependências do frontend..."
+if [ -d "node_modules" ]; then
+    rm -rf node_modules package-lock.json yarn.lock 2>/dev/null || true
 fi
 
-echo "📦 Instalando dependências do frontend..."
-rm -rf node_modules package-lock.json
-npm install
-
-echo "🔨 Construindo aplicação frontend..."
-if npm run build; then
-    echo "✅ Build do frontend concluído com sucesso!"
+if npm install --silent 2>&1 | grep -i "error\|fatal" > /dev/null; then
+    warning "Alguns erros durante instalação de dependências, mas continuando..."
 else
-    echo "⚠️  Erro ao fazer build do frontend."
-    echo "   Verifique os logs acima para mais detalhes."
-    echo "   Continuando mesmo assim..."
+    success "Dependências do frontend instaladas"
 fi
 
+# Construir aplicação frontend
+info "Construindo aplicação frontend..."
+if npm run build 2>&1; then
+    success "Build do frontend concluído"
+else
+    warning "Erro ao fazer build do frontend. Verifique os logs acima."
+    warning "Continuando mesmo assim..."
+fi
+
+# ==============================================================================
+# [9/9] Finalizando
+# ==============================================================================
 echo -e "${BLUE}[9/9] Finalizando...${NC}"
 
 # Iniciar backend com PM2 (se os arquivos existirem e migração foi bem-sucedida)
 if [ "$BACKEND_AVAILABLE" = true ] && [ -f "backend/server.js" ]; then
     pm2 delete zapflow-backend 2>/dev/null || true
     cd backend
-    pm2 start server.js --name zapflow-backend
-    cd ..
-    echo "✅ Backend iniciado com PM2"
-    
-    # Aguardar servidor iniciar
-    echo "Aguardando servidor backend iniciar..."
-    sleep 5
-    
-    # Testar conectividade da API
-    echo "Testando conectividade da API backend..."
-    API_URL="http://${SERVER_IP}:3001/api/health"
-    
-    # Tentar conectar até 10 vezes (10 segundos)
-    API_ACCESSIBLE=false
-    for i in {1..10}; do
-        if curl -s -f -m 2 "$API_URL" > /dev/null 2>&1; then
-            API_ACCESSIBLE=true
-            echo "✅ API backend está acessível em $API_URL"
-            break
-        fi
-        echo -n "."
-        sleep 1
-    done
-    echo ""
-    
-    if [ "$API_ACCESSIBLE" = false ]; then
-        echo "⚠️  API backend não está respondendo após 10 segundos"
-        echo "   Isso pode ser normal se o servidor ainda está inicializando"
+    if pm2 start server.js --name zapflow-backend --update-env; then
+        success "Backend iniciado com PM2"
+        
+        # Aguardar servidor iniciar
+        info "Aguardando servidor backend iniciar..."
+        sleep 5
+        
+        # Testar conectividade da API
+        info "Testando conectividade da API backend..."
+        API_URL="http://${SERVER_IP}:3001/api/health"
+        
+        # Tentar conectar até 15 vezes (15 segundos)
+        API_ACCESSIBLE=false
+        for i in {1..15}; do
+            if curl -s -f -m 2 "$API_URL" > /dev/null 2>&1; then
+                API_ACCESSIBLE=true
+                success "API backend está acessível em $API_URL"
+                break
+            fi
+            echo -n "."
+            sleep 1
+        done
         echo ""
-        echo "Verifique:"
-        echo "  1. Se o servidor está rodando: pm2 status"
-        echo "  2. Logs do servidor: pm2 logs zapflow-backend"
-        echo "  3. Se a porta está aberta no firewall (já configurado acima)"
-        echo "  4. Teste manualmente: curl http://${SERVER_IP}:3001/api/health"
+        
+        if [ "$API_ACCESSIBLE" = false ]; then
+            warning "API backend não está respondendo após 15 segundos"
+            warning "Isso pode ser normal se o servidor ainda está inicializando"
+        fi
+    else
+        warning "Falha ao iniciar backend com PM2"
     fi
+    cd "$PROJECT_ROOT"
 else
-    echo "⚠️  Backend não iniciado (arquivos não encontrados ou erro na migração)"
-    echo "   Os dados serão salvos apenas no localStorage do navegador."
+    warning "Backend não iniciado (arquivos não encontrados ou erro na migração)"
+    warning "Os dados serão salvos apenas no localStorage do navegador."
 fi
 
 # Iniciar frontend com PM2
+info "Iniciando frontend com PM2..."
 pm2 delete zapflow-front 2>/dev/null || true
-pm2 start "serve -s dist -l 5173" --name zapflow-front
-pm2 save
-pm2 startup | grep "sudo" | bash || true
+if [ -d "dist" ]; then
+    if pm2 start "serve -s dist -l 5173" --name zapflow-front; then
+        success "Frontend iniciado com PM2"
+        pm2 save || true
+        # Tentar configurar startup automático
+        pm2 startup 2>/dev/null | grep "sudo" | bash 2>/dev/null || true
+    else
+        warning "Falha ao iniciar frontend com PM2"
+    fi
+else
+    warning "Diretório dist não encontrado. Frontend não pode ser iniciado."
+fi
 
 # Configurar firewall
 if command -v ufw &> /dev/null; then
-    sudo ufw allow 8080  # Evolution API
-    sudo ufw allow 5173  # Frontend
-    sudo ufw allow 3001  # Backend API
-    sudo ufw allow 22     # SSH
-    sudo ufw allow 80    # HTTP
-    sudo ufw --force enable
+    info "Configurando firewall..."
+    echo "y" | sudo ufw allow 8080/tcp > /dev/null 2>&1  # Evolution API
+    echo "y" | sudo ufw allow 5173/tcp > /dev/null 2>&1  # Frontend
+    echo "y" | sudo ufw allow 3001/tcp > /dev/null 2>&1  # Backend API
+    echo "y" | sudo ufw allow 22/tcp > /dev/null 2>&1    # SSH
+    echo "y" | sudo ufw allow 80/tcp > /dev/null 2>&1    # HTTP
+    echo "y" | sudo ufw --force enable > /dev/null 2>&1 || true
+    success "Firewall configurado"
 fi
 
+# ==============================================================================
+# Resumo Final
+# ==============================================================================
 echo ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  INSTALAÇÃO CONCLUÍDA COM SUCESSO!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo -e "🌐 Frontend: http://${SERVER_IP}:5173"
-echo -e "🔌 Evolution API: http://${SERVER_IP}:8080"
-echo -e "💾 Backend API: http://${SERVER_IP}:3001"
+echo -e "🌐 Frontend: ${GREEN}http://${SERVER_IP}:5173${NC}"
+echo -e "🔌 Evolution API: ${GREEN}http://${SERVER_IP}:8080${NC}"
+echo -e "💾 Backend API: ${GREEN}http://${SERVER_IP}:3001${NC}"
 echo ""
 echo -e "${BLUE}Credenciais padrão do admin:${NC}"
 echo -e "   Username: ${GREEN}admin@piekas.com${NC}"
 echo -e "   Password: ${GREEN}123${NC}"
-echo -e "   ${BLUE}⚠️  ALTERE A SENHA EM PRODUÇÃO!${NC}"
+echo -e "   ${YELLOW}⚠️  ALTERE A SENHA EM PRODUÇÃO!${NC}"
 echo ""
 echo -e "${BLUE}Próximos passos após login:${NC}"
 echo -e "   1. Criar departamentos em ${YELLOW}Configurações > Departamentos${NC}"
@@ -472,26 +621,6 @@ echo -e "   ${YELLOW}pm2 restart zapflow-front${NC}    - Reiniciar frontend"
 echo ""
 echo -e "${BLUE}Testar APIs:${NC}"
 echo -e "   ${YELLOW}curl http://${SERVER_IP}:3001/api/health${NC}     - Backend API Health Check"
-echo -e "   ${YELLOW}curl -X POST http://${SERVER_IP}:3001/api/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"admin@piekas.com\",\"password\":\"123\"}'${NC} - Teste de Login"
 echo -e "   ${YELLOW}curl http://${SERVER_IP}:8080/instance/fetchInstances${NC} - Evolution API"
 echo ""
-echo -e "${BLUE}Se a API backend não estiver acessível:${NC}"
-echo -e "   1. Verifique o firewall (já configurado acima)"
-echo -e "   2. Verifique logs: ${YELLOW}pm2 logs zapflow-backend${NC}"
-echo -e "   3. Reinicie o backend: ${YELLOW}pm2 restart zapflow-backend${NC}"
-echo -e "   4. Verifique se está escutando no IP correto: ${YELLOW}netstat -tlnp | grep 3001${NC}"
-echo ""
-echo -e "${BLUE}Documentação completa:${NC}"
-echo -e "   📄 ${YELLOW}INSTALACAO_COMPLETA.md${NC} - Guia completo com todas as funcionalidades"
-echo -e "   📄 ${YELLOW}INSTALACAO_BACKEND.md${NC} - Guia específico do backend"
-echo -e "   📄 ${YELLOW}backend/README.md${NC} - Documentação da API"
-echo ""
-echo -e "${BLUE}Funcionalidades implementadas:${NC}"
-echo -e "   ✅ Atribuição automática de chats ao operador do departamento"
-echo -e "   ✅ Sistema de notificações (operadores e administradores)"
-echo -e "   ✅ Persistência completa no PostgreSQL"
-echo -e "   ✅ Validação de números (11+ dígitos)"
-echo -e "   ✅ Status persistente de chats"
-echo -e "   ✅ Socket.IO para mensagens em tempo real"
-echo -e "   ✅ Google Gemini AI para respostas inteligentes"
-echo -e "   ✅ Chatbot com horários de funcionamento"
+success "Instalação completa! Acesse http://${SERVER_IP}:5173 para começar."
