@@ -139,11 +139,37 @@ else
     success "IP do servidor detectado: ${SERVER_IP}"
 fi
 
-# Parar containers existentes se houver
-if sudo docker ps -a --format '{{.Names}}' | grep -q "evolution_postgres\|evolution_redis\|evolution_api"; then
-    info "Parando containers existentes..."
-    sudo docker compose down 2>/dev/null || sudo docker-compose down 2>/dev/null || true
-    sleep 2
+# Parar e remover containers existentes se houver
+info "Verificando containers existentes..."
+EXISTING_CONTAINERS=$(sudo docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E "evolution_postgres|evolution_redis|evolution_api" || true)
+
+if [ -n "$EXISTING_CONTAINERS" ]; then
+    info "Containers existentes encontrados. Parando e removendo..."
+    
+    # Tentar parar usando docker compose primeiro
+    if [ -f "docker-compose.yml" ]; then
+        if sudo docker compose down 2>/dev/null || sudo docker-compose down 2>/dev/null; then
+            success "Containers parados usando docker compose"
+        else
+            # Se falhar, parar manualmente
+            info "Parando containers manualmente..."
+            echo "$EXISTING_CONTAINERS" | while read container; do
+                sudo docker stop "$container" 2>/dev/null || true
+                sudo docker rm -f "$container" 2>/dev/null || true
+            done
+        fi
+    else
+        # Parar manualmente se não houver docker-compose.yml
+        echo "$EXISTING_CONTAINERS" | while read container; do
+            sudo docker stop "$container" 2>/dev/null || true
+            sudo docker rm -f "$container" 2>/dev/null || true
+        done
+    fi
+    
+    sleep 3
+    info "Containers antigos removidos"
+else
+    info "Nenhum container existente encontrado"
 fi
 
 # Criar docker-compose.yml
@@ -220,15 +246,122 @@ volumes:
   evolution_redis_data:
 EOL
 
+# Verificar se o arquivo foi criado corretamente
+if [ ! -f "docker-compose.yml" ]; then
+    error_exit "Falha ao criar docker-compose.yml"
+fi
+
+# Validar sintaxe do docker-compose.yml (se possível)
+info "Validando docker-compose.yml..."
+if sudo docker compose config &> /dev/null || sudo docker-compose config &> /dev/null; then
+    success "docker-compose.yml é válido"
+else
+    warning "Não foi possível validar docker-compose.yml, mas continuando..."
+fi
+
 # Subir containers
 info "Iniciando containers Docker..."
-if sudo docker compose up -d 2>/dev/null || sudo docker-compose up -d 2>/dev/null; then
+
+# Verificar se Docker está rodando
+if ! sudo docker ps &> /dev/null; then
+    warning "Docker não está respondendo. Tentando iniciar serviço Docker..."
+    sudo systemctl start docker 2>/dev/null || true
+    sleep 2
+    if ! sudo docker ps &> /dev/null; then
+        error_exit "Docker não está rodando. Execute: sudo systemctl start docker"
+    fi
+fi
+
+# Verificar se docker compose está disponível
+DOCKER_COMPOSE_CMD=""
+if sudo docker compose version &> /dev/null 2>&1; then
+    DOCKER_COMPOSE_CMD="sudo docker compose"
+    info "Usando: docker compose (v2)"
+elif command -v docker-compose &> /dev/null && sudo docker-compose version &> /dev/null 2>&1; then
+    DOCKER_COMPOSE_CMD="sudo docker-compose"
+    info "Usando: docker-compose (v1)"
+else
+    # Tentar instalar docker-compose-plugin
+    warning "Docker Compose não encontrado. Tentando instalar..."
+    sudo apt install -y docker-compose-plugin 2>/dev/null || sudo apt install -y docker-compose 2>/dev/null || true
+    sleep 2
+    
+    if sudo docker compose version &> /dev/null 2>&1; then
+        DOCKER_COMPOSE_CMD="sudo docker compose"
+        info "Docker Compose instalado e usando: docker compose (v2)"
+    elif sudo docker-compose version &> /dev/null 2>&1; then
+        DOCKER_COMPOSE_CMD="sudo docker-compose"
+        info "Docker Compose instalado e usando: docker-compose (v1)"
+    else
+        error_exit "Docker Compose não está disponível. Instale manualmente: sudo apt install docker-compose-plugin"
+    fi
+fi
+
+# Tentar iniciar containers e capturar erros
+info "Executando: $DOCKER_COMPOSE_CMD up -d"
+
+# Executar e capturar saída
+TEMP_OUTPUT=$(mktemp)
+if $DOCKER_COMPOSE_CMD up -d > "$TEMP_OUTPUT" 2>&1; then
+    DOCKER_EXIT_CODE=0
+    DOCKER_OUTPUT=$(cat "$TEMP_OUTPUT")
+    rm -f "$TEMP_OUTPUT"
+else
+    DOCKER_EXIT_CODE=$?
+    DOCKER_OUTPUT=$(cat "$TEMP_OUTPUT")
+    rm -f "$TEMP_OUTPUT"
+fi
+
+if [ $DOCKER_EXIT_CODE -eq 0 ]; then
     success "Containers Docker iniciados"
     # Aguardar containers iniciarem
     info "Aguardando containers iniciarem..."
     sleep 5
+    
+    # Verificar status dos containers
+    info "Verificando status dos containers..."
+    if $DOCKER_COMPOSE_CMD ps | grep -q "Up"; then
+        success "Containers estão rodando"
+    else
+        warning "Alguns containers podem não estar rodando. Verificando..."
+        $DOCKER_COMPOSE_CMD ps
+    fi
 else
-    error_exit "Falha ao iniciar containers Docker"
+    echo -e "${RED}Erro ao iniciar containers Docker:${NC}"
+    echo "$DOCKER_OUTPUT"
+    echo ""
+    
+    # Tentar diagnosticar o problema
+    warning "Tentando diagnosticar o problema..."
+    
+    # Verificar se as portas estão em uso
+    if sudo netstat -tuln 2>/dev/null | grep -q ":8080 "; then
+        warning "Porta 8080 já está em uso"
+    fi
+    
+    # Verificar se há problemas com imagens
+    info "Verificando imagens Docker..."
+    sudo docker images | grep -E "evolution-api|postgres|redis" || warning "Imagens não encontradas localmente"
+    
+    # Tentar fazer pull das imagens primeiro
+    info "Tentando baixar imagens necessárias..."
+    sudo docker pull evoapicloud/evolution-api:v2.3.4 || warning "Falha ao baixar imagem evolution-api"
+    sudo docker pull postgres:15-alpine || warning "Falha ao baixar imagem postgres"
+    sudo docker pull redis:alpine || warning "Falha ao baixar imagem redis"
+    
+    # Tentar novamente
+    info "Tentando iniciar containers novamente..."
+    TEMP_OUTPUT2=$(mktemp)
+    if $DOCKER_COMPOSE_CMD up -d > "$TEMP_OUTPUT2" 2>&1; then
+        success "Containers Docker iniciados na segunda tentativa"
+        rm -f "$TEMP_OUTPUT2"
+        sleep 5
+    else
+        echo -e "${RED}Erro na segunda tentativa:${NC}"
+        cat "$TEMP_OUTPUT2"
+        rm -f "$TEMP_OUTPUT2"
+        error_exit "Falha ao iniciar containers Docker mesmo após baixar imagens. Verifique os logs acima."
+    fi
 fi
 
 # ==============================================================================
