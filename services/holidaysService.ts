@@ -499,6 +499,35 @@ export async function getUpcomingHolidays(
               state: h.state
             }));
             
+            // Salva no cache agrupado por cidade
+            try {
+              const currentYear = new Date().getFullYear();
+              const holidaysByCity = new Map<string, { cityName: string; stateCode: string; holidays: typeof priorityHolidays }>();
+              
+              // Agrupa feriados por cidade e estado
+              for (const holiday of priorityHolidays) {
+                const key = `${holiday.city}|${holiday.state}`; // Usa | como separador seguro
+                if (!holidaysByCity.has(key)) {
+                  holidaysByCity.set(key, {
+                    cityName: holiday.city,
+                    stateCode: holiday.state,
+                    holidays: []
+                  });
+                }
+                holidaysByCity.get(key)!.holidays.push(holiday);
+              }
+              
+              // Salva cada cidade no cache
+              for (const cityData of holidaysByCity.values()) {
+                if (cityData.cityName && cityData.stateCode && cityData.holidays.length > 0) {
+                  await saveMunicipalHolidaysCache(cityData.cityName, cityData.stateCode, currentYear, cityData.holidays);
+                  console.log(`[HolidaysService] 💾 Cache salvo para ${cityData.cityName}/${cityData.stateCode} (${cityData.holidays.length} feriados)`);
+                }
+              }
+            } catch (cacheError) {
+              console.warn('[HolidaysService] Erro ao salvar cache dos estados principais:', cacheError);
+            }
+            
             allMunicipalHolidays.push(...formattedPriorityHolidays);
             console.log(`[HolidaysService] ✅ Encontrados ${formattedPriorityHolidays.length} feriados municipais dos estados principais`);
           }
