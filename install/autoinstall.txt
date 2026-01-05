@@ -141,35 +141,61 @@ fi
 
 # Parar e remover containers existentes se houver
 info "Verificando containers existentes..."
+
+# Lista de containers que precisam ser removidos
+CONTAINER_NAMES="evolution_postgres evolution_redis evolution_api"
+
+# Função para remover container por nome
+remove_container() {
+    local container_name=$1
+    if sudo docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${container_name}$"; then
+        info "Removendo container: $container_name"
+        sudo docker stop "$container_name" 2>/dev/null || true
+        sudo docker rm -f "$container_name" 2>/dev/null || true
+    fi
+}
+
+# Primeiro, tentar usar docker compose down se o arquivo existir
+if [ -f "docker-compose.yml" ]; then
+    info "Tentando parar containers usando docker compose..."
+    sudo docker compose down --remove-orphans 2>/dev/null || sudo docker-compose down --remove-orphans 2>/dev/null || true
+    sleep 2
+fi
+
+# Remover containers manualmente por nome (garantir que todos sejam removidos)
+info "Removendo containers manualmente por nome..."
+for container_name in $CONTAINER_NAMES; do
+    remove_container "$container_name"
+done
+
+# Verificar se ainda há containers órfãos com esses nomes
 EXISTING_CONTAINERS=$(sudo docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E "evolution_postgres|evolution_redis|evolution_api" || true)
 
 if [ -n "$EXISTING_CONTAINERS" ]; then
-    info "Containers existentes encontrados. Parando e removendo..."
-    
-    # Tentar parar usando docker compose primeiro
-    if [ -f "docker-compose.yml" ]; then
-        if sudo docker compose down 2>/dev/null || sudo docker-compose down 2>/dev/null; then
-            success "Containers parados usando docker compose"
-        else
-            # Se falhar, parar manualmente
-            info "Parando containers manualmente..."
-            echo "$EXISTING_CONTAINERS" | while read container; do
-                sudo docker stop "$container" 2>/dev/null || true
-                sudo docker rm -f "$container" 2>/dev/null || true
-            done
-        fi
-    else
-        # Parar manualmente se não houver docker-compose.yml
-        echo "$EXISTING_CONTAINERS" | while read container; do
+    warning "Ainda há containers existentes. Forçando remoção..."
+    echo "$EXISTING_CONTAINERS" | while read container; do
+        if [ -n "$container" ]; then
+            info "Forçando remoção de: $container"
             sudo docker stop "$container" 2>/dev/null || true
             sudo docker rm -f "$container" 2>/dev/null || true
-        done
-    fi
-    
-    sleep 3
-    info "Containers antigos removidos"
+        fi
+    done
+    sleep 2
+fi
+
+# Verificação final
+REMAINING=$(sudo docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E "evolution_postgres|evolution_redis|evolution_api" || true)
+if [ -z "$REMAINING" ]; then
+    success "Todos os containers antigos foram removidos"
 else
-    info "Nenhum container existente encontrado"
+    warning "Ainda há containers restantes: $REMAINING"
+    warning "Tentando remover novamente..."
+    echo "$REMAINING" | while read container; do
+        if [ -n "$container" ]; then
+            sudo docker rm -f "$container" 2>/dev/null || true
+        fi
+    done
+    sleep 2
 fi
 
 # Criar docker-compose.yml
@@ -258,6 +284,28 @@ if sudo docker compose config &> /dev/null || sudo docker-compose config &> /dev
 else
     warning "Não foi possível validar docker-compose.yml, mas continuando..."
 fi
+
+# Verificação final: garantir que não há containers com os nomes que vamos usar
+info "Verificação final: garantindo que não há conflitos de nomes..."
+CONFLICT_CONTAINERS=$(sudo docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E "^evolution_postgres$|^evolution_redis$|^evolution_api$" || true)
+if [ -n "$CONFLICT_CONTAINERS" ]; then
+    warning "Ainda há containers com nomes conflitantes. Removendo..."
+    echo "$CONFLICT_CONTAINERS" | while read container; do
+        if [ -n "$container" ]; then
+            info "Removendo container conflitante: $container"
+            sudo docker stop "$container" 2>/dev/null || true
+            sudo docker rm -f "$container" 2>/dev/null || true
+        fi
+    done
+    sleep 2
+    
+    # Verificar novamente
+    CONFLICT_CONTAINERS=$(sudo docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E "^evolution_postgres$|^evolution_redis$|^evolution_api$" || true)
+    if [ -n "$CONFLICT_CONTAINERS" ]; then
+        error_exit "Não foi possível remover containers conflitantes: $CONFLICT_CONTAINERS. Remova manualmente: sudo docker rm -f $CONFLICT_CONTAINERS"
+    fi
+fi
+success "Nenhum conflito de nomes detectado"
 
 # Subir containers
 info "Iniciando containers Docker..."
@@ -349,6 +397,17 @@ else
     sudo docker pull postgres:15-alpine || warning "Falha ao baixar imagem postgres"
     sudo docker pull redis:alpine || warning "Falha ao baixar imagem redis"
     
+    # Remover containers conflitantes antes de tentar novamente
+    info "Removendo containers conflitantes antes da segunda tentativa..."
+    for container_name in evolution_postgres evolution_redis evolution_api; do
+        if sudo docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${container_name}$"; then
+            info "Removendo: $container_name"
+            sudo docker stop "$container_name" 2>/dev/null || true
+            sudo docker rm -f "$container_name" 2>/dev/null || true
+        fi
+    done
+    sleep 2
+    
     # Tentar novamente
     info "Tentando iniciar containers novamente..."
     TEMP_OUTPUT2=$(mktemp)
@@ -359,8 +418,40 @@ else
     else
         echo -e "${RED}Erro na segunda tentativa:${NC}"
         cat "$TEMP_OUTPUT2"
+        ERROR_CONTENT=$(cat "$TEMP_OUTPUT2")
         rm -f "$TEMP_OUTPUT2"
-        error_exit "Falha ao iniciar containers Docker mesmo após baixar imagens. Verifique os logs acima."
+        
+        # Verificar se o erro é de conflito de nomes
+        if echo "$ERROR_CONTENT" | grep -q "container name.*is already in use"; then
+            warning "Detectado conflito de nomes de containers. Tentando remover containers órfãos..."
+            
+            # Extrair nomes de containers do erro e remover
+            for container_name in evolution_postgres evolution_redis evolution_api; do
+                CONTAINER_ID=$(sudo docker ps -a --filter "name=^${container_name}$" --format '{{.ID}}' 2>/dev/null || true)
+                if [ -n "$CONTAINER_ID" ]; then
+                    info "Removendo container órfão: $container_name (ID: $CONTAINER_ID)"
+                    sudo docker rm -f "$CONTAINER_ID" 2>/dev/null || true
+                fi
+            done
+            
+            sleep 2
+            
+            # Tentar uma última vez
+            info "Tentativa final após remover containers órfãos..."
+            TEMP_OUTPUT3=$(mktemp)
+            if $DOCKER_COMPOSE_CMD up -d > "$TEMP_OUTPUT3" 2>&1; then
+                success "Containers Docker iniciados na tentativa final"
+                rm -f "$TEMP_OUTPUT3"
+                sleep 5
+            else
+                echo -e "${RED}Erro na tentativa final:${NC}"
+                cat "$TEMP_OUTPUT3"
+                rm -f "$TEMP_OUTPUT3"
+                error_exit "Falha ao iniciar containers Docker. Execute manualmente: sudo docker rm -f \$(sudo docker ps -a -q --filter 'name=evolution_')"
+            fi
+        else
+            error_exit "Falha ao iniciar containers Docker mesmo após baixar imagens. Verifique os logs acima."
+        fi
     fi
 fi
 
