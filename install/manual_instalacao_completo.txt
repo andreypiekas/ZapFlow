@@ -75,6 +75,12 @@ services:
       - POSTGRES_DB=evolution
     volumes:
       - evolution_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d evolution || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   evolution_redis:
     image: redis:alpine
