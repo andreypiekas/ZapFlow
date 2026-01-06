@@ -2776,9 +2776,21 @@ const App: React.FC = () => {
                                                 // PRIORIDADE 3: Para mensagens do agente, verifica por conteúdo + timestamp (janela maior)
                                                 // IMPORTANTE: Mensagens do agente podem ter sido adicionadas localmente sem whatsappMessageId
                                                 // e depois recebidas via Socket.IO com whatsappMessageId, então precisa verificar por conteúdo
+                                                // CRÍTICO: A mensagem local pode não ter o cabeçalho "Andrey:\n" mas a do Socket.IO tem
+                                                // Então normaliza o conteúdo removendo o cabeçalho antes de comparar
                                                 if (mapped.sender === 'agent' && m.sender === 'agent') {
-                                                    const contentMatch = m.content && mapped.content && 
-                                                        m.content.trim() === mapped.content.trim();
+                                                    // Função para normalizar conteúdo removendo cabeçalho (ex: "Andrey:\n" ou "Andrey - Departamento:\n")
+                                                    const normalizeContent = (content: string): string => {
+                                                        if (!content) return '';
+                                                        // Remove padrões como "Nome:\n" ou "Nome - Departamento:\n" do início
+                                                        const headerPattern = /^[^:]+(?: - [^:]+)?:\n?/;
+                                                        return content.replace(headerPattern, '').trim();
+                                                    };
+                                                    
+                                                    const normalizedLocal = normalizeContent(m.content || '');
+                                                    const normalizedMapped = normalizeContent(mapped.content || '');
+                                                    const contentMatch = normalizedLocal && normalizedMapped && 
+                                                        normalizedLocal === normalizedMapped;
                                                     // Janela maior para mensagens do agente (até 60 segundos) para pegar mensagens recém-enviadas
                                                     const timeMatch = m.timestamp && mapped.timestamp && 
                                                         Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 60000;
