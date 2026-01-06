@@ -17,7 +17,7 @@ if [ -z "$1" ]; then
     if [ -z "$SERVER_IP" ]; then
         echo -e "${RED}❌ Não foi possível detectar o IP do servidor automaticamente.${NC}"
         echo -e "${YELLOW}Por favor, forneça o IP manualmente:${NC}"
-        echo -e "${YELLOW}   ./scripts/generate-docker-compose.sh 192.168.101.234${NC}"
+        echo -e "${YELLOW}   ./scripts/generate-docker-compose.sh 192.168.3.206${NC}"
         exit 1
     fi
 else

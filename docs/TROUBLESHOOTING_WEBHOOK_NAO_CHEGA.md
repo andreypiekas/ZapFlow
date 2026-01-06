@@ -10,7 +10,7 @@ Teste se a Evolution API consegue acessar o backend:
 
 ```bash
 # Da VM onde está a Evolution API (ou do mesmo servidor)
-curl http://192.168.101.234:3001/
+curl http://192.168.3.206:3001/
 
 # Deve retornar algo como:
 # {"service":"Zentria Backend API","version":"1.0.0",...}
@@ -40,7 +40,7 @@ Acesse a interface da Evolution API e verifique:
 1. **Events → Webhook**
 2. Confirme:
    - ✅ **Enabled**: ON (verde)
-   - ✅ **URL**: `http://192.168.101.234:3001/api/webhook/evolution`
+   - ✅ **URL**: `http://192.168.3.206:3001/api/webhook/evolution`
    - ✅ **Webhook Base64**: ON (verde)
    - ✅ **MESSAGES_UPSERT**: ON (verde)
 
@@ -60,13 +60,13 @@ Acesse a interface da Evolution API e verifique:
 
 ```bash
 # Parar instância
-curl -X DELETE http://192.168.101.234:8080/instance/delete/piekas \
+curl -X DELETE http://192.168.3.206:8080/instance/delete/piekas \
   -H "apikey: B8349283-F143-429D-B6C2-9386E8016558"
 
 # Aguardar alguns segundos
 
 # Criar/reiniciar instância (se necessário)
-curl -X POST http://192.168.101.234:8080/instance/create \
+curl -X POST http://192.168.3.206:8080/instance/create \
   -H "Content-Type: application/json" \
   -H "apikey: B8349283-F143-429D-B6C2-9386E8016558" \
   -d '{
@@ -99,15 +99,15 @@ Da VM onde está a Evolution API, teste:
 
 ```bash
 # Teste HTTP básico
-curl -v http://192.168.101.234:3001/
+curl -v http://192.168.3.206:3001/
 
 # Teste o endpoint de webhook diretamente
-curl -v -X POST http://192.168.101.234:3001/api/webhook/evolution \
+curl -v -X POST http://192.168.3.206:3001/api/webhook/evolution \
   -H "Content-Type: application/json" \
   -d '{"test": "ok"}'
 
 # Verificar se há firewall bloqueando
-telnet 192.168.101.234 3001
+telnet 192.168.3.206 3001
 # Se conectar, está OK. Se der timeout/refused, firewall está bloqueando
 ```
 
@@ -115,9 +115,9 @@ telnet 192.168.101.234 3001
 
 ⚠️ **URL deve ser acessível da Evolution API!**
 
-- Se a Evolution API está em `192.168.101.234:8080`
-- E o backend está em `192.168.101.234:3001`
-- A URL deve ser: `http://192.168.101.234:3001/api/webhook/evolution`
+- Se a Evolution API está em `192.168.3.206:8080`
+- E o backend está em `192.168.3.206:3001`
+- A URL deve ser: `http://192.168.3.206:3001/api/webhook/evolution`
 
 **NÃO use:**
 - ❌ `localhost` ou `127.0.0.1` (Evolution API não consegue acessar)
@@ -125,7 +125,7 @@ telnet 192.168.101.234 3001
 - ❌ URLs externas se não houver rota de rede
 
 **USE:**
-- ✅ IP real da VM/servidor (`192.168.101.234`)
+- ✅ IP real da VM/servidor (`192.168.3.206`)
 - ✅ URL completa com protocolo (`http://`)
 - ✅ Porta correta (`3001`)
 
@@ -134,8 +134,8 @@ telnet 192.168.101.234 3001
 Se o toggle **"Webhook by Events"** estiver ON, a Evolution API pode estar tentando enviar para uma URL diferente.
 
 **Com "Webhook by Events" ON:**
-- URL base: `http://192.168.101.234:3001/api/webhook/evolution`
-- URL real usada: `http://192.168.101.234:3001/api/webhook/evolution/MESSAGES_UPSERT`
+- URL base: `http://192.168.3.206:3001/api/webhook/evolution`
+- URL real usada: `http://192.168.3.206:3001/api/webhook/evolution/MESSAGES_UPSERT`
 
 **Solução:**
 - Opção 1: Desative "Webhook by Events" (OFF)
@@ -155,7 +155,7 @@ Versões antigas ou muito recentes podem ter bugs com webhooks.
 
 ```bash
 # Ver versão
-curl http://192.168.101.234:8080/
+curl http://192.168.3.206:8080/
 ```
 
 Recomendada: **v2.3.4** (conforme `docker-compose.yml`)
@@ -189,7 +189,7 @@ netstat -tulpn | grep 3001
 
 ```bash
 # Da Evolution API ou mesmo servidor, teste:
-curl -X POST http://192.168.101.234:3001/api/webhook/evolution \
+curl -X POST http://192.168.3.206:3001/api/webhook/evolution \
   -H "Content-Type: application/json" \
   -d '{
     "event": "MESSAGES_UPSERT",
@@ -217,7 +217,7 @@ Se funcionar, o problema é a Evolution API não enviando. Se não funcionar, pr
 Antes de desistir, confirme:
 
 - [ ] Backend está rodando (`pm2 status` mostra `backend` online)
-- [ ] Backend está acessível (`curl http://192.168.101.234:3001/` funciona)
+- [ ] Backend está acessível (`curl http://192.168.3.206:3001/` funciona)
 - [ ] Webhook Enabled está ON na Evolution API
 - [ ] URL do webhook está correta (IP real, não localhost)
 - [ ] Webhook Base64 está ON

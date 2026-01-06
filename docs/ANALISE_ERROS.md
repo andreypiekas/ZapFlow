@@ -20,7 +20,7 @@ Análise do arquivo de erros (`e:\Downloads\error`) com **22.237 linhas** de log
 ```
 
 **Causa Provável:**
-- WebSocket tentando conectar em `ws://192.168.101.234:8080/chat/ZapFlow`
+- WebSocket tentando conectar em `ws://192.168.3.206:8080/chat/ZapFlow`
 - Code 1006 indica conexão anormal (sem handshake de fechamento)
 - Pode ser: servidor não aceitando conexões WS, firewall, ou instância não disponível
 
@@ -42,7 +42,7 @@ Análise do arquivo de erros (`e:\Downloads\error`) com **22.237 linhas** de log
 [fetchChatMessages] ✅ Chat correspondente encontrado: 554984329374@s.whatsapp.net
 [fetchChatMessages] Estrutura do chat: {hasMessages: false, messagesType: 'undefined', messagesIsArray: false, messagesLength: 0, ...}
 [fetchChatMessages] ⚠️ Chat encontrado mas sem mensagens no campo messages
-[fetchChatMessages] ⚠️ Nenhuma mensagem encontrada em http://192.168.101.234:8080/chat/findChats/ZapFlow
+[fetchChatMessages] ⚠️ Nenhuma mensagem encontrada em http://192.168.3.206:8080/chat/findChats/ZapFlow
 ```
 
 **Causa Provável:**
@@ -199,7 +199,7 @@ cdn.tailwindcss.com should not be used in production. To use Tailwind CSS in pro
 
 ## 📝 Notas Técnicas
 
-- **Servidor:** `192.168.101.234:8080`
+- **Servidor:** `192.168.3.206:8080`
 - **Instância:** `ZapFlow`
 - **API:** Evolution API
 - **Formato esperado:** Chats com array `messages` dentro

@@ -7,7 +7,7 @@ Este guia ajuda a diagnosticar se o webhook da Evolution API está enviando even
 Antes de verificar, confirme que:
 
 - [ ] **Webhook Enabled**: ON (verde) na Evolution API
-- [ ] **URL do Webhook**: `http://192.168.101.234:3001/api/webhook/evolution`
+- [ ] **URL do Webhook**: `http://192.168.3.206:3001/api/webhook/evolution`
 - [ ] **Webhook Base64**: ON (verde) na Evolution API
 - [ ] **MESSAGES_UPSERT**: ON (verde) na lista de eventos
 - [ ] **Backend rodando**: Verifique com `pm2 status` ou `pm2 logs backend`
@@ -62,7 +62,7 @@ Teste se o endpoint está acessível e funcionando:
 
 ```bash
 # De dentro da VM ou do mesmo servidor do backend
-curl -X POST http://192.168.101.234:3001/api/webhook/evolution \
+curl -X POST http://192.168.3.206:3001/api/webhook/evolution \
   -H "Content-Type: application/json" \
   -d '{
     "event": "test.event",
@@ -145,7 +145,7 @@ WHERE data_type = 'webhook_messages'
 2. Teste a conectividade da Evolution API para o backend:
    ```bash
    # Da VM onde está a Evolution API, teste se consegue acessar o backend
-   curl http://192.168.101.234:3001/
+   curl http://192.168.3.206:3001/
    ```
 
 3. Verifique se a porta está aberta:

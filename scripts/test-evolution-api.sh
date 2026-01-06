@@ -2,7 +2,7 @@
 
 # Script para testar endpoints da Evolution API e diagnosticar erro 500
 
-BASE_URL="http://192.168.101.234:8080"
+BASE_URL="${BASE_URL:-http://192.168.3.206:8080}"
 API_KEY="B8349283-F143-429D-B6C2-9386E8016558"
 INSTANCE_NAME="ZapFlow"
 

@@ -20,7 +20,9 @@ const pool = new Pool({
 
 // Middleware CORS
 const corsOrigins = process.env.CORS_ORIGIN?.split(',').map(o => o.trim()) || ['http://localhost:5173', 'http://localhost:3000'];
-const serverIP = process.env.SERVER_IP || '192.168.101.234'; // IP padrão da VM
+// IP do servidor (opcional): usado para liberar CORS do IP do host quando não for localhost.
+// Dica: defina `SERVER_IP=192.168.3.206` no ambiente em produção.
+const serverIP = process.env.SERVER_IP;
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -40,7 +42,7 @@ app.use(cors({
     }
     
     // Permitir se origin contém o IP do servidor (frontend e outros serviços na mesma rede)
-    if (serverIP && (origin.includes(serverIP) || origin.includes('192.168.101.234'))) {
+    if (serverIP && origin.includes(serverIP)) {
       return callback(null, true);
     }
     

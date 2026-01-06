@@ -43,7 +43,7 @@ Você pode verificar todas as versões disponíveis diretamente no Docker Hub ou
 
 ```bash
 ssh usuario@ip_da_vm
-# Exemplo: ssh root@192.168.101.234
+# Exemplo: ssh root@192.168.3.206
 ```
 
 ### 2. Navegar para o diretório da Evolution API
