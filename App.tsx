@@ -2733,6 +2733,14 @@ const App: React.FC = () => {
                                             
                                             // Para mensagens enviadas (agent), tenta encontrar mensagem local para atualizar
                                             if (mapped.sender === 'agent') {
+                                                // Função para normalizar conteúdo removendo cabeçalho (ex: "Andrey:\n" ou "Andrey - Departamento:\n")
+                                                const normalizeContent = (content: string): string => {
+                                                    if (!content) return '';
+                                                    // Remove padrões como "Nome:\n" ou "Nome - Departamento:\n" do início
+                                                    const headerPattern = /^[^:]+(?: - [^:]+)?:\n?/;
+                                                    return content.replace(headerPattern, '').trim();
+                                                };
+                                                
                                                 // Procura mensagem local sem whatsappMessageId mas com mesmo conteúdo e timestamp próximo
                                                 messageIndex = chat.messages.findIndex(m => {
                                                     // Se já tem whatsappMessageId, verifica por ele (mais confiável)
@@ -2740,13 +2748,17 @@ const App: React.FC = () => {
                                                         m.whatsappMessageId === mapped.whatsappMessageId) {
                                                         return true;
                                                     }
-                                                    // Se não tem whatsappMessageId, verifica por conteúdo + timestamp (mensagem local pendente)
-                                                    // Aumenta janela de tempo para 30 segundos para capturar confirmações com delay
+                                                    // Se não tem whatsappMessageId, verifica por conteúdo normalizado + timestamp (mensagem local pendente)
+                                                    // CRÍTICO: A mensagem local pode não ter o cabeçalho "Andrey:\n" mas a do Socket.IO tem
+                                                    // Então normaliza o conteúdo removendo o cabeçalho antes de comparar
                                                     if (!m.whatsappMessageId && m.sender === 'agent') {
-                                                        const contentMatch = m.content && mapped.content && 
-                                                            m.content.trim() === mapped.content.trim();
+                                                        const normalizedLocal = normalizeContent(m.content || '');
+                                                        const normalizedMapped = normalizeContent(mapped.content || '');
+                                                        const contentMatch = normalizedLocal && normalizedMapped && 
+                                                            normalizedLocal === normalizedMapped;
+                                                        // Janela maior para mensagens do agente (até 60 segundos) para capturar confirmações com delay
                                                         const timeMatch = m.timestamp && mapped.timestamp && 
-                                                            Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 30000;
+                                                            Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 60000;
                                                         if (contentMatch && timeMatch) {
                                                             return true;
                                                         }
