@@ -2793,16 +2793,33 @@ const App: React.FC = () => {
                                                         return timeDiff;
                                                     }
                                                     
-                                                    // PRIORIDADE 2: Se timestamps são idênticos (timeDiff === 0), usa ordem de inserção (_sortOrder)
-                                                    // Isso garante que mensagens com mesmo timestamp mantenham a ordem de chegada
-                                                    const orderA = (a as any)._sortOrder ?? 0;
-                                                    const orderB = (b as any)._sortOrder ?? 0;
-                                                    if (orderA !== orderB) {
-                                                        return orderA - orderB;
-                                                    }
-                                                    
-                                                    // PRIORIDADE 3: Se tudo é igual, mantém ordem original (estável)
-                                                    return 0;
+                        // PRIORIDADE 2: Se timestamps são idênticos, usa whatsappMessageId para desempate
+                        // Isso garante ordem estável mesmo quando timestamps são idênticos
+                        if (a.whatsappMessageId && b.whatsappMessageId) {
+                            return a.whatsappMessageId.localeCompare(b.whatsappMessageId);
+                        }
+                        if (a.whatsappMessageId && !b.whatsappMessageId) {
+                            return -1; // Mensagem com whatsappMessageId vem antes
+                        }
+                        if (!a.whatsappMessageId && b.whatsappMessageId) {
+                            return 1; // Mensagem com whatsappMessageId vem antes
+                        }
+                        
+                        // PRIORIDADE 3: Se timestamps são idênticos, usa ordem de inserção (_sortOrder)
+                        // Isso garante que mensagens com mesmo timestamp mantenham a ordem de chegada
+                        const orderA = (a as any)._sortOrder ?? 0;
+                        const orderB = (b as any)._sortOrder ?? 0;
+                        if (orderA !== orderB) {
+                            return orderA - orderB;
+                        }
+                        
+                        // PRIORIDADE 4: Se tudo é igual, usa ID para desempate (ordem estável)
+                        if (a.id && b.id) {
+                            return a.id.localeCompare(b.id);
+                        }
+                        
+                        // PRIORIDADE 5: Se tudo é igual, mantém ordem original (estável)
+                        return 0;
                                                 });
                                                 
                                                 // Lógica para processar mensagens de clientes finalizados
@@ -3782,27 +3799,91 @@ const App: React.FC = () => {
             if (c.id === updatedChat.id) {
                 // Se o chat atualizado tem mensagens, faz merge preservando ordem
                 if (updatedChat.messages.length > 0 && c.messages.length > 0) {
+                    // Função para gerar chave única de mensagem
+                    const getMessageKey = (msg: Message): string => {
+                        // PRIORIDADE 1: Usa whatsappMessageId se disponível (mais confiável)
+                        if (msg.whatsappMessageId) {
+                            return `whatsapp_${msg.whatsappMessageId}`;
+                        }
+                        // PRIORIDADE 2: Usa id se disponível
+                        if (msg.id) {
+                            return `id_${msg.id}`;
+                        }
+                        // PRIORIDADE 3: Gera chave baseada em timestamp + conteúdo + sender
+                        const timestamp = msg.timestamp?.getTime() || Date.now();
+                        const content = msg.content?.substring(0, 50) || '';
+                        const sender = msg.sender || 'unknown';
+                        return `gen_${timestamp}_${sender}_${content}`;
+                    };
+                    
+                    // Função para verificar se mensagens são duplicadas
+                    const isDuplicate = (msg1: Message, msg2: Message): boolean => {
+                        // Se ambas têm whatsappMessageId e são iguais, são duplicatas
+                        if (msg1.whatsappMessageId && msg2.whatsappMessageId) {
+                            return msg1.whatsappMessageId === msg2.whatsappMessageId;
+                        }
+                        // Se ambas têm id e são iguais, são duplicatas
+                        if (msg1.id && msg2.id) {
+                            return msg1.id === msg2.id;
+                        }
+                        // Se têm mesmo timestamp, conteúdo e sender, são duplicatas
+                        const time1 = msg1.timestamp?.getTime() || 0;
+                        const time2 = msg2.timestamp?.getTime() || 0;
+                        if (time1 === time2 && time1 !== 0) {
+                            const content1 = msg1.content?.trim() || '';
+                            const content2 = msg2.content?.trim() || '';
+                            const sender1 = msg1.sender || '';
+                            const sender2 = msg2.sender || '';
+                            if (content1 === content2 && content1 !== '' && sender1 === sender2) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    };
+                    
                     const messageMap = new Map<string, Message>();
                     
                     // Adiciona mensagens existentes primeiro
                     c.messages.forEach(msg => {
-                        const key = msg.id || `${msg.timestamp?.getTime()}_${msg.content?.substring(0, 50)}`;
+                        const key = getMessageKey(msg);
                         messageMap.set(key, msg);
                     });
                     
                     // Adiciona/atualiza com mensagens novas (prioriza novas se forem mais recentes)
                     updatedChat.messages.forEach(msg => {
-                        const key = msg.id || `${msg.timestamp?.getTime()}_${msg.content?.substring(0, 50)}`;
+                        const key = getMessageKey(msg);
                         const existing = messageMap.get(key);
                         
                         if (!existing) {
-                            // Nova mensagem, adiciona
-                            messageMap.set(key, msg);
+                            // Verifica se não é duplicata de outra mensagem no map
+                            let isDup = false;
+                            for (const existingMsg of messageMap.values()) {
+                                if (isDuplicate(msg, existingMsg)) {
+                                    isDup = true;
+                                    // Se a nova mensagem tem mais informações (whatsappMessageId), substitui
+                                    if (msg.whatsappMessageId && !existingMsg.whatsappMessageId) {
+                                        const existingKey = getMessageKey(existingMsg);
+                                        messageMap.delete(existingKey);
+                                        messageMap.set(key, msg);
+                                    }
+                                    break;
+                                }
+                            }
+                            if (!isDup) {
+                                messageMap.set(key, msg);
+                            }
                         } else if (msg.timestamp && existing.timestamp) {
                             // Se a nova for mais recente, substitui
                             if (msg.timestamp.getTime() > existing.timestamp.getTime()) {
                                 messageMap.set(key, msg);
                             }
+                            // Se a nova tem whatsappMessageId e a existente não, substitui
+                            else if (msg.whatsappMessageId && !existing.whatsappMessageId) {
+                                messageMap.set(key, msg);
+                            }
+                        } else if (msg.whatsappMessageId && !existing.whatsappMessageId) {
+                            // Nova tem whatsappMessageId, existente não - substitui
+                            messageMap.set(key, msg);
                         }
                     });
                     
