@@ -543,8 +543,21 @@ export async function getUpcomingHolidays(
       const todayStr = today.toISOString().split('T')[0];
       const municipalEndDateStr = municipalEndDate.toISOString().split('T')[0];
       
+      console.log(`[HolidaysService] 🔍 Buscando feriados municipais do banco para estados: ${selectedStates.join(', ')}`);
+      
       for (const stateCode of selectedStates) {
+        if (onStatusUpdate) {
+          onStatusUpdate({
+            isSearching: true,
+            quotaExceeded,
+            currentState: stateCode,
+            progressMessage: `Buscando feriados de ${stateCode} no banco de dados...`
+          });
+        }
+        
         const dbHolidays = await getUpcomingMunicipalHolidays(15, stateCode);
+        console.log(`[HolidaysService] 📊 Encontrados ${dbHolidays.length} feriados municipais no banco para ${stateCode}`);
+        
         const formattedDBHolidays: Holiday[] = dbHolidays
           .filter(h => {
             const holidayDate = new Date(h.date);
@@ -560,9 +573,13 @@ export async function getUpcomingHolidays(
         
         if (formattedDBHolidays.length > 0) {
           allMunicipalHolidays.push(...formattedDBHolidays);
-          console.log(`[HolidaysService] ✅ Carregados ${formattedDBHolidays.length} feriados municipais do banco para ${stateCode}`);
+          console.log(`[HolidaysService] ✅ Carregados ${formattedDBHolidays.length} feriados municipais do banco para ${stateCode} (filtrados para próximos 15 dias)`);
+        } else {
+          console.log(`[HolidaysService] ⚠️ Nenhum feriado municipal encontrado no banco para ${stateCode} nos próximos 15 dias`);
         }
       }
+      
+      console.log(`[HolidaysService] 📊 Total de feriados municipais encontrados no banco: ${allMunicipalHolidays.length}`);
     } catch (dbError) {
       console.warn('[HolidaysService] Erro ao buscar feriados municipais do banco, continuando com busca via IA:', dbError);
     }
