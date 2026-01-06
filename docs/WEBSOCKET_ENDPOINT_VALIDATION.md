@@ -2,7 +2,7 @@
 
 ## Problema Identificado
 
-O erro `404 Not Found` ao acessar `http://192.168.3.206:8080/chat/ZapFlow` indica que esse endpoint **não existe** na Evolution API.
+O erro `404 Not Found` ao acessar `http://SEU_IP_SERVIDOR:8080/chat/ZapFlow` indica que esse endpoint **não existe** na Evolution API.
 
 ## Endpoints Corretos da Evolution API
 
@@ -40,17 +40,17 @@ O WebSocket da Evolution API **NÃO usa** o endpoint `/chat/{instanceName}`.
 
 1. **Socket.IO** (mais comum):
    ```
-   ws://192.168.3.206:8080/socket.io/?EIO=4&transport=websocket&instance=ZapFlow
+   ws://SEU_IP_SERVIDOR:8080/socket.io/?EIO=4&transport=websocket&instance=ZapFlow
    ```
 
 2. **WebSocket direto** (se configurado):
    ```
-   ws://192.168.3.206:8080/ws/ZapFlow
+   ws://SEU_IP_SERVIDOR:8080/ws/ZapFlow
    ```
 
 3. **WebSocket com autenticação**:
    ```
-   ws://192.168.3.206:8080/socket.io/?instance=ZapFlow
+   ws://SEU_IP_SERVIDOR:8080/socket.io/?instance=ZapFlow
    ```
 
 ## Como Verificar o Endpoint Correto
@@ -81,12 +81,12 @@ environment:
 No navegador (Console do DevTools):
 ```javascript
 // Teste 1: Socket.IO
-const ws1 = new WebSocket('ws://192.168.3.206:8080/socket.io/?EIO=4&transport=websocket&instance=ZapFlow');
+const ws1 = new WebSocket('ws://SEU_IP_SERVIDOR:8080/socket.io/?EIO=4&transport=websocket&instance=ZapFlow');
 ws1.onopen = () => console.log('✅ Socket.IO conectado');
 ws1.onerror = (e) => console.error('❌ Socket.IO erro:', e);
 
 // Teste 2: WebSocket direto
-const ws2 = new WebSocket('ws://192.168.3.206:8080/ws/ZapFlow');
+const ws2 = new WebSocket('ws://SEU_IP_SERVIDOR:8080/ws/ZapFlow');
 ws2.onopen = () => console.log('✅ WebSocket direto conectado');
 ws2.onerror = (e) => console.error('❌ WebSocket direto erro:', e);
 ```

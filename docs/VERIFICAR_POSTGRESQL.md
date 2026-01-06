@@ -137,7 +137,7 @@ JWT_SECRET=seu_jwt_secret_super_seguro
 PORT=3001
 
 # CORS
-CORS_ORIGIN=http://192.168.3.206:5173,http://localhost:5173
+CORS_ORIGIN=http://SEU_IP_SERVIDOR:5173,http://localhost:5173
 ```
 
 **Salvar:** `Ctrl+X`, depois `Y`, depois `Enter`

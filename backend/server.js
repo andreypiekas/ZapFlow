@@ -7,6 +7,7 @@ import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import dns from 'dns';
 import net from 'net';
+import os from 'os';
 
 dotenv.config();
 
@@ -24,8 +25,28 @@ const pool = new Pool({
 // Middleware CORS
 const corsOrigins = process.env.CORS_ORIGIN?.split(',').map(o => o.trim()) || ['http://localhost:5173', 'http://localhost:3000'];
 // IP do servidor (opcional): usado para liberar CORS do IP do host quando não for localhost.
-// Dica: defina `SERVER_IP=192.168.3.206` no ambiente em produção.
-const serverIP = process.env.SERVER_IP;
+// Se não estiver definido, tentamos detectar automaticamente (zero configuração manual).
+const detectServerIp = () => {
+  try {
+    const nets = os.networkInterfaces();
+    for (const name of Object.keys(nets)) {
+      const iface = nets[name] || [];
+      for (const addr of iface) {
+        if (!addr) continue;
+        // Node 18+: addr.family pode ser number (4/6) ou string ('IPv4'/'IPv6')
+        const isV4 = addr.family === 4 || addr.family === 'IPv4';
+        if (isV4 && !addr.internal && addr.address && !addr.address.startsWith('169.254.')) {
+          return addr.address;
+        }
+      }
+    }
+  } catch {
+    // noop
+  }
+  return null;
+};
+
+const serverIP = process.env.SERVER_IP || detectServerIp();
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -1873,7 +1894,7 @@ app.get('/api/health', async (req, res) => {
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
   console.log(`📊 Health check: http://0.0.0.0:${PORT}/api/health`);
-  console.log(`🌐 Acessível em: http://localhost:${PORT} e http://${process.env.SERVER_IP || 'localhost'}:${PORT}`);
+  console.log(`🌐 Acessível em: http://localhost:${PORT} e http://${serverIP || 'localhost'}:${PORT}`);
 });
 
 // Tratamento de erros

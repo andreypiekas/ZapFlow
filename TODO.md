@@ -106,12 +106,16 @@
   - Se não suportar, definir alternativa (ex.: selo apenas na UI + texto opcional).
 
 ---
-## 🔴 Prioritário
 
 ### 6. IP do servidor automático (zero configuração manual)
-**Status:** 🔴 Pendente  
+**Status:** ✅ Concluído  
 **Prioridade:** Alta  
 **Objetivo:** Nada deve exigir edição manual de IP em arquivos/scripts.
+
+**Implementação (resumo):**
+- Frontend: URL do backend auto‑derivada de `window.location` quando `VITE_API_URL` não está definido.
+- Backend: detecção automática de `SERVER_IP` (fallback) para liberar CORS e melhorar logs.
+- Infra/Docs/Scripts: removido IP hardcoded (`docker-compose.yml` usa `SERVER_IP`; docs/scripts usam placeholders).
 
 **Tarefas detalhadas:**
 - `install/autoinstall.txt`: detectar IP automaticamente e persistir em `.env`/config.
@@ -119,6 +123,7 @@
 - Garantir CORS e URLs internos usando o `SERVER_IP` detectado.
 
 ---
+## 🔴 Prioritário
 
 ### 7. Webhook persistente (global) — não configurável “por máquina”
 **Status:** 🔴 Pendente  

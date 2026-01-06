@@ -5,9 +5,36 @@ import { storageService } from './storageService';
 import { Holiday } from './holidaysService';
 
 const getApiBaseUrl = () => {
-  const envUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3001';
+  const envUrl = (import.meta as any).env?.VITE_API_URL as string | undefined;
+  let rawUrl = (envUrl || '').trim();
+
+  // Se não há VITE_API_URL, deriva automaticamente do host atual.
+  // Objetivo: zero configuração manual de IP (funciona em dev e em produção por IP/domínio).
+  if (!rawUrl) {
+    try {
+      if (typeof window !== 'undefined' && window.location) {
+        const { protocol, hostname, port, origin } = window.location;
+        const devPorts = new Set(['5173', '4173', '3000']);
+
+        // Em dev (Vite/CRA), backend costuma rodar em 3001 no mesmo host.
+        if (devPorts.has(port)) {
+          rawUrl = `${protocol}//${hostname}:3001`;
+        } else {
+          // Em produção, preferimos same-origin (proxy/reverse-proxy).
+          rawUrl = origin;
+        }
+      }
+    } catch {
+      // noop
+    }
+  }
+
+  if (!rawUrl) {
+    rawUrl = 'http://localhost:3001';
+  }
+
   // Remove /api do final se presente
-  const baseUrl = envUrl.replace(/\/api\/?$/, '');
+  const baseUrl = rawUrl.replace(/\/api\/?$/, '');
   // Log removido para produção - muito verboso
   // if (!(window as any).__API_BASE_URL_LOGGED) {
   //   console.log(`[ApiService] URL da API configurada: ${baseUrl}`);
