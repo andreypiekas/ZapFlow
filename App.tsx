@@ -2758,21 +2758,34 @@ const App: React.FC = () => {
                                                     // CRÍTICO: A mensagem local pode não ter o cabeçalho "Andrey:\n" mas a do Socket.IO tem
                                                     // Então normaliza o conteúdo removendo o cabeçalho antes de comparar
                                                     if (!m.whatsappMessageId && m.sender === 'agent') {
-                                                        const normalizedLocal = normalizeContent(m.content || '');
-                                                        const normalizedMapped = normalizeContent(mapped.content || '');
-                                                        const contentMatch = normalizedLocal && normalizedMapped && 
-                                                            normalizedLocal === normalizedMapped;
-                                                        // Janela maior para mensagens do agente (até 60 segundos) para capturar confirmações com delay
+                                                        // Verifica se é uma mensagem local recente (ID começa com "m_" e timestamp próximo)
+                                                        const isLocalMessage = m.id && m.id.startsWith('m_');
                                                         const timeMatch = m.timestamp && mapped.timestamp && 
                                                             Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 60000;
                                                         
-                                                        if (contentMatch && timeMatch) {
-                                                            console.log(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem local por conteúdo normalizado - local="${normalizedLocal}", mapped="${normalizedMapped}", timeDiff=${Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime())}ms`);
-                                                            return true;
-                                                        } else {
-                                                            // Log para debug quando não encontra
-                                                            if (m.timestamp && mapped.timestamp && Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 60000) {
-                                                                console.log(`[App] ⚠️ [DEBUG] Socket.IO: Mensagem local não encontrada - local="${m.content?.substring(0, 50)}", normalizedLocal="${normalizedLocal}", mapped="${mapped.content?.substring(0, 50)}", normalizedMapped="${normalizedMapped}", contentMatch=${contentMatch}, timeMatch=${timeMatch}`);
+                                                        if (isLocalMessage && timeMatch) {
+                                                            // Se é mensagem local recente, verifica conteúdo normalizado
+                                                            const normalizedLocal = normalizeContent(m.content || '');
+                                                            const normalizedMapped = normalizeContent(mapped.content || '');
+                                                            const contentMatch = normalizedLocal && normalizedMapped && 
+                                                                normalizedLocal === normalizedMapped;
+                                                            
+                                                            if (contentMatch) {
+                                                                console.log(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem local por conteúdo normalizado - local="${normalizedLocal}", mapped="${normalizedMapped}", timeDiff=${Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime())}ms`);
+                                                                return true;
+                                                            } else {
+                                                                // Se conteúdo não bate exatamente, mas é mensagem local muito recente (últimos 5 segundos), considera match
+                                                                // Isso evita duplicação quando há pequenas diferenças no conteúdo
+                                                                const veryRecent = Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 5000;
+                                                                if (veryRecent && normalizedLocal && normalizedMapped) {
+                                                                    // Verifica se o conteúdo normalizado está contido um no outro (mais flexível)
+                                                                    const localInMapped = normalizedMapped.includes(normalizedLocal);
+                                                                    const mappedInLocal = normalizedLocal.includes(normalizedMapped);
+                                                                    if (localInMapped || mappedInLocal) {
+                                                                        console.log(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem local por conteúdo parcial (muito recente) - local="${normalizedLocal}", mapped="${normalizedMapped}"`);
+                                                                        return true;
+                                                                    }
+                                                                }
                                                             }
                                                         }
                                                     }
