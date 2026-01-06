@@ -249,6 +249,42 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Media Viewer (Lightbox) - estilo WhatsApp Web
+  type ImageViewerState = { url: string; fileName?: string } | null;
+  const [imageViewer, setImageViewer] = useState<ImageViewerState>(null);
+
+  const closeImageViewer = useCallback(() => setImageViewer(null), []);
+  const openImageViewer = useCallback((url: string, fileName?: string) => {
+    if (!url) return;
+    setImageViewer({ url, fileName });
+  }, []);
+
+  const downloadImageViewer = useCallback(() => {
+    if (!imageViewer?.url) return;
+    const url = imageViewer.url;
+    const fileName = imageViewer.fileName || 'imagem';
+    try {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.rel = 'noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  }, [imageViewer]);
+
+  useEffect(() => {
+    if (!imageViewer) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeImageViewer();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [imageViewer, closeImageViewer]);
+
   // Link Preview cache (URL -> preview)
   type LinkPreviewState = { status: 'loading' | 'ready' | 'error'; data?: LinkPreview };
   const [linkPreviews, setLinkPreviews] = useState<Record<string, LinkPreviewState>>({});
@@ -2144,7 +2180,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             src={finalImageUrl} 
             alt="Imagem enviada" 
             className="rounded-lg max-w-full sm:max-w-sm mb-1 object-cover max-h-64 cursor-pointer hover:opacity-95" 
-            onClick={() => window.open(finalImageUrl, '_blank')}
+            onClick={() => openImageViewer(finalImageUrl, msg.fileName)}
             onLoad={() => {
               // console.log('[ChatInterface] ✅ Imagem carregada com sucesso:', finalImageUrl.substring(0, 100));
             }}
@@ -3387,6 +3423,50 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                    Cancelar
                 </button>
              </div>
+          </div>
+        </div>
+      )}
+
+      {/* Media Viewer (Lightbox) */}
+      {imageViewer && (
+        <div
+          className="absolute inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeImageViewer();
+          }}
+        >
+          <div className="w-full max-w-5xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between gap-3 mb-3 text-white">
+              <div className="text-sm font-medium truncate">
+                {imageViewer.fileName || 'Imagem'}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={downloadImageViewer}
+                  className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                  title="Baixar"
+                >
+                  <ArrowRightLeft className="rotate-90" size={18} />
+                </button>
+                <button
+                  onClick={closeImageViewer}
+                  className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                  title="Fechar (Esc)"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 rounded-lg bg-black/40 border border-white/10 overflow-auto flex items-center justify-center p-2">
+              <img
+                src={imageViewer.url}
+                alt={imageViewer.fileName || 'Imagem'}
+                className="max-h-[80vh] max-w-full object-contain"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            </div>
           </div>
         </div>
       )}
