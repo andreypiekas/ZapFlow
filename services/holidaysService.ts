@@ -21,19 +21,6 @@ export interface HolidaySearchStatus {
   totalCities?: number;
 }
 
-// Cache de pesquisas em andamento para evitar pesquisas duplicadas
-const pendingSearches = new Map<string, Promise<Holiday[]>>();
-
-// Interface para status de busca
-export interface HolidaySearchStatus {
-  isSearching: boolean;
-  quotaExceeded: boolean;
-  currentCity?: string;
-  currentState?: string;
-  progressMessage?: string;
-  error?: string;
-}
-
 export interface Holiday {
   date: string; // YYYY-MM-DD
   name: string;
