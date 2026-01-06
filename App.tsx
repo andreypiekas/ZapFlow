@@ -2066,7 +2066,31 @@ const App: React.FC = () => {
           // PRIORIDADE ABSOLUTA: Define chats do banco diretamente no estado
           // Isso garante que status, assignedTo e departmentId do banco sejam preservados
           // Não faz merge com currentChats - banco é a fonte da verdade
-          setChats(chatsArray);
+          // Só atualiza se houver mudanças reais para evitar re-renderizações desnecessárias
+          setChats(prevChats => {
+            // Compara se há diferenças significativas antes de atualizar
+            if (prevChats.length !== chatsArray.length) {
+              return chatsArray;
+            }
+            
+            // Verifica se há diferenças nos IDs ou status
+            const prevIds = new Set(prevChats.map(c => c.id));
+            const newIds = new Set(chatsArray.map(c => c.id));
+            if (prevIds.size !== newIds.size || [...prevIds].some(id => !newIds.has(id))) {
+              return chatsArray;
+            }
+            
+            // Verifica se há mudanças de status ou assignedTo
+            const hasStatusChanges = chatsArray.some(newChat => {
+              const prevChat = prevChats.find(c => c.id === newChat.id);
+              return !prevChat || 
+                     prevChat.status !== newChat.status || 
+                     prevChat.assignedTo !== newChat.assignedTo ||
+                     prevChat.departmentId !== newChat.departmentId;
+            });
+            
+            return hasStatusChanges ? chatsArray : prevChats;
+          });
           
           console.log(`[App] ✅ Carregados ${chatsArray.length} chats do banco com status fixo`);
         } else {
@@ -2095,10 +2119,10 @@ const App: React.FC = () => {
       }, 100);
     });
     
-    // Polling a cada 100ms para detectar mensagens
+    // Polling a cada 2 segundos para detectar mensagens (reduzido de 100ms para evitar re-renderizações constantes)
     // IMPORTANTE: Só cria novo intervalo se não existir um já rodando
     if (!intervalIdRef.current) {
-      intervalIdRef.current = setInterval(syncChats, 100);
+      intervalIdRef.current = setInterval(syncChats, 2000);
     }
     
     // Inicializa Socket.IO de forma assíncrona
@@ -3626,8 +3650,12 @@ const App: React.FC = () => {
   };
 
   const handleViewChange = (view: ViewState) => {
-    setCurrentView(view);
-    setIsMobileMenuOpen(false);
+    // Usa requestAnimationFrame para garantir que o clique seja processado antes da atualização
+    // Isso evita que re-renderizações constantes interfiram com os cliques
+    requestAnimationFrame(() => {
+      setCurrentView(view);
+      setIsMobileMenuOpen(false);
+    });
   };
 
   const handleUpdateChat = async (updatedChat: Chat) => {
@@ -4792,7 +4820,11 @@ const App: React.FC = () => {
                 </div>
                 <div className="mt-4 pt-4 border-t border-[#0D0F13]">
                   <button
-                    onClick={() => setCurrentView('holidays')}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleViewChange('holidays');
+                    }}
                     className="text-sm text-[#00E0D1] hover:text-[#00C3FF] font-medium flex items-center gap-1 transition-colors"
                   >
                     Ver todos os feriados
@@ -4820,7 +4852,11 @@ const App: React.FC = () => {
 
   const SidebarItem = ({ view, icon: Icon, label }: { view: ViewState, icon: any, label: string }) => (
     <button 
-        onClick={() => handleViewChange(view)}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handleViewChange(view);
+        }}
         className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all relative group ${currentView === view ? 'bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] shadow-lg shadow-[#00C3FF]/30 font-medium' : 'hover:bg-[#0D0F13] text-slate-300 hover:text-[#00E0D1]'} ${isSidebarCollapsed ? 'justify-center' : ''}`}
         title={isSidebarCollapsed ? label : ''}
     >
