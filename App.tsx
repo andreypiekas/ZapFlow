@@ -2906,12 +2906,12 @@ const App: React.FC = () => {
                                                     lastMessageTime: mapped.timestamp,
                                                     unreadCount: updatedChat.unreadCount
                                                 };
-                                            } else if (!exists) {
+                                            } else if (!exists && !shouldUpdate) {
                                                 // Nova mensagem (não existe e não é atualização)
+                                                // IMPORTANTE: Só adiciona se não for uma atualização (shouldUpdate = false)
                                                 chatUpdated = true;
                                                 
-                                            // Log removido para produção - muito verboso
-                                            // console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}`);
+                                                console.log(`[App] ✅ [DEBUG] Socket.IO: Adicionando nova mensagem - sender=${mapped.sender}, whatsappId=${mapped.whatsappMessageId}, content=${mapped.content?.substring(0, 50)}`);
                                                 // SEMPRE usa o timestamp real para garantir ordem correta de envio/recebimento
                                                 let updatedMessages = [...chat.messages, mapped].sort((a, b) => {
                                                     const timeA = a.timestamp?.getTime() || 0;
