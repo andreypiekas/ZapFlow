@@ -2979,7 +2979,29 @@ const App: React.FC = () => {
                                                     content: finalMappedContent
                                                 };
                                                 
-                                                console.log(`[App] ✅ [DEBUG] Socket.IO: Adicionando nova mensagem - sender=${mapped.sender}, whatsappId=${mapped.whatsappMessageId}, originalContent="${mapped.content?.substring(0, 50)}", normalizedContent="${finalMappedContent?.substring(0, 50)}"`);
+                                                console.log(`[App] ✅ [DEBUG] Socket.IO: Adicionando nova mensagem - sender=${mapped.sender}, whatsappId=${mapped.whatsappMessageId}, originalContent="${mapped.content?.substring(0, 50)}", normalizedContent="${finalMappedContent?.substring(0, 50)}", isAgent=${mapped.sender === 'agent'}`);
+                                                
+                                                // Verifica se já existe uma mensagem idêntica antes de adicionar (prevenção extra de duplicação)
+                                                const alreadyExists = chat.messages.some(m => {
+                                                    if (m.whatsappMessageId && messageToAdd.whatsappMessageId && 
+                                                        m.whatsappMessageId === messageToAdd.whatsappMessageId) {
+                                                        return true;
+                                                    }
+                                                    if (m.sender === 'agent' && messageToAdd.sender === 'agent' && 
+                                                        m.content === finalMappedContent &&
+                                                        m.timestamp && messageToAdd.timestamp &&
+                                                        Math.abs(m.timestamp.getTime() - messageToAdd.timestamp.getTime()) < 5000) {
+                                                        console.log(`[App] ⚠️ [DEBUG] Socket.IO: Mensagem idêntica já existe, ignorando duplicata - content="${finalMappedContent?.substring(0, 50)}"`);
+                                                        return true;
+                                                    }
+                                                    return false;
+                                                });
+                                                
+                                                if (alreadyExists) {
+                                                    console.log(`[App] ⚠️ [DEBUG] Socket.IO: Mensagem duplicada detectada, não adicionando novamente`);
+                                                    return chat; // Retorna chat sem alterações
+                                                }
+                                                
                                                 // SEMPRE usa o timestamp real para garantir ordem correta de envio/recebimento
                                                 let updatedMessages = [...chat.messages, messageToAdd].sort((a, b) => {
                                                     const timeA = a.timestamp?.getTime() || 0;
