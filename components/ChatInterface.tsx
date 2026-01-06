@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw, Smile, Tag, Plus, Clock, User as UserIcon, AlertTriangle } from 'lucide-react';
 import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow, Contact } from '../types';
 import { generateSmartReply } from '../services/geminiService';
-import { sendRealMessage, sendRealMessageWithId, sendRealMediaMessage, blobToBase64, sendRealContact, sendDepartmentSelectionMessage, fetchMediaUrlByMessageId } from '../services/whatsappService';
+import { sendRealMessage, sendRealMessageWithId, sendRealMediaMessageWithId, blobToBase64, sendRealContact, sendDepartmentSelectionMessage, fetchMediaUrlByMessageId } from '../services/whatsappService';
 import { deleteChat as deleteChatApi, loadUserData } from '../services/apiService';
 import { AVAILABLE_TAGS, EMOJIS, STICKERS } from '../constants';
 
@@ -808,13 +808,47 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       captionToSend = formatMessageHeader() + captionToSend;
     }
 
-    const success = await sendRealMediaMessage(apiConfig, targetNumber, blob, captionToSend, type, selectedFile?.name);
-    
-    finalizeMessageStatus(newMessage, success);
-    
-    setIsSending(false);
-    clearAttachment();
-    setInputText('');
+    try {
+      const fileName =
+        selectedFile?.name ||
+        (type === 'audio' ? 'audio.ogg' : type === 'image' ? 'image.jpg' : 'file');
+
+      const result = await sendRealMediaMessageWithId(apiConfig, targetNumber, blob, captionToSend, type, fileName);
+      const success = result.success;
+
+      // CRÍTICO: Atualiza a mensagem local com o whatsappMessageId real
+      // Isso evita duplicação na UI quando chega confirmação via Socket.IO/API (sem URL)
+      if (success && result.messageId && chatSnapshotAfterLocalAdd) {
+        const patchedChat = {
+          ...chatSnapshotAfterLocalAdd,
+          messages: chatSnapshotAfterLocalAdd.messages.map(m => {
+            if (m.id === newMessage.id) {
+              return {
+                ...m,
+                whatsappMessageId: result.messageId,
+                rawMessage: (result.raw ?? m.rawMessage)
+              };
+            }
+            return m;
+          })
+        };
+        onUpdateChat(patchedChat);
+      }
+
+      if (!success) {
+        alert(result.error || 'Erro ao enviar mídia. Verifique a conexão e tente novamente.');
+      }
+
+      finalizeMessageStatus(newMessage, success);
+    } catch (error: any) {
+      console.error('[sendMediaMessage] Erro ao enviar mídia:', error);
+      alert(error?.message || 'Erro ao enviar mídia. Verifique a conexão e tente novamente.');
+      finalizeMessageStatus(newMessage, false);
+    } finally {
+      setIsSending(false);
+      clearAttachment();
+      setInputText('');
+    }
   };
 
   const handleSendContact = async (contact: Contact) => {
@@ -1380,34 +1414,67 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   };
 
   // Helper para transformar URL relativa em absoluta se necessário
-  const getMediaUrl = (url: string | undefined): string | undefined => {
-    if (!url) {
+  const getMediaUrl = (url: string | undefined, mimeTypeHint?: string, mediaTypeHint?: Message['type']): string | undefined => {
+    if (!url) return undefined;
+
+    const trimmed = String(url).trim();
+
+    // Se parece ser base64 puro (sem prefixo data:), converte para Data URL.
+    // Isso evita o browser tentar fazer GET /<base64> na Evolution API.
+    const maybeBase64 = trimmed.replace(/\s/g, '');
+    const isLikelyBase64 =
+      maybeBase64.length > 200 &&
+      !maybeBase64.startsWith('data:') &&
+      !maybeBase64.startsWith('http://') &&
+      !maybeBase64.startsWith('https://') &&
+      !maybeBase64.startsWith('/') &&
+      /^[A-Za-z0-9+/]+={0,2}$/.test(maybeBase64);
+
+    const guessMimeTypeFromBase64 = (b64: string): string | undefined => {
+      const head = b64.substring(0, 20);
+      if (head.startsWith('/9j/')) return 'image/jpeg';
+      if (head.startsWith('iVBORw0KGgo')) return 'image/png';
+      if (head.startsWith('R0lGOD')) return 'image/gif';
+      if (head.startsWith('UklGR')) return 'image/webp';
+      if (head.startsWith('JVBERi0')) return 'application/pdf';
+      if (head.startsWith('AAAAIGZ0eXB') || head.startsWith('AAAAHGZ0eXB')) return 'video/mp4';
       return undefined;
+    };
+
+    if (isLikelyBase64) {
+      const mime =
+        (mimeTypeHint && mimeTypeHint.trim()) ||
+        guessMimeTypeFromBase64(maybeBase64) ||
+        (mediaTypeHint === 'image' ? 'image/jpeg'
+          : mediaTypeHint === 'video' ? 'video/mp4'
+          : mediaTypeHint === 'audio' ? 'audio/ogg; codecs=opus'
+          : 'application/octet-stream');
+      return `data:${mime};base64,${maybeBase64}`;
     }
-    
+
     // Se é uma URL base64 (data:image/, data:video/, etc.), retorna como está
-    if (url.startsWith('data:')) {
-      return url;
+    if (trimmed.startsWith('data:')) {
+      return trimmed;
     }
-    
+
     // Se já é uma URL absoluta (http:// ou https://), retorna como está
-    if (url.startsWith('http://') || url.startsWith('https://')) {
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
       // Se é uma URL da Evolution API e temos API key, adiciona como query parameter
       // Evolution API pode requerer autenticação para acessar mídia
-      if (apiConfig.baseUrl && url.includes(apiConfig.baseUrl.replace(/^https?:\/\//, '').split(':')[0]) && apiConfig.apiKey) {
-        const urlObj = new URL(url);
+      if (apiConfig.baseUrl && trimmed.includes(apiConfig.baseUrl.replace(/^https?:\/\//, '').split(':')[0]) && apiConfig.apiKey) {
+        const urlObj = new URL(trimmed);
         urlObj.searchParams.set('apikey', apiConfig.apiKey);
         return urlObj.toString();
       }
-      return url;
+      return trimmed;
     }
-    
+
     // Se é uma URL relativa e temos baseUrl configurado, transforma em absoluta
-    if (apiConfig.baseUrl && !url.startsWith('/')) {
+    if (apiConfig.baseUrl && !trimmed.startsWith('/')) {
       // Remove trailing slash do baseUrl se houver
       const baseUrl = apiConfig.baseUrl.replace(/\/$/, '');
       // Remove leading slash da URL se houver
-      const cleanUrl = url.startsWith('/') ? url.substring(1) : url;
+      const cleanUrl = trimmed.startsWith('/') ? trimmed.substring(1) : trimmed;
       const finalUrl = `${baseUrl}/${cleanUrl}`;
       // Adiciona API key se disponível
       if (apiConfig.apiKey) {
@@ -1420,11 +1487,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       // console.log('[ChatInterface] getMediaUrl: URL relativa transformada:', finalUrl.substring(0, 100));
       return finalUrl;
     }
-    
+
     // Se começa com /, adiciona baseUrl
-    if (url.startsWith('/') && apiConfig.baseUrl) {
+    if (trimmed.startsWith('/') && apiConfig.baseUrl) {
       const baseUrl = apiConfig.baseUrl.replace(/\/$/, '');
-      const finalUrl = `${baseUrl}${url}`;
+      const finalUrl = `${baseUrl}${trimmed}`;
       // Adiciona API key se disponível
       if (apiConfig.apiKey) {
         const urlObj = new URL(finalUrl);
@@ -1436,10 +1503,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       // console.log('[ChatInterface] getMediaUrl: URL com / transformada:', finalUrl.substring(0, 100));
       return finalUrl;
     }
-    
+
     // Retorna como está se não conseguir transformar
-    // console.warn('[ChatInterface] getMediaUrl: Não foi possível transformar URL, retornando como está:', url.substring(0, 100));
-    return url;
+    // console.warn('[ChatInterface] getMediaUrl: Não foi possível transformar URL, retornando como está:', trimmed.substring(0, 100));
+    return trimmed;
   };
 
   // Função utilitária para normalizar conteúdo de mensagens do agente (remove cabeçalho)
@@ -1496,7 +1563,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     };
 
     if (msg.type === 'sticker' && msg.mediaUrl) {
-        const stickerUrl = getMediaUrl(msg.mediaUrl);
+        const stickerUrl = getMediaUrl(msg.mediaUrl, msg.mimeType, msg.type);
         if (!stickerUrl) return <span className="text-sm opacity-70">Sticker (URL não disponível)</span>;
         return <img src={stickerUrl} alt="Sticker" className="w-32 h-32 object-contain" onError={(e) => {
           // console.error('[ChatInterface] Erro ao carregar sticker:', stickerUrl);
@@ -1719,7 +1786,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         );
       }
       
-      const finalImageUrl = getMediaUrl(imageUrl);
+      const finalImageUrl = getMediaUrl(imageUrl, msg.mimeType, msg.type);
       if (!finalImageUrl) {
         // Log removido - muito verboso para produção
         return (
@@ -1775,7 +1842,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       );
     }
     if (msg.type === 'audio' && msg.mediaUrl) {
-      const audioUrl = getMediaUrl(msg.mediaUrl);
+      const audioUrl = getMediaUrl(msg.mediaUrl, msg.mimeType, msg.type);
       if (!audioUrl) {
         return <span className="text-sm opacity-70">Áudio (URL não disponível)</span>;
       }
@@ -1788,7 +1855,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       );
     }
     if (msg.type === 'document') {
-       const docUrl = getMediaUrl(msg.mediaUrl);
+       const docUrl = getMediaUrl(msg.mediaUrl, msg.mimeType, msg.type);
        return (
            <div className={`flex items-center gap-3 p-3 rounded-lg ${isUserMessage ? 'bg-white/10' : 'bg-black/5'}`}>
                <div className={`p-2 rounded-full ${isUserMessage ? 'bg-white/20 text-white' : 'bg-white text-emerald-600'}`}>

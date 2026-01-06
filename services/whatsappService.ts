@@ -722,39 +722,53 @@ export const blobToBase64 = (blob: Blob): Promise<string> => {
   });
 };
 
-export const sendRealMediaMessage = async (
-  config: ApiConfig, 
-  phone: string, 
-  mediaBlob: Blob, 
-  caption: string = '', 
+export type SendRealMediaMessageWithIdResult = {
+  success: boolean;
+  messageId?: string;
+  raw?: any;
+  error?: string;
+};
+
+/**
+ * Envia mídia e tenta retornar o ID real do WhatsApp (Evolution API key.id).
+ * Mantém o `sendRealMediaMessage` (boolean) intacto para compatibilidade.
+ */
+export const sendRealMediaMessageWithId = async (
+  config: ApiConfig,
+  phone: string,
+  mediaBlob: Blob,
+  caption: string = '',
   mediaType: 'image' | 'video' | 'audio' | 'document',
   fileName: string = 'file'
-) => {
-  if (config.isDemo) return true;
+): Promise<SendRealMediaMessageWithIdResult> => {
+  if (config.isDemo) {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return { success: true, messageId: `demo_${Date.now()}` };
+  }
 
   const active = await findActiveInstance(config);
   const target = active?.instanceName || config.instanceName;
-  
+
   // Formata o número
   const cleanPhone = formatPhoneForApi(phone);
 
   const base64 = await blobToBase64(mediaBlob);
-    
+
   let endpoint = 'sendMedia';
-  if (mediaType === 'audio') endpoint = 'sendWhatsAppAudio'; 
+  if (mediaType === 'audio') endpoint = 'sendWhatsAppAudio';
 
   // Evolution API v2.3.4 e v2.3.6 esperam mediatype no nível raiz, não dentro de mediaMessage
   const body: any = {
-      number: cleanPhone,
-      delay: 1200,
-      mediatype: mediaType, // Propriedade no nível raiz (requerido pela API)
-      media: base64,
-      fileName: fileName
+    number: cleanPhone,
+    delay: 1200,
+    mediatype: mediaType, // Propriedade no nível raiz (requerido pela API)
+    media: base64,
+    fileName: fileName
   };
 
   // Adiciona caption apenas se fornecido (não é obrigatório)
   if (caption && caption.trim()) {
-      body.caption = caption;
+    body.caption = caption;
   }
 
   try {
@@ -766,17 +780,33 @@ export const sendRealMediaMessage = async (
       },
       body: JSON.stringify(body)
     });
-    
+
     if (!response.ok) {
-        console.error(`[sendRealMediaMessage] Falha API: ${response.status}`, await response.text());
-        return false;
+      const errorText = await response.text();
+      console.error(`[sendRealMediaMessageWithId] Falha API: ${response.status}`, errorText);
+      return { success: false, error: `Falha ao enviar mídia (${response.status})` };
     }
 
-    return response.ok;
-  } catch (error) {
-    console.error("[sendRealMediaMessage] Erro de rede:", error);
-    return false;
+    let data: any = null;
+    try { data = await response.json(); } catch { /* ignore */ }
+
+    return { success: true, messageId: extractEvolutionMessageId(data), raw: data };
+  } catch (error: any) {
+    console.error('[sendRealMediaMessageWithId] Erro de rede:', error);
+    return { success: false, error: error?.message || 'Erro de rede' };
   }
+};
+
+export const sendRealMediaMessage = async (
+  config: ApiConfig, 
+  phone: string, 
+  mediaBlob: Blob, 
+  caption: string = '', 
+  mediaType: 'image' | 'video' | 'audio' | 'document',
+  fileName: string = 'file'
+) => {
+  const result = await sendRealMediaMessageWithId(config, phone, mediaBlob, caption, mediaType, fileName);
+  return !!result.success;
 };
 
 // Envia um contato via WhatsApp (vCard)
