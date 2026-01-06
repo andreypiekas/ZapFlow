@@ -21,7 +21,22 @@ import { storageService } from './services/storageService';
 import { apiService, getBackendUrl, loadConfig as loadConfigFromBackend, saveConfig as saveConfigToBackend, getUpcomingNationalHolidays } from './services/apiService';
 import { SecurityService } from './services/securityService';
 import { io, Socket } from 'socket.io-client';
-import { getNationalHolidays, getUpcomingHolidays, Holiday, BRAZILIAN_STATES } from './services/holidaysService'; 
+import { getNationalHolidays, getUpcomingHolidays, Holiday, BRAZILIAN_STATES } from './services/holidaysService';
+
+// Função utilitária para normalizar conteúdo de mensagens do agente (remove cabeçalho)
+// CRÍTICO: O frontend renderiza o nome do agente separadamente, então o conteúdo NUNCA deve ter o cabeçalho
+const normalizeMessageContent = (content: string | undefined, sender: string | undefined): string => {
+    if (!content || sender !== 'agent') {
+        return content || '';
+    }
+    // Remove padrões como "Nome:\n" ou "Nome - Departamento:\n" do início
+    let normalized = content;
+    // Remove "Nome:\n" ou "Nome:\n\n"
+    normalized = normalized.replace(/^[^:]+:\n+/g, '');
+    // Remove "Nome - Departamento:\n" ou "Nome - Departamento:\n\n"
+    normalized = normalized.replace(/^[^:]+ - [^:]+:\n+/g, '');
+    return normalized.trim();
+}; 
 
 // Carrega configuração padrão (será substituída quando usuário fizer login)
 const loadConfig = (): ApiConfig => {
@@ -2069,7 +2084,9 @@ const App: React.FC = () => {
                 lastMessageTime: chatObj.lastMessageTime ? new Date(chatObj.lastMessageTime) : new Date(),
                 messages: chatObj.messages?.map((msg: Message) => ({
                   ...msg,
-                  timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date()
+                  timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+                  // CRÍTICO: Normaliza conteúdo de mensagens do agente ao carregar do banco
+                  content: normalizeMessageContent(msg.content, msg.sender)
                 })) || []
               };
             })
@@ -2738,18 +2755,7 @@ const App: React.FC = () => {
                                             
                                             // Para mensagens enviadas (agent), tenta encontrar mensagem local para atualizar
                                             if (mapped.sender === 'agent') {
-                                                // Função para normalizar conteúdo removendo cabeçalho (ex: "Andrey:\n" ou "Andrey - Departamento:\n")
-                                                const normalizeContent = (content: string): string => {
-                                                    if (!content) return '';
-                                                    // Remove padrões como "Nome:\n" ou "Nome - Departamento:\n" do início
-                                                    // Tenta múltiplos padrões para garantir que capture todos os casos
-                                                    let normalized = content;
-                                                    // Remove "Nome:\n" ou "Nome:\n\n"
-                                                    normalized = normalized.replace(/^[^:]+:\n+/g, '');
-                                                    // Remove "Nome - Departamento:\n" ou "Nome - Departamento:\n\n"
-                                                    normalized = normalized.replace(/^[^:]+ - [^:]+:\n+/g, '');
-                                                    return normalized.trim();
-                                                };
+                                                // Usa a função utilitária global para normalizar conteúdo
                                                 
                                                 // Procura mensagem local sem whatsappMessageId mas com mesmo conteúdo e timestamp próximo
                                                 // IMPORTANTE: Verifica TODAS as mensagens do agente, não apenas as com ID "m_"
@@ -2773,8 +2779,8 @@ const App: React.FC = () => {
                                                         
                                                         if (isLocalMessage && timeMatch) {
                                                             // Se é mensagem local recente, verifica conteúdo normalizado
-                                                            const normalizedLocal = normalizeContent(m.content || '');
-                                                            const normalizedMapped = normalizeContent(mapped.content || '');
+                                                            const normalizedLocal = normalizeMessageContent(m.content, m.sender);
+                                                            const normalizedMapped = normalizeMessageContent(mapped.content, mapped.sender);
                                                             const contentMatch = normalizedLocal && normalizedMapped && 
                                                                 normalizedLocal === normalizedMapped;
                                                             
@@ -2802,12 +2808,12 @@ const App: React.FC = () => {
                                                 
                                                 // Se não encontrou, tenta uma busca mais ampla: qualquer mensagem do agente sem whatsappMessageId nos últimos 10 segundos
                                                 if (messageIndex < 0) {
-                                                    const normalizedMapped = normalizeContent(mapped.content || '');
+                                                    const normalizedMapped = normalizeMessageContent(mapped.content, mapped.sender);
                                                     messageIndex = chat.messages.findIndex(m => {
                                                         if (m.sender === 'agent' && !m.whatsappMessageId && m.timestamp && mapped.timestamp) {
                                                             const timeDiff = Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime());
                                                             if (timeDiff < 10000) { // 10 segundos
-                                                                const normalizedLocal = normalizeContent(m.content || '');
+                                                                const normalizedLocal = normalizeMessageContent(m.content, m.sender);
                                                                 if (normalizedLocal && normalizedMapped && 
                                                                     (normalizedLocal === normalizedMapped || 
                                                                      normalizedMapped.includes(normalizedLocal) || 
@@ -2997,18 +3003,9 @@ const App: React.FC = () => {
                                                 // IMPORTANTE: Só adiciona se não for uma atualização (shouldUpdate = false)
                                                 chatUpdated = true;
                                                 
-                                                // Normaliza o conteúdo para mensagens do agente (remove cabeçalho)
-                                                let finalMappedContent = mapped.content;
-                                                if (mapped.sender === 'agent' && mapped.content) {
-                                                    const normalizeContent = (content: string): string => {
-                                                        if (!content) return '';
-                                                        let normalized = content;
-                                                        normalized = normalized.replace(/^[^:]+:\n+/g, '');
-                                                        normalized = normalized.replace(/^[^:]+ - [^:]+:\n+/g, '');
-                                                        return normalized.trim();
-                                                    };
-                                                    finalMappedContent = normalizeContent(mapped.content);
-                                                }
+                                                // CRÍTICO: Normaliza o conteúdo para mensagens do agente (remove cabeçalho)
+                                                // Usa a função utilitária global para garantir consistência
+                                                const finalMappedContent = normalizeMessageContent(mapped.content, mapped.sender);
                                                 
                                                 const messageToAdd = {
                                                     ...mapped,
