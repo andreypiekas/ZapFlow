@@ -2737,8 +2737,13 @@ const App: React.FC = () => {
                                                 const normalizeContent = (content: string): string => {
                                                     if (!content) return '';
                                                     // Remove padrões como "Nome:\n" ou "Nome - Departamento:\n" do início
-                                                    const headerPattern = /^[^:]+(?: - [^:]+)?:\n?/;
-                                                    return content.replace(headerPattern, '').trim();
+                                                    // Tenta múltiplos padrões para garantir que capture todos os casos
+                                                    let normalized = content;
+                                                    // Remove "Nome:\n" ou "Nome:\n\n"
+                                                    normalized = normalized.replace(/^[^:]+:\n+/g, '');
+                                                    // Remove "Nome - Departamento:\n" ou "Nome - Departamento:\n\n"
+                                                    normalized = normalized.replace(/^[^:]+ - [^:]+:\n+/g, '');
+                                                    return normalized.trim();
                                                 };
                                                 
                                                 // Procura mensagem local sem whatsappMessageId mas com mesmo conteúdo e timestamp próximo
@@ -2746,6 +2751,7 @@ const App: React.FC = () => {
                                                     // Se já tem whatsappMessageId, verifica por ele (mais confiável)
                                                     if (m.whatsappMessageId && mapped.whatsappMessageId && 
                                                         m.whatsappMessageId === mapped.whatsappMessageId) {
+                                                        console.log(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem por whatsappMessageId: ${m.whatsappMessageId}`);
                                                         return true;
                                                     }
                                                     // Se não tem whatsappMessageId, verifica por conteúdo normalizado + timestamp (mensagem local pendente)
@@ -2759,8 +2765,15 @@ const App: React.FC = () => {
                                                         // Janela maior para mensagens do agente (até 60 segundos) para capturar confirmações com delay
                                                         const timeMatch = m.timestamp && mapped.timestamp && 
                                                             Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 60000;
+                                                        
                                                         if (contentMatch && timeMatch) {
+                                                            console.log(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem local por conteúdo normalizado - local="${normalizedLocal}", mapped="${normalizedMapped}", timeDiff=${Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime())}ms`);
                                                             return true;
+                                                        } else {
+                                                            // Log para debug quando não encontra
+                                                            if (m.timestamp && mapped.timestamp && Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 60000) {
+                                                                console.log(`[App] ⚠️ [DEBUG] Socket.IO: Mensagem local não encontrada - local="${m.content?.substring(0, 50)}", normalizedLocal="${normalizedLocal}", mapped="${mapped.content?.substring(0, 50)}", normalizedMapped="${normalizedMapped}", contentMatch=${contentMatch}, timeMatch=${timeMatch}`);
+                                                            }
                                                         }
                                                     }
                                                     return false;
@@ -2768,6 +2781,9 @@ const App: React.FC = () => {
                                                 
                                                 if (messageIndex >= 0) {
                                                     shouldUpdate = true;
+                                                    console.log(`[App] ✅ [DEBUG] Socket.IO: shouldUpdate=true, messageIndex=${messageIndex}`);
+                                                } else {
+                                                    console.log(`[App] ⚠️ [DEBUG] Socket.IO: Mensagem do agente não encontrada localmente - mappedContent="${mapped.content?.substring(0, 50)}", whatsappId=${mapped.whatsappMessageId}, totalMessages=${chat.messages.length}`);
                                                 }
                                             }
                                             
