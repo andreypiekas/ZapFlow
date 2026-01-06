@@ -138,6 +138,67 @@ class StorageService {
     return null;
   }
 
+  // Busca TODOS os registros de um tipo (ex.: todos os chats) como objeto { [key]: value }
+  // Útil para rotinas que precisam varrer o conjunto completo no backend (ex.: sync).
+  async getAllData<T>(dataType: DataType): Promise<{ [key: string]: T } | null> {
+    // Preferência: backend (fonte de verdade)
+    if (this.useAPI && this.apiAvailable) {
+      try {
+        const data = await apiService.getAllData<T>(dataType);
+        this.consecutiveFailures = 0;
+        return data || {};
+      } catch (error) {
+        console.warn(`[StorageService] Erro ao buscar todos os dados de ${dataType} da API, tentando fallback:`, error);
+        this.consecutiveFailures++;
+        if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
+          this.useAPI = false;
+        }
+      }
+    }
+
+    // Fallback: localStorage (apenas se permitido)
+    if (!this.useOnlyPostgreSQL) {
+      try {
+        const storageKey = this.getLocalStorageKey(dataType);
+        const saved = localStorage.getItem(storageKey);
+        if (!saved) return {};
+
+        let decrypted = saved;
+        if (this.isSensitiveDataType(dataType)) {
+          try {
+            decrypted = SecurityService.decrypt(saved);
+          } catch {
+            decrypted = saved;
+          }
+        }
+
+        const parsed: any = JSON.parse(decrypted);
+
+        // Se já é um objeto, retorna direto
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed as { [key: string]: T };
+        }
+
+        // Se é array (caso legado), tenta converter para map por id
+        if (Array.isArray(parsed)) {
+          const obj: { [key: string]: T } = {};
+          for (const item of parsed) {
+            const id = item?.id;
+            if (id) obj[String(id)] = item as T;
+          }
+          return obj;
+        }
+
+        return {};
+      } catch (error) {
+        console.error(`[StorageService] Erro ao buscar todos os dados de ${dataType} do localStorage:`, error);
+        return {};
+      }
+    }
+
+    return null;
+  }
+
   // TODO: Remover fallback para localStorage - backend é obrigatório
   async save<T>(dataType: DataType, value: T, key?: string): Promise<boolean> {
     const storageKey = key || 'default';

@@ -165,8 +165,13 @@
 ## 🟢 Futuras
 
 ### 9. Reduzir logs no F12 + toggle “Debug do Dev”
-**Status:** 🟢 Planejado  
+**Status:** ✅ Concluído  
 **Objetivo:** Usuário final não deve ver logs excessivos; dev pode reativar.
+
+**Implementação (resumo):**
+- Criado `services/logger.ts` com níveis (`error/warn/info/debug`) e flag `debugLogsEnabled`.
+- Adicionado toggle em **Configurações** (“Debug do Dev”) persistido no `/api/config`.
+- Logs `[DEBUG]` do `App.tsx` migrados para `logger.debug()` (silencioso por padrão; aparece quando ativado).
 
 **Tarefas detalhadas:**
 - Criar `logger` com níveis (`error/warn/info/debug`).

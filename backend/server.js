@@ -1971,7 +1971,8 @@ app.get('/api/config', authenticateToken, dataLimiter, async (req, res) => {
           isDemo: false,
           googleClientId: '',
           geminiApiKey: '',
-          holidayStates: []
+          holidayStates: [],
+          debugLogsEnabled: false
         }
       });
     }

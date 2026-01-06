@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ApiConfig, User, UserRole } from '../types';
-import { Save, Server, Shield, Globe, User as UserIcon, Bell, Lock, RefreshCw, Database, HardDrive, Sparkles, Trash2, AlertTriangle, CheckCircle, Calendar } from 'lucide-react';
+import { Save, Server, Shield, Globe, User as UserIcon, Bell, Lock, RefreshCw, Database, HardDrive, Sparkles, Trash2, AlertTriangle, CheckCircle, Calendar, Bug } from 'lucide-react';
 import { fetchAllInstances, fetchInstanceDetails, InstanceInfo } from '../services/whatsappService';
 import { checkApiHealth, getAuthToken, cleanupInvalidChats } from '../services/apiService';
 import { BRAZILIAN_STATES } from '../services/holidaysService';
@@ -525,6 +525,32 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
                       </p>
                     </div>
                   </div>
+
+                  {/* Debug do Dev (logs no console) - Apenas Admin */}
+                  {isAdmin && (
+                    <div className="col-span-1 md:col-span-2">
+                      <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                        <Bug size={16} /> Debug do Dev (logs no console)
+                      </label>
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                        <label className="relative inline-flex items-center cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={!!formData.debugLogsEnabled}
+                            onChange={(e) => setFormData({ ...formData, debugLogsEnabled: e.target.checked })}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                          <span className="ml-3 text-sm font-medium text-slate-700">
+                            {formData.debugLogsEnabled ? 'Ativado' : 'Desativado'}
+                          </span>
+                        </label>
+                        <p className="text-xs text-slate-600 mt-2">
+                          Quando ativado, habilita logs de <strong>debug</strong> no F12 para diagnóstico (reduz ruído para usuário final).
+                        </p>
+                      </div>
+                    </div>
+                  )}
               </div>
 
             </div>

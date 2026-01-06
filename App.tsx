@@ -20,6 +20,7 @@ import { processChatbotMessages } from './services/chatbotService';
 import { storageService } from './services/storageService';
 import { apiService, getBackendUrl, loadConfig as loadConfigFromBackend, saveConfig as saveConfigToBackend, getUpcomingNationalHolidays } from './services/apiService';
 import { SecurityService } from './services/securityService';
+import { logger, setDebugLoggingEnabled } from './services/logger';
 import { io, Socket } from 'socket.io-client';
 import { getNationalHolidays, getUpcomingHolidays, Holiday, BRAZILIAN_STATES } from './services/holidaysService';
 
@@ -61,7 +62,8 @@ const loadConfig = (): ApiConfig => {
     isDemo: false,
     googleClientId: '',
     geminiApiKey: '',
-    holidayStates: []
+    holidayStates: [],
+    debugLogsEnabled: false
   };
 };
 
@@ -169,7 +171,7 @@ interface Notification {
   id: string;
   title: string;
   message: string;
-  type: 'info' | 'warning' | 'success';
+  type: 'info' | 'warning' | 'success' | 'error';
 }
 
 // Função auxiliar para encontrar o operador específico do departamento
@@ -266,6 +268,11 @@ const App: React.FC = () => {
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [upcomingHolidays, setUpcomingHolidays] = useState<Holiday[]>([]);
+
+  // Toggle global de logs de debug (F12)
+  useEffect(() => {
+    setDebugLoggingEnabled(!!apiConfig.debugLogsEnabled);
+  }, [apiConfig.debugLogsEnabled]);
 
   // Configurações são salvas apenas via handleSaveConfig (endpoint /api/config)
   // Não salvar automaticamente aqui para evitar conflitos com configurações globais
@@ -578,7 +585,8 @@ const App: React.FC = () => {
             isDemo: apiConfigData.isDemo || false,
             googleClientId: apiConfigData.googleClientId || '',
             geminiApiKey: apiConfigData.geminiApiKey || '',
-            holidayStates: apiConfigData.holidayStates || []
+            holidayStates: apiConfigData.holidayStates || [],
+            debugLogsEnabled: !!apiConfigData.debugLogsEnabled
           };
           
           // Verifica se há pelo menos um campo não vazio para considerar como configuração válida
@@ -720,6 +728,7 @@ const App: React.FC = () => {
   // Refs para armazenar interval e Socket.IO
   const intervalIdRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  const initWebSocketRef = useRef<((isReconnect?: boolean) => Promise<void>) | null>(null);
   const wsReconnectAttemptsRef = useRef<number>(0);
   const wsReconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const MAX_RECONNECT_ATTEMPTS = 5;
@@ -749,18 +758,18 @@ const App: React.FC = () => {
     const syncChats = async () => {
         // Evita múltiplas execuções simultâneas
         if (isSyncing) {
-            console.log('[App] ⏸️ [DEBUG] syncChats já em execução, pulando...');
+            logger.debug('[App] ⏸️ [DEBUG] syncChats já em execução, pulando...');
             return;
         }
         
         isSyncing = true;
         try {
-            console.log('[App] 🔍 [DEBUG] Iniciando syncChats...');
+            logger.debug('[App] 🔍 [DEBUG] Iniciando syncChats...');
         // PASSO 1: Carrega chats do banco PRIMEIRO para ter status fixo
         let dbChatsMap = new Map<string, Chat>();
         try {
             const dbChatsData = await apiService.getAllData<Chat>('chats');
-            console.log('[App] 🔍 [DEBUG] syncChats - getAllData retornou:', {
+            logger.debug('[App] 🔍 [DEBUG] syncChats - getAllData retornou:', {
                 count: dbChatsData ? Object.keys(dbChatsData).length : 0,
                 keys: dbChatsData ? Object.keys(dbChatsData).slice(0, 5) : []
             });
@@ -772,7 +781,7 @@ const App: React.FC = () => {
                     const chatObj = chat && typeof chat === 'object' ? chat : { id: key };
                     
                     if (chatObj && chatObj.id) {
-                        console.log('[App] 🔍 [DEBUG] syncChats - Adicionando chat ao Map:', {
+                        logger.debug('[App] 🔍 [DEBUG] syncChats - Adicionando chat ao Map:', {
                             id: chatObj.id,
                             status: chatObj.status,
                             assignedTo: chatObj.assignedTo
@@ -787,15 +796,15 @@ const App: React.FC = () => {
                             })) || []
                         });
                     } else {
-                        console.log('[App] 🔍 [DEBUG] syncChats - Chat inválido ignorado:', { key, chat, chatObj });
+                        logger.debug('[App] 🔍 [DEBUG] syncChats - Chat inválido ignorado:', { key, chat, chatObj });
                     }
                 });
-                console.log(`[App] 🔍 [DEBUG] syncChats - dbChatsMap criado com ${dbChatsMap.size} chats.`);
+                logger.debug(`[App] 🔍 [DEBUG] syncChats - dbChatsMap criado com ${dbChatsMap.size} chats.`);
             } else {
-                console.log('[App] ⚠️ [DEBUG] syncChats - Nenhum chat no banco para criar Map');
+                logger.debug('[App] ⚠️ [DEBUG] syncChats - Nenhum chat no banco para criar Map');
             }
         } catch (error) {
-            console.error('[App] ❌ [DEBUG] Erro ao carregar chats do banco antes da sincronização:', error);
+            logger.debug('[App] ❌ [DEBUG] Erro ao carregar chats do banco antes da sincronização:', error);
         }
 
         // PASSO 2: Busca chats da API (com tratamento de erro)
@@ -803,7 +812,7 @@ const App: React.FC = () => {
         try {
             realChats = await fetchChats(apiConfig);
         } catch (error) {
-            console.error('[App] ❌ [DEBUG] Erro ao buscar chats da Evolution API:', error);
+            logger.debug('[App] ❌ [DEBUG] Erro ao buscar chats da Evolution API:', error);
             // Continua com os chats do banco mesmo se a API falhar
             realChats = [];
         }
@@ -823,23 +832,23 @@ const App: React.FC = () => {
         // Busca mensagens em paralelo para os chats que precisam
         const messagesMap = new Map<string, Message[]>();
         if (chatsNeedingMessages.length > 0) {
-            console.log(`[App] 🔍 [DEBUG] syncChats: Buscando mensagens separadamente para ${chatsNeedingMessages.length} chats...`);
+            logger.debug(`[App] 🔍 [DEBUG] syncChats: Buscando mensagens separadamente para ${chatsNeedingMessages.length} chats...`);
             await Promise.all(chatsNeedingMessages.map(async (realChat) => {
                 try {
-                    console.log(`[App] 🔍 [DEBUG] syncChats: Iniciando busca de mensagens para ${realChat.id} (API tem ${realChat.messages.length} mensagens)...`);
+                    logger.debug(`[App] 🔍 [DEBUG] syncChats: Iniciando busca de mensagens para ${realChat.id} (API tem ${realChat.messages.length} mensagens)...`);
                     const fetchedMessages = await fetchChatMessages(apiConfig, realChat.id, 1000);
-                    console.log(`[App] 🔍 [DEBUG] syncChats: fetchChatMessages retornou ${fetchedMessages.length} mensagens para ${realChat.id}`);
+                    logger.debug(`[App] 🔍 [DEBUG] syncChats: fetchChatMessages retornou ${fetchedMessages.length} mensagens para ${realChat.id}`);
                     if (fetchedMessages.length > realChat.messages.length) {
-                        console.log(`[App] ✅ [DEBUG] syncChats: Buscou ${fetchedMessages.length} mensagens separadamente para ${realChat.id} (antes tinha ${realChat.messages.length})`);
+                        logger.debug(`[App] ✅ [DEBUG] syncChats: Buscou ${fetchedMessages.length} mensagens separadamente para ${realChat.id} (antes tinha ${realChat.messages.length})`);
                         messagesMap.set(realChat.id, fetchedMessages);
                     } else {
-                        console.log(`[App] ⚠️ [DEBUG] syncChats: fetchChatMessages retornou ${fetchedMessages.length} mensagens (não é maior que ${realChat.messages.length}), não atualizando messagesMap para ${realChat.id}`);
+                        logger.debug(`[App] ⚠️ [DEBUG] syncChats: fetchChatMessages retornou ${fetchedMessages.length} mensagens (não é maior que ${realChat.messages.length}), não atualizando messagesMap para ${realChat.id}`);
                     }
                 } catch (error) {
-                    console.error(`[App] ❌ [DEBUG] syncChats: Erro ao buscar mensagens separadamente para ${realChat.id}:`, error);
+                    logger.debug(`[App] ❌ [DEBUG] syncChats: Erro ao buscar mensagens separadamente para ${realChat.id}:`, error);
                 }
             }));
-            console.log(`[App] 🔍 [DEBUG] syncChats: messagesMap final tem ${messagesMap.size} entradas:`, Array.from(messagesMap.keys()));
+            logger.debug(`[App] 🔍 [DEBUG] syncChats: messagesMap final tem ${messagesMap.size} entradas:`, Array.from(messagesMap.keys()));
         }
         
         if (realChats.length > 0) {
@@ -887,7 +896,7 @@ const App: React.FC = () => {
                         ? dbChatsMap.get(existingChat.id) 
                         : (realChat && realChat.id ? dbChatsMap.get(realChat.id) : undefined);
                     
-                    console.log('[App] 🔍 [DEBUG] syncChats - Processando chat:', {
+                    logger.debug('[App] 🔍 [DEBUG] syncChats - Processando chat:', {
                         realChatId: realChat?.id,
                         existingChatId: existingChat?.id,
                         existingChatStatus: existingChat?.status,
@@ -905,9 +914,9 @@ const App: React.FC = () => {
                         let apiMessages = messagesFromMap || realChat.messages;
                         
                         if (messagesFromMap) {
-                            console.log(`[App] ✅ [DEBUG] syncChats: Usando ${messagesFromMap.length} mensagens do messagesMap para ${realChat.id}`);
+                            logger.debug(`[App] ✅ [DEBUG] syncChats: Usando ${messagesFromMap.length} mensagens do messagesMap para ${realChat.id}`);
                         } else {
-                            console.log(`[App] ⚠️ [DEBUG] syncChats: Nenhuma mensagem no messagesMap para ${realChat.id}, usando ${realChat.messages.length} mensagens da API`);
+                            logger.debug(`[App] ⚠️ [DEBUG] syncChats: Nenhuma mensagem no messagesMap para ${realChat.id}, usando ${realChat.messages.length} mensagens da API`);
                         }
                         
                         const newMsgCount = apiMessages.length;
@@ -915,7 +924,7 @@ const App: React.FC = () => {
                         
                         // Log para rastrear contagem de mensagens
                         if (newMsgCount !== oldMsgCount) {
-                            console.log(`[App] 📊 [DEBUG] syncChats: Contagem de mensagens diferente - chatId: ${realChat.id}, oldCount: ${oldMsgCount}, newCount: ${newMsgCount}, dbStatus: ${dbChat?.status}`);
+                            logger.debug(`[App] 📊 [DEBUG] syncChats: Contagem de mensagens diferente - chatId: ${realChat.id}, oldCount: ${oldMsgCount}, newCount: ${newMsgCount}, dbStatus: ${dbChat?.status}`);
                         }
                         
                         // COMPARAÇÃO ROBUSTA: Verifica se há novas mensagens do usuário comparando as mensagens reais
@@ -943,11 +952,11 @@ const App: React.FC = () => {
                             const lastMsg = apiMessages[apiMessages.length - 1];
                             const dbChatStatus = dbChat?.status;
                             
-                            console.log(`[App] 🔍 [DEBUG] syncChats: Nova mensagem detectada - chatId: ${realChat.id}, dbStatus: ${dbChatStatus}, lastMsgSender: ${lastMsg?.sender}, lastMsgContent: ${lastMsg?.content?.substring(0, 50)}, hasNewUserMessage: ${hasNewUserMessage}`);
+                            logger.debug(`[App] 🔍 [DEBUG] syncChats: Nova mensagem detectada - chatId: ${realChat.id}, dbStatus: ${dbChatStatus}, lastMsgSender: ${lastMsg?.sender}, lastMsgContent: ${lastMsg?.content?.substring(0, 50)}, hasNewUserMessage: ${hasNewUserMessage}`);
                             
                             // Se o chat está fechado no banco e recebeu nova mensagem do usuário, reabre IMEDIATAMENTE
                             if (dbChatStatus === 'closed' && hasNewUserMessage) {
-                                console.log(`[App] 🔄 [DEBUG] syncChats: Chat fechado ${realChat.id} recebeu nova mensagem do usuário, reabrindo IMEDIATAMENTE...`);
+                                logger.debug(`[App] 🔄 [DEBUG] syncChats: Chat fechado ${realChat.id} recebeu nova mensagem do usuário, reabrindo IMEDIATAMENTE...`);
                                 
                                 // Atualiza status para pending e limpa assignedTo/departmentId IMEDIATAMENTE
                                 // Usa IIFE async para executar imediatamente sem bloquear
@@ -955,7 +964,7 @@ const App: React.FC = () => {
                                     try {
                                         // Atualiza banco IMEDIATAMENTE
                                         await apiService.updateChatStatus(realChat.id, 'pending', undefined, null);
-                                        console.log(`[App] ✅ [DEBUG] syncChats: Chat ${realChat.id} reaberto e salvo no banco`);
+                                        logger.debug(`[App] ✅ [DEBUG] syncChats: Chat ${realChat.id} reaberto e salvo no banco`);
                                         
                                         // Quando chat fechado é reaberto, SEMPRE envia mensagem de seleção de departamento
                                         // pois o departamento foi desatribuído ao fechar o chat
@@ -965,7 +974,7 @@ const App: React.FC = () => {
                                         const departmentsResult = await apiService.getDepartments();
                                         const availableDepartments = departmentsResult.success && departmentsResult.data ? departmentsResult.data : departments;
                                         
-                                        console.log(`[App] 🔍 [DEBUG] syncChats: Verificando envio de mensagem de seleção - chatHasDepartment: ${chatHasDepartment}, departments.length: ${availableDepartments.length}, realChat.id: ${realChat.id}`);
+                                        logger.debug(`[App] 🔍 [DEBUG] syncChats: Verificando envio de mensagem de seleção - chatHasDepartment: ${chatHasDepartment}, departments.length: ${availableDepartments.length}, realChat.id: ${realChat.id}`);
                                         
                                         // Se não tem departamento (foi desatribuído ao fechar), SEMPRE envia mensagem de seleção
                                         if (!chatHasDepartment && availableDepartments.length > 0) {
@@ -976,10 +985,10 @@ const App: React.FC = () => {
                                                                   (realChat.id ? realChat.id.split('@')[0] : null) ||
                                                                   (existingChat?.id ? existingChat.id.split('@')[0] : null);
                                             
-                                            console.log(`[App] 🔍 [DEBUG] syncChats: Tentando enviar mensagem - contactNumber: ${contactNumber}, realChat.contactNumber: ${realChat.contactNumber}, existingChat?.contactNumber: ${existingChat?.contactNumber}`);
+                                            logger.debug(`[App] 🔍 [DEBUG] syncChats: Tentando enviar mensagem - contactNumber: ${contactNumber}, realChat.contactNumber: ${realChat.contactNumber}, existingChat?.contactNumber: ${existingChat?.contactNumber}`);
                                             
                                             if (contactNumber && contactNumber.length >= 10) {
-                                                console.log(`[App] 📤 [DEBUG] syncChats: Chat reaberto sem departamento - Enviando mensagem de seleção de departamento para ${realChat.id} (número: ${contactNumber})`);
+                                                logger.debug(`[App] 📤 [DEBUG] syncChats: Chat reaberto sem departamento - Enviando mensagem de seleção de departamento para ${realChat.id} (número: ${contactNumber})`);
                                                 const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, availableDepartments);
                                                 
                                                 if (sent) {
@@ -1003,18 +1012,18 @@ const App: React.FC = () => {
                                                         awaitingDepartmentSelection: true,
                                                         messages: [...realChat.messages, systemMessage]
                                                     });
-                                                    console.log(`[App] ✅ [DEBUG] syncChats: Mensagem de seleção de departamento enviada para ${realChat.id}`);
+                                                    logger.debug(`[App] ✅ [DEBUG] syncChats: Mensagem de seleção de departamento enviada para ${realChat.id}`);
                                                 } else {
-                                                    console.error(`[App] ❌ [DEBUG] syncChats: Falha ao enviar mensagem de seleção de departamento para ${realChat.id}`);
+                                                    logger.debug(`[App] ❌ [DEBUG] syncChats: Falha ao enviar mensagem de seleção de departamento para ${realChat.id}`);
                                                 }
                                             } else {
-                                                console.warn(`[App] ⚠️ [DEBUG] syncChats: Não foi possível enviar mensagem de seleção - número de contato inválido para ${realChat.id} (contactNumber: ${contactNumber})`);
+                                                logger.debug(`[App] ⚠️ [DEBUG] syncChats: Não foi possível enviar mensagem de seleção - número de contato inválido para ${realChat.id} (contactNumber: ${contactNumber})`);
                                             }
                                         } else {
                                             if (availableDepartments.length === 0) {
-                                                console.warn(`[App] ⚠️ [DEBUG] syncChats: Não enviando mensagem de seleção - NENHUM DEPARTAMENTO CONFIGURADO. Configure departamentos em Configurações > Departamentos para que a mensagem seja enviada automaticamente.`);
+                                                logger.debug(`[App] ⚠️ [DEBUG] syncChats: Não enviando mensagem de seleção - NENHUM DEPARTAMENTO CONFIGURADO. Configure departamentos em Configurações > Departamentos para que a mensagem seja enviada automaticamente.`);
                                             } else {
-                                                console.log(`[App] ⚠️ [DEBUG] syncChats: Não enviando mensagem de seleção - chatHasDepartment: ${chatHasDepartment}, departments.length: ${availableDepartments.length}`);
+                                                logger.debug(`[App] ⚠️ [DEBUG] syncChats: Não enviando mensagem de seleção - chatHasDepartment: ${chatHasDepartment}, departments.length: ${availableDepartments.length}`);
                                             }
                                         }
                                         
@@ -1175,7 +1184,7 @@ const App: React.FC = () => {
                         
                         // PRIORIDADE 1: Se o banco tem mais mensagens que a API, SEMPRE usa mensagens do banco como base
                         if (hasMoreDbMessages && dbMessages.length > 0) {
-                            console.log(`[App] 🔍 [DEBUG] syncChats: Banco tem ${dbMessages.length} mensagens, API tem ${apiMessagesForMerge.length}. Usando banco como base.`);
+                            logger.debug(`[App] 🔍 [DEBUG] syncChats: Banco tem ${dbMessages.length} mensagens, API tem ${apiMessagesForMerge.length}. Usando banco como base.`);
                             
                             // Adiciona TODAS as mensagens do banco primeiro (fonte mais completa)
                             dbMessages.forEach(msg => {
@@ -1714,7 +1723,7 @@ const App: React.FC = () => {
                             finalStatus = dbChat.status || 'pending'; // Se não tem status no banco, usa pending
                             finalAssignedTo = dbChat.assignedTo;
                             finalDepartmentId = dbChat.departmentId !== undefined ? dbChat.departmentId : null;
-                            console.log('[App] 🔍 [DEBUG] syncChats - Usando dados do BANCO (PRIORIDADE ABSOLUTA):', {
+                            logger.debug('[App] 🔍 [DEBUG] syncChats - Usando dados do BANCO (PRIORIDADE ABSOLUTA):', {
                                 id: realChat.id,
                                 status: finalStatus,
                                 assignedTo: finalAssignedTo,
@@ -1726,7 +1735,7 @@ const App: React.FC = () => {
                             finalStatus = realChat.status || 'pending';
                             finalAssignedTo = undefined;
                             finalDepartmentId = null;
-                            console.log('[App] 🔍 [DEBUG] syncChats - Chat NÃO está no banco, usando status da API:', {
+                            logger.debug('[App] 🔍 [DEBUG] syncChats - Chat NÃO está no banco, usando status da API:', {
                                 id: realChat.id,
                                 status: finalStatus
                             });
@@ -2107,7 +2116,7 @@ const App: React.FC = () => {
             // console.log('[App] Nenhum chat retornado da API, mantendo estado atual');
         }
         } catch (error) {
-            console.error('[App] ❌ [DEBUG] Erro em syncChats:', error);
+            logger.debug('[App] ❌ [DEBUG] Erro em syncChats:', error);
         } finally {
             isSyncing = false;
         }
@@ -2117,10 +2126,10 @@ const App: React.FC = () => {
     // Isso garante que status, assignedTo e departmentId do banco tenham prioridade
     const loadChatsFromDatabase = async () => {
       try {
-        console.log('[App] 🔍 [DEBUG] Iniciando loadChatsFromDatabase...');
+        logger.debug('[App] 🔍 [DEBUG] Iniciando loadChatsFromDatabase...');
         // Carrega todos os chats individuais do banco (data_key = chatId)
         const allChatsData = await apiService.getAllData<Chat>('chats');
-        console.log('[App] 🔍 [DEBUG] getAllData retornou:', {
+        logger.debug('[App] 🔍 [DEBUG] getAllData retornou:', {
           isNull: allChatsData === null,
           isUndefined: allChatsData === undefined,
           keys: allChatsData ? Object.keys(allChatsData) : [],
@@ -2129,7 +2138,7 @@ const App: React.FC = () => {
         });
         
         if (allChatsData && Object.keys(allChatsData).length > 0) {
-          console.log('[App] 🔍 [DEBUG] Estrutura de allChatsData:', {
+          logger.debug('[App] 🔍 [DEBUG] Estrutura de allChatsData:', {
             keys: Object.keys(allChatsData),
             firstKey: Object.keys(allChatsData)[0],
             firstValue: Object.values(allChatsData)[0],
@@ -2145,7 +2154,7 @@ const App: React.FC = () => {
               // Se não, pode ser que a key seja o id
               const chatObj = chat && typeof chat === 'object' ? chat : { id: key };
               
-              console.log('[App] 🔍 [DEBUG] Processando entrada do banco:', {
+              logger.debug('[App] 🔍 [DEBUG] Processando entrada do banco:', {
                 key,
                 chatType: typeof chat,
                 chatIsObject: chat && typeof chat === 'object',
@@ -2166,7 +2175,7 @@ const App: React.FC = () => {
                                     
                                     // Log se houve normalização ao carregar do banco (indica mensagem antiga com cabeçalho)
                                     if (msg.sender === 'agent' && originalContent !== normalizedContent) {
-                                        console.log(`[App] 🔄 [DEBUG] syncChats: Normalizando mensagem do banco - original="${originalContent.substring(0, 100)}", normalized="${normalizedContent.substring(0, 100)}"`);
+                                        logger.debug(`[App] 🔄 [DEBUG] syncChats: Normalizando mensagem do banco - original="${originalContent.substring(0, 100)}", normalized="${normalizedContent.substring(0, 100)}"`);
                                     }
                                     
                                     return {
@@ -2181,7 +2190,7 @@ const App: React.FC = () => {
             .filter((chat: any) => {
               // Valida se o chat tem ID
               if (!chat || !chat.id || typeof chat.id !== 'string') {
-                console.log('[App] 🔍 [DEBUG] Chat filtrado (sem id válido):', chat);
+                logger.debug('[App] 🔍 [DEBUG] Chat filtrado (sem id válido):', chat);
                 return false;
               }
               
@@ -2200,14 +2209,14 @@ const App: React.FC = () => {
               
               // Chat é válido se: é grupo OU tem número válido
               if (!isGroup && !hasValidNumber) {
-                console.warn(`[App] ⚠️ [DEBUG] Chat inválido ignorado ao carregar do banco: ${chat.id} (número: ${chatIdNumber || contactNumber || 'N/A'}, dígitos: ${chatIdNumber.length || contactNumber.length || 0})`);
+                logger.debug(`[App] ⚠️ [DEBUG] Chat inválido ignorado ao carregar do banco: ${chat.id} (número: ${chatIdNumber || contactNumber || 'N/A'}, dígitos: ${chatIdNumber.length || contactNumber.length || 0})`);
                 return false;
               }
               
               return true;
             });
           
-          console.log('[App] 🔍 [DEBUG] Chats processados:', {
+          logger.debug('[App] 🔍 [DEBUG] Chats processados:', {
             total: chatsArray.length,
             statuses: chatsArray.map(c => ({ 
               id: c?.id || 'unknown', 
@@ -2245,12 +2254,12 @@ const App: React.FC = () => {
             return hasStatusChanges ? chatsArray : prevChats;
           });
           
-          console.log(`[App] ✅ Carregados ${chatsArray.length} chats do banco com status fixo`);
+          logger.info(`[App] ✅ Carregados ${chatsArray.length} chats do banco com status fixo`);
         } else {
-          console.log('[App] ⚠️ [DEBUG] Nenhum chat encontrado no banco - allChatsData:', allChatsData);
+          logger.debug('[App] ⚠️ [DEBUG] Nenhum chat encontrado no banco - allChatsData:', allChatsData);
         }
       } catch (error) {
-        console.error('[App] ❌ [DEBUG] Erro ao carregar chats do banco:', error);
+        logger.debug('[App] ❌ [DEBUG] Erro ao carregar chats do banco:', error);
       }
     };
 
@@ -2280,6 +2289,8 @@ const App: React.FC = () => {
     
     // Inicializa Socket.IO de forma assíncrona
     const initWebSocket = async (isReconnect: boolean = false) => {
+        // Exponibiliza para a UI (botão "Reconectar")
+        initWebSocketRef.current = initWebSocket;
         // Limpa timeout anterior se existir
         if (wsReconnectTimeoutRef.current) {
             clearTimeout(wsReconnectTimeoutRef.current);
@@ -2367,7 +2378,7 @@ const App: React.FC = () => {
                         allListeners = Array.from(socket.eventNames());
                     }
                 } catch (e) {
-                    console.warn('[App] ⚠️ [DEBUG] socket.eventNames() não disponível:', e);
+                    logger.debug('[App] ⚠️ [DEBUG] socket.eventNames() não disponível:', e);
                 }
                 
                 console.log('[App] ✅ Socket.IO conectado com sucesso!', {
@@ -2381,7 +2392,7 @@ const App: React.FC = () => {
                 
                 // Loga todos os listeners registrados para debug
                 if (allListeners.length > 0) {
-                    console.log('[App] 🔍 [DEBUG] Socket.IO listeners registrados:', allListeners);
+                    logger.debug('[App] 🔍 [DEBUG] Socket.IO listeners registrados:', allListeners);
                 }
             });
             
@@ -2417,42 +2428,42 @@ const App: React.FC = () => {
                 if (socket.onAny && typeof socket.onAny === 'function') {
                     socket.onAny((eventName, ...args) => {
                         // Loga TODOS os eventos para debug (não apenas mensagens)
-                        console.log(`[App] 🔔 [DEBUG] Socket.IO evento recebido: ${eventName}`, {
+                        logger.debug(`[App] 🔔 [DEBUG] Socket.IO evento recebido: ${eventName}`, {
                             eventName,
                             argsCount: args.length,
                             firstArgType: args[0] ? typeof args[0] : 'undefined',
                             firstArgKeys: args[0] && typeof args[0] === 'object' ? Object.keys(args[0]).slice(0, 10) : []
                         });
                     });
-                    console.log('[App] ✅ [DEBUG] socket.onAny registrado com sucesso');
+                    logger.debug('[App] ✅ [DEBUG] socket.onAny registrado com sucesso');
                 } else {
-                    console.warn('[App] ⚠️ [DEBUG] socket.onAny não está disponível nesta versão do Socket.IO');
+                    logger.debug('[App] ⚠️ [DEBUG] socket.onAny não está disponível nesta versão do Socket.IO');
                 }
             } catch (e) {
-                console.error('[App] ❌ [DEBUG] Erro ao registrar socket.onAny:', e);
+                logger.debug('[App] ❌ [DEBUG] Erro ao registrar socket.onAny:', e);
             }
             
             // Event: messages.upsert - mensagens novas ou atualizadas
-            console.log('[App] 🔧 [DEBUG] Registrando handler messages.upsert no Socket.IO');
+            logger.debug('[App] 🔧 [DEBUG] Registrando handler messages.upsert no Socket.IO');
             
             // Verifica se o socket está conectado antes de registrar handlers
             if (!socket.connected) {
-                console.warn('[App] ⚠️ [DEBUG] Socket.IO não está conectado ao registrar handlers. Aguardando conexão...');
+                logger.debug('[App] ⚠️ [DEBUG] Socket.IO não está conectado ao registrar handlers. Aguardando conexão...');
                 socket.once('connect', () => {
-                    console.log('[App] ✅ [DEBUG] Socket.IO conectado, handlers serão registrados agora');
+                    logger.debug('[App] ✅ [DEBUG] Socket.IO conectado, handlers serão registrados agora');
                 });
             }
             
             // Debounce para processar múltiplas mensagens rápidas em batch
             // Agrupa mensagens por remoteJid e processa em batch após 100ms
             const messageQueue = new Map<string, any[]>();
-            const messageProcessTimeouts = new Map<string, NodeJS.Timeout>();
+            const messageProcessTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
             
             const processMessageBatch = (remoteJid: string, messages: any[]) => {
                 // Processa todas as mensagens do batch
                 messages.forEach((messageData, index) => {
                     try {
-                        console.log(`[App] 🔍 [DEBUG] processMessageBatch: Processando mensagem ${index + 1}/${messages.length} para ${remoteJid}`, {
+                        logger.debug(`[App] 🔍 [DEBUG] processMessageBatch: Processando mensagem ${index + 1}/${messages.length} para ${remoteJid}`, {
                             hasKey: !!messageData.key,
                             hasMessage: !!messageData.message,
                             status: messageData.status,
@@ -2462,7 +2473,7 @@ const App: React.FC = () => {
                         
                         const mapped = mapApiMessageToInternal(messageData);
                         if (!mapped) {
-                            console.log(`[App] ⚠️ [DEBUG] processMessageBatch: mapApiMessageToInternal retornou null para mensagem ${index + 1}`, {
+                            logger.debug(`[App] ⚠️ [DEBUG] processMessageBatch: mapApiMessageToInternal retornou null para mensagem ${index + 1}`, {
                                 hasKey: !!messageData.key,
                                 hasMessage: !!messageData.message,
                                 conversation: messageData.message?.conversation,
@@ -2471,7 +2482,7 @@ const App: React.FC = () => {
                             return;
                         }
                         
-                        console.log(`[App] ✅ [DEBUG] processMessageBatch: Mensagem mapeada com sucesso`, {
+                        logger.debug(`[App] ✅ [DEBUG] processMessageBatch: Mensagem mapeada com sucesso`, {
                             sender: mapped.sender,
                             content: mapped.content?.substring(0, 50),
                             type: mapped.type,
@@ -2498,7 +2509,7 @@ const App: React.FC = () => {
             };
             
             socket.on('messages.upsert', (data: any) => {
-                console.log('[App] 🎯 [DEBUG] Socket.IO messages.upsert HANDLER CHAMADO!', {
+                logger.debug('[App] 🎯 [DEBUG] Socket.IO messages.upsert HANDLER CHAMADO!', {
                     hasData: !!data,
                     dataType: typeof data,
                     dataKeys: data && typeof data === 'object' ? Object.keys(data).slice(0, 10) : [],
@@ -2511,7 +2522,7 @@ const App: React.FC = () => {
                     if (data && typeof data === 'object') {
                         const hasImageInData = !!(data.message?.imageMessage || data.imageMessage);
                         if (hasImageInData) {
-                            console.log('[App] 🖼️ [DEBUG] Socket.IO: Estrutura ORIGINAL do data recebido:', {
+                            logger.debug('[App] 🖼️ [DEBUG] Socket.IO: Estrutura ORIGINAL do data recebido:', {
                                 hasDataMessage: !!data.message,
                                 hasDataImageMessage: !!data.imageMessage,
                                 dataMessageKeys: data.message ? Object.keys(data.message).slice(0, 20) : [],
@@ -2527,13 +2538,13 @@ const App: React.FC = () => {
                     // Extrai dados da mensagem
                     const messageData = data.message || data;
                     if (!messageData || !messageData.key) {
-                        console.log('[App] 🔍 [DEBUG] Socket.IO messages.upsert: messageData ou key ausente', { hasMessage: !!data.message, hasData: !!data, hasKey: !!messageData?.key });
+                        logger.debug('[App] 🔍 [DEBUG] Socket.IO messages.upsert: messageData ou key ausente', { hasMessage: !!data.message, hasData: !!data, hasKey: !!messageData?.key });
                         return;
                     }
                     
                     const remoteJid = normalizeJid(messageData.key.remoteJid || messageData.key.remoteJidAlt || '');
                     if (!remoteJid) {
-                        console.log('[App] 🔍 [DEBUG] Socket.IO messages.upsert: remoteJid ausente', { key: messageData.key });
+                        logger.debug('[App] 🔍 [DEBUG] Socket.IO messages.upsert: remoteJid ausente', { key: messageData.key });
                         return;
                     }
                     
@@ -2546,7 +2557,7 @@ const App: React.FC = () => {
                     
                     // Log detalhado para imagens
                     if (hasImageMessage) {
-                        console.log('[App] 🖼️ [DEBUG] Socket.IO: Imagem detectada na mensagem recebida:', {
+                        logger.debug('[App] 🖼️ [DEBUG] Socket.IO: Imagem detectada na mensagem recebida:', {
                             hasMessageImageMessage: !!messageData.message?.imageMessage,
                             hasImageMessage: !!messageData.imageMessage,
                             messageImageMessageKeys: messageData.message?.imageMessage ? Object.keys(messageData.message.imageMessage) : [],
@@ -2559,11 +2570,11 @@ const App: React.FC = () => {
                         });
                     }
                     
-                    console.log(`[App] 🔍 [DEBUG] Socket.IO messages.upsert recebido: remoteJid=${remoteJid}, fromMe=${fromMe}, status=${messageStatus}, content="${messageContent.substring(0, 50)}", hasImage=${hasImageMessage}, imageUrl=${typeof imageUrl === 'string' ? imageUrl.substring(0, 100) : imageUrl}`);
+                    logger.debug(`[App] 🔍 [DEBUG] Socket.IO messages.upsert recebido: remoteJid=${remoteJid}, fromMe=${fromMe}, status=${messageStatus}, content="${messageContent.substring(0, 50)}", hasImage=${hasImageMessage}, imageUrl=${typeof imageUrl === 'string' ? imageUrl.substring(0, 100) : imageUrl}`);
                     
                     // Log específico para mensagens do agente
                     if (fromMe) {
-                        console.log(`[App] 🎯 [DEBUG] Socket.IO: Mensagem do AGENTE detectada! fromMe=${fromMe}, content="${messageContent.substring(0, 100)}"`);
+                        logger.debug(`[App] 🎯 [DEBUG] Socket.IO: Mensagem do AGENTE detectada! fromMe=${fromMe}, content="${messageContent.substring(0, 100)}"`);
                     }
                     
                     // Se é uma imagem e encontrou URL, garante que ela seja preservada na estrutura
@@ -2571,10 +2582,10 @@ const App: React.FC = () => {
                         // Garante que a URL esteja na estrutura correta antes de processar
                         if (messageData.message?.imageMessage && !messageData.message.imageMessage.url) {
                             messageData.message.imageMessage.url = imageUrl;
-                            console.log('[App] ✅ [DEBUG] Socket.IO: URL preservada em message.imageMessage.url');
+                            logger.debug('[App] ✅ [DEBUG] Socket.IO: URL preservada em message.imageMessage.url');
                         } else if (messageData.imageMessage && !messageData.imageMessage.url) {
                             messageData.imageMessage.url = imageUrl;
-                            console.log('[App] ✅ [DEBUG] Socket.IO: URL preservada em imageMessage.url');
+                            logger.debug('[App] ✅ [DEBUG] Socket.IO: URL preservada em imageMessage.url');
                         }
                     }
                     
@@ -2590,7 +2601,7 @@ const App: React.FC = () => {
                     }
                     messageProcessTimeouts.set(remoteJid, setTimeout(() => {
                         const messagesToProcess = messageQueue.get(remoteJid) || [];
-                        console.log(`[App] 🔍 [DEBUG] Socket.IO: Processando batch de ${messagesToProcess.length} mensagens para ${remoteJid}`);
+                        logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Processando batch de ${messagesToProcess.length} mensagens para ${remoteJid}`);
                         processMessageBatch(remoteJid, messagesToProcess);
                         messageQueue.delete(remoteJid);
                         messageProcessTimeouts.delete(remoteJid);
@@ -2603,7 +2614,7 @@ const App: React.FC = () => {
             const processSingleMessage = async (remoteJid: string, mapped: Message, messageData: any) => {
                 try {
                     // Debug: log para rastrear remoteJid recebido
-                    console.log(`[App] 🔍 [DEBUG] Mensagem recebida via Socket.IO: remoteJid=${remoteJid}, sender=${mapped?.sender}, content=${mapped?.content?.substring(0, 50)}`);
+                    logger.debug(`[App] 🔍 [DEBUG] Mensagem recebida via Socket.IO: remoteJid=${remoteJid}, sender=${mapped?.sender}, content=${mapped?.content?.substring(0, 50)}`);
                     
                     if (mapped) {
                         // Verifica se o chat já existe antes de processar
@@ -2626,7 +2637,7 @@ const App: React.FC = () => {
                         
                         // VERIFICAÇÃO CRÍTICA: Se é mensagem do usuário, verifica no banco se chat está fechado
                         // e envia mensagem de seleção IMEDIATAMENTE, mesmo se chat não estiver no estado
-                        console.log(`[App] 🔍 [DEBUG] Socket.IO: Verificando mensagem - sender=${mapped?.sender}, remoteJid=${remoteJid}, departments.length=${departments.length}`);
+                        logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Verificando mensagem - sender=${mapped?.sender}, remoteJid=${remoteJid}, departments.length=${departments.length}`);
                         
                         if (mapped.sender === 'user' && departments.length > 0) {
                                     const contactNumber = remoteJid.split('@')[0]?.replace(/\D/g, '') || '';
@@ -2634,14 +2645,14 @@ const App: React.FC = () => {
                                     // Verifica se chat existe no estado
                                     const chatInState = existingChatBefore;
                                     
-                                    console.log(`[App] 🔍 [DEBUG] Socket.IO: Mensagem do usuário detectada - remoteJid=${remoteJid}, contactNumber=${contactNumber}, chatInState=${!!chatInState}, status=${chatInState?.status}`);
+                                    logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Mensagem do usuário detectada - remoteJid=${remoteJid}, contactNumber=${contactNumber}, chatInState=${!!chatInState}, status=${chatInState?.status}`);
                                     
                                     // Se chat não está no estado OU está fechado, verifica no banco e envia mensagem
                                     if (!chatInState || chatInState.status === 'closed') {
-                                        console.log(`[App] 🔍 [DEBUG] Socket.IO: Verificando chat no banco para envio imediato - remoteJid=${remoteJid}, chatInState=${!!chatInState}, status=${chatInState?.status}`);
+                                        logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Verificando chat no banco para envio imediato - remoteJid=${remoteJid}, chatInState=${!!chatInState}, status=${chatInState?.status}`);
                                         
                                         // Busca chat no banco de dados
-                                        storageService.getAllData('chats').then(allChatsData => {
+                                        storageService.getAllData<Chat>('chats').then(allChatsData => {
                                             if (allChatsData && typeof allChatsData === 'object') {
                                                 const chatKey = Object.keys(allChatsData).find(key => {
                                                     const chat = allChatsData[key];
@@ -2661,22 +2672,22 @@ const App: React.FC = () => {
                                                     const hasNoDepartment = !dbChat.departmentId;
                                                     const shouldSend = !dbChat.departmentSelectionSent || wasClosed;
                                                     
-                                                    console.log(`[App] 🔍 [DEBUG] Socket.IO: Chat encontrado no banco - chatId=${chatKey}, status=${dbChat.status}, departmentId=${dbChat.departmentId}, departmentSelectionSent=${dbChat.departmentSelectionSent}, shouldSend=${shouldSend}`);
+                                                    logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Chat encontrado no banco - chatId=${chatKey}, status=${dbChat.status}, departmentId=${dbChat.departmentId}, departmentSelectionSent=${dbChat.departmentSelectionSent}, shouldSend=${shouldSend}`);
                                                     
                                                     if (wasClosed && hasNoDepartment && shouldSend && contactNumber.length >= 10) {
-                                                        console.log(`[App] 🔄 [DEBUG] Socket.IO: Chat fechado no banco recebeu mensagem do usuário - Reabrindo IMEDIATAMENTE para ${remoteJid} (número: ${contactNumber})`);
+                                                        logger.debug(`[App] 🔄 [DEBUG] Socket.IO: Chat fechado no banco recebeu mensagem do usuário - Reabrindo IMEDIATAMENTE para ${remoteJid} (número: ${contactNumber})`);
                                                         
                                                         // Reabre o chat IMEDIATAMENTE no banco antes de enviar mensagem
                                                         (async () => {
                                                             try {
                                                                 // Atualiza status no banco IMEDIATAMENTE
                                                                 await apiService.updateChatStatus(dbChat.id, 'pending', undefined, null);
-                                                                console.log(`[App] ✅ [DEBUG] Socket.IO: Chat ${dbChat.id} reaberto e salvo no banco IMEDIATAMENTE (verificação do banco)`);
+                                                                logger.debug(`[App] ✅ [DEBUG] Socket.IO: Chat ${dbChat.id} reaberto e salvo no banco IMEDIATAMENTE (verificação do banco)`);
                                                                 
                                                                 // Depois de salvar, envia mensagem de seleção de departamento
                                                                 const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, departments);
                                                                 if (sent) {
-                                                                    console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção enviada IMEDIATAMENTE do banco para ${remoteJid}`);
+                                                                    logger.debug(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção enviada IMEDIATAMENTE do banco para ${remoteJid}`);
                                                                     // Atualiza chat com departmentSelectionSent
                                                                     handleUpdateChat({
                                                                         ...dbChat,
@@ -2688,39 +2699,39 @@ const App: React.FC = () => {
                                                                     });
                                                                 }
                                                             } catch (error) {
-                                                                console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao reabrir chat do banco:`, error);
+                                                                logger.debug(`[App] ❌ [DEBUG] Socket.IO: Erro ao reabrir chat do banco:`, error);
                                                             }
                                                         })();
                                                     } else if (wasClosed && contactNumber.length >= 10) {
                                                         // Chat está fechado mas já tem departamento ou mensagem já foi enviada - apenas reabre
-                                                        console.log(`[App] 🔄 [DEBUG] Socket.IO: Chat fechado no banco recebeu mensagem do usuário - Reabrindo (sem enviar mensagem) para ${remoteJid}`);
+                                                        logger.debug(`[App] 🔄 [DEBUG] Socket.IO: Chat fechado no banco recebeu mensagem do usuário - Reabrindo (sem enviar mensagem) para ${remoteJid}`);
                                                         (async () => {
                                                             try {
                                                                 await apiService.updateChatStatus(dbChat.id, 'pending', undefined, null);
-                                                                console.log(`[App] ✅ [DEBUG] Socket.IO: Chat ${dbChat.id} reaberto no banco (sem enviar mensagem)`);
+                                                                logger.debug(`[App] ✅ [DEBUG] Socket.IO: Chat ${dbChat.id} reaberto no banco (sem enviar mensagem)`);
                                                             } catch (error) {
-                                                                console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao reabrir chat do banco:`, error);
+                                                                logger.debug(`[App] ❌ [DEBUG] Socket.IO: Erro ao reabrir chat do banco:`, error);
                                                             }
                                                         })();
                                                     }
                                                 } else {
                                                     // Chat não existe no banco - é um chat novo, envia mensagem imediatamente
                                                     if (contactNumber.length >= 10) {
-                                                        console.log(`[App] 📤 [DEBUG] Socket.IO: Chat novo detectado - Enviando mensagem de seleção IMEDIATAMENTE para ${remoteJid} (número: ${contactNumber})`);
+                                                        logger.debug(`[App] 📤 [DEBUG] Socket.IO: Chat novo detectado - Enviando mensagem de seleção IMEDIATAMENTE para ${remoteJid} (número: ${contactNumber})`);
                                                         sendDepartmentSelectionMessage(apiConfig, contactNumber, departments)
                                                             .then(sent => {
                                                                 if (sent) {
-                                                                    console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção enviada IMEDIATAMENTE para chat novo ${remoteJid}`);
+                                                                    logger.debug(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção enviada IMEDIATAMENTE para chat novo ${remoteJid}`);
                                                                 }
                                                             })
                                                             .catch(err => {
-                                                                console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem para chat novo:`, err);
+                                                                logger.debug(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem para chat novo:`, err);
                                                             });
                                                     }
                                                 }
                                             }
                                         }).catch(err => {
-                                            console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao buscar chat no banco:`, err);
+                                            logger.debug(`[App] ❌ [DEBUG] Socket.IO: Erro ao buscar chat no banco:`, err);
                                         });
                                     }
                         }
@@ -2775,7 +2786,7 @@ const App: React.FC = () => {
                                         
                                         if (chatJid === messageJid || chatNumberMatch) {
                                             foundChat = true;
-                                            console.log(`[App] 🔍 [DEBUG] Chat encontrado: chatId=${chat.id}, chatJid=${chatJid}, messageJid=${messageJid}, matchType=${exactMatch ? 'exato' : fullNumberMatch ? 'número completo' : 'parcial'}`);
+                                            logger.debug(`[App] 🔍 [DEBUG] Chat encontrado: chatId=${chat.id}, chatJid=${chatJid}, messageJid=${messageJid}, matchType=${exactMatch ? 'exato' : fullNumberMatch ? 'número completo' : 'parcial'}`);
                                         
                                             // Verifica se precisa enviar mensagem de seleção de departamento IMEDIATAMENTE
                                             // ANTES de processar a mensagem, para garantir que seja enviada sempre que necessário
@@ -2784,13 +2795,13 @@ const App: React.FC = () => {
                                             
                                             // Debug: log detalhado para entender por que a condição não está sendo satisfeita
                                             if (isUserMessage) {
-                                                console.log(`[App] 🔍 [DEBUG] Socket.IO: Verificando envio de mensagem de seleção - chatId: ${chat.id}, isUserMessage: ${isUserMessage}, departmentId: ${chat.departmentId}, departmentSelectionSent: ${chat.departmentSelectionSent}, departments.length: ${departments.length}, status: ${chat.status}, assignedTo: ${chat.assignedTo}, wasClosed: ${wasClosed}`);
+                                                logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Verificando envio de mensagem de seleção - chatId: ${chat.id}, isUserMessage: ${isUserMessage}, departmentId: ${chat.departmentId}, departmentSelectionSent: ${chat.departmentSelectionSent}, departments.length: ${departments.length}, status: ${chat.status}, assignedTo: ${chat.assignedTo}, wasClosed: ${wasClosed}`);
                                             }
                                             
                                             // Se chat estava fechado e recebeu mensagem do usuário, RESETA departmentSelectionSent para permitir reenvio
                                             // Isso garante que a mensagem seja enviada quando o chat for reaberto
                                             if (wasClosed && isUserMessage) {
-                                                console.log(`[App] 🔄 [DEBUG] Socket.IO: Chat fechado recebeu mensagem do usuário - Resetando departmentSelectionSent para permitir reenvio`);
+                                                logger.debug(`[App] 🔄 [DEBUG] Socket.IO: Chat fechado recebeu mensagem do usuário - Resetando departmentSelectionSent para permitir reenvio`);
                                                 // Não atualiza o chat ainda, apenas prepara para enviar a mensagem
                                             }
                                             
@@ -2802,7 +2813,7 @@ const App: React.FC = () => {
                                                 (!chat.departmentSelectionSent || wasClosed); // Permite reenvio se chat estava fechado
                                             
                                             if (shouldSendSelection) {
-                                                console.log(`[App] 📤 [DEBUG] Socket.IO: Chat sem departamento - Enviando mensagem de seleção IMEDIATAMENTE para ${chat.id} (status: ${chat.status}, wasClosed: ${wasClosed})`);
+                                                logger.debug(`[App] 📤 [DEBUG] Socket.IO: Chat sem departamento - Enviando mensagem de seleção IMEDIATAMENTE para ${chat.id} (status: ${chat.status}, wasClosed: ${wasClosed})`);
                                                 const contactNumber = chat.contactNumber || (chat.id ? chat.id.split('@')[0] : null);
                                                 
                                                 if (contactNumber && contactNumber.length >= 10) {
@@ -2810,7 +2821,7 @@ const App: React.FC = () => {
                                                     sendDepartmentSelectionMessage(apiConfig, contactNumber, departments)
                                                         .then(sent => {
                                                             if (sent) {
-                                                                console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada IMEDIATAMENTE para ${chat.id}`);
+                                                                logger.debug(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada IMEDIATAMENTE para ${chat.id}`);
                                                                 // Marca como enviada para evitar reenvio
                                                                 handleUpdateChat({
                                                                     ...chat,
@@ -2822,17 +2833,17 @@ const App: React.FC = () => {
                                                                     departmentId: null
                                                                 });
                                                             } else {
-                                                                console.error(`[App] ❌ [DEBUG] Socket.IO: Falha ao enviar mensagem de seleção de departamento para ${chat.id}`);
+                                                                logger.debug(`[App] ❌ [DEBUG] Socket.IO: Falha ao enviar mensagem de seleção de departamento para ${chat.id}`);
                                                             }
                                                         })
                                                         .catch(err => {
-                                                            console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem de seleção de departamento:`, err);
+                                                            logger.debug(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem de seleção de departamento:`, err);
                                                         });
                                                 } else {
-                                                    console.warn(`[App] ⚠️ [DEBUG] Socket.IO: Não foi possível enviar mensagem de seleção - número de contato inválido para ${chat.id} (contactNumber: ${contactNumber})`);
+                                                    logger.debug(`[App] ⚠️ [DEBUG] Socket.IO: Não foi possível enviar mensagem de seleção - número de contato inválido para ${chat.id} (contactNumber: ${contactNumber})`);
                                                 }
                                             } else if (isUserMessage && !shouldSendSelection) {
-                                                console.log(`[App] ⚠️ [DEBUG] Socket.IO: Condição não satisfeita para envio - isUserMessage: ${isUserMessage}, departmentId: ${chat.departmentId}, departmentSelectionSent: ${chat.departmentSelectionSent}, departments.length: ${departments.length}, status: ${chat.status}, assignedTo: ${chat.assignedTo}, wasClosed: ${wasClosed}`);
+                                                logger.debug(`[App] ⚠️ [DEBUG] Socket.IO: Condição não satisfeita para envio - isUserMessage: ${isUserMessage}, departmentId: ${chat.departmentId}, departmentSelectionSent: ${chat.departmentSelectionSent}, departments.length: ${departments.length}, status: ${chat.status}, assignedTo: ${chat.assignedTo}, wasClosed: ${wasClosed}`);
                                             }
                                         
                                             // Para mensagens enviadas (fromMe: true), tenta atualizar mensagem local existente
@@ -2852,7 +2863,7 @@ const App: React.FC = () => {
                                                     // PRIORIDADE 1: Se já tem whatsappMessageId, verifica por ele (mais confiável)
                                                     if (m.whatsappMessageId && mapped.whatsappMessageId && 
                                                         m.whatsappMessageId === mapped.whatsappMessageId) {
-                                                        console.log(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem por whatsappMessageId: ${m.whatsappMessageId}`);
+                                                        logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem por whatsappMessageId: ${m.whatsappMessageId}`);
                                                         return true;
                                                     }
                                                     
@@ -2873,7 +2884,7 @@ const App: React.FC = () => {
                                                                 normalizedLocal === normalizedMapped;
                                                             
                                                             if (contentMatch) {
-                                                                console.log(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem local por conteúdo normalizado - local="${normalizedLocal}", mapped="${normalizedMapped}", timeDiff=${Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime())}ms, localId=${m.id}`);
+                                                                logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem local por conteúdo normalizado - local="${normalizedLocal}", mapped="${normalizedMapped}", timeDiff=${Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime())}ms, localId=${m.id}`);
                                                                 return true;
                                                             } else {
                                                                 // Se conteúdo não bate exatamente, mas é mensagem local muito recente (últimos 5 segundos), considera match
@@ -2884,7 +2895,7 @@ const App: React.FC = () => {
                                                                     const localInMapped = normalizedMapped.includes(normalizedLocal);
                                                                     const mappedInLocal = normalizedLocal.includes(normalizedMapped);
                                                                     if (localInMapped || mappedInLocal) {
-                                                                        console.log(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem local por conteúdo parcial (muito recente) - local="${normalizedLocal}", mapped="${normalizedMapped}", localId=${m.id}`);
+                                                                        logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem local por conteúdo parcial (muito recente) - local="${normalizedLocal}", mapped="${normalizedMapped}", localId=${m.id}`);
                                                                         return true;
                                                                     }
                                                                 }
@@ -2906,7 +2917,7 @@ const App: React.FC = () => {
                                                                     (normalizedLocal === normalizedMapped || 
                                                                      normalizedMapped.includes(normalizedLocal) || 
                                                                      normalizedLocal.includes(normalizedMapped))) {
-                                                                    console.log(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem local em busca ampla - local="${normalizedLocal}", mapped="${normalizedMapped}", timeDiff=${timeDiff}ms, localId=${m.id}`);
+                                                                    logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem local em busca ampla - local="${normalizedLocal}", mapped="${normalizedMapped}", timeDiff=${timeDiff}ms, localId=${m.id}`);
                                                                     return true;
                                                                 }
                                                             }
@@ -2917,9 +2928,9 @@ const App: React.FC = () => {
                                                 
                                                 if (messageIndex >= 0) {
                                                     shouldUpdate = true;
-                                                    console.log(`[App] ✅ [DEBUG] Socket.IO: shouldUpdate=true, messageIndex=${messageIndex}`);
+                                                    logger.debug(`[App] ✅ [DEBUG] Socket.IO: shouldUpdate=true, messageIndex=${messageIndex}`);
                                                 } else {
-                                                    console.log(`[App] ⚠️ [DEBUG] Socket.IO: Mensagem do agente não encontrada localmente - mappedContent="${mapped.content?.substring(0, 50)}", whatsappId=${mapped.whatsappMessageId}, totalMessages=${chat.messages.length}`);
+                                                    logger.debug(`[App] ⚠️ [DEBUG] Socket.IO: Mensagem do agente não encontrada localmente - mappedContent="${mapped.content?.substring(0, 50)}", whatsappId=${mapped.whatsappMessageId}, totalMessages=${chat.messages.length}`);
                                                 }
                                             }
                                             
@@ -2973,7 +2984,7 @@ const App: React.FC = () => {
                                                 const existingMsg = chat.messages[existingMessageIndex];
                                                 // Se a mensagem existente não tem mediaUrl mas a nova tem, atualiza
                                                 if (!existingMsg.mediaUrl && mapped.mediaUrl) {
-                                                    console.log(`[App] 🔄 [DEBUG] Socket.IO: Atualizando mediaUrl de mensagem existente: ${existingMsg.id}`, {
+                                                    logger.debug(`[App] 🔄 [DEBUG] Socket.IO: Atualizando mediaUrl de mensagem existente: ${existingMsg.id}`, {
                                                         existingHasMediaUrl: !!existingMsg.mediaUrl,
                                                         newHasMediaUrl: !!mapped.mediaUrl,
                                                         newMediaUrl: mapped.mediaUrl.substring(0, 100)
@@ -2986,7 +2997,7 @@ const App: React.FC = () => {
                                             if (shouldUpdate && messageIndex >= 0) {
                                                 // Atualiza mensagem local existente com dados da API (inclui whatsappMessageId e mediaUrl)
                                                 chatUpdated = true;
-                                                console.log(`[App] 🔄 [DEBUG] Socket.IO: Atualizando mensagem existente do agente - messageIndex=${messageIndex}, localId=${chat.messages[messageIndex]?.id}, whatsappId=${mapped.whatsappMessageId}, originalContent="${mapped.content?.substring(0, 50)}"`);
+                                                logger.debug(`[App] 🔄 [DEBUG] Socket.IO: Atualizando mensagem existente do agente - messageIndex=${messageIndex}, localId=${chat.messages[messageIndex]?.id}, whatsappId=${mapped.whatsappMessageId}, originalContent="${mapped.content?.substring(0, 50)}"`);
                                                 const updatedMessages = [...chat.messages];
                                                 
                                                 // CRÍTICO: Normaliza o conteúdo removendo cabeçalho para manter consistência
@@ -3002,7 +3013,7 @@ const App: React.FC = () => {
                                                     ? localContent 
                                                     : normalizedMappedContent;
                                                 
-                                                console.log(`[App] 🔄 [DEBUG] Socket.IO: Normalizando conteúdo - local="${localContent.substring(0, 50)}", mapped="${mapped.content?.substring(0, 50)}", normalizedLocal="${normalizedLocalContent.substring(0, 50)}", normalizedMapped="${normalizedMappedContent.substring(0, 50)}", final="${finalContent.substring(0, 50)}"`);
+                                                logger.debug(`[App] 🔄 [DEBUG] Socket.IO: Normalizando conteúdo - local="${localContent.substring(0, 50)}", mapped="${mapped.content?.substring(0, 50)}", normalizedLocal="${normalizedLocalContent.substring(0, 50)}", normalizedMapped="${normalizedMappedContent.substring(0, 50)}", final="${finalContent.substring(0, 50)}"`);
                                                 
                                                 // IMPORTANTE: Atualiza mediaUrl se estiver presente na mensagem mapeada
                                                 // Isso garante que URLs de mídia sejam atualizadas quando chegarem via WebSocket
@@ -3085,10 +3096,10 @@ const App: React.FC = () => {
                                                 // Log detalhado para debug de duplicação
                                                 const originalContent = mapped.content || '';
                                                 if (mapped.sender === 'agent' && originalContent !== finalMappedContent) {
-                                                    console.log(`[App] 🔄 [DEBUG] Socket.IO: Normalizando conteúdo do agente ao adicionar - original="${originalContent.substring(0, 100)}", normalized="${finalMappedContent.substring(0, 100)}"`);
+                                                    logger.debug(`[App] 🔄 [DEBUG] Socket.IO: Normalizando conteúdo do agente ao adicionar - original="${originalContent.substring(0, 100)}", normalized="${finalMappedContent.substring(0, 100)}"`);
                                                 }
                                                 
-                                                console.log(`[App] ✅ [DEBUG] Socket.IO: Adicionando nova mensagem - sender=${mapped.sender}, whatsappId=${mapped.whatsappMessageId}, originalContent="${originalContent.substring(0, 50)}", normalizedContent="${finalMappedContent.substring(0, 50)}", isAgent=${mapped.sender === 'agent'}`);
+                                                logger.debug(`[App] ✅ [DEBUG] Socket.IO: Adicionando nova mensagem - sender=${mapped.sender}, whatsappId=${mapped.whatsappMessageId}, originalContent="${originalContent.substring(0, 50)}", normalizedContent="${finalMappedContent.substring(0, 50)}", isAgent=${mapped.sender === 'agent'}`);
                                                 
                                                 // Verifica se já existe uma mensagem idêntica antes de adicionar (prevenção extra de duplicação)
                                                 const alreadyExists = chat.messages.some(m => {
@@ -3100,14 +3111,14 @@ const App: React.FC = () => {
                                                         m.content === finalMappedContent &&
                                                         m.timestamp && messageToAdd.timestamp &&
                                                         Math.abs(m.timestamp.getTime() - messageToAdd.timestamp.getTime()) < 5000) {
-                                                        console.log(`[App] ⚠️ [DEBUG] Socket.IO: Mensagem idêntica já existe, ignorando duplicata - content="${finalMappedContent?.substring(0, 50)}"`);
+                                                        logger.debug(`[App] ⚠️ [DEBUG] Socket.IO: Mensagem idêntica já existe, ignorando duplicata - content="${finalMappedContent?.substring(0, 50)}"`);
                                                         return true;
                                                     }
                                                     return false;
                                                 });
                                                 
                                                 if (alreadyExists) {
-                                                    console.log(`[App] ⚠️ [DEBUG] Socket.IO: Mensagem duplicada detectada, não adicionando novamente`);
+                                                    logger.debug(`[App] ⚠️ [DEBUG] Socket.IO: Mensagem duplicada detectada, não adicionando novamente`);
                                                     return chat; // Retorna chat sem alterações
                                                 }
                                                 
@@ -3318,10 +3329,10 @@ const App: React.FC = () => {
                                                                                         !updatedChat.departmentSelectionSent;
                                                         
                                                         if (needsDepartmentSelection) {
-                                                            console.log(`[App] 📤 [DEBUG] Socket.IO: Chat reaberto - Enviando mensagem de seleção de departamento para ${chat.id} (número: ${contactNumber})`);
+                                                            logger.debug(`[App] 📤 [DEBUG] Socket.IO: Chat reaberto - Enviando mensagem de seleção de departamento para ${chat.id} (número: ${contactNumber})`);
                                                             const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, departments);
                                                             if (sent) {
-                                                                console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada para ${chat.id}`);
+                                                                logger.debug(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada para ${chat.id}`);
                                                                 // Atualiza chat com departmentSelectionSent
                                                                 handleUpdateChat({
                                                                     ...updatedChat,
@@ -3403,10 +3414,10 @@ const App: React.FC = () => {
                                                                                             !chat.departmentSelectionSent;
                                                             
                                                             if (needsDepartmentSelection) {
-                                                                console.log(`[App] 📤 [DEBUG] Socket.IO: Chat reaberto (mensagem já existia) - Enviando mensagem de seleção de departamento para ${chat.id} (número: ${contactNumber})`);
+                                                                logger.debug(`[App] 📤 [DEBUG] Socket.IO: Chat reaberto (mensagem já existia) - Enviando mensagem de seleção de departamento para ${chat.id} (número: ${contactNumber})`);
                                                                 const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, departments);
                                                                 if (sent) {
-                                                                    console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada para ${chat.id} (mensagem já existia)`);
+                                                                    logger.debug(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada para ${chat.id} (mensagem já existia)`);
                                                                     // Atualiza chat com departmentSelectionSent
                                                                     handleUpdateChat({
                                                                         ...chat,
@@ -3485,7 +3496,7 @@ const App: React.FC = () => {
                     
                     // Se o chat não existia antes e é uma mensagem do usuário, cria o chat novo
                     if (!chatExistsBefore && mapped && mapped.sender === 'user') {
-                        console.log(`[App] 🔍 [DEBUG] Socket.IO: Chat novo detectado - remoteJid=${remoteJid}, criando chat...`);
+                        logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Chat novo detectado - remoteJid=${remoteJid}, criando chat...`);
                         
                         // Extrai número do JID
                         const contactNumber = remoteJid.split('@')[0]?.replace(/\D/g, '') || '';
@@ -3527,7 +3538,7 @@ const App: React.FC = () => {
                             
                             // Envia mensagem de seleção de departamento se houver departamentos configurados
                             if (departments.length > 0) {
-                                console.log(`[App] 📤 [DEBUG] Socket.IO: Chat novo sem departamento - Enviando mensagem de seleção de departamento para ${remoteJid} (número: ${contactNumber})`);
+                                logger.debug(`[App] 📤 [DEBUG] Socket.IO: Chat novo sem departamento - Enviando mensagem de seleção de departamento para ${remoteJid} (número: ${contactNumber})`);
                                 sendDepartmentSelectionMessage(apiConfig, contactNumber, departments)
                                     .then(sent => {
                                         if (sent) {
@@ -3547,19 +3558,19 @@ const App: React.FC = () => {
                                                 awaitingDepartmentSelection: true,
                                                 messages: [...newChat.messages, systemMessage]
                                             });
-                                            console.log(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada para novo chat ${remoteJid}`);
+                                            logger.debug(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada para novo chat ${remoteJid}`);
                                         } else {
-                                            console.error(`[App] ❌ [DEBUG] Socket.IO: Falha ao enviar mensagem de seleção de departamento para novo chat ${remoteJid}`);
+                                            logger.debug(`[App] ❌ [DEBUG] Socket.IO: Falha ao enviar mensagem de seleção de departamento para novo chat ${remoteJid}`);
                                         }
                                     })
                                     .catch(err => {
-                                        console.error(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem de seleção de departamento para novo chat:`, err);
+                                        logger.debug(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem de seleção de departamento para novo chat:`, err);
                                     });
                             } else {
-                                console.warn(`[App] ⚠️ [DEBUG] Socket.IO: Não enviando mensagem de seleção - NENHUM DEPARTAMENTO CONFIGURADO para novo chat ${remoteJid}`);
+                                logger.debug(`[App] ⚠️ [DEBUG] Socket.IO: Não enviando mensagem de seleção - NENHUM DEPARTAMENTO CONFIGURADO para novo chat ${remoteJid}`);
                             }
                         } else {
-                            console.warn(`[App] ⚠️ [DEBUG] Socket.IO: Não foi possível criar chat novo - número inválido: ${contactNumber} (remoteJid: ${remoteJid})`);
+                            logger.debug(`[App] ⚠️ [DEBUG] Socket.IO: Não foi possível criar chat novo - número inválido: ${contactNumber} (remoteJid: ${remoteJid})`);
                         }
                     }
                 }
@@ -3856,7 +3867,7 @@ const App: React.FC = () => {
     }
   };
 
-  const addNotification = (title: string, message: string, type: 'info' | 'warning' | 'success' = 'info', playSound: boolean = false, showBrowser: boolean = false) => {
+  const addNotification = (title: string, message: string, type: 'info' | 'warning' | 'success' | 'error' = 'info', playSound: boolean = false, showBrowser: boolean = false) => {
     const id = Date.now().toString();
     setNotifications(prev => [...prev, { id, title, message, type }]);
     
@@ -3926,7 +3937,7 @@ const App: React.FC = () => {
   };
 
   const handleUpdateChat = async (updatedChat: Chat) => {
-    console.log('[App] 🔍 [DEBUG] handleUpdateChat CHAMADO:', {
+    logger.debug('[App] 🔍 [DEBUG] handleUpdateChat CHAMADO:', {
       chatId: updatedChat.id,
       status: updatedChat.status,
       assignedTo: updatedChat.assignedTo,
@@ -3939,7 +3950,7 @@ const App: React.FC = () => {
     if (chatExists) {
         const oldChat = chats.find(c => c.id === updatedChat.id);
         
-        console.log('[App] 🔍 [DEBUG] handleUpdateChat - Chat existente encontrado:', {
+        logger.debug('[App] 🔍 [DEBUG] handleUpdateChat - Chat existente encontrado:', {
           oldStatus: oldChat?.status,
           newStatus: updatedChat.status,
           oldAssignedTo: oldChat?.assignedTo,
@@ -3962,7 +3973,7 @@ const App: React.FC = () => {
            updatedChat.messages[updatedChat.messages.length - 1].id !== oldChat.messages[oldChat.messages.length - 1].id)
         );
         
-        console.log('[App] 🔍 [DEBUG] handleUpdateChat - Mudanças detectadas:', {
+        logger.debug('[App] 🔍 [DEBUG] handleUpdateChat - Mudanças detectadas:', {
           statusChanged,
           assignedToChanged,
           departmentIdChanged,
@@ -3977,7 +3988,7 @@ const App: React.FC = () => {
         // Se as mensagens mudaram, salva o chat completo (incluindo mensagens)
         if (currentUser && messagesChanged) {
           try {
-            console.log('[App] 🔍 [DEBUG] handleUpdateChat - Salvando chat completo com mensagens no banco:', {
+            logger.debug('[App] 🔍 [DEBUG] handleUpdateChat - Salvando chat completo com mensagens no banco:', {
               chatId: updatedChat.id,
               msgCount: updatedChat.messages.length
             });
@@ -3994,9 +4005,9 @@ const App: React.FC = () => {
             
             // Salva o chat completo usando saveData para incluir as mensagens
             await apiService.saveData('chats', normalizedChat.id, normalizedChat);
-            console.log(`[App] ✅ [DEBUG] Chat completo salvo no banco: ${normalizedChat.contactName} (${normalizedChat.messages.length} mensagens)`);
+            logger.debug(`[App] ✅ [DEBUG] Chat completo salvo no banco: ${normalizedChat.contactName} (${normalizedChat.messages.length} mensagens)`);
           } catch (error) {
-            console.error(`[App] ❌ [DEBUG] Erro ao salvar chat completo no banco:`, error);
+            logger.debug(`[App] ❌ [DEBUG] Erro ao salvar chat completo no banco:`, error);
           }
         }
         
@@ -4004,7 +4015,7 @@ const App: React.FC = () => {
         // (mas não se já salvou o chat completo acima para evitar duplicação)
         if (currentUser && (statusChanged || assignedToChanged || departmentIdChanged || contactNameChanged || contactAvatarChanged) && !messagesChanged) {
           try {
-            console.log('[App] 🔍 [DEBUG] handleUpdateChat - Salvando apenas status/metadados no banco:', {
+            logger.debug('[App] 🔍 [DEBUG] handleUpdateChat - Salvando apenas status/metadados no banco:', {
               chatId: updatedChat.id,
               status: updatedChat.status,
               assignedTo: updatedChat.assignedTo,
@@ -4025,9 +4036,9 @@ const App: React.FC = () => {
               updatedChat.contactName,
               updatedChat.contactAvatar
             );
-            console.log(`[App] ✅ [DEBUG] Chat ${updatedChat.contactName} salvo no banco: status=${updatedChat.status}, assignedTo=${updatedChat.assignedTo}, contactName=${updatedChat.contactName}`);
+            logger.debug(`[App] ✅ [DEBUG] Chat ${updatedChat.contactName} salvo no banco: status=${updatedChat.status}, assignedTo=${updatedChat.assignedTo}, contactName=${updatedChat.contactName}`);
           } catch (error) {
-            console.error(`[App] ❌ [DEBUG] Erro ao salvar chat no banco:`, error);
+            logger.debug(`[App] ❌ [DEBUG] Erro ao salvar chat no banco:`, error);
           }
         } else if (currentUser && (statusChanged || assignedToChanged || departmentIdChanged || contactNameChanged || contactAvatarChanged) && messagesChanged) {
           // Se tanto mensagens quanto status/metadados mudaram, já salvou o chat completo acima
@@ -4042,10 +4053,10 @@ const App: React.FC = () => {
               updatedChat.contactAvatar
             );
           } catch (error) {
-            console.error(`[App] ❌ [DEBUG] Erro ao atualizar status após salvar chat completo:`, error);
+            logger.debug(`[App] ❌ [DEBUG] Erro ao atualizar status após salvar chat completo:`, error);
           }
         } else if (!messagesChanged && !statusChanged && !assignedToChanged && !departmentIdChanged && !contactNameChanged && !contactAvatarChanged) {
-          console.log('[App] 🔍 [DEBUG] handleUpdateChat - NÃO salvou no banco (nenhuma mudança detectada):', {
+          logger.debug('[App] 🔍 [DEBUG] handleUpdateChat - NÃO salvou no banco (nenhuma mudança detectada):', {
             chatId: updatedChat.id,
             hasUser: !!currentUser
           });
@@ -5047,8 +5058,10 @@ const App: React.FC = () => {
                                     onClick={() => {
                                         wsReconnectAttemptsRef.current = 0;
                                         setWsStatus('connecting');
-                                        initWebSocket(false).catch(err => {
-                                            console.error('[App] ❌ Erro ao reconectar Socket.IO:', err);
+                                        const fn = initWebSocketRef.current;
+                                        if (!fn) return;
+                                        fn(false).catch(err => {
+                                          console.error('[App] ❌ Erro ao reconectar Socket.IO:', err);
                                         });
                                     }}
                                     className="text-xs px-3 py-1 bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] rounded-lg hover:from-[#00B0E6] hover:to-[#00C8B8] font-medium transition-all"
@@ -5212,9 +5225,9 @@ const App: React.FC = () => {
     <div className="flex h-screen bg-dark-charcoal font-sans overflow-hidden">
       <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2">
         {notifications.map(n => (
-          <div key={n.id} className={`min-w-[300px] max-w-sm p-4 rounded-lg shadow-xl border-l-4 bg-[#16191F] animate-in slide-in-from-right flex items-start gap-3 ${n.type === 'info' ? 'border-[#0074FF]' : n.type === 'warning' ? 'border-orange-500' : 'border-[#00E0D1]'}`}>
-             <div className={`mt-1 ${n.type === 'info' ? 'text-[#0074FF]' : n.type === 'warning' ? 'text-orange-500' : 'text-[#00E0D1]'}`}>
-                {n.type === 'info' ? <Info size={20} /> : n.type === 'warning' ? <AlertTriangle size={20} /> : <CheckCircle size={20} />}
+          <div key={n.id} className={`min-w-[300px] max-w-sm p-4 rounded-lg shadow-xl border-l-4 bg-[#16191F] animate-in slide-in-from-right flex items-start gap-3 ${n.type === 'info' ? 'border-[#0074FF]' : n.type === 'warning' ? 'border-orange-500' : n.type === 'error' ? 'border-red-500' : 'border-[#00E0D1]'}`}>
+             <div className={`mt-1 ${n.type === 'info' ? 'text-[#0074FF]' : n.type === 'warning' ? 'text-orange-500' : n.type === 'error' ? 'text-red-500' : 'text-[#00E0D1]'}`}>
+                {n.type === 'info' ? <Info size={20} /> : n.type === 'warning' ? <AlertTriangle size={20} /> : n.type === 'error' ? <AlertTriangle size={20} /> : <CheckCircle size={20} />}
              </div>
              <div className="flex-1">
                 <h4 className="font-bold text-slate-800 text-sm">{n.title}</h4>

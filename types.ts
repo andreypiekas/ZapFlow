@@ -147,6 +147,7 @@ export interface ApiConfig {
   googleClientId?: string; // Client ID for Google People API
   geminiApiKey?: string; // API Key do Google Gemini para respostas de IA
   holidayStates?: string[]; // Estados para buscar feriados municipais no dashboard
+  debugLogsEnabled?: boolean; // Toggle para habilitar logs de debug no console (Dev)
 }
 
 export type ViewState = 'dashboard' | 'chat' | 'connections' | 'departments' | 'settings' | 'users' | 'reports' | 'workflows' | 'contacts' | 'chatbot' | 'holidays';
