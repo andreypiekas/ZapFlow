@@ -591,6 +591,21 @@ PORT=3001
 
 # CORS - URLs permitidas
 CORS_ORIGIN=http://${SERVER_IP}:5173,http://localhost:5173
+
+# IP do servidor (opcional - backend também tenta detectar automaticamente)
+SERVER_IP=${SERVER_IP}
+
+# ============================================================================
+# Evolution API / Webhook (auto-configuração)
+# ============================================================================
+# Fonte de verdade para o backend reaplicar webhook automaticamente no startup.
+# Se você alterar a AUTHENTICATION_API_KEY no docker-compose, atualize aqui também.
+EVOLUTION_BASE_URL=http://${SERVER_IP}:8080
+EVOLUTION_AUTH_KEY=B8349283-F143-429D-B6C2-9386E8016558
+EVOLUTION_WEBHOOK_URL=http://${SERVER_IP}:3001/api/webhook/evolution
+EVOLUTION_WEBHOOK_BY_EVENTS=true
+EVOLUTION_WEBHOOK_BASE64=true
+EVOLUTION_WEBHOOK_EVENTS=MESSAGES_UPSERT,MESSAGES_UPDATE,CHATS_UPSERT,CHATS_UPDATE,CONTACTS_UPSERT,CONNECTION_UPDATE
 EOL
 
 # Verificar se os arquivos do backend existem

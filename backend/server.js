@@ -8,6 +8,7 @@ import rateLimit from 'express-rate-limit';
 import dns from 'dns';
 import net from 'net';
 import os from 'os';
+import { ensureEvolutionWebhookConfigured } from './services/evolutionWebhookService.js';
 
 dotenv.config();
 
@@ -1895,6 +1896,15 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
   console.log(`📊 Health check: http://0.0.0.0:${PORT}/api/health`);
   console.log(`🌐 Acessível em: http://localhost:${PORT} e http://${serverIP || 'localhost'}:${PORT}`);
+
+  // ========================================================================
+  // Webhook persistente (Evolution) — tenta garantir configuração no startup
+  // Fonte de verdade: .env (EVOLUTION_*) e/ou config global no PostgreSQL (/api/config)
+  // ========================================================================
+  setTimeout(() => {
+    ensureEvolutionWebhookConfigured({ pool, serverIP, port: PORT })
+      .catch(() => {});
+  }, 4000);
 });
 
 // Tratamento de erros
@@ -2009,6 +2019,12 @@ app.put('/api/config', authenticateToken, dataLimiter, async (req, res) => {
       hasApiKey: !!config.apiKey,
       instanceName: config.instanceName || 'não definido'
     });
+
+    // Reaplica webhook automaticamente quando a configuração global muda
+    setTimeout(() => {
+      ensureEvolutionWebhookConfigured({ pool, serverIP, port: PORT, overrideConfig: config })
+        .catch(() => {});
+    }, 1000);
 
     res.json({ success: true });
   } catch (error) {

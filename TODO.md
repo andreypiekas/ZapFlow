@@ -126,9 +126,14 @@
 ## 🔴 Prioritário
 
 ### 7. Webhook persistente (global) — não configurável “por máquina”
-**Status:** 🔴 Pendente  
+**Status:** ✅ Concluído  
 **Prioridade:** Alta  
 **Objetivo:** A configuração do webhook deve ser **centralizada no servidor** e reaplicada automaticamente.
+
+**Implementação (resumo):**
+- Fonte de verdade: `apiConfig` global no PostgreSQL (`/api/config`) + variáveis `EVOLUTION_*` no `.env` do backend (fallback).
+- Backend: rotina de startup + reaplicação ao salvar `/api/config` para tentar configurar webhook (URL + eventos + base64) via Evolution API (best‑effort, tenta múltiplos endpoints).
+- Autoinstall: gera as variáveis `EVOLUTION_BASE_URL`, `EVOLUTION_AUTH_KEY`, `EVOLUTION_WEBHOOK_URL`, `EVOLUTION_WEBHOOK_EVENTS`, `EVOLUTION_WEBHOOK_BASE64`, `EVOLUTION_WEBHOOK_BY_EVENTS`.
 
 **Tarefas detalhadas:**
 - Definir fonte de verdade: PostgreSQL (`/api/config` global) + `.env` no servidor.
