@@ -2250,44 +2250,28 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
             }
         }
         
+        // Ordena por timestamp, respeitando ordem cronológica real
+        // SEMPRE usa o timestamp real para garantir ordem correta de envio/recebimento
         const sortedMessages = messages.sort((a, b) => {
             const timeA = a.timestamp?.getTime() || 0;
             const timeB = b.timestamp?.getTime() || 0;
             const timeDiff = timeA - timeB;
-            const absTimeDiff = Math.abs(timeDiff);
             
-            // PRIORIDADE 1: Se timestamps são muito próximos (< 10 segundos) e senders diferentes
-            // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
-            // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
-            // independentemente de pequenas diferenças de sincronização de relógio
-            if (absTimeDiff < 10000 && a.sender !== b.sender) {
-                // Agente sempre vem antes do usuário quando timestamps estão próximos
-                if (a.sender === 'agent' && b.sender === 'user') {
-                    return -1; // Agente antes
-                }
-                // Usuário sempre vem depois do agente quando timestamps estão próximos
-                if (a.sender === 'user' && b.sender === 'agent') {
-                    return 1; // Usuário depois
-                }
-            }
-            
-            // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
-            if (absTimeDiff >= 10000) {
+            // PRIORIDADE 1: Se timestamps são diferentes, usa timestamp real (ordem cronológica)
+            if (timeDiff !== 0) {
                 return timeDiff;
             }
             
-            // PRIORIDADE 3: Se timestamps são idênticos (timeDiff === 0) e mesmo sender, mantém ordem original
-            // IMPORTANTE: Só mantém ordem original quando timeDiff === 0 exatamente
-            // Se houver qualquer diferença (mesmo que muito pequena), usa timestamp para garantir ordem cronológica
-            // Isso evita que mensagens recebidas rapidamente (1, 2, 3, 4, 5, 6) apareçam na ordem errada (6, 5, 4, 3, 2, 1)
-            if (timeDiff === 0 && a.sender === b.sender) {
-                return 0; // Mantém ordem original
+            // PRIORIDADE 2: Se timestamps são idênticos (timeDiff === 0), usa ordem de inserção (_sortOrder)
+            // Isso garante que mensagens com mesmo timestamp mantenham a ordem de chegada
+            const orderA = (a as any)._sortOrder ?? 0;
+            const orderB = (b as any)._sortOrder ?? 0;
+            if (orderA !== orderB) {
+                return orderA - orderB;
             }
             
-            // PRIORIDADE 4: Se chegou aqui, timestamps são muito próximos mas não idênticos, ou senders são diferentes
-            // e a PRIORIDADE 1 não se aplicou. Nesses casos, usa o timestamp real para garantir a ordem cronológica.
-            // Isso garante que mensagens recebidas rapidamente sejam sempre ordenadas corretamente por timestamp.
-            return timeDiff;
+            // PRIORIDADE 3: Se tudo é igual, mantém ordem original (estável)
+            return 0;
         });
         // Log para diagnóstico
         if (sortedMessages.length === 0) {
