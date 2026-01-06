@@ -695,7 +695,7 @@ export const getMunicipalHolidaysCache = async (
   }
 };
 
-// Salvar feriados municipais no cache
+// Salvar feriados municipais no cache (também salva na tabela permanente)
 export const saveMunicipalHolidaysCache = async (
   cityName: string,
   stateCode: string,
@@ -711,6 +711,103 @@ export const saveMunicipalHolidaysCache = async (
   } catch (error: any) {
     console.error('[ApiService] Erro ao salvar cache de feriados municipais:', error);
     return false;
+  }
+};
+
+// Salvar feriados municipais na tabela permanente
+export const saveMunicipalHolidays = async (
+  holidays: Array<{ date: string; name: string; city: string; state: string; year?: number }>
+): Promise<{ success: boolean; saved: number; skipped: number; errors: number }> => {
+  try {
+    const response = await apiService.request<{ 
+      success: boolean; 
+      saved: number; 
+      skipped: number; 
+      errors: number;
+      total: number;
+    }>('/api/holidays/municipal', {
+      method: 'POST',
+      body: JSON.stringify({ holidays })
+    });
+    
+    if (response.success) {
+      console.log(`[ApiService] ✅ Feriados municipais salvos: ${response.saved} salvos, ${response.skipped} já existiam`);
+      return {
+        success: true,
+        saved: response.saved,
+        skipped: response.skipped,
+        errors: response.errors
+      };
+    }
+    
+    return { success: false, saved: 0, skipped: 0, errors: 0 };
+  } catch (error: any) {
+    console.error('[ApiService] Erro ao salvar feriados municipais:', error);
+    return { success: false, saved: 0, skipped: 0, errors: 0 };
+  }
+};
+
+// Buscar feriados municipais da tabela permanente
+export const getMunicipalHolidaysFromDB = async (
+  startDate?: string,
+  endDate?: string,
+  city?: string,
+  state?: string,
+  year?: number
+): Promise<Array<{ date: string; name: string; city: string; state: string; year: number; type: string }>> => {
+  try {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    if (city) params.append('city', city);
+    if (state) params.append('state', state);
+    if (year) params.append('year', year.toString());
+
+    const response = await apiService.request<{ 
+      success: boolean; 
+      holidays: Array<{ date: string; name: string; city: string; state: string; year: number; type: string }>;
+      count: number;
+    }>(`/api/holidays/municipal?${params.toString()}`, {
+      method: 'GET'
+    });
+    
+    if (response.success) {
+      return response.holidays || [];
+    }
+    
+    return [];
+  } catch (error: any) {
+    console.error('[ApiService] Erro ao buscar feriados municipais do banco:', error);
+    return [];
+  }
+};
+
+// Buscar feriados municipais próximos da tabela permanente
+export const getUpcomingMunicipalHolidays = async (
+  days: number = 15,
+  state?: string
+): Promise<Array<{ date: string; name: string; city: string; state: string; year: number; type: string }>> => {
+  try {
+    const params = new URLSearchParams();
+    params.append('days', days.toString());
+    if (state) params.append('state', state);
+
+    const response = await apiService.request<{ 
+      success: boolean; 
+      holidays: Array<{ date: string; name: string; city: string; state: string; year: number; type: string }>;
+      count: number;
+    }>(`/api/holidays/municipal/upcoming?${params.toString()}`, {
+      method: 'GET'
+    });
+    
+    if (response.success) {
+      return response.holidays || [];
+    }
+    
+    return [];
+  } catch (error: any) {
+    console.error('[ApiService] Erro ao buscar feriados municipais próximos:', error);
+    return [];
   }
 };
 

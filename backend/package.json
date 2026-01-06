@@ -10,6 +10,7 @@
     "build": "echo 'Backend não requer build - Node.js puro' && exit 0",
     "migrate": "node scripts/migrate.js",
     "migrate-holidays-cache": "node scripts/add-municipal-holidays-cache.js",
+    "migrate-municipal-holidays": "node scripts/add-municipal-holidays-table.js",
     "migrate-gemini-quota": "node scripts/add-gemini-quota-control.js",
     "migrate-national-holidays": "node scripts/add-national-holidays-table.js",
     "create-admin": "node scripts/create-admin.js",

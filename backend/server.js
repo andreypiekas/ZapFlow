@@ -1906,6 +1906,52 @@ app.post('/api/holidays/municipal-cache', authenticateToken, dataLimiter, async 
     );
 
     console.log(`[HolidaysCache] ✅ Cache salvo para ${cityName}/${stateCode} (${year}) - ${holidays.length} feriados`);
+    
+    // Também salva na tabela permanente
+    try {
+      let savedToDB = 0;
+      let skippedInDB = 0;
+      
+      for (const holiday of holidays) {
+        try {
+          if (!holiday.date || !holiday.name) continue;
+          
+          const holidayYear = parseInt(holiday.date.substring(0, 4)) || yearInt;
+          
+          const dbResult = await pool.query(
+            `INSERT INTO municipal_holidays (date, name, city, state, year, type, updated_at)
+             VALUES ($1, $2, $3, $4, $5, 'municipal', CURRENT_TIMESTAMP)
+             ON CONFLICT (date, name, city, state) 
+             DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+             RETURNING id`,
+            [
+              holiday.date,
+              holiday.name.trim(),
+              cityName.trim(),
+              stateCode.trim().toUpperCase(),
+              holidayYear
+            ]
+          );
+          
+          if (dbResult.rows.length > 0) {
+            savedToDB++;
+          } else {
+            skippedInDB++;
+          }
+        } catch (dbError) {
+          if (dbError.code !== '23505') { // Ignora duplicatas
+            console.warn(`[HolidaysCache] ⚠️ Erro ao salvar feriado ${holiday.name} na tabela permanente:`, dbError.message);
+          } else {
+            skippedInDB++;
+          }
+        }
+      }
+      
+      console.log(`[HolidaysCache] 💾 Tabela permanente: ${savedToDB} salvos, ${skippedInDB} já existiam`);
+    } catch (dbError) {
+      console.warn('[HolidaysCache] ⚠️ Erro ao salvar na tabela permanente (continuando):', dbError.message);
+    }
+    
     res.json({ success: true, message: 'Cache de feriados municipais salvo com sucesso' });
   } catch (error) {
     console.error('[HolidaysCache] ❌ Erro ao salvar cache:', error);
@@ -2069,6 +2115,196 @@ app.delete('/api/gemini/quota/cleanup', authenticateToken, async (req, res) => {
     console.error('[GeminiQuota] Erro ao limpar registros antigos:', error);
     res.status(500).json({ 
       error: 'Erro ao limpar registros antigos',
+      details: error.message
+    });
+  }
+});
+
+// ==================== Feriados Municipais (Tabela Permanente) ====================
+
+// Salvar feriados municipais na tabela permanente
+app.post('/api/holidays/municipal', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { holidays } = req.body; // Array de {date, name, city, state, year}
+    
+    if (!Array.isArray(holidays) || holidays.length === 0) {
+      return res.status(400).json({ error: 'holidays deve ser um array não vazio' });
+    }
+
+    console.log(`[MunicipalHolidays] 📥 Recebendo ${holidays.length} feriados municipais para salvar`);
+
+    let saved = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    for (const holiday of holidays) {
+      try {
+        // Valida dados obrigatórios
+        if (!holiday.date || !holiday.name || !holiday.city || !holiday.state) {
+          console.warn(`[MunicipalHolidays] ⚠️ Feriado inválido ignorado:`, holiday);
+          errors++;
+          continue;
+        }
+
+        // Valida formato de data (YYYY-MM-DD)
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(holiday.date)) {
+          console.warn(`[MunicipalHolidays] ⚠️ Formato de data inválido ignorado: ${holiday.date}`);
+          errors++;
+          continue;
+        }
+
+        // Extrai ano da data
+        const holidayYear = parseInt(holiday.date.substring(0, 4));
+        if (isNaN(holidayYear)) {
+          console.warn(`[MunicipalHolidays] ⚠️ Ano inválido: ${holiday.date}`);
+          errors++;
+          continue;
+        }
+
+        // Tenta inserir (UNIQUE constraint previne duplicações)
+        const result = await pool.query(
+          `INSERT INTO municipal_holidays (date, name, city, state, year, type, updated_at)
+           VALUES ($1, $2, $3, $4, $5, 'municipal', CURRENT_TIMESTAMP)
+           ON CONFLICT (date, name, city, state) 
+           DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+           RETURNING id`,
+          [
+            holiday.date,
+            holiday.name.trim(),
+            holiday.city.trim(),
+            holiday.state.trim().toUpperCase(),
+            holidayYear
+          ]
+        );
+
+        if (result.rows.length > 0) {
+          saved++;
+        } else {
+          skipped++;
+        }
+      } catch (error) {
+        // Se for erro de duplicação, ignora (já existe)
+        if (error.code === '23505') {
+          skipped++;
+        } else {
+          console.error(`[MunicipalHolidays] ❌ Erro ao salvar feriado ${holiday.name}:`, error.message);
+          errors++;
+        }
+      }
+    }
+
+    console.log(`[MunicipalHolidays] ✅ Salvos: ${saved}, Já existiam: ${skipped}, Erros: ${errors}`);
+
+    res.json({
+      success: true,
+      saved,
+      skipped,
+      errors,
+      total: holidays.length
+    });
+  } catch (error) {
+    console.error('[MunicipalHolidays] ❌ Erro ao salvar feriados municipais:', error);
+    res.status(500).json({
+      error: 'Erro ao salvar feriados municipais',
+      details: error.message
+    });
+  }
+});
+
+// Buscar feriados municipais da tabela permanente
+app.get('/api/holidays/municipal', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const { startDate, endDate, city, state, year } = req.query;
+
+    let query = 'SELECT date, name, city, state, year, type FROM municipal_holidays WHERE 1=1';
+    const params = [];
+    let paramIndex = 1;
+
+    if (startDate) {
+      query += ` AND date >= $${paramIndex}`;
+      params.push(startDate);
+      paramIndex++;
+    }
+
+    if (endDate) {
+      query += ` AND date <= $${paramIndex}`;
+      params.push(endDate);
+      paramIndex++;
+    }
+
+    if (city) {
+      query += ` AND LOWER(city) = LOWER($${paramIndex})`;
+      params.push(city);
+      paramIndex++;
+    }
+
+    if (state) {
+      query += ` AND UPPER(state) = UPPER($${paramIndex})`;
+      params.push(state);
+      paramIndex++;
+    }
+
+    if (year) {
+      query += ` AND year = $${paramIndex}`;
+      params.push(parseInt(year));
+      paramIndex++;
+    }
+
+    query += ' ORDER BY date ASC, city ASC';
+
+    const result = await pool.query(query, params);
+
+    res.json({
+      success: true,
+      holidays: result.rows,
+      count: result.rows.length
+    });
+  } catch (error) {
+    console.error('[MunicipalHolidays] ❌ Erro ao buscar feriados municipais:', error);
+    res.status(500).json({
+      error: 'Erro ao buscar feriados municipais',
+      details: error.message
+    });
+  }
+});
+
+// Buscar feriados municipais próximos (similar ao getUpcomingNationalHolidays)
+app.get('/api/holidays/municipal/upcoming', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 15;
+    const { state } = req.query; // Opcional: filtrar por estado
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const endDate = new Date(today);
+    endDate.setDate(today.getDate() + days);
+
+    let query = `
+      SELECT date, name, city, state, year, type 
+      FROM municipal_holidays 
+      WHERE date >= $1 AND date <= $2
+    `;
+    const params = [today.toISOString().split('T')[0], endDate.toISOString().split('T')[0]];
+
+    if (state) {
+      query += ' AND UPPER(state) = UPPER($3)';
+      params.push(state);
+    }
+
+    query += ' ORDER BY date ASC, city ASC';
+
+    const result = await pool.query(query, params);
+
+    res.json({
+      success: true,
+      holidays: result.rows,
+      count: result.rows.length
+    });
+  } catch (error) {
+    console.error('[MunicipalHolidays] ❌ Erro ao buscar feriados municipais próximos:', error);
+    res.status(500).json({
+      error: 'Erro ao buscar feriados municipais próximos',
       details: error.message
     });
   }
