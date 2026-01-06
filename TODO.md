@@ -34,6 +34,28 @@
 
 ---
 
+### 2. Imagens não aparecem (mídia sem URL/base64)
+**Status:** 🟡 Em validação  
+**Prioridade:** Alta  
+**Descrição:** Mensagens de imagem aparecem como "Imagem (URL não disponível)" e não renderizam o conteúdo.
+
+**Causas identificadas e correções aplicadas:**
+- ✅ **Webhook Base64 era salvo como global (user_id NULL), mas não era lido pela UI**:
+  - O backend `GET /api/data/:dataType` filtrava apenas por `user_id = req.user.id`, então `webhook_messages` nunca era retornado.
+  - **Correção**: para `webhook_messages`, o backend agora permite buscar por `key` retornando registros `user_id = req.user.id` **ou** `user_id IS NULL` (com `LIMIT 1`).
+- ✅ **Preview de mídia enviada pelo agente estava quebrado**:
+  - `blobToBase64()` retorna base64 puro; o frontend salvava isso em `mediaUrl` sem prefixo `data:<mime>;base64,`, então o `<img>` não carregava.
+  - **Correção**: `mediaUrl` agora usa Data URL completo (`data:${mime};base64,...`).
+
+**Pré-requisito (para mensagens recebidas/antigas com `imageMessage: {}`):**
+- Recomenda-se habilitar **Webhook Base64** na Evolution API (ver `docs/CONFIGURAR_WEBHOOK_BASE64.md`).
+
+**Arquivos relacionados:**
+- `backend/server.js` (leitura de `webhook_messages`)
+- `components/ChatInterface.tsx` (render e preview de mídia)
+
+---
+
 ## 🟡 Melhorias Pendentes
 
 ### 2. Otimização de Performance

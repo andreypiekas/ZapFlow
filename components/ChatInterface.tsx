@@ -772,7 +772,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     if (!selectedChat) return;
     setIsSending(true);
 
+    // `blobToBase64` retorna APENAS o base64 puro (sem prefixo data:...).
+    // Para renderizar no <img>/<audio> precisamos de um Data URL completo.
     const base64Preview = await blobToBase64(blob);
+    const previewMimeType = (blob as any)?.type || 'application/octet-stream';
+    const previewDataUrl = `data:${previewMimeType};base64,${base64Preview}`;
 
     const newMessage: Message = {
       id: `m_${Date.now()}`,
@@ -781,8 +785,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       timestamp: new Date(),
       status: MessageStatus.SENT,
       type: type,
-      mediaUrl: base64Preview, 
-      mimeType: blob.type,
+      mediaUrl: previewDataUrl,
+      mimeType: previewMimeType,
       fileName: selectedFile?.name
     };
 

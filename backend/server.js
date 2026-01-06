@@ -247,12 +247,41 @@ app.get('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res) 
     const { dataType } = req.params;
     const { key } = req.query;
 
-    let query = 'SELECT data_value, data_key FROM user_data WHERE user_id = $1 AND data_type = $2';
-    const params = [req.user.id, dataType];
+    // ⚠️ IMPORTANTE (mídia/base64 via webhook):
+    // `webhook_messages` é salvo pelo webhook sem contexto de usuário (user_id = NULL).
+    // Para exibir imagens antigas (onde `imageMessage: {}` vem vazio via REST), o frontend consulta:
+    //   GET /api/data/webhook_messages?key=<messageId>
+    // Portanto, para `webhook_messages` precisamos permitir leitura do registro global (user_id IS NULL)
+    // mantendo autenticação (apenas usuários logados).
+    const isWebhookMessages = dataType === 'webhook_messages';
 
-    if (key) {
-      query += ' AND data_key = $3';
-      params.push(key);
+    let query;
+    let params;
+
+    if (isWebhookMessages) {
+      // Evita vazar um dump inteiro de webhooks: exige key e retorna no máximo 1 registro
+      if (!key) {
+        return res.status(400).json({ error: 'key é obrigatório para webhook_messages' });
+      }
+
+      query = `
+        SELECT data_value, data_key
+        FROM user_data
+        WHERE data_type = $1
+          AND data_key = $2
+          AND (user_id = $3 OR user_id IS NULL)
+        ORDER BY (user_id IS NULL) ASC, updated_at DESC
+        LIMIT 1
+      `;
+      params = [dataType, key, req.user.id];
+    } else {
+      query = 'SELECT data_value, data_key FROM user_data WHERE user_id = $1 AND data_type = $2';
+      params = [req.user.id, dataType];
+
+      if (key) {
+        query += ' AND data_key = $3';
+        params.push(key);
+      }
     }
 
     const result = await pool.query(query, params);
