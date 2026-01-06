@@ -2928,20 +2928,6 @@ const App: React.FC = () => {
                                                 
                                                 console.log(`[App] 🔄 [DEBUG] Socket.IO: Normalizando conteúdo - local="${localContent.substring(0, 50)}", mapped="${mapped.content?.substring(0, 50)}", normalizedLocal="${normalizedLocalContent.substring(0, 50)}", normalizedMapped="${normalizedMappedContent.substring(0, 50)}", final="${finalContent.substring(0, 50)}"`);
                                                 
-                                                // CRÍTICO: Preserva o conteúdo local se ele já estiver normalizado (sem cabeçalho)
-                                                // Isso evita que o cabeçalho seja re-adicionado se a mensagem do Socket.IO tiver o cabeçalho
-                                                const localContent = updatedMessages[messageIndex].content || '';
-                                                const normalizedMappedContent = normalizeContent(mapped.content || '');
-                                                const normalizedLocalContent = normalizeContent(localContent);
-                                                
-                                                // Se o conteúdo local já está normalizado e é igual ao normalizado do Socket.IO, preserva o local
-                                                // Caso contrário, usa o normalizado do Socket.IO
-                                                const finalContent = (normalizedLocalContent === normalizedMappedContent && normalizedLocalContent === localContent) 
-                                                    ? localContent 
-                                                    : normalizedMappedContent;
-                                                
-                                                console.log(`[App] 🔄 [DEBUG] Socket.IO: Normalizando conteúdo - local="${localContent.substring(0, 50)}", mapped="${mapped.content?.substring(0, 50)}", normalizedLocal="${normalizedLocalContent.substring(0, 50)}", normalizedMapped="${normalizedMappedContent.substring(0, 50)}", final="${finalContent.substring(0, 50)}"`);
-                                                
                                                 // IMPORTANTE: Atualiza mediaUrl se estiver presente na mensagem mapeada
                                                 // Isso garante que URLs de mídia sejam atualizadas quando chegarem via WebSocket
                                                 updatedMessages[messageIndex] = {
