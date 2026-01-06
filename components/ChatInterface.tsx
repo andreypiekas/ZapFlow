@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw, Smile, Tag, Plus, Clock, User as UserIcon, AlertTriangle } from 'lucide-react';
 import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow, Contact } from '../types';
 import { generateSmartReply } from '../services/geminiService';
-import { sendRealMessage, sendRealMediaMessage, blobToBase64, sendRealContact, sendDepartmentSelectionMessage, fetchMediaUrlByMessageId } from '../services/whatsappService';
+import { sendRealMessage, sendRealMessageWithId, sendRealMediaMessage, blobToBase64, sendRealContact, sendDepartmentSelectionMessage, fetchMediaUrlByMessageId } from '../services/whatsappService';
 import { deleteChat as deleteChatApi, loadUserData } from '../services/apiService';
 import { AVAILABLE_TAGS, EMOJIS, STICKERS } from '../constants';
 
@@ -786,7 +786,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       fileName: selectedFile?.name
     };
 
-    updateChatWithNewMessage(newMessage);
+    const chatSnapshotAfterLocalAdd = updateChatWithNewMessage(newMessage);
 
     const targetNumber = getValidPhoneNumber(selectedChat);
     
@@ -928,7 +928,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       } : undefined
     };
 
-    updateChatWithNewMessage(newMessage);
+    const chatSnapshotAfterLocalAdd = updateChatWithNewMessage(newMessage);
 
     const targetNumber = getValidPhoneNumber(selectedChat);
     console.log("[NumberDebug] Número final para envio:", targetNumber);
@@ -950,7 +950,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     
     try {
         // Envia mensagem formatada com nome e departamento ao WhatsApp
-        const success = await sendRealMessage(apiConfig, targetNumber, messageToSend, replyToId, replyToRaw);
+        const result = await sendRealMessageWithId(apiConfig, targetNumber, messageToSend, replyToId, replyToRaw);
+        const success = result.success;
+
+        // CRÍTICO: Atualiza a mensagem local com o whatsappMessageId real
+        // Isso evita duplicação na UI quando chega confirmação via Socket.IO/API
+        if (success && result.messageId && chatSnapshotAfterLocalAdd) {
+            const patchedChat = {
+                ...chatSnapshotAfterLocalAdd,
+                messages: chatSnapshotAfterLocalAdd.messages.map(m => {
+                    if (m.id === newMessage.id) {
+                        return {
+                            ...m,
+                            whatsappMessageId: result.messageId,
+                            rawMessage: (result.raw ?? m.rawMessage)
+                        };
+                    }
+                    return m;
+                })
+            };
+            onUpdateChat(patchedChat);
+        }
         
         if (!success) {
             // Se retornou false mas não lançou erro, mostra mensagem genérica
@@ -1054,7 +1074,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       setShowEmojiPicker(false);
   };
 
-  const updateChatWithNewMessage = (msg: Message) => {
+  const updateChatWithNewMessage = (msg: Message): Chat | undefined => {
     if (!selectedChat) return;
     const updatedChat = {
       ...selectedChat,
@@ -1065,6 +1085,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       unreadCount: 0 // Reset unread if agent sends
     };
     onUpdateChat(updatedChat);
+    return updatedChat;
   };
 
   // For testing/Demo purposes

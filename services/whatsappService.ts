@@ -586,6 +586,128 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
   }
 };
 
+export type SendRealMessageWithIdResult = {
+  success: boolean;
+  messageId?: string;
+  raw?: any;
+  error?: string;
+};
+
+const extractEvolutionMessageId = (data: any): string | undefined => {
+  if (!data || typeof data !== 'object') return undefined;
+  return (
+    data?.key?.id ||
+    data?.message?.key?.id ||
+    data?.data?.key?.id ||
+    data?.response?.key?.id ||
+    data?.id ||
+    data?.messageId ||
+    data?.message_id
+  );
+};
+
+/**
+ * Envia mensagem e tenta retornar o ID real do WhatsApp (Evolution API key.id).
+ * Mantém o `sendRealMessage` (boolean) intacto para compatibilidade.
+ */
+export const sendRealMessageWithId = async (
+  config: ApiConfig,
+  phone: string,
+  text: string,
+  replyToMessageId?: string,
+  replyToRawMessage?: any
+): Promise<SendRealMessageWithIdResult> => {
+  if (config.isDemo) {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return { success: true, messageId: `demo_${Date.now()}` };
+  }
+
+  const active = await findActiveInstance(config);
+  const target = active?.instanceName || config.instanceName;
+  const cleanPhone = formatPhoneForApi(phone);
+
+  try {
+    if (!text || text.trim().length === 0) {
+      console.error(`[sendRealMessageWithId] Erro: texto vazio para ${cleanPhone}`);
+      return { success: false, error: 'Texto vazio' };
+    }
+
+    const payload: any = {
+      number: cleanPhone,
+      text: text.trim(),
+      delay: 1200,
+      linkPreview: false
+    };
+
+    // quoted (resposta) — mesmo comportamento do sendRealMessage
+    if (replyToMessageId) {
+      if (replyToRawMessage && replyToRawMessage.key) {
+        payload.quoted = {
+          key: {
+            remoteJid: replyToRawMessage.key.remoteJid || cleanPhone + '@s.whatsapp.net',
+            fromMe: replyToRawMessage.key.fromMe !== undefined ? replyToRawMessage.key.fromMe : false,
+            id: replyToRawMessage.key.id || replyToMessageId,
+            participant: replyToRawMessage.key.participant || undefined
+          },
+          message: replyToRawMessage.message || replyToRawMessage.messageTimestamp ? {
+            conversation: replyToRawMessage.message?.conversation || replyToRawMessage.content || ''
+          } : undefined
+        };
+      } else {
+        payload.quotedMessageId = replyToMessageId;
+      }
+    }
+
+    const doRequest = async () => {
+      return await fetch(`${config.baseUrl}/message/sendText/${target}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': getAuthKey(config)
+        },
+        body: JSON.stringify(payload)
+      });
+    };
+
+    let response = await doRequest();
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[sendRealMessageWithId] Falha API: ${response.status} para ${cleanPhone}`, errorText);
+
+      let errorMessage: string | undefined;
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.response?.message?.[0]?.exists === false) {
+          errorMessage = `O número ${cleanPhone} não existe no WhatsApp ou não está registrado.`;
+        }
+      } catch {
+        // ignore parse errors
+      }
+
+      // Se quotedMessageId não funcionar, tenta sem ele (mesma regra do sendRealMessage)
+      if (replyToMessageId && response.status === 400 && payload.quotedMessageId) {
+        delete payload.quotedMessageId;
+        response = await doRequest();
+        if (response.ok) {
+          let data: any = null;
+          try { data = await response.json(); } catch { /* ignore */ }
+          return { success: true, messageId: extractEvolutionMessageId(data), raw: data };
+        }
+      }
+
+      return { success: false, error: errorMessage || `Falha ao enviar mensagem (${response.status})` };
+    }
+
+    let data: any = null;
+    try { data = await response.json(); } catch { /* ignore */ }
+    return { success: true, messageId: extractEvolutionMessageId(data), raw: data };
+  } catch (error: any) {
+    console.error('[sendRealMessageWithId] Erro de rede:', error);
+    return { success: false, error: error?.message || 'Erro de rede' };
+  }
+};
+
 export const blobToBase64 = (blob: Blob): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
