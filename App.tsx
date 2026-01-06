@@ -2872,6 +2872,26 @@ const App: React.FC = () => {
                                                 chatUpdated = true;
                                                 console.log(`[App] 🔄 [DEBUG] Socket.IO: Atualizando mensagem existente do agente - messageIndex=${messageIndex}, localId=${chat.messages[messageIndex]?.id}, whatsappId=${mapped.whatsappMessageId}`);
                                                 const updatedMessages = [...chat.messages];
+                                                
+                                                // Normaliza o conteúdo removendo cabeçalho para manter consistência
+                                                // A mensagem local já tem o conteúdo sem cabeçalho, então preserva ele
+                                                const normalizeContent = (content: string): string => {
+                                                    if (!content) return '';
+                                                    let normalized = content;
+                                                    normalized = normalized.replace(/^[^:]+:\n+/g, '');
+                                                    normalized = normalized.replace(/^[^:]+ - [^:]+:\n+/g, '');
+                                                    return normalized.trim();
+                                                };
+                                                
+                                                // Preserva o conteúdo local (sem cabeçalho) em vez do conteúdo do Socket.IO (com cabeçalho)
+                                                const existingContent = updatedMessages[messageIndex].content || '';
+                                                const normalizedSocketContent = normalizeContent(mapped.content || '');
+                                                // Se o conteúdo normalizado do Socket.IO é igual ao conteúdo local, mantém o local
+                                                // Caso contrário, usa o normalizado (sem cabeçalho)
+                                                const finalContent = normalizedSocketContent === existingContent 
+                                                    ? existingContent 
+                                                    : normalizedSocketContent || existingContent;
+                                                
                                                 // IMPORTANTE: Atualiza mediaUrl se estiver presente na mensagem mapeada
                                                 // Isso garante que URLs de mídia sejam atualizadas quando chegarem via WebSocket
                                                 updatedMessages[messageIndex] = {
@@ -2880,6 +2900,7 @@ const App: React.FC = () => {
                                                     id: mapped.whatsappMessageId || updatedMessages[messageIndex].id, // Usa ID do WhatsApp se disponível
                                                     rawMessage: mapped.rawMessage,
                                                     status: mapped.status, // Atualiza status (pode ter mudado)
+                                                    content: finalContent, // Preserva conteúdo sem cabeçalho
                                                     // Atualiza mediaUrl se a nova mensagem tiver URL (importante para imagens que chegam sem URL inicialmente)
                                                     mediaUrl: mapped.mediaUrl || updatedMessages[messageIndex].mediaUrl
                                                 };
