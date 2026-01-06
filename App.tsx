@@ -2454,7 +2454,12 @@ const App: React.FC = () => {
                         });
                     }
                     
-                    console.log(`[App] 🔍 [DEBUG] Socket.IO messages.upsert recebido: remoteJid=${remoteJid}, fromMe=${fromMe}, status=${messageStatus}, content=${messageContent.substring(0, 50)}, hasImage=${hasImageMessage}, imageUrl=${typeof imageUrl === 'string' ? imageUrl.substring(0, 100) : imageUrl}`);
+                    console.log(`[App] 🔍 [DEBUG] Socket.IO messages.upsert recebido: remoteJid=${remoteJid}, fromMe=${fromMe}, status=${messageStatus}, content="${messageContent.substring(0, 50)}", hasImage=${hasImageMessage}, imageUrl=${typeof imageUrl === 'string' ? imageUrl.substring(0, 100) : imageUrl}`);
+                    
+                    // Log específico para mensagens do agente
+                    if (fromMe) {
+                        console.log(`[App] 🎯 [DEBUG] Socket.IO: Mensagem do AGENTE detectada! fromMe=${fromMe}, content="${messageContent.substring(0, 100)}"`);
+                    }
                     
                     // Se é uma imagem e encontrou URL, garante que ela seja preservada na estrutura
                     if (hasImageMessage && imageUrl && imageUrl !== 'não encontrado' && typeof imageUrl === 'string') {
