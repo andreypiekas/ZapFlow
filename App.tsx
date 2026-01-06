@@ -1580,26 +1580,20 @@ const App: React.FC = () => {
                                 }
                             }
                             
-                            // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
-                            if (absTimeDiff >= 10000) {
-                                return timeDiff;
-                            }
-                            
-                            // PRIORIDADE 3: Se timestamps são idênticos (timeDiff === 0) e mesmo sender, usa ordem de inserção
-                            // IMPORTANTE: Só usa _sortOrder quando timeDiff === 0 exatamente
-                            // Se houver qualquer diferença (mesmo que muito pequena), usa timestamp para garantir ordem cronológica
-                            // Isso evita que mensagens recebidas rapidamente (1, 2, 3, 4, 5, 6) apareçam na ordem errada (6, 5, 4, 3, 2, 1)
-                            if (timeDiff === 0 && a.sender === b.sender) {
-                                // Timestamps exatamente idênticos: usa ordem de inserção como fallback
-                                const orderA = (a as any)._sortOrder ?? 0;
-                                const orderB = (b as any)._sortOrder ?? 0;
+                            // PRIORIDADE 3: Se timestamps são idênticos, usa ordem de inserção (_sortOrder)
+                            const orderA = (a as any)._sortOrder ?? 0;
+                            const orderB = (b as any)._sortOrder ?? 0;
+                            if (orderA !== orderB) {
                                 return orderA - orderB;
                             }
                             
-                            // PRIORIDADE 4: Se chegou aqui, timestamps são muito próximos mas não idênticos, ou senders são diferentes
-                            // e a PRIORIDADE 1 não se aplicou. Nesses casos, usa o timestamp real para garantir a ordem cronológica.
-                            // Isso garante que mensagens recebidas rapidamente sejam sempre ordenadas corretamente por timestamp.
-                            return timeDiff;
+                            // PRIORIDADE 4: Se tudo é igual, usa ID para desempate
+                            if (a.id && b.id) {
+                                return a.id.localeCompare(b.id);
+                            }
+                            
+                            // PRIORIDADE 5: Se tudo é igual, mantém ordem original
+                            return 0;
                         });
                         
                         // Remove o campo temporário de ordenação
