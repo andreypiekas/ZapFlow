@@ -25,24 +25,28 @@ import { getNationalHolidays, getUpcomingHolidays, Holiday, BRAZILIAN_STATES } f
 
 // Função utilitária para normalizar conteúdo de mensagens do agente (remove cabeçalho)
 // CRÍTICO: O frontend renderiza o nome do agente separadamente, então o conteúdo NUNCA deve ter o cabeçalho
-// Esta função remove TODOS os padrões de cabeçalho, incluindo duplicados como "Andrey: Andrey:"
+// Esta função remove TODOS os padrões de cabeçalho, incluindo duplicados como "Andrey:\nAndrey:\n"
 const normalizeMessageContent = (content: string | undefined, sender: string | undefined): string => {
     if (!content || sender !== 'agent') {
         return content || '';
     }
     let normalized = content;
+    let previousLength = 0;
     
-    // Remove múltiplos cabeçalhos duplicados (ex: "Andrey: Andrey: texto" -> "texto")
-    // Remove padrões repetidos como "Nome: Nome:" ou "Nome: Nome: Nome:"
-    while (normalized.match(/^[^:]+:\s*[^:]+:\s*/)) {
-        normalized = normalized.replace(/^[^:]+:\s*/, '');
+    // Loop que remove TODOS os cabeçalhos duplicados até não haver mais mudanças
+    // Isso garante que "Andrey:\nAndrey:\n111" vire "111"
+    while (normalized.length !== previousLength) {
+        previousLength = normalized.length;
+        
+        // Remove padrão "Nome:\n" ou "Nome:\n\n" do início
+        normalized = normalized.replace(/^[^:\n]+:\n+/g, '');
+        
+        // Remove padrão "Nome - Departamento:\n" ou "Nome - Departamento:\n\n" do início
+        normalized = normalized.replace(/^[^:\n]+ - [^:\n]+:\n+/g, '');
+        
+        // Remove padrão "Nome: " (com espaço) do início
+        normalized = normalized.replace(/^[^:\n]+:\s+/g, '');
     }
-    
-    // Remove padrões como "Nome:\n" ou "Nome - Departamento:\n" do início
-    // Remove "Nome:\n" ou "Nome:\n\n"
-    normalized = normalized.replace(/^[^:]+:\n+/g, '');
-    // Remove "Nome - Departamento:\n" ou "Nome - Departamento:\n\n"
-    normalized = normalized.replace(/^[^:]+ - [^:]+:\n+/g, '');
     
     // Remove qualquer espaço em branco no início após remover cabeçalhos
     return normalized.trim();
