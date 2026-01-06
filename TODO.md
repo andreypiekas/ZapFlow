@@ -233,3 +233,30 @@
 **Critério de aceite:**
 - Abrir `https://<IP>` e usar login + chats + mídias + WebSocket sem falhas.
 
+---
+
+## 🧹 Organização / Branding
+
+### 14. Reorganizar arquivos do projeto + README
+**Status:** 🔴 Pendente  
+**Prioridade:** Média  
+**Objetivo:** Organizar a estrutura do repositório e garantir um `README.md` único e confiável.
+
+**Tarefas detalhadas:**
+- Padronizar pastas (`frontend/`, `backend/`, `docs/`, `install/`, `scripts/`) e mover arquivos conforme necessário.
+- Remover/arquivar duplicidades (ex.: backups, manuais repetidos) sem quebrar o fluxo de instalação.
+- Atualizar `README.md` com setup (Windows/Linux), variáveis `.env`, e troubleshooting.
+
+---
+
+### 15. Renomear “ZapFlow” → “Zentria” (novo nome do produto)
+**Status:** 🔴 Pendente  
+**Prioridade:** Alta  
+**Objetivo:** Alterar o branding em todo o sistema (UI, docs, scripts, serviços), mantendo compatibilidade.
+
+**Tarefas detalhadas:**
+- Frontend: atualizar textos/títulos/labels (incl. telas e menu).
+- Backend: atualizar logs/nomes e mensagens.
+- Docs/Scripts/PM2/Docker: atualizar nomes e referências.
+- Fazer varredura por `ZapFlow`/`zapflow` e substituir com critério (não quebrar chaves/IDs; definir estratégia de migração de `localStorage` se necessário).
+
