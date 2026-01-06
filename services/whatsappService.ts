@@ -1158,12 +1158,16 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     let mediaUrl: string | undefined = undefined;
     let mimeType: string | undefined = undefined;
     let fileName: string | undefined = undefined;
+    let fileSize: number | undefined = undefined;
     
     if (msgObj.imageMessage) {
         type = 'image';
         // Extrai URL da imagem - a Evolution API pode fornecer a URL em diferentes campos
         // Tenta múltiplas formas de obter a URL
         const imageMsg = msgObj.imageMessage;
+        if (imageMsg?.fileLength) {
+            fileSize = Number(imageMsg.fileLength);
+        }
         
         // Verifica se imageMessage está vazio (isso é comum na sincronização inicial)
         // A URL será atualizada quando os dados completos chegarem via WebSocket
@@ -1378,6 +1382,9 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     } else if (msgObj.audioMessage) {
         type = 'audio';
         const audioMsg = msgObj.audioMessage;
+        if (audioMsg?.fileLength) {
+            fileSize = Number(audioMsg.fileLength);
+        }
         mimeType = audioMsg?.mimetype || 'audio/ogg; codecs=opus';
         // ✅ PRIORIDADE: Base64 do Webhook (quando Webhook Base64 está habilitado)
         if (audioMsg?.base64 && typeof audioMsg.base64 === 'string' && audioMsg.base64.length > 0) {
@@ -1391,6 +1398,9 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     } else if (msgObj.videoMessage) {
         type = 'video';
         const videoMsg = msgObj.videoMessage;
+        if (videoMsg?.fileLength) {
+            fileSize = Number(videoMsg.fileLength);
+        }
         mimeType = videoMsg?.mimetype || 'video/mp4';
         // ✅ PRIORIDADE: Base64 do Webhook (quando Webhook Base64 está habilitado)
         if (videoMsg?.base64 && typeof videoMsg.base64 === 'string' && videoMsg.base64.length > 0) {
@@ -1419,6 +1429,9 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         const docMsg = msgObj.documentMessage;
         mimeType = docMsg?.mimetype || 'application/pdf';
         fileName = docMsg?.fileName || docMsg?.title || fileName;
+        if (docMsg?.fileLength) {
+            fileSize = Number(docMsg.fileLength);
+        }
         // ✅ PRIORIDADE: Base64 do Webhook (quando Webhook Base64 está habilitado)
         if (docMsg?.base64 && typeof docMsg.base64 === 'string' && docMsg.base64.length > 0) {
             mediaUrl = `data:${mimeType};base64,${docMsg.base64}`;
@@ -1531,6 +1544,7 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         mediaUrl: mediaUrl, // URL da mídia (imagem, vídeo, áudio, documento, sticker)
         mimeType,
         fileName,
+        fileSize,
         author: author, // Salva o JID real para correção automática (sempre normalizado)
         whatsappMessageId: key.id, // Salva o ID real do WhatsApp para respostas
         rawMessage: apiMsg, // Salva o objeto completo para respostas (Evolution API precisa do objeto completo)

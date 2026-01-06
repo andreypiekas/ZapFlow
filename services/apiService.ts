@@ -27,6 +27,14 @@ export interface ApiResponse<T> {
   error?: string;
 }
 
+export interface LinkPreview {
+  url: string;
+  title?: string;
+  description?: string;
+  image?: string;
+  fetchedAt?: string;
+}
+
 class ApiService {
   // Verifica se o erro é de conexão (backend não disponível)
   // IMPORTANTE: Backend é obrigatório - erros de conexão são críticos
@@ -152,6 +160,14 @@ class ApiService {
       }
       return {};
     }
+  }
+
+  async getLinkPreview(url: string): Promise<LinkPreview> {
+    const response = await this.request<{ success?: boolean; preview: LinkPreview }>(
+      `/api/link-preview?url=${encodeURIComponent(url)}`,
+      { method: 'GET' }
+    );
+    return (response as any).preview || (response as any);
   }
 
   async saveData<T>(dataType: string, key: string, value: T): Promise<boolean> {
@@ -574,6 +590,10 @@ export const saveUserData = <T>(dataType: string, key: string, value: T) => {
 
 export const loadUserData = <T>(dataType: string, key?: string) => {
   return apiService.getData<T>(dataType, key);
+};
+
+export const fetchLinkPreview = (url: string) => {
+  return apiService.getLinkPreview(url);
 };
 
 export const deleteUserData = (dataType: string, key: string) => {

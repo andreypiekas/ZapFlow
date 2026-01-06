@@ -5,12 +5,15 @@ import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
+import dns from 'dns';
+import net from 'net';
 
 dotenv.config();
 
 const { Pool } = pg;
 const app = express();
 const PORT = process.env.PORT || 3001;
+const dnsPromises = dns.promises;
 
 // Configuração do PostgreSQL
 const pool = new Pool({
@@ -195,6 +198,87 @@ const authenticateToken = async (req, res, next) => {
   } catch (error) {
     return res.status(403).json({ error: 'Token inválido' });
   }
+};
+
+// ============================================================================
+// Utilidades para Link Preview (SSRF-safe)
+// ============================================================================
+const PREVIEW_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const PREVIEW_MAX_CONTENT_LENGTH = 500_000; // 500 KB
+const PREVIEW_MAX_HTML = 200_000; // 200 KB
+const PREVIEW_TIMEOUT = 7000; // 7s
+
+const isPrivateIp = (ip) => {
+  if (!ip) return true;
+  const kind = net.isIP(ip);
+  if (kind === 4) {
+    return ip.startsWith('10.') ||
+           ip.startsWith('127.') ||
+           ip.startsWith('192.168.') ||
+           ip.startsWith('169.254.') ||
+           ip.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./);
+  }
+  if (kind === 6) {
+    const normalized = ip.toLowerCase();
+    return normalized === '::1' ||
+           normalized.startsWith('fc') ||
+           normalized.startsWith('fd') ||
+           normalized.startsWith('fe80');
+  }
+  return true;
+};
+
+const normalizeUrlForPreview = (rawUrl) => {
+  if (!rawUrl) return null;
+  try {
+    const trimmed = String(rawUrl).trim();
+    const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+    const parsed = new URL(withProtocol);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+    return parsed.toString();
+  } catch (e) {
+    return null;
+  }
+};
+
+const resolveHostToIp = async (hostname) => {
+  if (!hostname) return null;
+  if (net.isIP(hostname)) return hostname;
+  const lookupResult = await dnsPromises.lookup(hostname, { family: 0 });
+  return lookupResult?.address;
+};
+
+const extractMeta = (html, attr, value) => {
+  if (!html) return undefined;
+  const regex = new RegExp(`<meta[^>]+${attr}=["']${value}["'][^>]*content=["']([^"']+)["'][^>]*>`, 'i');
+  const match = html.match(regex);
+  return match ? match[1] : undefined;
+};
+
+const parseLinkPreview = (html, targetUrl) => {
+  if (!html) return { url: targetUrl };
+  const titleTag = html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1];
+  const ogTitle = extractMeta(html, 'property', 'og:title') || extractMeta(html, 'name', 'twitter:title');
+  const ogDescription = extractMeta(html, 'property', 'og:description') ||
+                        extractMeta(html, 'name', 'twitter:description') ||
+                        extractMeta(html, 'name', 'description');
+  let ogImage = extractMeta(html, 'property', 'og:image') || extractMeta(html, 'name', 'twitter:image');
+
+  try {
+    if (ogImage) {
+      ogImage = new URL(ogImage, targetUrl).toString();
+    }
+  } catch (e) {
+    ogImage = undefined;
+  }
+
+  return {
+    url: targetUrl,
+    title: (ogTitle || titleTag || '').trim().substring(0, 180) || undefined,
+    description: (ogDescription || '').trim().substring(0, 400) || undefined,
+    image: ogImage,
+    fetchedAt: new Date().toISOString()
+  };
 };
 
 // Rotas de autenticação
@@ -407,6 +491,113 @@ app.delete('/api/data/:dataType/:key', authenticateToken, dataLimiter, async (re
   } catch (error) {
     console.error('Erro ao deletar dados:', error);
     res.status(500).json({ error: 'Erro ao deletar dados' });
+  }
+});
+
+// Link Preview SSRF-safe com cache global em user_data (user_id NULL, data_type = 'link_previews')
+app.get('/api/link-preview', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const rawUrl = req.query.url;
+    const normalizedUrl = normalizeUrlForPreview(rawUrl);
+
+    if (!normalizedUrl) {
+      return res.status(400).json({ error: 'URL inválida. Use http(s) e inclua domínio válido.' });
+    }
+
+    const parsed = new URL(normalizedUrl);
+    const hostname = parsed.hostname;
+
+    if (!hostname || hostname.toLowerCase() === 'localhost') {
+      return res.status(400).json({ error: 'Host não permitido' });
+    }
+
+    let resolvedIp = null;
+    try {
+      resolvedIp = await resolveHostToIp(hostname);
+    } catch (err) {
+      console.error('[link-preview] Falha ao resolver host:', hostname, err?.message);
+      return res.status(400).json({ error: 'Host inválido ou não resolvido' });
+    }
+
+    if (isPrivateIp(resolvedIp)) {
+      return res.status(400).json({ error: 'URL não permitida (IP interno/privado)' });
+    }
+
+    const cacheKey = normalizedUrl.toLowerCase();
+    const cached = await pool.query(
+      `SELECT data_value FROM user_data WHERE data_type = $1 AND data_key = $2 AND user_id IS NULL LIMIT 1`,
+      ['link_previews', cacheKey]
+    );
+
+    if (cached.rows.length > 0) {
+      const cachedValue = typeof cached.rows[0].data_value === 'string'
+        ? JSON.parse(cached.rows[0].data_value)
+        : cached.rows[0].data_value;
+      const fetchedAt = cachedValue?.fetchedAt ? new Date(cachedValue.fetchedAt).getTime() : 0;
+      if (fetchedAt && (Date.now() - fetchedAt) < PREVIEW_TTL_MS) {
+        return res.json({ success: true, preview: cachedValue });
+      }
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), PREVIEW_TIMEOUT);
+
+    let response;
+    try {
+      response = await fetch(normalizedUrl, {
+        method: 'GET',
+        redirect: 'follow',
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'ZapFlow-LinkPreview/1.0',
+          'Accept': 'text/html,application/xhtml+xml'
+        }
+      });
+    } catch (err) {
+      clearTimeout(timeoutId);
+      console.error('[link-preview] Erro ao buscar URL:', normalizedUrl, err?.message);
+      return res.status(502).json({ error: 'Falha ao buscar URL para preview' });
+    }
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return res.status(502).json({ error: `Falha ao obter preview (HTTP ${response.status})` });
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    const contentLengthHeader = Number(response.headers.get('content-length') || 0);
+
+    if (contentLengthHeader > PREVIEW_MAX_CONTENT_LENGTH) {
+      return res.status(400).json({ error: 'Conteúdo muito grande para gerar preview' });
+    }
+
+    let html = '';
+    if (contentType.includes('text/html')) {
+      try {
+        html = await response.text();
+        if (html.length > PREVIEW_MAX_HTML) {
+          html = html.slice(0, PREVIEW_MAX_HTML);
+        }
+      } catch (err) {
+        console.warn('[link-preview] Não foi possível ler HTML completo, prosseguindo com preview parcial.');
+      }
+    }
+
+    const preview = parseLinkPreview(html, normalizedUrl);
+
+    await pool.query(
+      `INSERT INTO user_data (user_id, data_type, data_key, data_value)
+       VALUES (NULL, $1, $2, $3)
+       ON CONFLICT (COALESCE(user_id, 0), data_type, data_key)
+       DO UPDATE SET data_value = EXCLUDED.data_value, updated_at = CURRENT_TIMESTAMP`,
+      ['link_previews', cacheKey, JSON.stringify(preview)]
+    );
+
+    res.json({ success: true, preview });
+  } catch (error) {
+    console.error('[link-preview] Erro inesperado:', error);
+    res.status(500).json({ error: 'Erro ao gerar preview' });
   }
 });
 

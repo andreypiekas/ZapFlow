@@ -101,6 +101,7 @@ export interface Message {
   mediaUrl?: string;
   fileName?: string;
   mimeType?: string;
+  fileSize?: number;
   author?: string; // Real JID (identificador único) de quem enviou, usado para correções
   whatsappMessageId?: string; // ID real da mensagem no WhatsApp (key.id)
   rawMessage?: any; // Objeto completo da mensagem da API (necessário para respostas)

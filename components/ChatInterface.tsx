@@ -3,7 +3,7 @@ import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLe
 import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow, Contact } from '../types';
 import { generateSmartReply } from '../services/geminiService';
 import { sendRealMessage, sendRealMessageWithId, sendRealMediaMessageWithId, blobToBase64, sendRealContact, sendDepartmentSelectionMessage, fetchMediaUrlByMessageId } from '../services/whatsappService';
-import { deleteChat as deleteChatApi, loadUserData } from '../services/apiService';
+import { deleteChat as deleteChatApi, loadUserData, fetchLinkPreview, LinkPreview } from '../services/apiService';
 import { AVAILABLE_TAGS, EMOJIS, STICKERS } from '../constants';
 
 interface ChatInterfaceProps {
@@ -249,6 +249,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Link Preview cache (URL -> preview)
+  type LinkPreviewState = { status: 'loading' | 'ready' | 'error'; data?: LinkPreview };
+  const [linkPreviews, setLinkPreviews] = useState<Record<string, LinkPreviewState>>({});
+  const linkPreviewStateRef = useRef<Record<string, LinkPreviewState>>({});
+  const linkPreviewInFlight = useRef<Set<string>>(new Set());
+
   // Audio Recording States
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -272,6 +278,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   // Derived States for Assignment
   const isAssigned = !!selectedChat?.assignedTo;
   const isAssignedToMe = selectedChat?.assignedTo === currentUser.id;
+
+  useEffect(() => {
+    linkPreviewStateRef.current = linkPreviews;
+  }, [linkPreviews]);
   
   // Validation Logic
   const isLID = selectedChat?.id?.includes('@lid');
@@ -789,7 +799,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       type: type,
       mediaUrl: previewDataUrl,
       mimeType: previewMimeType,
-      fileName: selectedFile?.name
+      fileName: selectedFile?.name,
+      fileSize: typeof (blob as any)?.size === 'number' ? (blob as any).size : undefined
     };
 
     const chatSnapshotAfterLocalAdd = updateChatWithNewMessage(newMessage);
@@ -1415,6 +1426,48 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const normalizePreviewUrl = (raw: string | null | undefined): string | null => {
+    if (!raw) return null;
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+  };
+
+  const extractFirstUrl = (text: string | undefined): string | null => {
+    if (!text) return null;
+    const match = text.match(/(https?:\/\/[^\s]+|www\.[^\s]+)/i);
+    if (!match) return null;
+    return normalizePreviewUrl(match[1]);
+  };
+
+  const formatFileSize = (size?: number | null): string | null => {
+    if (!size || size <= 0) return null;
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let value = size;
+    let unitIndex = 0;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value = value / 1024;
+      unitIndex++;
+    }
+    const formatted = value >= 10 ? Math.round(value).toString() : value.toFixed(1);
+    return `${formatted} ${units[unitIndex]}`;
+  };
+
+  const getStatusLabel = (msg: Message): string | null => {
+    switch (msg.status) {
+      case MessageStatus.SENT:
+        return 'Enviado';
+      case MessageStatus.DELIVERED:
+        return 'Entregue';
+      case MessageStatus.READ:
+        return 'Lido';
+      case MessageStatus.ERROR:
+        return 'Erro';
+      default:
+        return 'Enviando...';
+    }
+  };
+
   const isValidUrl = (url: any): url is string => {
     return typeof url === 'string' && url.trim().length > 0;
   };
@@ -1579,6 +1632,46 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       });
   };
 
+  const ensureLinkPreview = useCallback((rawUrl: string) => {
+    const normalized = normalizePreviewUrl(rawUrl);
+    if (!normalized) return;
+
+    const current = linkPreviewStateRef.current[normalized];
+    if (current && (current.status === 'ready' || current.status === 'error' || current.status === 'loading')) {
+      return;
+    }
+    if (linkPreviewInFlight.current.has(normalized)) return;
+
+    linkPreviewInFlight.current.add(normalized);
+    setLinkPreviews(prev => ({ ...prev, [normalized]: { status: 'loading' } }));
+
+    fetchLinkPreview(normalized)
+      .then(data => {
+        setLinkPreviews(prev => ({ ...prev, [normalized]: { status: 'ready', data } }));
+      })
+      .catch(error => {
+        console.error('[LinkPreview] Erro ao obter preview:', error);
+        setLinkPreviews(prev => ({ ...prev, [normalized]: { status: 'error' } }));
+      })
+      .finally(() => {
+        linkPreviewInFlight.current.delete(normalized);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!selectedChat) return;
+    const urls = new Set<string>();
+
+    selectedChat.messages.forEach(msg => {
+      if ((msg.type === 'text' || !msg.type) && msg.content) {
+        const url = extractFirstUrl(msg.content);
+        if (url) urls.add(url);
+      }
+    });
+
+    urls.forEach(url => ensureLinkPreview(url));
+  }, [selectedChat, ensureLinkPreview]);
+
   // Helper para transformar URL relativa em absoluta se necessário
   const getMediaUrl = (url: string | undefined, mimeTypeHint?: string, mediaTypeHint?: Message['type']): string | undefined => {
     if (!url) return undefined;
@@ -1713,6 +1806,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     const content = normalizedContent;
     const highlight = messageSearchTerm.trim();
     const isUserMessage = msg.sender === 'user';
+    const statusLabel = getStatusLabel(msg);
     
     const highlightedContent = (text: string) => {
         if (!highlight || !text) return text;
@@ -2042,6 +2136,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
           {msg.content && msg.content !== 'Imagem' && (
              <p className={`text-sm mt-1 ${isUserMessage ? 'text-white' : ''}`}>{highlightedContent(msg.content)}</p>
           )}
+          {statusLabel && (
+            <span className="text-[11px] text-slate-400 mt-1">{statusLabel}</span>
+          )}
         </div>
       );
     }
@@ -2092,6 +2189,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
           {msg.content && msg.content !== 'Vídeo' && (
             <p className={`text-sm mt-1 ${isUserMessage ? 'text-white' : ''}`}>{highlightedContent(msg.content)}</p>
           )}
+          {statusLabel && (
+            <span className="text-[11px] text-slate-400 mt-1">{statusLabel}</span>
+          )}
         </div>
       );
     }
@@ -2105,6 +2205,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
            <audio controls src={audioUrl} className="w-full h-8" onError={(e) => {
              // console.error('[ChatInterface] Erro ao carregar áudio:', audioUrl);
            }} />
+           {statusLabel && (
+             <span className="text-[11px] text-slate-400 whitespace-nowrap">{statusLabel}</span>
+           )}
         </div>
       );
     }
@@ -2120,6 +2223,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
          scheduleMediaFetch(msg, 'document');
        }
        const finalDocUrl = docUrl ? getMediaUrl(docUrl, msg.mimeType, msg.type) : undefined;
+       const sizeLabel = formatFileSize(msg.fileSize);
+       const timeLabel = msg.timestamp ? msg.timestamp.toLocaleString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : null;
        return (
            <div className={`flex items-center gap-3 p-3 rounded-lg ${isUserMessage ? 'bg-white/10' : 'bg-black/5'}`}>
                <div className={`p-2 rounded-full ${isUserMessage ? 'bg-white/20 text-white' : 'bg-white text-emerald-600'}`}>
@@ -2129,17 +2234,72 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                    <p className={`text-sm font-medium truncate ${isUserMessage ? 'text-white' : ''}`}>{msg.fileName || 'Documento'}</p>
                    <p className={`text-xs uppercase ${isUserMessage ? 'text-slate-300' : 'opacity-70'}`}>{msg.mimeType?.split('/')[1] || 'FILE'}</p>
                </div>
-               {finalDocUrl ? (
-                  <a href={finalDocUrl} download={msg.fileName} className={`p-2 rounded-full ${isUserMessage ? 'text-white hover:bg-white/20' : 'text-emerald-700 hover:bg-emerald-100'}`}>
-                      <ArrowRightLeft className="rotate-90" size={16} />
-                  </a>
-               ) : (
-                  <span className="text-xs text-slate-400">URL não disponível</span>
-               )}
+               <div className="flex flex-col items-end gap-1">
+                 {finalDocUrl ? (
+                    <a href={finalDocUrl} download={msg.fileName} className={`p-2 rounded-full ${isUserMessage ? 'text-white hover:bg-white/20' : 'text-emerald-700 hover:bg-emerald-100'}`}>
+                        <ArrowRightLeft className="rotate-90" size={16} />
+                    </a>
+                 ) : (
+                    <span className="text-xs text-slate-400">URL não disponível</span>
+                 )}
+                 <div className="text-[11px] text-slate-400 flex flex-col items-end leading-tight">
+                   {sizeLabel && <span>{sizeLabel}</span>}
+                   {timeLabel && <span>{timeLabel}</span>}
+                   {statusLabel && <span>{statusLabel}</span>}
+                 </div>
+               </div>
            </div>
        );
     }
-    return <p className={`text-sm leading-relaxed whitespace-pre-wrap ${isUserMessage ? 'text-white' : 'text-slate-800'}`}>{highlightedContent(msg.content)}</p>;
+    const linkUrl = extractFirstUrl(content);
+    const normalizedLinkUrl = linkUrl ? normalizePreviewUrl(linkUrl) : null;
+    const previewState = normalizedLinkUrl ? linkPreviews[normalizedLinkUrl] : undefined;
+    let hostLabel = '';
+    if (normalizedLinkUrl) {
+      try {
+        hostLabel = new URL(normalizedLinkUrl).hostname;
+      } catch {
+        hostLabel = normalizedLinkUrl;
+      }
+    }
+
+    const linkPreviewCard = normalizedLinkUrl ? (
+      <div className={`mt-2 rounded-lg border ${isUserMessage ? 'border-white/20 bg-white/5' : 'border-slate-200 bg-white'} overflow-hidden`}>
+        <a href={normalizedLinkUrl} target="_blank" rel="noreferrer" className="flex gap-3 p-3 no-underline text-inherit">
+          {previewState?.status === 'ready' && previewState.data ? (
+            <>
+              {previewState.data.image && (
+                <img
+                  src={previewState.data.image}
+                  alt={previewState.data.title || hostLabel || 'Link'}
+                  className="w-16 h-16 object-cover rounded-md flex-shrink-0 border border-slate-200/70"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              )}
+              <div className="flex-1 min-w-0 space-y-1">
+                {hostLabel && <p className="text-[11px] uppercase tracking-wide text-emerald-500 truncate">{hostLabel}</p>}
+                {previewState.data.title && <p className="text-sm font-semibold text-slate-800 truncate">{previewState.data.title}</p>}
+                {previewState.data.description && <p className="text-xs text-slate-500 line-clamp-2">{previewState.data.description}</p>}
+                {!previewState.data.title && !previewState.data.description && (
+                  <p className="text-xs text-slate-500 truncate">{normalizedLinkUrl}</p>
+                )}
+              </div>
+            </>
+          ) : previewState?.status === 'error' ? (
+            <span className="text-xs text-red-500">Não foi possível gerar o preview</span>
+          ) : (
+            <span className="text-xs text-slate-500">Carregando preview...</span>
+          )}
+        </a>
+      </div>
+    ) : null;
+
+    return (
+      <div className="flex flex-col gap-2">
+        <p className={`text-sm leading-relaxed whitespace-pre-wrap ${isUserMessage ? 'text-white' : 'text-slate-800'}`}>{highlightedContent(msg.content)}</p>
+        {linkPreviewCard}
+      </div>
+    );
   };
 
   const displayedMessages = selectedChat?.messages.filter(msg => {
