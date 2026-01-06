@@ -1080,8 +1080,45 @@ const App: React.FC = () => {
 
                         // Merge inteligente de mensagens: combina mensagens locais, do banco e da API, removendo duplicatas
                         // PRIORIDADE: Mensagens do banco > Mensagens locais > Mensagens da API
+                        // SEMPRE usa whatsappMessageId como chave primária para evitar duplicatas
                         const mergedMessages: Message[] = [];
                         const messageMap = new Map<string, Message>();
+                        
+                        // Função para gerar chave única de mensagem (prioriza whatsappMessageId)
+                        const getMessageKey = (msg: Message): string => {
+                            if (msg.whatsappMessageId) {
+                                return `whatsapp_${msg.whatsappMessageId}`;
+                            }
+                            if (msg.id) {
+                                return `id_${msg.id}`;
+                            }
+                            const timestamp = msg.timestamp?.getTime() || Date.now();
+                            const content = msg.content?.substring(0, 50) || '';
+                            const sender = msg.sender || 'unknown';
+                            return `gen_${timestamp}_${sender}_${content}`;
+                        };
+                        
+                        // Função para verificar se mensagens são duplicadas
+                        const isDuplicate = (msg1: Message, msg2: Message): boolean => {
+                            if (msg1.whatsappMessageId && msg2.whatsappMessageId) {
+                                return msg1.whatsappMessageId === msg2.whatsappMessageId;
+                            }
+                            if (msg1.id && msg2.id) {
+                                return msg1.id === msg2.id;
+                            }
+                            const time1 = msg1.timestamp?.getTime() || 0;
+                            const time2 = msg2.timestamp?.getTime() || 0;
+                            if (time1 === time2 && time1 !== 0) {
+                                const content1 = msg1.content?.trim() || '';
+                                const content2 = msg2.content?.trim() || '';
+                                const sender1 = msg1.sender || '';
+                                const sender2 = msg2.sender || '';
+                                if (content1 === content2 && content1 !== '' && sender1 === sender2) {
+                                    return true;
+                                }
+                            }
+                            return false;
+                        };
                         
                         // Usa mensagens da API (que podem ter sido buscadas separadamente)
                         const apiMessagesForMerge = apiMessages;
@@ -1091,68 +1128,78 @@ const App: React.FC = () => {
                         const hasMoreDbMessages = dbMessages.length > apiMessagesForMerge.length;
                         const hasMoreLocalMessages = existingChat.messages.length > apiMessagesForMerge.length;
                         
-                        // PRIORIDADE 1: Se o banco tem mais mensagens que a API, usa mensagens do banco como base
+                        // PRIORIDADE 1: Se o banco tem mais mensagens que a API, SEMPRE usa mensagens do banco como base
                         if (hasMoreDbMessages && dbMessages.length > 0) {
-                            // Adiciona mensagens do banco primeiro (têm mais mensagens)
+                            console.log(`[App] 🔍 [DEBUG] syncChats: Banco tem ${dbMessages.length} mensagens, API tem ${apiMessagesForMerge.length}. Usando banco como base.`);
+                            
+                            // Adiciona TODAS as mensagens do banco primeiro (fonte mais completa)
                             dbMessages.forEach(msg => {
-                                const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
-                                if (!messageMap.has(msgKey)) {
-                                    messageMap.set(msgKey, msg);
-                                }
+                                const msgKey = getMessageKey(msg);
+                                messageMap.set(msgKey, msg);
                             });
                             
-                            // Depois adiciona mensagens da API que não estão no banco
+                            // Depois adiciona mensagens da API que não estão no banco (usando whatsappMessageId)
                             apiMessagesForMerge.forEach(msg => {
-                                const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
-                                const existsInDb = Array.from(messageMap.values()).some(dbMsg => {
-                                    if (dbMsg.whatsappMessageId && msg.whatsappMessageId && 
-                                        dbMsg.whatsappMessageId === msg.whatsappMessageId) {
-                                        return true;
-                                    }
-                                    if (dbMsg.id && msg.id && dbMsg.id === msg.id) {
-                                        return true;
-                                    }
-                                    if (dbMsg.content && msg.content && dbMsg.sender === msg.sender) {
-                                        const contentMatch = dbMsg.content.trim() === msg.content.trim();
-                                        const timeWindow = msg.sender === 'agent' ? 30000 : 10000;
-                                        const timeMatch = dbMsg.timestamp && msg.timestamp && 
-                                            Math.abs(dbMsg.timestamp.getTime() - msg.timestamp.getTime()) < timeWindow;
-                                        if (contentMatch && timeMatch) {
-                                            return true;
+                                const msgKey = getMessageKey(msg);
+                                const existing = messageMap.get(msgKey);
+                                
+                                if (!existing) {
+                                    // Verifica se não é duplicata de outra mensagem no map
+                                    let isDup = false;
+                                    for (const existingMsg of messageMap.values()) {
+                                        if (isDuplicate(msg, existingMsg)) {
+                                            isDup = true;
+                                            // Se a nova mensagem tem whatsappMessageId e a existente não, substitui
+                                            if (msg.whatsappMessageId && !existingMsg.whatsappMessageId) {
+                                                const existingKey = getMessageKey(existingMsg);
+                                                messageMap.delete(existingKey);
+                                                messageMap.set(msgKey, msg);
+                                            }
+                                            break;
                                         }
                                     }
-                                    return false;
-                                });
-                                
-                                if (!existsInDb && !messageMap.has(msgKey)) {
+                                    if (!isDup) {
+                                        messageMap.set(msgKey, msg);
+                                    }
+                                } else if (msg.whatsappMessageId && !existing.whatsappMessageId) {
+                                    // Nova tem whatsappMessageId, existente não - substitui
+                                    messageMap.set(msgKey, msg);
+                                } else if (msg.timestamp && existing.timestamp && 
+                                          msg.timestamp.getTime() > existing.timestamp.getTime()) {
+                                    // Nova é mais recente - substitui
                                     messageMap.set(msgKey, msg);
                                 }
                             });
                             
                             // Por último, adiciona mensagens locais que não estão no banco nem na API
                             existingChat.messages.forEach(msg => {
-                                const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
-                                const existsInMap = Array.from(messageMap.values()).some(m => {
-                                    if (m.whatsappMessageId && msg.whatsappMessageId && 
-                                        m.whatsappMessageId === msg.whatsappMessageId) {
-                                        return true;
-                                    }
-                                    if (m.id && msg.id && m.id === msg.id) {
-                                        return true;
-                                    }
-                                    if (m.content && msg.content && m.sender === msg.sender) {
-                                        const contentMatch = m.content.trim() === msg.content.trim();
-                                        const timeWindow = msg.sender === 'agent' ? 30000 : 10000;
-                                        const timeMatch = m.timestamp && msg.timestamp && 
-                                            Math.abs(m.timestamp.getTime() - msg.timestamp.getTime()) < timeWindow;
-                                        if (contentMatch && timeMatch) {
-                                            return true;
+                                const msgKey = getMessageKey(msg);
+                                const existing = messageMap.get(msgKey);
+                                
+                                if (!existing) {
+                                    // Verifica se não é duplicata
+                                    let isDup = false;
+                                    for (const existingMsg of messageMap.values()) {
+                                        if (isDuplicate(msg, existingMsg)) {
+                                            isDup = true;
+                                            // Se a mensagem local tem whatsappMessageId e a existente não, substitui
+                                            if (msg.whatsappMessageId && !existingMsg.whatsappMessageId) {
+                                                const existingKey = getMessageKey(existingMsg);
+                                                messageMap.delete(existingKey);
+                                                messageMap.set(msgKey, msg);
+                                            }
+                                            break;
                                         }
                                     }
-                                    return false;
-                                });
-                                
-                                if (!existsInMap && !messageMap.has(msgKey)) {
+                                    if (!isDup) {
+                                        messageMap.set(msgKey, msg);
+                                    }
+                                } else if (msg.whatsappMessageId && !existing.whatsappMessageId) {
+                                    // Local tem whatsappMessageId, existente não - substitui
+                                    messageMap.set(msgKey, msg);
+                                } else if (msg.timestamp && existing.timestamp && 
+                                          msg.timestamp.getTime() > existing.timestamp.getTime()) {
+                                    // Local é mais recente - substitui
                                     messageMap.set(msgKey, msg);
                                 }
                             });
