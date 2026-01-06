@@ -2752,19 +2752,22 @@ const App: React.FC = () => {
                                                 };
                                                 
                                                 // Procura mensagem local sem whatsappMessageId mas com mesmo conteúdo e timestamp próximo
+                                                // IMPORTANTE: Verifica TODAS as mensagens do agente, não apenas as com ID "m_"
+                                                // porque a mensagem pode ter sido atualizada antes mas ainda não ter whatsappMessageId
                                                 messageIndex = chat.messages.findIndex(m => {
-                                                    // Se já tem whatsappMessageId, verifica por ele (mais confiável)
+                                                    // PRIORIDADE 1: Se já tem whatsappMessageId, verifica por ele (mais confiável)
                                                     if (m.whatsappMessageId && mapped.whatsappMessageId && 
                                                         m.whatsappMessageId === mapped.whatsappMessageId) {
                                                         console.log(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem por whatsappMessageId: ${m.whatsappMessageId}`);
                                                         return true;
                                                     }
-                                                    // Se não tem whatsappMessageId, verifica por conteúdo normalizado + timestamp (mensagem local pendente)
+                                                    
+                                                    // PRIORIDADE 2: Se não tem whatsappMessageId, verifica por conteúdo normalizado + timestamp (mensagem local pendente)
                                                     // CRÍTICO: A mensagem local pode não ter o cabeçalho "Andrey:\n" mas a do Socket.IO tem
                                                     // Então normaliza o conteúdo removendo o cabeçalho antes de comparar
                                                     if (!m.whatsappMessageId && m.sender === 'agent') {
-                                                        // Verifica se é uma mensagem local recente (ID começa com "m_" e timestamp próximo)
-                                                        const isLocalMessage = m.id && m.id.startsWith('m_');
+                                                        // Verifica se é uma mensagem local recente (ID começa com "m_" OU é mensagem do agente sem whatsappMessageId)
+                                                        const isLocalMessage = (m.id && m.id.startsWith('m_')) || (!m.whatsappMessageId && m.sender === 'agent');
                                                         const timeMatch = m.timestamp && mapped.timestamp && 
                                                             Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 60000;
                                                         
@@ -2776,7 +2779,7 @@ const App: React.FC = () => {
                                                                 normalizedLocal === normalizedMapped;
                                                             
                                                             if (contentMatch) {
-                                                                console.log(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem local por conteúdo normalizado - local="${normalizedLocal}", mapped="${normalizedMapped}", timeDiff=${Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime())}ms`);
+                                                                console.log(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem local por conteúdo normalizado - local="${normalizedLocal}", mapped="${normalizedMapped}", timeDiff=${Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime())}ms, localId=${m.id}`);
                                                                 return true;
                                                             } else {
                                                                 // Se conteúdo não bate exatamente, mas é mensagem local muito recente (últimos 5 segundos), considera match
@@ -2787,7 +2790,7 @@ const App: React.FC = () => {
                                                                     const localInMapped = normalizedMapped.includes(normalizedLocal);
                                                                     const mappedInLocal = normalizedLocal.includes(normalizedMapped);
                                                                     if (localInMapped || mappedInLocal) {
-                                                                        console.log(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem local por conteúdo parcial (muito recente) - local="${normalizedLocal}", mapped="${normalizedMapped}"`);
+                                                                        console.log(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem local por conteúdo parcial (muito recente) - local="${normalizedLocal}", mapped="${normalizedMapped}", localId=${m.id}`);
                                                                         return true;
                                                                     }
                                                                 }
@@ -2796,6 +2799,27 @@ const App: React.FC = () => {
                                                     }
                                                     return false;
                                                 });
+                                                
+                                                // Se não encontrou, tenta uma busca mais ampla: qualquer mensagem do agente sem whatsappMessageId nos últimos 10 segundos
+                                                if (messageIndex < 0) {
+                                                    const normalizedMapped = normalizeContent(mapped.content || '');
+                                                    messageIndex = chat.messages.findIndex(m => {
+                                                        if (m.sender === 'agent' && !m.whatsappMessageId && m.timestamp && mapped.timestamp) {
+                                                            const timeDiff = Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime());
+                                                            if (timeDiff < 10000) { // 10 segundos
+                                                                const normalizedLocal = normalizeContent(m.content || '');
+                                                                if (normalizedLocal && normalizedMapped && 
+                                                                    (normalizedLocal === normalizedMapped || 
+                                                                     normalizedMapped.includes(normalizedLocal) || 
+                                                                     normalizedLocal.includes(normalizedMapped))) {
+                                                                    console.log(`[App] 🔍 [DEBUG] Socket.IO: Encontrou mensagem local em busca ampla - local="${normalizedLocal}", mapped="${normalizedMapped}", timeDiff=${timeDiff}ms, localId=${m.id}`);
+                                                                    return true;
+                                                                }
+                                                            }
+                                                        }
+                                                        return false;
+                                                    });
+                                                }
                                                 
                                                 if (messageIndex >= 0) {
                                                     shouldUpdate = true;
