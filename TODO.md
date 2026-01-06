@@ -41,9 +41,14 @@
 ---
 
 ### 3. Arquivos, mídias e links “igual WhatsApp Web” (paridade de UX)
-**Status:** 🔴 Pendente  
+**Status:** ✅ Concluído  
 **Prioridade:** Alta  
 **Objetivo:** Mensagens de **link**, **arquivo** e **mídia** devem se comportar/parecer com o WhatsApp Web.
+
+**Implementação (resumo):**
+- Links: detecção + preview com cache no servidor (`/api/link-preview`, SSRF-safe) e cache no cliente.
+- Arquivos: cards com metadados (nome/tipo/tamanho/data) e ações (visualizar/baixar quando possível).
+- Mídias: normalização de `directPath` (CDN do WhatsApp), fallback/retry via `webhook_messages` + busca por `messageId`, suporte a data URL (base64) e URLs autenticadas.
 
 **Tarefas detalhadas:**
 - **Links (preview estilo WhatsApp):**
@@ -63,9 +68,13 @@
 ---
 
 ### 4. Visualização expandida no chat + botão de download (imagem/vídeo/PDF)
-**Status:** 🔴 Pendente  
+**Status:** ✅ Concluído  
 **Prioridade:** Alta  
 **Objetivo:** Ao clicar na mídia no chat, abrir um **viewer** (modal) para visualizar, com opção de download.
+
+**Implementação (resumo):**
+- Viewer modal para imagem/vídeo/PDF (fecha com ESC/click fora).
+- Download robusto (Data URL → Blob/`blob:`; URL HTTP quando disponível).
 
 **Tarefas detalhadas:**
 - **Imagem:** modal com zoom, navegação (esc fecha), abrir em nova aba opcional.
@@ -81,9 +90,15 @@
 ---
 
 ### 5. Encaminhamento de mensagens (Forward) com tag “Encaminhada”
-**Status:** 🔴 Pendente  
+**Status:** ✅ Concluído  
 **Prioridade:** Alta  
 **Objetivo:** Permitir encaminhar mensagens e exibir a tag “Encaminhada”, como no WhatsApp.
+
+**Implementação (resumo):**
+- UI: menu de contexto/ações na mensagem → **Encaminhar**; modal para selecionar chats destino.
+- Persistência: salva metadata `forwarded`, `forwardedFromChatId`, `forwardedFromMessageId` na mensagem.
+- Render: mostra selo **“Encaminhada”** no bubble.
+- **Pesquisa técnica:** Evolution API não expõe flag “forwarded” nativa para o WhatsApp (encaminhada “real”); adotado **selo na UI** como alternativa.
 
 **Tarefas detalhadas:**
 - UI: menu de contexto na mensagem → “Encaminhar”.

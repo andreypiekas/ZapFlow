@@ -105,6 +105,9 @@ export interface Message {
   author?: string; // Real JID (identificador único) de quem enviou, usado para correções
   whatsappMessageId?: string; // ID real da mensagem no WhatsApp (key.id)
   rawMessage?: any; // Objeto completo da mensagem da API (necessário para respostas)
+  forwarded?: boolean; // Mensagem encaminhada (selo na UI)
+  forwardedFromChatId?: string; // Chat de origem do encaminhamento
+  forwardedFromMessageId?: string; // Mensagem de origem (whatsappMessageId ou id interno)
   replyTo?: {
     id: string;
     content: string;

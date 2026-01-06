@@ -248,6 +248,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const [isUserInfoOpen, setIsUserInfoOpen] = useState(false);
   const [userInfoTab, setUserInfoTab] = useState<'media' | 'links' | 'docs'>('media');
   const [addContactStatus, setAddContactStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+
+  // Forward (Encaminhar)
+  const [messageMenu, setMessageMenu] = useState<{ msg: Message; x: number; y: number } | null>(null);
+  const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
+  const [forwardingMessage, setForwardingMessage] = useState<Message | null>(null);
+  const [forwardSearchTerm, setForwardSearchTerm] = useState('');
+  const [forwardSelected, setForwardSelected] = useState<Record<string, boolean>>({});
+  const [isForwarding, setIsForwarding] = useState(false);
   
   // File & Media States
   const [isDragging, setIsDragging] = useState(false);
@@ -550,6 +558,262 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       setAddContactStatus('success');
     } catch (e) {
       setAddContactStatus('error');
+    }
+  };
+
+  const openForwardModal = (msg: Message) => {
+    if (!msg) return;
+    setForwardingMessage(msg);
+    setIsForwardModalOpen(true);
+    setForwardSearchTerm('');
+    setForwardSelected({});
+    setIsForwarding(false);
+  };
+
+  const closeForwardModal = () => {
+    setIsForwardModalOpen(false);
+    setForwardingMessage(null);
+    setForwardSearchTerm('');
+    setForwardSelected({});
+    setIsForwarding(false);
+  };
+
+  const forwardSelectedChatIds = useMemo(
+    () => Object.keys(forwardSelected).filter(id => !!forwardSelected[id]),
+    [forwardSelected]
+  );
+
+  const forwardDestinationChats = useMemo(() => {
+    const term = forwardSearchTerm.trim().toLowerCase();
+    return (chats && Array.isArray(chats) ? chats : [])
+      .filter(c => c && c.id && c.id !== selectedChatId)
+      .filter(c => {
+        if (!term) return true;
+        const name = (c.contactName || '').toLowerCase();
+        const number = (c.contactNumber || '').toLowerCase();
+        const code = (c.clientCode || '').toLowerCase();
+        return name.includes(term) || number.includes(term) || code.includes(term);
+      })
+      .sort((a, b) => {
+        const ta = a.lastMessageTime ? new Date(a.lastMessageTime as any).getTime() : 0;
+        const tb = b.lastMessageTime ? new Date(b.lastMessageTime as any).getTime() : 0;
+        return tb - ta;
+      });
+  }, [chats, forwardSearchTerm, selectedChatId]);
+
+  const toggleForwardDestination = (chatId: string) => {
+    setForwardSelected(prev => ({ ...prev, [chatId]: !prev[chatId] }));
+  };
+
+  const appendMessageToChatById = (chatId: string, msg: Message): Chat | undefined => {
+    const chat = (chats && Array.isArray(chats)) ? chats.find(c => c.id === chatId) : undefined;
+    if (!chat) return undefined;
+    const updatedChat: Chat = {
+      ...chat,
+      messages: [...(chat.messages || []), msg],
+      lastMessage: msg.type === 'text' || !msg.type ? msg.content : `📎 ${msg.type}`,
+      lastMessageTime: new Date(),
+      status: 'open',
+      unreadCount: 0
+    };
+    onUpdateChat(updatedChat);
+    return updatedChat;
+  };
+
+  const patchMessageInChatSnapshot = (chat: Chat | undefined, messageId: string, patch: Partial<Message>) => {
+    if (!chat) return;
+    const updatedChat = {
+      ...chat,
+      messages: (chat.messages || []).map(m => (m.id === messageId ? { ...m, ...patch } : m))
+    };
+    onUpdateChat(updatedChat);
+  };
+
+  const markMessageErrorInChatSnapshot = (chat: Chat | undefined, messageId: string) => {
+    patchMessageInChatSnapshot(chat, messageId, { status: MessageStatus.ERROR });
+  };
+
+  const pickForwardCaption = (msg: Message): string => {
+    const c = (msg.content || '').trim();
+    if (!c) return '';
+    if (msg.type === 'image' && c === 'Imagem') return '';
+    if (msg.type === 'video' && c === 'Vídeo') return '';
+    if (msg.type === 'audio' && (c === 'Áudio' || c === 'Audio')) return '';
+    if (msg.type === 'document' && (c === 'Arquivo' || c === 'Documento')) return '';
+    if (msg.type === 'sticker' && c === 'Sticker') return '';
+    return c;
+  };
+
+  const dataUrlToBlob = (dataUrl: string): Blob | null => {
+    const match = dataUrl.match(/^data:([^;,]+)?(;base64)?,(.*)$/);
+    if (!match) return null;
+    const mimeType = (match[1] || 'application/octet-stream').trim();
+    const isBase64 = !!match[2];
+    const dataPart = match[3] || '';
+
+    try {
+      if (isBase64) {
+        const binary = atob(dataPart);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        return new Blob([bytes], { type: mimeType });
+      }
+      return new Blob([decodeURIComponent(dataPart)], { type: mimeType });
+    } catch {
+      return null;
+    }
+  };
+
+  const blobFromUrl = async (url: string): Promise<Blob | null> => {
+    if (!url) return null;
+    if (url.startsWith('data:')) {
+      return dataUrlToBlob(url);
+    }
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      return await res.blob();
+    } catch {
+      return null;
+    }
+  };
+
+  const handleConfirmForward = async () => {
+    if (!selectedChat) return;
+    if (!forwardingMessage) return;
+    if (forwardSelectedChatIds.length === 0) return;
+
+    setIsForwarding(true);
+    const failures: string[] = [];
+
+    for (const destChatId of forwardSelectedChatIds) {
+      const destChat = (chats && Array.isArray(chats)) ? chats.find(c => c.id === destChatId) : undefined;
+      if (!destChat) continue;
+
+      const targetNumber = getValidPhoneNumber(destChat);
+      const targetDigits = targetNumber.replace(/\D/g, '').length;
+      if (!targetNumber || targetDigits < 10) {
+        failures.push(`${destChat.contactName || destChat.contactNumber || destChat.id}: número inválido`);
+        continue;
+      }
+
+      const original = forwardingMessage;
+      const forwardedFromMessageId = original.whatsappMessageId || original.id;
+
+      // Tipo para envio (sticker vira image)
+      const originalType = (original.type || 'text') as MessageType;
+      const sendMediaType: 'image' | 'video' | 'audio' | 'document' | null =
+        originalType === 'image' ? 'image'
+          : originalType === 'video' ? 'video'
+          : originalType === 'audio' ? 'audio'
+          : originalType === 'document' ? 'document'
+          : originalType === 'sticker' ? 'image'
+          : null;
+
+      // Mensagem local (sempre sender=agent)
+      const localId = `fwd_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const localMsg: Message = {
+        id: localId,
+        content: original.content || '',
+        sender: 'agent',
+        timestamp: new Date(),
+        status: MessageStatus.SENT,
+        type: originalType === 'sticker' ? 'image' : (originalType === 'text' ? 'text' : originalType),
+        mediaUrl: original.mediaUrl,
+        mimeType: original.mimeType,
+        fileName: original.fileName,
+        fileSize: original.fileSize,
+        forwarded: true,
+        forwardedFromChatId: selectedChat.id,
+        forwardedFromMessageId
+      };
+
+      // Se for mídia e não tiver mediaUrl, tenta pegar do raw
+      if (sendMediaType && !localMsg.mediaUrl && original.rawMessage) {
+        const rawCandidate = findMediaUrlInRaw(original.rawMessage, sendMediaType);
+        if (rawCandidate) {
+          localMsg.mediaUrl = rawCandidate;
+        }
+      }
+
+      // Normaliza URL para render/uso
+      const finalLocalMediaUrl = localMsg.mediaUrl ? getMediaUrl(localMsg.mediaUrl, localMsg.mimeType, localMsg.type) : undefined;
+      if (finalLocalMediaUrl) {
+        localMsg.mediaUrl = finalLocalMediaUrl;
+      }
+
+      const chatSnapshotAfterLocalAdd = appendMessageToChatById(destChatId, localMsg);
+
+      try {
+        if (!sendMediaType) {
+          // Texto
+          const messageContent = original.content || '';
+          let messageToSend = messageContent;
+          if (currentUser.name) {
+            messageToSend = formatMessageHeader(destChat) + messageContent;
+          }
+
+          const result = await sendRealMessageWithId(apiConfig, targetNumber, messageToSend);
+          if (result.success && result.messageId) {
+            patchMessageInChatSnapshot(chatSnapshotAfterLocalAdd, localId, {
+              whatsappMessageId: result.messageId,
+              rawMessage: (result.raw ?? localMsg.rawMessage)
+            });
+          } else {
+            failures.push(`${destChat.contactName || destChat.contactNumber || destChat.id}: falha ao enviar`);
+            markMessageErrorInChatSnapshot(chatSnapshotAfterLocalAdd, localId);
+          }
+          continue;
+        }
+
+        // Mídia
+        const captionRaw = pickForwardCaption(original);
+        let captionToSend = captionRaw;
+        if (captionToSend && currentUser.name) {
+          captionToSend = formatMessageHeader(destChat) + captionToSend;
+        }
+
+        const mediaUrlForFetch = finalLocalMediaUrl;
+        if (!mediaUrlForFetch) {
+          failures.push(`${destChat.contactName || destChat.contactNumber || destChat.id}: mídia sem URL/base64`);
+          markMessageErrorInChatSnapshot(chatSnapshotAfterLocalAdd, localId);
+          continue;
+        }
+
+        const blob = await blobFromUrl(mediaUrlForFetch);
+        if (!blob) {
+          failures.push(`${destChat.contactName || destChat.contactNumber || destChat.id}: não foi possível obter a mídia (CORS/URL)`);
+          markMessageErrorInChatSnapshot(chatSnapshotAfterLocalAdd, localId);
+          continue;
+        }
+
+        const fileName =
+          original.fileName ||
+          (sendMediaType === 'document' ? 'documento' : sendMediaType === 'audio' ? 'audio' : sendMediaType === 'video' ? 'video' : 'imagem');
+
+        const result = await sendRealMediaMessageWithId(apiConfig, targetNumber, blob, captionToSend, sendMediaType, fileName);
+        if (result.success && result.messageId) {
+          patchMessageInChatSnapshot(chatSnapshotAfterLocalAdd, localId, {
+            whatsappMessageId: result.messageId,
+            rawMessage: (result.raw ?? localMsg.rawMessage)
+          });
+        } else {
+          failures.push(`${destChat.contactName || destChat.contactNumber || destChat.id}: falha ao enviar mídia`);
+          markMessageErrorInChatSnapshot(chatSnapshotAfterLocalAdd, localId);
+        }
+      } catch (e: any) {
+        failures.push(`${destChat.contactName || destChat.contactNumber || destChat.id}: erro inesperado`);
+        markMessageErrorInChatSnapshot(chatSnapshotAfterLocalAdd, localId);
+      }
+    }
+
+    setIsForwarding(false);
+    closeForwardModal();
+
+    if (failures.length > 0) {
+      alert(`Alguns encaminhamentos falharam:\n- ${failures.slice(0, 8).join('\n- ')}${failures.length > 8 ? '\n- ...' : ''}`);
     }
   };
 
@@ -993,9 +1257,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
   // --- SENDING LOGIC ---
   // Função auxiliar para formatar cabeçalho com nome e departamento
-  const formatMessageHeader = (): string => {
+  const formatMessageHeader = (chat?: Chat): string => {
     if (!currentUser.name) return '';
-    const userDepartmentId = currentUser.departmentId || selectedChat?.departmentId;
+    const userDepartmentId = currentUser.departmentId || chat?.departmentId || selectedChat?.departmentId;
     const userDepartment = userDepartmentId 
       ? departments.find(d => d.id === userDepartmentId)
       : null;
@@ -3102,6 +3366,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         msg.sender === 'user' ? 'bg-[#374151] text-white rounded-tl-none border border-[#4B5563]' : 'bg-gradient-to-r from-[#0074FF] to-[#00C3FF] text-white rounded-tr-none glow-blue'
                       }`}
                       onDoubleClick={() => msg.sender !== 'system' && handleReplyToMessage(msg)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        const menuWidth = 200;
+                        const menuHeight = 96;
+                        const x = Math.min(e.clientX, window.innerWidth - menuWidth - 8);
+                        const y = Math.min(e.clientY, window.innerHeight - menuHeight - 8);
+                        setMessageMenu({ msg, x, y });
+                      }}
                       style={msg.sender === 'user' ? { 
                         backgroundColor: '#374151',
                         color: '#FFFFFF',
@@ -3119,6 +3391,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                           <div className={msg.sender === 'user' ? 'text-slate-200' : 'text-slate-500 truncate'}>
                             {msg.replyTo.content.length > 50 ? msg.replyTo.content.substring(0, 50) + '...' : msg.replyTo.content}
                           </div>
+                        </div>
+                      )}
+
+                      {/* Encaminhada */}
+                      {msg.forwarded && (
+                        <div className="px-2 pt-1 pb-0.5">
+                          <span className="text-[11px] italic text-white/80">Encaminhada</span>
                         </div>
                       )}
                       
@@ -3153,6 +3432,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                           title="Responder"
                         >
                           <ArrowRightLeft size={12} className={msg.sender === 'user' ? 'text-slate-200' : 'text-slate-500'} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                            const menuWidth = 200;
+                            const menuHeight = 96;
+                            const x = Math.min(rect.right, window.innerWidth - menuWidth - 8);
+                            const y = Math.min(rect.bottom, window.innerHeight - menuHeight - 8);
+                            setMessageMenu({ msg, x, y });
+                          }}
+                          className={`opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded ${
+                            msg.sender === 'user' ? 'hover:bg-white/10' : 'hover:bg-black/5'
+                          }`}
+                          title="Mais ações"
+                        >
+                          <MoreVertical size={12} className={msg.sender === 'user' ? 'text-slate-200' : 'text-slate-500'} />
                         </button>
                         <div className="flex items-center gap-1 ml-auto">
                           <span className={`text-[10px] font-medium ${msg.sender === 'user' ? 'text-slate-200' : 'text-slate-500'}`}>
@@ -3699,6 +3995,135 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                    Cancelar
                 </button>
              </div>
+          </div>
+        </div>
+      )}
+
+      {/* Message Context Menu (Responder / Encaminhar) */}
+      {messageMenu && (
+        <>
+          <div className="fixed inset-0 z-[75]" onMouseDown={() => setMessageMenu(null)} />
+          <div
+            className="fixed z-[76] w-52 rounded-lg border border-white/10 bg-[#111316] shadow-2xl overflow-hidden"
+            style={{ left: messageMenu.x, top: messageMenu.y }}
+          >
+            <button
+              onClick={() => {
+                handleReplyToMessage(messageMenu.msg);
+                setMessageMenu(null);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-slate-200 hover:bg-white/5 transition-colors"
+            >
+              Responder
+            </button>
+            <button
+              onClick={() => {
+                openForwardModal(messageMenu.msg);
+                setMessageMenu(null);
+              }}
+              className="w-full text-left px-4 py-3 text-sm text-slate-200 hover:bg-white/5 transition-colors border-t border-white/10"
+            >
+              Encaminhar
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Forward Modal */}
+      {isForwardModalOpen && forwardingMessage && (
+        <div
+          className="absolute inset-0 z-[65] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeForwardModal();
+          }}
+        >
+          <div className="w-full max-w-md bg-[#111316] border border-[#0D0F13] rounded-xl shadow-2xl overflow-hidden">
+            <div className="px-4 py-3 flex items-center justify-between bg-[#0D0F13] border-b border-[#111316]">
+              <h3 className="text-slate-200 font-semibold text-sm">Encaminhar mensagem</h3>
+              <button
+                onClick={closeForwardModal}
+                className="p-2 rounded-full hover:bg-white/5 text-slate-200 transition-colors"
+                title="Fechar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              <div>
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Prévia</div>
+                <div className="rounded-lg border border-white/10 bg-[#16191F] p-3 text-sm text-slate-200">
+                  {forwardingMessage.type && forwardingMessage.type !== 'text' ? (
+                    <div className="flex items-center gap-2">
+                      <FileIcon size={16} className="text-[#00E0D1]" />
+                      <span className="capitalize">
+                        {forwardingMessage.type}
+                      </span>
+                      {forwardingMessage.fileName && (
+                        <span className="text-xs text-slate-400 truncate">• {forwardingMessage.fileName}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="whitespace-pre-wrap">{forwardingMessage.content}</span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Destinos</div>
+                <input
+                  value={forwardSearchTerm}
+                  onChange={(e) => setForwardSearchTerm(e.target.value)}
+                  placeholder="Buscar chats..."
+                  className="w-full px-3 py-2 rounded-lg bg-[#0D0F13] border border-white/10 text-slate-200 text-sm outline-none focus:border-[#00E0D1]/60"
+                />
+              </div>
+
+              <div className="max-h-[45vh] overflow-y-auto rounded-lg border border-white/10 bg-[#0D0F13]">
+                {forwardDestinationChats.length === 0 ? (
+                  <div className="p-4 text-sm text-slate-400">Nenhum chat encontrado.</div>
+                ) : (
+                  forwardDestinationChats.map(c => {
+                    const checked = !!forwardSelected[c.id];
+                    return (
+                      <button
+                        key={c.id}
+                        onClick={() => toggleForwardDestination(c.id)}
+                        className={`w-full flex items-center gap-3 px-4 py-3 border-b border-white/5 last:border-0 text-left hover:bg-white/5 transition-colors ${
+                          checked ? 'bg-white/5' : ''
+                        }`}
+                      >
+                        <div className={`w-5 h-5 rounded border flex items-center justify-center ${checked ? 'bg-[#00E0D1] border-[#00E0D1] text-[#0D0F13]' : 'border-white/20 text-transparent'}`}>
+                          <Check size={14} />
+                        </div>
+                        <img src={c.contactAvatar} alt="" className="w-8 h-8 rounded-full bg-white flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm text-slate-200 font-medium truncate">
+                            {c.contactName || c.contactNumber || c.id}
+                          </div>
+                          <div className="text-xs text-slate-400 truncate">
+                            {c.contactNumber} {c.clientCode ? `• COD: ${c.clientCode}` : ''}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="px-4 py-3 flex items-center justify-between border-t border-[#111316] bg-[#0D0F13]">
+              <div className="text-xs text-slate-400">
+                {forwardSelectedChatIds.length} selecionado(s)
+              </div>
+              <button
+                onClick={handleConfirmForward}
+                disabled={forwardSelectedChatIds.length === 0 || isForwarding}
+                className="px-4 py-2 rounded-lg text-sm font-semibold bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] hover:from-[#00B0E6] hover:to-[#00C8B8] disabled:from-slate-600 disabled:to-slate-600 disabled:cursor-not-allowed transition-colors"
+              >
+                {isForwarding ? 'Encaminhando...' : 'Encaminhar'}
+              </button>
+            </div>
           </div>
         </div>
       )}
