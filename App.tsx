@@ -3818,7 +3818,19 @@ const App: React.FC = () => {
                             return timeDiff;
                         }
                         
-                        // PRIORIDADE 2: Se timestamps são idênticos (timeDiff === 0), usa ordem de inserção (_sortOrder)
+                        // PRIORIDADE 2: Se timestamps são idênticos, usa whatsappMessageId para desempate
+                        // Isso garante ordem estável mesmo quando timestamps são idênticos
+                        if (a.whatsappMessageId && b.whatsappMessageId) {
+                            return a.whatsappMessageId.localeCompare(b.whatsappMessageId);
+                        }
+                        if (a.whatsappMessageId && !b.whatsappMessageId) {
+                            return -1; // Mensagem com whatsappMessageId vem antes
+                        }
+                        if (!a.whatsappMessageId && b.whatsappMessageId) {
+                            return 1; // Mensagem com whatsappMessageId vem antes
+                        }
+                        
+                        // PRIORIDADE 3: Se timestamps são idênticos, usa ordem de inserção (_sortOrder)
                         // Isso garante que mensagens com mesmo timestamp mantenham a ordem de chegada
                         const orderA = (a as any)._sortOrder ?? 0;
                         const orderB = (b as any)._sortOrder ?? 0;
@@ -3826,7 +3838,12 @@ const App: React.FC = () => {
                             return orderA - orderB;
                         }
                         
-                        // PRIORIDADE 3: Se tudo é igual, mantém ordem original (estável)
+                        // PRIORIDADE 4: Se tudo é igual, usa ID para desempate (ordem estável)
+                        if (a.id && b.id) {
+                            return a.id.localeCompare(b.id);
+                        }
+                        
+                        // PRIORIDADE 5: Se tudo é igual, mantém ordem original (estável)
                         return 0;
                     });
                     
