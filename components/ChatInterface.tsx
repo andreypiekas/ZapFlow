@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw, Smile, Tag, Plus, Clock, User as UserIcon, AlertTriangle, Eye } from 'lucide-react';
 import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow, Contact } from '../types';
 import { generateSmartReply } from '../services/geminiService';
@@ -11,6 +11,7 @@ interface ChatInterfaceProps {
   departments: Department[];
   currentUser: User;
   onUpdateChat: (chat: Chat) => void;
+  onAddContact?: (contact: Contact) => Promise<void> | void;
   apiConfig: ApiConfig;
   quickReplies?: QuickReply[];
   workflows?: Workflow[];
@@ -19,7 +20,7 @@ interface ChatInterfaceProps {
   isViewActive?: boolean; // Indica se a view de chats está ativa
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, currentUser, onUpdateChat, apiConfig, quickReplies = [], workflows = [], contacts = [], forceSelectChatId, isViewActive = true }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, currentUser, onUpdateChat, onAddContact, apiConfig, quickReplies = [], workflows = [], contacts = [], forceSelectChatId, isViewActive = true }) => {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   
   // Ref para rastrear o último forceSelectChatId processado
@@ -166,7 +167,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             if (idIsValidNumber) {
                 targetNumber = idFromChatId.replace(/\D/g, '');
                 console.log(`[NumberFix] Usando ID do chat (número puro): ${targetNumber}`);
-            } else if (idDigits > 14) {
+            } else if (idDigits.length > 14) {
                 console.log(`[NumberFix] Ignorando ID do chat muito longo (provavelmente ID de lista): ${idFromChatId} (${idDigits} dígitos)`);
             }
         }
@@ -242,6 +243,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const [isEditingContact, setIsEditingContact] = useState(false);
   const [editContactName, setEditContactName] = useState('');
   const [editClientCode, setEditClientCode] = useState('');
+
+  // User Info Panel (WhatsApp Web style)
+  const [isUserInfoOpen, setIsUserInfoOpen] = useState(false);
+  const [userInfoTab, setUserInfoTab] = useState<'media' | 'links' | 'docs'>('media');
+  const [addContactStatus, setAddContactStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   
   // File & Media States
   const [isDragging, setIsDragging] = useState(false);
@@ -255,6 +261,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   type PdfViewerState = { url: string; fileName?: string } | null;
   const [pdfViewer, setPdfViewer] = useState<PdfViewerState>(null);
   const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null);
+  type VideoViewerState = { url: string; fileName?: string } | null;
+  const [videoViewer, setVideoViewer] = useState<VideoViewerState>(null);
 
   const closeImageViewer = useCallback(() => setImageViewer(null), []);
   const openImageViewer = useCallback((url: string, fileName?: string) => {
@@ -266,6 +274,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const openPdfViewer = useCallback((url: string, fileName?: string) => {
     if (!url) return;
     setPdfViewer({ url, fileName });
+  }, []);
+  const closeVideoViewer = useCallback(() => setVideoViewer(null), []);
+  const openVideoViewer = useCallback((url: string, fileName?: string) => {
+    if (!url) return;
+    setVideoViewer({ url, fileName });
   }, []);
 
   // Download robusto (evita navegar para data: no top frame). Para data URLs, converte em Blob + blob: URL.
@@ -330,6 +343,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     downloadFromUrl(pdfViewer.url, pdfViewer.fileName || 'documento.pdf');
   }, [pdfViewer, downloadFromUrl]);
 
+  const downloadVideoViewer = useCallback(() => {
+    if (!videoViewer?.url) return;
+    downloadFromUrl(videoViewer.url, videoViewer.fileName || 'video.mp4');
+  }, [videoViewer, downloadFromUrl]);
+
   useEffect(() => {
     if (!imageViewer) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -347,6 +365,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [pdfViewer, closePdfViewer]);
+
+  useEffect(() => {
+    if (!videoViewer) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeVideoViewer();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [videoViewer, closeVideoViewer]);
+
+  useEffect(() => {
+    if (!isUserInfoOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // Se algum viewer estiver aberto, deixa ele tratar primeiro
+        if (imageViewer || pdfViewer || videoViewer) return;
+        setIsUserInfoOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isUserInfoOpen, imageViewer, pdfViewer, videoViewer]);
 
   // Para evitar bloqueios/erros com data: em iframes/embeds, converte PDF data URL em blob: URL no viewer.
   useEffect(() => {
@@ -451,6 +491,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         setShowOptionsMenu(false); 
         setMessageSearchTerm('');
         setShowSearch(false);
+        setIsUserInfoOpen(false);
+        setUserInfoTab('media');
+        setAddContactStatus('idle');
         
         // Zera a contagem de mensagens não lidas quando o chat é selecionado/visualizado
         if (selectedChat.unreadCount > 0) {
@@ -470,6 +513,45 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       lastProcessedChatIdRef.current = null;
     }
   }, [selectedChatId, selectedChat]); // Inclui selectedChat para detectar quando o objeto é atualizado
+
+  const normalizePhoneForMatch = (phone: string | undefined | null) => {
+    return String(phone || '').replace(/\D/g, '');
+  };
+
+  const isCurrentChatInContacts = (() => {
+    if (!selectedChat) return false;
+    const chatPhone = normalizePhoneForMatch(selectedChat.contactNumber);
+    if (!chatPhone) return false;
+    return (contacts || []).some(c => normalizePhoneForMatch(c.phone) === chatPhone);
+  })();
+
+  const handleOpenUserInfo = () => {
+    if (!selectedChat) return;
+    setIsUserInfoOpen(true);
+    setAddContactStatus('idle');
+  };
+
+  const handleAddChatToContacts = async () => {
+    if (!selectedChat || isCurrentChatInContacts) return;
+    if (!onAddContact) {
+      setAddContactStatus('error');
+      return;
+    }
+
+    try {
+      setAddContactStatus('loading');
+      await onAddContact({
+        id: 'new',
+        name: selectedChat.contactName || selectedChat.contactNumber,
+        phone: selectedChat.contactNumber,
+        avatar: selectedChat.contactAvatar,
+        source: 'manual'
+      });
+      setAddContactStatus('success');
+    } catch (e) {
+      setAddContactStatus('error');
+    }
+  };
 
   // Logic: Filter by Tab AND Search + SORTING
   const filteredChats = (chats && Array.isArray(chats) ? chats : [])
@@ -1575,6 +1657,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
   };
 
+  const extractUrls = (text: string | undefined): string[] => {
+    if (!text) return [];
+    const matches = text.match(/(https?:\/\/[^\s]+|www\.[^\s]+)/gi);
+    if (!matches) return [];
+    const urls: string[] = [];
+    for (const raw of matches) {
+      const normalized = normalizePreviewUrl(raw);
+      if (normalized) urls.push(normalized);
+    }
+    // Dedupe mantendo ordem
+    return Array.from(new Set(urls));
+  };
+
   const extractFirstUrl = (text: string | undefined): string | null => {
     if (!text) return null;
     const match = text.match(/(https?:\/\/[^\s]+|www\.[^\s]+)/i);
@@ -1806,8 +1901,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
     selectedChat.messages.forEach(msg => {
       if ((msg.type === 'text' || !msg.type) && msg.content) {
-        const url = extractFirstUrl(msg.content);
-        if (url) urls.add(url);
+        extractUrls(msg.content).forEach(u => urls.add(u));
       }
     });
 
@@ -1921,6 +2015,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     // console.warn('[ChatInterface] getMediaUrl: Não foi possível transformar URL, retornando como está:', trimmed.substring(0, 100));
     return trimmed;
   };
+
+  // Coleções para o painel de Informações do usuário (Mídia / Links / Docs)
+  const userInfoData = useMemo(() => {
+    const empty = { media: [] as Message[], docs: [] as Message[], links: [] as { url: string; host: string; timestamp: Date }[] };
+    if (!selectedChat) return empty;
+    const msgs = (selectedChat.messages && Array.isArray(selectedChat.messages)) ? selectedChat.messages : [];
+
+    const media = msgs.filter(m => m && (m.type === 'image' || m.type === 'video' || m.type === 'audio' || m.type === 'sticker'));
+    const docs = msgs.filter(m => m && m.type === 'document');
+
+    const linkMap = new Map<string, { url: string; host: string; timestamp: Date }>();
+    for (const msg of msgs) {
+      if (!msg?.content) continue;
+      const urls = extractUrls(msg.content);
+      if (!urls.length) continue;
+      const ts = msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp as any);
+      for (const url of urls) {
+        const existing = linkMap.get(url);
+        if (!existing || ts.getTime() > existing.timestamp.getTime()) {
+          let host = url;
+          try { host = new URL(url).hostname; } catch {}
+          linkMap.set(url, { url, host, timestamp: ts });
+        }
+      }
+    }
+    const links = Array.from(linkMap.values()).sort((a, b) => (b.timestamp?.getTime?.() || 0) - (a.timestamp?.getTime?.() || 0));
+
+    return { media, docs, links };
+  }, [selectedChat, mediaRetryTick]);
 
   // Função utilitária para normalizar conteúdo de mensagens do agente (remove cabeçalho)
   // CRÍTICO: O frontend renderiza o nome do agente separadamente, então o conteúdo NUNCA deve ter o cabeçalho
@@ -2775,22 +2898,36 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                                     </button>
                                 </div>
                             ) : (
-                                <div className="flex flex-col group cursor-pointer" onClick={() => setIsEditingContact(true)}>
-                                    <div className="flex items-center gap-2">
-                                        <h2 className="font-semibold text-sm md:text-base truncate max-w-[150px] md:max-w-none">
-                                            {selectedChat.contactName}
-                                        </h2>
-                                        {selectedChat.clientCode && (
-                                            <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded font-mono text-emerald-50">
-                                                | COD: {selectedChat.clientCode}
-                                            </span>
-                                        )}
-                                        <Edit3 size={12} className="opacity-0 group-hover:opacity-50 text-white" />
-                                    </div>
-                                    <p className="text-xs opacity-90 text-emerald-100 truncate flex items-center gap-1">
-                                        {getDepartmentName(selectedChat.departmentId)} 
-                                        {!isAssigned && (selectedChat.status === 'open' || selectedChat.status === 'pending') && " • Aguardando Atendimento"}
-                                    </p>
+                                <div className="flex items-start gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleOpenUserInfo}
+                                        className="flex-1 min-w-0 text-left group"
+                                        title="Abrir informações do usuário"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <h2 className="font-semibold text-sm md:text-base truncate max-w-[150px] md:max-w-none">
+                                                {selectedChat.contactName}
+                                            </h2>
+                                            {selectedChat.clientCode && (
+                                                <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded font-mono text-emerald-50 flex-shrink-0">
+                                                    | COD: {selectedChat.clientCode}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-xs opacity-90 text-emerald-100 truncate flex items-center gap-1">
+                                            {getDepartmentName(selectedChat.departmentId)} 
+                                            {!isAssigned && (selectedChat.status === 'open' || selectedChat.status === 'pending') && " • Aguardando Atendimento"}
+                                        </p>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setIsEditingContact(true); }}
+                                        className="p-1 rounded hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+                                        title="Editar nome e código"
+                                    >
+                                        <Edit3 size={16} />
+                                    </button>
                                 </div>
                             )}
                         </div>
@@ -3566,6 +3703,363 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         </div>
       )}
 
+      {/* User Info Panel */}
+      {isUserInfoOpen && selectedChat && (
+        <div className="absolute inset-0 z-[60]">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onMouseDown={() => setIsUserInfoOpen(false)}
+          />
+          <div className="absolute right-0 top-0 h-full w-full sm:w-[380px] bg-[#111316] border-l border-[#0D0F13] shadow-2xl flex flex-col">
+            <div className="h-16 px-4 flex items-center justify-between bg-[#0D0F13] border-b border-[#111316]">
+              <button
+                onClick={() => setIsUserInfoOpen(false)}
+                className="p-2 rounded-full hover:bg-[#111316] text-slate-200 transition-colors"
+                title="Voltar"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <h3 className="text-slate-200 font-semibold text-sm">Informações do usuário</h3>
+              <div className="w-10" />
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div className="flex items-center gap-3">
+                <img
+                  src={selectedChat.contactAvatar}
+                  alt=""
+                  className="w-12 h-12 rounded-full bg-white flex-shrink-0"
+                />
+                <div className="min-w-0">
+                  <div className="text-slate-200 font-semibold truncate">{selectedChat.contactName}</div>
+                  <div className="text-xs text-slate-400 truncate">{selectedChat.contactNumber}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={handleAddChatToContacts}
+                  disabled={isCurrentChatInContacts || addContactStatus === 'loading'}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors flex items-center justify-center gap-2 ${
+                    isCurrentChatInContacts
+                      ? 'bg-white/5 text-slate-400 border-white/10 cursor-not-allowed'
+                      : addContactStatus === 'loading'
+                      ? 'bg-white/10 text-slate-200 border-white/20 cursor-wait'
+                      : 'bg-[#16191F] text-slate-200 border-white/10 hover:border-[#00E0D1]/50 hover:text-[#00E0D1]'
+                  }`}
+                  title={isCurrentChatInContacts ? 'Já está nos contatos' : 'Adicionar aos contatos'}
+                >
+                  <UserPlus size={16} />
+                  {isCurrentChatInContacts
+                    ? 'Nos contatos'
+                    : addContactStatus === 'loading'
+                    ? 'Adicionando...'
+                    : addContactStatus === 'success'
+                    ? 'Adicionado'
+                    : addContactStatus === 'error'
+                    ? 'Falhou'
+                    : 'Adicionar'}
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowSearch(true);
+                    setIsUserInfoOpen(false);
+                  }}
+                  className="px-3 py-2 rounded-lg text-sm font-medium border bg-[#16191F] text-slate-200 border-white/10 hover:border-[#00E0D1]/50 hover:text-[#00E0D1] transition-colors flex items-center justify-center gap-2"
+                  title="Pesquisar na conversa"
+                >
+                  <Search size={16} />
+                  Pesquisar
+                </button>
+              </div>
+
+              {/* Editar nome e código */}
+              <div className="rounded-lg border border-[#0D0F13] bg-[#16191F] p-3 space-y-2">
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Nome e código</div>
+                <input
+                  value={editContactName}
+                  onChange={(e) => setEditContactName(e.target.value)}
+                  className="w-full bg-[#0D0F13] border border-white/10 text-slate-200 rounded px-3 py-2 text-sm outline-none focus:border-[#00E0D1]/60"
+                  placeholder="Nome do contato"
+                />
+                <input
+                  value={editClientCode}
+                  onChange={(e) => setEditClientCode(e.target.value)}
+                  className="w-full bg-[#0D0F13] border border-white/10 text-slate-200 rounded px-3 py-2 text-sm outline-none focus:border-[#00E0D1]/60 font-mono"
+                  placeholder="Código do cliente"
+                />
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={handleSaveContactInfo}
+                    className="flex-1 px-3 py-2 rounded-lg text-sm font-semibold bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] hover:from-[#00B0E6] hover:to-[#00C8B8] transition-colors"
+                  >
+                    Salvar
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditContactName(selectedChat.contactName);
+                      setEditClientCode(selectedChat.clientCode || '');
+                    }}
+                    className="flex-1 px-3 py-2 rounded-lg text-sm font-medium border border-white/10 bg-[#0D0F13] text-slate-200 hover:border-white/20 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex gap-1 bg-[#0D0F13] rounded-lg p-1 border border-white/10">
+                <button
+                  onClick={() => setUserInfoTab('media')}
+                  className={`flex-1 text-xs font-semibold py-2 rounded-md transition-colors ${
+                    userInfoTab === 'media' ? 'bg-white/10 text-[#00E0D1]' : 'text-slate-300 hover:bg-white/5'
+                  }`}
+                >
+                  Mídia ({userInfoData.media.length})
+                </button>
+                <button
+                  onClick={() => setUserInfoTab('links')}
+                  className={`flex-1 text-xs font-semibold py-2 rounded-md transition-colors ${
+                    userInfoTab === 'links' ? 'bg-white/10 text-[#00E0D1]' : 'text-slate-300 hover:bg-white/5'
+                  }`}
+                >
+                  Links ({userInfoData.links.length})
+                </button>
+                <button
+                  onClick={() => setUserInfoTab('docs')}
+                  className={`flex-1 text-xs font-semibold py-2 rounded-md transition-colors ${
+                    userInfoTab === 'docs' ? 'bg-white/10 text-[#00E0D1]' : 'text-slate-300 hover:bg-white/5'
+                  }`}
+                >
+                  Docs ({userInfoData.docs.length})
+                </button>
+              </div>
+
+              {/* Conteúdo das abas */}
+              {userInfoTab === 'media' && (
+                <div className="space-y-3">
+                  {/* Grid de imagens / stickers / vídeos */}
+                  <div className="grid grid-cols-3 gap-2">
+                    {userInfoData.media
+                      .filter(m => m.type === 'image' || m.type === 'sticker' || m.type === 'video')
+                      .slice()
+                      .reverse()
+                      .map(m => {
+                        const mediaType: 'image' | 'video' = m.type === 'video' ? 'video' : 'image';
+                        let rawUrl = m.mediaUrl;
+                        if (!rawUrl && m.rawMessage) {
+                          rawUrl = findMediaUrlInRaw(m.rawMessage, mediaType);
+                        }
+                        const finalUrl = rawUrl ? getMediaUrl(rawUrl, m.mimeType, m.type) : undefined;
+                        const key = m.id || m.whatsappMessageId || `${m.timestamp?.toString?.() || ''}_${Math.random()}`;
+
+                        if (!finalUrl) {
+                          return (
+                            <button
+                              key={key}
+                              onClick={() => scheduleMediaFetch(m, mediaType)}
+                              className="aspect-square rounded-lg border border-white/10 bg-[#16191F] flex flex-col items-center justify-center text-slate-400 hover:text-[#00E0D1] hover:border-[#00E0D1]/30 transition-colors"
+                              title="Mídia sem URL (tentar buscar)"
+                            >
+                              {m.type === 'video' ? <Play size={18} /> : <ImageIcon size={18} />}
+                              <span className="text-[10px] mt-1">Buscar</span>
+                            </button>
+                          );
+                        }
+
+                        if (m.type === 'video') {
+                          return (
+                            <button
+                              key={key}
+                              onClick={() => openVideoViewer(finalUrl, m.fileName)}
+                              className="relative aspect-square rounded-lg overflow-hidden border border-white/10 bg-black hover:border-[#00E0D1]/30 transition-colors"
+                              title="Abrir vídeo"
+                            >
+                              <video
+                                src={finalUrl}
+                                className="w-full h-full object-cover opacity-80"
+                                muted
+                                playsInline
+                                preload="metadata"
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-9 h-9 rounded-full bg-black/50 border border-white/20 flex items-center justify-center">
+                                  <Play size={18} className="text-white" />
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <button
+                            key={key}
+                            onClick={() => openImageViewer(finalUrl, m.fileName)}
+                            className="aspect-square rounded-lg overflow-hidden border border-white/10 bg-black hover:border-[#00E0D1]/30 transition-colors"
+                            title="Abrir imagem"
+                          >
+                            <img
+                              src={finalUrl}
+                              alt={m.fileName || 'Imagem'}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
+                          </button>
+                        );
+                      })}
+                  </div>
+
+                  {/* Áudios */}
+                  {userInfoData.media.some(m => m.type === 'audio') && (
+                    <div className="space-y-2">
+                      <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Áudios</div>
+                      {userInfoData.media
+                        .filter(m => m.type === 'audio')
+                        .slice()
+                        .reverse()
+                        .map(m => {
+                          let rawUrl = m.mediaUrl;
+                          if (!rawUrl && m.rawMessage) {
+                            rawUrl = findMediaUrlInRaw(m.rawMessage, 'audio');
+                          }
+                          const finalUrl = rawUrl ? getMediaUrl(rawUrl, m.mimeType, m.type) : undefined;
+                          const key = m.id || m.whatsappMessageId || `${m.timestamp?.toString?.() || ''}_${Math.random()}`;
+                          return (
+                            <div key={key} className="rounded-lg border border-white/10 bg-[#16191F] p-2">
+                              {finalUrl ? (
+                                <audio controls src={finalUrl} className="w-full h-9" />
+                              ) : (
+                                <button
+                                  onClick={() => scheduleMediaFetch(m, 'audio')}
+                                  className="w-full text-left text-sm text-slate-300 hover:text-[#00E0D1]"
+                                >
+                                  Áudio (buscar URL)
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {userInfoTab === 'links' && (
+                <div className="space-y-2">
+                  {userInfoData.links.length === 0 ? (
+                    <div className="text-sm text-slate-400">Nenhum link encontrado.</div>
+                  ) : (
+                    userInfoData.links.map(item => {
+                      const previewState = linkPreviews[item.url];
+                      return (
+                        <div key={item.url} className="rounded-lg border border-white/10 bg-[#16191F] overflow-hidden">
+                          <a href={item.url} target="_blank" rel="noreferrer" className="block p-3 no-underline text-inherit hover:bg-white/5 transition-colors">
+                            <div className="text-[11px] uppercase tracking-wide text-[#00E0D1] truncate">{item.host}</div>
+                            {previewState?.status === 'ready' && previewState.data ? (
+                              <div className="mt-2 flex gap-3">
+                                {previewState.data.image && (
+                                  <img
+                                    src={previewState.data.image}
+                                    alt={previewState.data.title || item.host}
+                                    className="w-14 h-14 object-cover rounded-md flex-shrink-0 border border-white/10"
+                                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                  />
+                                )}
+                                <div className="min-w-0">
+                                  {previewState.data.title && (
+                                    <div className="text-sm font-semibold text-slate-100 truncate">{previewState.data.title}</div>
+                                  )}
+                                  {previewState.data.description && (
+                                    <div className="text-xs text-slate-400 line-clamp-2">{previewState.data.description}</div>
+                                  )}
+                                  {!previewState.data.title && !previewState.data.description && (
+                                    <div className="text-xs text-slate-400 truncate">{item.url}</div>
+                                  )}
+                                </div>
+                              </div>
+                            ) : previewState?.status === 'error' ? (
+                              <div className="text-xs text-red-400 mt-1">Não foi possível gerar o preview</div>
+                            ) : (
+                              <div className="text-xs text-slate-400 mt-1">Carregando preview...</div>
+                            )}
+                          </a>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+
+              {userInfoTab === 'docs' && (
+                <div className="space-y-2">
+                  {userInfoData.docs.length === 0 ? (
+                    <div className="text-sm text-slate-400">Nenhum documento encontrado.</div>
+                  ) : (
+                    userInfoData.docs
+                      .slice()
+                      .reverse()
+                      .map(m => {
+                        let rawUrl = m.mediaUrl;
+                        if (!rawUrl && m.rawMessage) {
+                          rawUrl = findMediaUrlInRaw(m.rawMessage, 'document');
+                        }
+                        const finalUrl = rawUrl ? getMediaUrl(rawUrl, m.mimeType, m.type) : undefined;
+                        const isPdf = ((m.mimeType || '').toLowerCase().includes('pdf')) || ((m.fileName || '').toLowerCase().endsWith('.pdf'));
+                        const sizeLabel = formatFileSize(m.fileSize);
+                        const key = m.id || m.whatsappMessageId || `${m.timestamp?.toString?.() || ''}_${Math.random()}`;
+
+                        return (
+                          <div key={key} className="rounded-lg border border-white/10 bg-[#16191F] p-3 flex items-center gap-3">
+                            <div className="p-2 rounded-full bg-white/10 text-slate-200">
+                              <FileIcon size={18} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm text-slate-200 font-medium truncate">{m.fileName || 'Documento'}</div>
+                              <div className="text-xs text-slate-400 truncate">
+                                {(m.mimeType || 'FILE').toUpperCase()} {sizeLabel ? `• ${sizeLabel}` : ''}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {isPdf && finalUrl && (
+                                <button
+                                  onClick={() => openPdfViewer(finalUrl, m.fileName || 'documento.pdf')}
+                                  className="p-2 rounded-full hover:bg-white/10 text-slate-200 hover:text-[#00E0D1] transition-colors"
+                                  title="Visualizar"
+                                >
+                                  <Eye size={16} />
+                                </button>
+                              )}
+                              {finalUrl ? (
+                                <button
+                                  onClick={() => downloadFromUrl(finalUrl, m.fileName || (isPdf ? 'documento.pdf' : 'documento'))}
+                                  className="p-2 rounded-full hover:bg-white/10 text-slate-200 hover:text-[#00E0D1] transition-colors"
+                                  title="Baixar"
+                                >
+                                  <ArrowRightLeft className="rotate-90" size={16} />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => scheduleMediaFetch(m, 'document')}
+                                  className="text-xs text-slate-400 hover:text-[#00E0D1]"
+                                  title="Buscar URL"
+                                >
+                                  Buscar
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Media Viewer (Lightbox) */}
       {imageViewer && (
         <div
@@ -3650,6 +4144,47 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
               ) : (
                 <div className="p-4 text-sm text-white/80">PDF indisponível para visualização</div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Video Viewer */}
+      {videoViewer && (
+        <div
+          className="absolute inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeVideoViewer();
+          }}
+        >
+          <div className="w-full max-w-5xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between gap-3 mb-3 text-white">
+              <div className="text-sm font-medium truncate">
+                {videoViewer.fileName || 'Vídeo'}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={downloadVideoViewer}
+                  className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                  title="Baixar"
+                >
+                  <ArrowRightLeft className="rotate-90" size={18} />
+                </button>
+                <button
+                  onClick={closeVideoViewer}
+                  className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                  title="Fechar (Esc)"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 rounded-lg bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">
+              <video
+                controls
+                src={videoViewer.url}
+                className="w-full h-[80vh] bg-black"
+              />
             </div>
           </div>
         </div>
