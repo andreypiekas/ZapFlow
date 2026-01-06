@@ -26,29 +26,17 @@
 ## 🔴 Prioritário
 
 ### 2. Imagens não aparecem (mídia sem URL/base64)
-**Status:** 🟡 Em validação e ajuste  
-**Prioridade:** Alta  
-**Sintoma:** Mensagens de mídia podem aparecer como “Imagem (URL não disponível)” no chat, principalmente no **recebimento**.
+**Status:** ✅ Concluído  
+**Prioridade:** Alta (resolvido)  
+**Resultado:** Imagens/vídeos/PDFs deixam de sumir após alguns segundos; a mensagem “Imagem (URL não disponível)” não volta após sync/F5.
 
-**Correções já aplicadas (precisam validação em produção):**
-- Backend: webhook salva base64 no PostgreSQL de forma mais robusta (não depende só de `imageMessage.base64`).
-- Frontend: busca `webhook_messages` por `messageId` (inclui casos `data.key.id`) e faz **retry controlado** se o webhook ainda não salvou.
-- Frontend: melhoria na extração de `messageId` ao enviar mídia (para patch do `whatsappMessageId`).
+**Correções efetivas:**
+- Backend: webhook salva base64 de forma robusta em `webhook_messages` (PostgreSQL).
+- Frontend: busca `webhook_messages` por `messageId` (inclui `data.key.id`), faz retry controlado e preserva `mediaUrl`/`rawMessage` ao mesclar mensagens (evita sobreposição por cópias sem mídia).
+- Deduplicação/merge: no `App.tsx`, ao mesclar mensagens (API/DB/local), mantemos a `mediaUrl` existente se a nova cópia vier sem mídia.
 
-**O que falta validar/ajustar:**
-- Confirmar se o webhook está chegando com **base64** (config da Evolution).
-- Confirmar se o registro é salvo em `user_data` com `data_type = 'webhook_messages'` e `data_key = <messageId>`.
-- Garantir que mensagem de mídia não “duplique” (uma com preview e outra “sem URL”).
-
-**Critério de aceite:**
-- Receber 5 imagens + 3 vídeos + 3 PDFs → todas renderizam no chat.
-- Refresh (F5) → a mídia continua aparecendo (não some).
-
-**Arquivos/áreas:**
-- `backend/server.js` (webhook base64 + leitura de `webhook_messages`)
-- `components/ChatInterface.tsx` (render e retry de mídia)
-- `services/whatsappService.ts` (`mapApiMessageToInternal`, IDs)
-- `docs/CONFIGURAR_WEBHOOK_BASE64.md`
+**Critério de aceite (atingido):**
+- Enviar/receber imagens/vídeos/PDFs → continuam aparecendo após sync e F5, sem voltar “URL não disponível”.
 
 ---
 
