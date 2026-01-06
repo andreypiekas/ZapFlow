@@ -594,16 +594,73 @@ export type SendRealMessageWithIdResult = {
 };
 
 const extractEvolutionMessageId = (data: any): string | undefined => {
-  if (!data || typeof data !== 'object') return undefined;
-  return (
-    data?.key?.id ||
-    data?.message?.key?.id ||
-    data?.data?.key?.id ||
-    data?.response?.key?.id ||
-    data?.id ||
-    data?.messageId ||
-    data?.message_id
-  );
+  // A Evolution API pode retornar o ID em formatos diferentes dependendo do endpoint/versão.
+  // Esta função tenta ser resiliente, priorizando `key.id` (mais confiável) e fazendo busca recursiva.
+  const seen = new Set<any>();
+
+  const isObj = (v: any): v is Record<string, any> => !!v && typeof v === 'object';
+  const isNonEmptyString = (v: any): v is string => typeof v === 'string' && v.trim().length > 0;
+  const isLikelyMessageId = (v: string): boolean => {
+    // IDs do WhatsApp/Evolution geralmente são alfanuméricos (às vezes com _/-) e não contêm espaços.
+    // Evita retornar IDs triviais como "1" ou strings curtas.
+    return /^[A-Za-z0-9_-]{6,}$/.test(v);
+  };
+
+  const pick = (obj: any, depth: number = 0): string | undefined => {
+    if (!isObj(obj) || depth > 8) return undefined;
+    if (seen.has(obj)) return undefined;
+    seen.add(obj);
+
+    // Array: varre itens
+    if (Array.isArray(obj)) {
+      for (const item of obj) {
+        const id = pick(item, depth + 1);
+        if (id) return id;
+      }
+      return undefined;
+    }
+
+    // PRIORIDADE ABSOLUTA: key.id (estrutura padrão do Baileys/Evolution)
+    const keyId = (obj as any)?.key?.id;
+    if (isNonEmptyString(keyId) && isLikelyMessageId(keyId)) return keyId;
+
+    // Caminhos comuns (vários wrappers)
+    const candidates = [
+      (obj as any)?.message?.key?.id,
+      (obj as any)?.data?.key?.id,
+      (obj as any)?.response?.key?.id,
+      (obj as any)?.response?.message?.key?.id,
+      (obj as any)?.response?.data?.key?.id,
+      (obj as any)?.messageId,
+      (obj as any)?.message_id
+    ];
+    for (const c of candidates) {
+      if (isNonEmptyString(c) && isLikelyMessageId(c)) return c;
+    }
+
+    // Recurse em wrappers típicos antes de varrer tudo
+    const wrappers = ['data', 'response', 'message', 'result', 'payload'];
+    for (const w of wrappers) {
+      const id = pick((obj as any)[w], depth + 1);
+      if (id) return id;
+    }
+
+    // Busca recursiva em todas as propriedades (limitada por profundidade)
+    for (const k of Object.keys(obj)) {
+      const v = (obj as any)[k];
+      if (!isObj(v)) continue;
+      const id = pick(v, depth + 1);
+      if (id) return id;
+    }
+
+    // Fallback final: alguns endpoints podem devolver apenas `id`
+    const fallbackId = (obj as any)?.id;
+    if (isNonEmptyString(fallbackId) && isLikelyMessageId(fallbackId)) return fallbackId;
+
+    return undefined;
+  };
+
+  return pick(data);
 };
 
 /**

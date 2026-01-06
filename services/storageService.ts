@@ -144,7 +144,10 @@ class StorageService {
 
     // Salva no localStorage apenas se não estiver configurado para usar apenas PostgreSQL
     // OU se for um dado não sensível (mesmo com PostgreSQL apenas)
-    const shouldSaveToLocalStorage = !this.useOnlyPostgreSQL || !this.isSensitiveDataType(dataType);
+    // ⚠️ IMPORTANTE: `chats` pode conter histórico grande + base64 e estoura a cota do navegador com facilidade.
+    // O sistema já persiste chats no backend por chat (key=chatId), então evitamos localStorage para este tipo.
+    const localStorageAllowed = dataType !== 'chats';
+    const shouldSaveToLocalStorage = localStorageAllowed && (!this.useOnlyPostgreSQL || !this.isSensitiveDataType(dataType));
     const localStorageSuccess = shouldSaveToLocalStorage ? this.saveToLocalStorage(dataType, value, key) : true;
 
     // Se API está disponível, tenta salvar
@@ -232,7 +235,8 @@ class StorageService {
   async saveBatch<T>(dataType: DataType, data: { [key: string]: T }): Promise<boolean> {
     // TODO: Remover localStorage - backend é obrigatório
     // Salva no localStorage temporariamente (será removido)
-    const localStorageSuccess = this.saveToLocalStorage(dataType, data);
+    const localStorageAllowed = dataType !== 'chats';
+    const localStorageSuccess = localStorageAllowed ? this.saveToLocalStorage(dataType, data) : true;
 
     // Backend é obrigatório - sempre tenta salvar na API
     if (this.useAPI && this.apiAvailable) {

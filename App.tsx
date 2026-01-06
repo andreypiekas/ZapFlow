@@ -270,12 +270,10 @@ const App: React.FC = () => {
   // Configurações são salvas apenas via handleSaveConfig (endpoint /api/config)
   // Não salvar automaticamente aqui para evitar conflitos com configurações globais
 
-  // Persiste chats usando storageService
-  useEffect(() => {
-    storageService.save('chats', chats).catch(err => {
-      console.error('[App] Erro ao salvar chats:', err);
-    });
-  }, [chats]);
+  // ⚠️ IMPORTANTE:
+  // Não persistimos o array completo de `chats` (inclui histórico + mídia/base64) no storageService/localStorage,
+  // pois isso estoura facilmente a cota do navegador (QuotaExceededError) e ainda cria um registro "default" inútil no banco.
+  // Os chats são persistidos **por chat** via `handleUpdateChat` (saveData('chats', chatId, chat)).
 
   // Persiste usuários usando storageService
   useEffect(() => {

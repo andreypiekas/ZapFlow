@@ -208,6 +208,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  // Força re-render pontual para permitir retries de mídia (quando o webhook salva base64 alguns segundos depois)
+  const [mediaRetryTick, setMediaRetryTick] = useState(0);
   
   // Resizable Sidebar State
   const [listWidth, setListWidth] = useState(380); // Default width in pixels
@@ -1699,9 +1701,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             console.log('[ChatInterface] 🔍 ESTRUTURA COMPLETA DO imageMessage:', imageMsgObj);
             console.log('[ChatInterface] 🔍 rawMessage COMPLETO:', rawMsg);
             
-            // Verifica se há messageId ou key.id que possa ser usado para buscar a URL
-            const messageId = msg.whatsappMessageId || rawMsg?.key?.id;
-            const remoteJid = rawMsg?.key?.remoteJid || rawMsg?.key?.remoteJidAlt;
+            // Verifica se há messageId ou key.id que possa ser usado para buscar a URL/base64
+            // (alguns formatos podem encapsular key em data.key)
+            const messageId =
+              msg.whatsappMessageId ||
+              rawMsg?.key?.id ||
+              rawMsg?.data?.key?.id ||
+              rawMsg?.message?.key?.id;
+            const remoteJid =
+              rawMsg?.key?.remoteJid ||
+              rawMsg?.key?.remoteJidAlt ||
+              rawMsg?.data?.key?.remoteJid ||
+              rawMsg?.data?.key?.remoteJidAlt;
             if (messageId && remoteJid) {
               console.log('[ChatInterface] 🔍 Possível buscar URL usando:', {
                 messageId,
@@ -1710,17 +1721,32 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
               });
               
               // Tenta buscar URL/base64 da mídia usando messageId (async, não bloqueia renderização)
-              // Usa uma flag para evitar múltiplas buscas para a mesma mensagem
+              // Usa uma flag para evitar múltiplas buscas simultâneas para a mesma mensagem,
+              // mas permite retry rápido quando o webhook ainda não salvou o base64 no banco.
               const fetchKey = `fetch_${messageId}`;
+              const attemptsKey = `fetchAttempts_${messageId}`;
+              const attemptsSoFar = Number((window as any)[attemptsKey] || 0);
+              const maxAttempts = 6;
+
+              if (attemptsSoFar >= maxAttempts) {
+                // Evita loop infinito se realmente não houver base64/URL disponível
+                return;
+              }
+
               if (!(window as any)[fetchKey]) {
                 (window as any)[fetchKey] = true;
-                
+                (window as any)[attemptsKey] = attemptsSoFar + 1;
+
+                let foundAny = false;
+
                 // PRIORIDADE 1: Buscar base64 salvo pelo webhook no banco
                 loadUserData<{ messageId: string; dataUrl: string; mimeType: string }>('webhook_messages', messageId)
                   .then(webhookData => {
                     if (webhookData?.dataUrl) {
+                      foundAny = true;
                       console.log('[ChatInterface] ✅ Base64 encontrado no banco (webhook):', messageId);
                       msg.mediaUrl = webhookData.dataUrl;
+
                       // Atualiza o chat para forçar re-render
                       const chat = chats.find(c => c.id === (selectedChatId || ''));
                       if (chat) {
@@ -1731,10 +1757,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                           onUpdateChat({ ...chat, messages: updatedMessages });
                         }
                       }
-                      setTimeout(() => delete (window as any)[fetchKey], 60000);
+
                       return null; // Base64 encontrado, não precisa buscar URL
                     }
-                    
+
                     // PRIORIDADE 2: Buscar URL via Evolution API (se configurado)
                     if (apiConfig.baseUrl && apiConfig.apiKey) {
                       return fetchMediaUrlByMessageId(apiConfig, messageId, remoteJid, 'image');
@@ -1742,9 +1768,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                     return null;
                   })
                   .then(url => {
-                    if (url && !msg.mediaUrl) { // Se não foi definido pelo base64 acima
+                    if (url && !msg.mediaUrl) {
+                      foundAny = true;
                       console.log('[ChatInterface] ✅ URL encontrada via messageId:', url.substring(0, 100));
                       msg.mediaUrl = url;
+
                       // Tenta atualizar no chat para forçar re-render
                       const chat = chats.find(c => c.id === (selectedChatId || ''));
                       if (chat) {
@@ -1756,14 +1784,26 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         }
                       }
                     } else if (!url && !msg.mediaUrl) {
-                      console.log('[ChatInterface] ⚠️ URL não encontrada via messageId - imageMessage pode estar realmente vazio');
+                      console.log('[ChatInterface] ⚠️ URL/base64 ainda não disponível (provável atraso do webhook).');
                     }
-                    // Remove a flag após um tempo para permitir nova tentativa se necessário
-                    setTimeout(() => delete (window as any)[fetchKey], 60000);
                   })
                   .catch(error => {
                     console.error('[ChatInterface] Erro ao buscar URL/base64 via messageId:', error);
-                    setTimeout(() => delete (window as any)[fetchKey], 30000);
+                  })
+                  .finally(() => {
+                    // Se não encontrou nada, libera rápido para permitir retry (webhook pode chegar depois).
+                    // Se encontrou, mantém bloqueio por mais tempo para evitar spam.
+                    const delay = foundAny ? 60000 : 4000;
+                    setTimeout(() => {
+                      delete (window as any)[fetchKey];
+                      if (foundAny) {
+                        // Sucesso: limpa contador de tentativas
+                        delete (window as any)[attemptsKey];
+                      } else {
+                        // Força re-render para tentar novamente sem depender de outras atualizações do app
+                        setMediaRetryTick(t => t + 1);
+                      }
+                    }, delay);
                   });
               }
             }

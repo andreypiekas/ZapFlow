@@ -1537,31 +1537,64 @@ const handleWebhookEvolution = async (req, res) => {
             console.log(`[WEBHOOK] Mensagem de mídia encontrada - messageId: ${messageId}, imageMsg: ${imageMsg ? 'sim' : 'não'}, base64: ${imageMsg?.base64 ? 'presente' : 'ausente'}`);
           }
           
-          // Se for mensagem de mídia e tiver base64, salva no banco
-          if ((imageMsg || videoMsg || audioMsg || documentMsg) && 
-              (imageMsg?.base64 || videoMsg?.base64 || audioMsg?.base64 || documentMsg?.base64)) {
-            
-            // Extrai base64 e cria data URL
-            let base64Data = null;
-            let mimeType = 'image/jpeg';
-            
-            if (imageMsg?.base64) {
-              base64Data = imageMsg.base64;
-              mimeType = imageMsg.mimetype || 'image/jpeg';
-            } else if (videoMsg?.base64) {
-              base64Data = videoMsg.base64;
-              mimeType = videoMsg.mimetype || 'video/mp4';
-            } else if (audioMsg?.base64) {
-              base64Data = audioMsg.base64;
-              mimeType = audioMsg.mimetype || 'audio/ogg; codecs=opus';
-            } else if (documentMsg?.base64) {
-              base64Data = documentMsg.base64;
-              mimeType = documentMsg.mimetype || 'application/pdf';
+          // Se for mensagem de mídia, tenta extrair base64 (quando Webhook Base64 está habilitado)
+          // IMPORTANTE: algumas versões/formatos podem enviar base64 fora do imageMessage.base64
+          // (ex.: no nível superior do payload). Então fazemos extração mais robusta.
+          if (imageMsg || videoMsg || audioMsg || documentMsg) {
+            const isNonEmptyString = (v) => typeof v === 'string' && v.trim().length > 0;
+            const isDataUrl = (v) => isNonEmptyString(v) && v.trim().startsWith('data:') && v.includes('base64,');
+
+            // Candidatos comuns (estrutura varia por versão e configuração)
+            const base64Candidate =
+              imageMsg?.base64 ||
+              videoMsg?.base64 ||
+              audioMsg?.base64 ||
+              documentMsg?.base64 ||
+              // Alguns payloads colocam base64 no topo
+              messageObj?.base64 ||
+              messageData?.base64 ||
+              // Alguns payloads podem encapsular em `data`
+              messageData?.data?.base64 ||
+              messageData?.data?.message?.imageMessage?.base64 ||
+              messageData?.data?.message?.videoMessage?.base64 ||
+              messageData?.data?.message?.audioMessage?.base64 ||
+              messageData?.data?.message?.documentMessage?.base64 ||
+              messageData?.data?.imageMessage?.base64 ||
+              messageData?.data?.videoMessage?.base64 ||
+              messageData?.data?.audioMessage?.base64 ||
+              messageData?.data?.documentMessage?.base64 ||
+              // Alguns formatos usam `media` em vez de `base64`
+              imageMsg?.media ||
+              videoMsg?.media ||
+              audioMsg?.media ||
+              documentMsg?.media;
+
+            // mimeType: tenta pegar do objeto específico, senão fallback genérico
+            let mimeType =
+              imageMsg?.mimetype ||
+              videoMsg?.mimetype ||
+              audioMsg?.mimetype ||
+              documentMsg?.mimetype ||
+              messageObj?.mimetype ||
+              messageData?.mimetype ||
+              (imageMsg ? 'image/jpeg' : videoMsg ? 'video/mp4' : audioMsg ? 'audio/ogg; codecs=opus' : 'application/octet-stream');
+
+            let dataUrl = null;
+            if (isDataUrl(base64Candidate)) {
+              dataUrl = base64Candidate.trim();
+              // Se vier como dataURL, tenta inferir o mime
+              try {
+                const header = dataUrl.split(',')[0] || '';
+                const inferred = header.split(':')[1]?.split(';')[0];
+                if (inferred) mimeType = inferred;
+              } catch {
+                // ignore
+              }
+            } else if (isNonEmptyString(base64Candidate)) {
+              dataUrl = `data:${mimeType};base64,${base64Candidate.trim()}`;
             }
-            
-            if (base64Data) {
-              const dataUrl = `data:${mimeType};base64,${base64Data}`;
-              
+
+            if (dataUrl) {
               // Salva base64 independente de chat existir (pode ser usado depois quando chat for criado)
               // Salva a mensagem completa com base64 para uso posterior
               try {
@@ -1579,14 +1612,14 @@ const handleWebhookEvolution = async (req, res) => {
                     rawMessage: messageData
                   })]
                 );
-                
+
                 processed++;
                 console.log(`[WEBHOOK] ✅ Mensagem com base64 salva: ${messageId} (${mimeType}) para remoteJid: ${remoteJid}`);
               } catch (dbError) {
                 console.error(`[WEBHOOK] Erro ao salvar base64 no banco para ${messageId}:`, dbError);
               }
             } else {
-              console.log(`[WEBHOOK] ⚠️ Mensagem de mídia sem base64 - messageId: ${messageId}, imageMsg: ${imageMsg ? 'existe' : 'não'}, videoMsg: ${videoMsg ? 'existe' : 'não'}`);
+              console.log(`[WEBHOOK] ⚠️ Mensagem de mídia sem base64 - messageId: ${messageId}, imageMsg: ${imageMsg ? 'existe' : 'não'}, videoMsg: ${videoMsg ? 'existe' : 'não'}, audioMsg: ${audioMsg ? 'existe' : 'não'}, documentMsg: ${documentMsg ? 'existe' : 'não'}`);
             }
           }
         } catch (msgError) {
