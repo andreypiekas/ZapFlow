@@ -196,3 +196,25 @@
   - Opção B: Arquivo em disco/MinIO/S3 + tabela com metadados (recomendado)
 - Definir política de retenção (ex.: 30/90 dias) + limpeza automática.
 
+---
+
+## 🔒 Infra / Deploy
+
+### 13. HTTPS mesmo acessando por IP + arquivo de autoconfiguração
+**Status:** 🔴 Pendente  
+**Prioridade:** Alta  
+**Objetivo:** Permitir acesso via `https://<IP>` sem depender de domínio e sem exigir configuração manual; o processo deve gerar um **arquivo de autoconfiguração**.
+
+**Tarefas detalhadas:**
+- Gerar certificado TLS para uso por IP (ex.: **CA interna/self‑signed**) e salvar em um local padrão (ex.: `certs/`).
+- Criar **arquivo de autoconfiguração** (ex.: `install/https_autoconfig.ps1` / `install/https_autoconfig.sh` ou `install/https_autoconfig.json`) que:
+  - Detecta IP automaticamente.
+  - Configura reverse proxy (ex.: Nginx/Caddy) para `https://<IP>`.
+  - Força redirecionamento `http -> https`.
+  - Ajusta `.env`/config (`VITE_API_URL`, `BASE_URL`, etc.) para usar HTTPS.
+  - Garante WebSocket (Socket.IO) funcionando em HTTPS e CORS correto.
+- Documentar o passo de confiar no certificado (quando necessário) em Windows/Android.
+
+**Critério de aceite:**
+- Abrir `https://<IP>` e usar login + chats + mídias + WebSocket sem falhas.
+
