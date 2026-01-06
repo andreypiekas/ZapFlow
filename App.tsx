@@ -1409,26 +1409,27 @@ const App: React.FC = () => {
                                                 });
                                                 
                                                 // Ordena por timestamp, respeitando ordem cronológica real
+                                                // SEMPRE usa o timestamp real para garantir ordem correta de envio/recebimento
                                                 const uniqueMessages = Array.from(messageMap.values())
                                                     .sort((a, b) => {
                                                         const timeA = a.timestamp?.getTime() || 0;
                                                         const timeB = b.timestamp?.getTime() || 0;
                                                         const timeDiff = timeA - timeB;
-                                                        const absTimeDiff = Math.abs(timeDiff);
                                                         
-                                                        // PRIORIDADE 1: Se timestamps são muito próximos (< 10 segundos) e senders diferentes
-                                                        // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
-                                                        // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
-                                                        // independentemente de pequenas diferenças de sincronização de relógio
-                                                        if (absTimeDiff < 10000 && a.sender !== b.sender) {
-                                                            // Agente sempre vem antes do usuário quando timestamps estão próximos
-                                                            if (a.sender === 'agent' && b.sender === 'user') {
-                                                                return -1; // Agente antes
-                                                            }
-                                                            // Usuário sempre vem depois do agente quando timestamps estão próximos
-                                                            if (a.sender === 'user' && b.sender === 'agent') {
-                                                                return 1; // Usuário depois
-                                                            }
+                                                        // PRIORIDADE 1: Se timestamps são diferentes, usa timestamp real (ordem cronológica)
+                                                        if (timeDiff !== 0) {
+                                                            return timeDiff;
+                                                        }
+                                                        
+                                                        // PRIORIDADE 2: Se timestamps são idênticos, usa whatsappMessageId para desempate
+                                                        if (a.whatsappMessageId && b.whatsappMessageId) {
+                                                            return a.whatsappMessageId.localeCompare(b.whatsappMessageId);
+                                                        }
+                                                        if (a.whatsappMessageId && !b.whatsappMessageId) {
+                                                            return -1;
+                                                        }
+                                                        if (!a.whatsappMessageId && b.whatsappMessageId) {
+                                                            return 1;
                                                         }
                                                         
                                                         // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
@@ -2885,25 +2886,26 @@ const App: React.FC = () => {
                                                 
                                             // Log removido para produção - muito verboso
                                             // console.log(`[App] ✅ Nova mensagem adicionada ao chat ${chat.contactName}`);
+                                                // SEMPRE usa o timestamp real para garantir ordem correta de envio/recebimento
                                                 let updatedMessages = [...chat.messages, mapped].sort((a, b) => {
                                                     const timeA = a.timestamp?.getTime() || 0;
                                                     const timeB = b.timestamp?.getTime() || 0;
                                                     const timeDiff = timeA - timeB;
-                                                    const absTimeDiff = Math.abs(timeDiff);
                                                     
-                                                    // PRIORIDADE 1: Se timestamps são muito próximos (< 10 segundos) e senders diferentes
-                                                    // Sempre prioriza mensagens do agente (enviadas) para aparecer ANTES das do usuário (recebidas)
-                                                    // Isso garante que mensagens enviadas apareçam antes de recebidas quando timestamps estão próximos
-                                                    // independentemente de pequenas diferenças de sincronização de relógio
-                                                    if (absTimeDiff < 10000 && a.sender !== b.sender) {
-                                                        // Agente sempre vem antes do usuário quando timestamps estão próximos
-                                                        if (a.sender === 'agent' && b.sender === 'user') {
-                                                            return -1; // Agente antes
-                                                        }
-                                                        // Usuário sempre vem depois do agente quando timestamps estão próximos
-                                                        if (a.sender === 'user' && b.sender === 'agent') {
-                                                            return 1; // Usuário depois
-                                                        }
+                                                    // PRIORIDADE 1: Se timestamps são diferentes, usa timestamp real (ordem cronológica)
+                                                    if (timeDiff !== 0) {
+                                                        return timeDiff;
+                                                    }
+                                                    
+                                                    // PRIORIDADE 2: Se timestamps são idênticos, usa whatsappMessageId para desempate
+                                                    if (a.whatsappMessageId && b.whatsappMessageId) {
+                                                        return a.whatsappMessageId.localeCompare(b.whatsappMessageId);
+                                                    }
+                                                    if (a.whatsappMessageId && !b.whatsappMessageId) {
+                                                        return -1;
+                                                    }
+                                                    if (!a.whatsappMessageId && b.whatsappMessageId) {
+                                                        return 1;
                                                     }
                                                     
                                                     // PRIORIDADE 2: Para diferenças maiores, usa timestamp real
