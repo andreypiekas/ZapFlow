@@ -900,18 +900,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     if (!inputText.trim()) return;
     setIsSending(true);
 
-        // Formata mensagem com nome e departamento para envio ao WhatsApp
-        let messageToSend = messageContent;
-        if (currentUser.name) {
-          messageToSend = formatMessageHeader() + messageContent;
-        }
-
-    // Salva o conteúdo antes de limpar o input
+    // Salva o conteúdo ANTES de limpar o input
     const messageContent = inputText;
     
     // Limpa o input IMEDIATAMENTE após salvar o conteúdo
     setInputText('');
     setReplyingTo(null); // Limpa a resposta também
+    
+    // Formata mensagem com nome e departamento para envio ao WhatsApp
+    let messageToSend = messageContent;
+    if (currentUser.name) {
+      messageToSend = formatMessageHeader() + messageContent;
+    }
     
     const newMessage: Message = {
       id: `m_${Date.now()}`,
