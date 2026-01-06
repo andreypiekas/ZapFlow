@@ -2092,12 +2092,22 @@ const App: React.FC = () => {
                 ...chatObj,
                 id: chatObj.id || key, // Usa o id do chat ou a key como fallback
                 lastMessageTime: chatObj.lastMessageTime ? new Date(chatObj.lastMessageTime) : new Date(),
-                messages: chatObj.messages?.map((msg: Message) => ({
-                  ...msg,
-                  timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-                  // CRÍTICO: Normaliza conteúdo de mensagens do agente ao carregar do banco
-                  content: normalizeMessageContent(msg.content, msg.sender)
-                })) || []
+                                messages: chatObj.messages?.map((msg: Message) => {
+                                    const originalContent = msg.content || '';
+                                    const normalizedContent = normalizeMessageContent(originalContent, msg.sender);
+                                    
+                                    // Log se houve normalização ao carregar do banco (indica mensagem antiga com cabeçalho)
+                                    if (msg.sender === 'agent' && originalContent !== normalizedContent) {
+                                        console.log(`[App] 🔄 [DEBUG] syncChats: Normalizando mensagem do banco - original="${originalContent.substring(0, 100)}", normalized="${normalizedContent.substring(0, 100)}"`);
+                                    }
+                                    
+                                    return {
+                                        ...msg,
+                                        timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+                                        // CRÍTICO: Normaliza conteúdo de mensagens do agente ao carregar do banco
+                                        content: normalizedContent
+                                    };
+                                }) || []
               };
             })
             .filter((chat: any) => {
@@ -3004,7 +3014,13 @@ const App: React.FC = () => {
                                                     content: finalMappedContent
                                                 };
                                                 
-                                                console.log(`[App] ✅ [DEBUG] Socket.IO: Adicionando nova mensagem - sender=${mapped.sender}, whatsappId=${mapped.whatsappMessageId}, originalContent="${mapped.content?.substring(0, 50)}", normalizedContent="${finalMappedContent?.substring(0, 50)}", isAgent=${mapped.sender === 'agent'}`);
+                                                // Log detalhado para debug de duplicação
+                                                const originalContent = mapped.content || '';
+                                                if (mapped.sender === 'agent' && originalContent !== finalMappedContent) {
+                                                    console.log(`[App] 🔄 [DEBUG] Socket.IO: Normalizando conteúdo do agente ao adicionar - original="${originalContent.substring(0, 100)}", normalized="${finalMappedContent.substring(0, 100)}"`);
+                                                }
+                                                
+                                                console.log(`[App] ✅ [DEBUG] Socket.IO: Adicionando nova mensagem - sender=${mapped.sender}, whatsappId=${mapped.whatsappMessageId}, originalContent="${originalContent.substring(0, 50)}", normalizedContent="${finalMappedContent.substring(0, 50)}", isAgent=${mapped.sender === 'agent'}`);
                                                 
                                                 // Verifica se já existe uma mensagem idêntica antes de adicionar (prevenção extra de duplicação)
                                                 const alreadyExists = chat.messages.some(m => {
