@@ -2762,29 +2762,32 @@ const App: React.FC = () => {
                                             // Verifica se a mensagem já existe e encontra seu índice para possível atualização
                                             let existingMessageIndex = -1;
                                             const exists = !shouldUpdate && chat.messages.some((m, idx) => {
-                                                // Verifica por ID do WhatsApp (mais confiável)
+                                                // PRIORIDADE 1: Verifica por ID do WhatsApp (mais confiável)
                                                 if (m.whatsappMessageId && mapped.whatsappMessageId && 
                                                     m.whatsappMessageId === mapped.whatsappMessageId) {
                                                     existingMessageIndex = idx;
                                                     return true;
                                                 }
-                                                // Verifica por ID interno
+                                                // PRIORIDADE 2: Verifica por ID interno
                                                 if (m.id && mapped.id && m.id === mapped.id) {
                                                     existingMessageIndex = idx;
                                                     return true;
                                                 }
-                                                // Para mensagens do agente, verifica também por conteúdo + timestamp (pode ter sido atualizada)
+                                                // PRIORIDADE 3: Para mensagens do agente, verifica por conteúdo + timestamp (janela maior)
+                                                // IMPORTANTE: Mensagens do agente podem ter sido adicionadas localmente sem whatsappMessageId
+                                                // e depois recebidas via Socket.IO com whatsappMessageId, então precisa verificar por conteúdo
                                                 if (mapped.sender === 'agent' && m.sender === 'agent') {
                                                     const contentMatch = m.content && mapped.content && 
                                                         m.content.trim() === mapped.content.trim();
+                                                    // Janela maior para mensagens do agente (até 60 segundos) para pegar mensagens recém-enviadas
                                                     const timeMatch = m.timestamp && mapped.timestamp && 
-                                                        Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 30000;
+                                                        Math.abs(m.timestamp.getTime() - mapped.timestamp.getTime()) < 60000;
                                                     if (contentMatch && timeMatch) {
                                                         existingMessageIndex = idx;
                                                         return true;
                                                     }
                                                 }
-                                                // Para outras mensagens, verifica por conteúdo + timestamp muito próximo (evita duplicação)
+                                                // PRIORIDADE 4: Para outras mensagens, verifica por conteúdo + timestamp muito próximo (evita duplicação)
                                                 if (m.content && mapped.content && 
                                                     m.content.trim() === mapped.content.trim() &&
                                                     m.sender === mapped.sender &&
