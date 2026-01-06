@@ -2961,9 +2961,27 @@ const App: React.FC = () => {
                                                 // IMPORTANTE: Só adiciona se não for uma atualização (shouldUpdate = false)
                                                 chatUpdated = true;
                                                 
-                                                console.log(`[App] ✅ [DEBUG] Socket.IO: Adicionando nova mensagem - sender=${mapped.sender}, whatsappId=${mapped.whatsappMessageId}, content=${mapped.content?.substring(0, 50)}`);
+                                                // Normaliza o conteúdo para mensagens do agente (remove cabeçalho)
+                                                let finalMappedContent = mapped.content;
+                                                if (mapped.sender === 'agent' && mapped.content) {
+                                                    const normalizeContent = (content: string): string => {
+                                                        if (!content) return '';
+                                                        let normalized = content;
+                                                        normalized = normalized.replace(/^[^:]+:\n+/g, '');
+                                                        normalized = normalized.replace(/^[^:]+ - [^:]+:\n+/g, '');
+                                                        return normalized.trim();
+                                                    };
+                                                    finalMappedContent = normalizeContent(mapped.content);
+                                                }
+                                                
+                                                const messageToAdd = {
+                                                    ...mapped,
+                                                    content: finalMappedContent
+                                                };
+                                                
+                                                console.log(`[App] ✅ [DEBUG] Socket.IO: Adicionando nova mensagem - sender=${mapped.sender}, whatsappId=${mapped.whatsappMessageId}, originalContent="${mapped.content?.substring(0, 50)}", normalizedContent="${finalMappedContent?.substring(0, 50)}"`);
                                                 // SEMPRE usa o timestamp real para garantir ordem correta de envio/recebimento
-                                                let updatedMessages = [...chat.messages, mapped].sort((a, b) => {
+                                                let updatedMessages = [...chat.messages, messageToAdd].sort((a, b) => {
                                                     const timeA = a.timestamp?.getTime() || 0;
                                                     const timeB = b.timestamp?.getTime() || 0;
                                                     const timeDiff = timeA - timeB;
