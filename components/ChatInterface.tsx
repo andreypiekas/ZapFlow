@@ -997,11 +997,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         // Mostra mensagem específica se disponível, senão mostra genérica
         const errorMessage = error?.message || 'Erro ao enviar mensagem. Verifique a conexão e tente novamente.';
         alert(errorMessage);
+        // Se der erro, restaura o texto no input para o usuário poder tentar novamente
+        setInputText(messageContent);
         finalizeMessageStatus(newMessage, false);
     } finally {
         setIsSending(false);
-        setInputText('');
-        setReplyingTo(null); // Limpa a resposta após enviar
+        // Input já foi limpo no início, não precisa limpar novamente (exceto em caso de erro)
         setShowQuickReplies(false);
         setShowEmojiPicker(false);
     }
