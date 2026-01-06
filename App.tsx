@@ -2855,16 +2855,9 @@ const App: React.FC = () => {
                                                 // CRÍTICO: A mensagem local pode não ter o cabeçalho "Andrey:\n" mas a do Socket.IO tem
                                                 // Então normaliza o conteúdo removendo o cabeçalho antes de comparar
                                                 if (mapped.sender === 'agent' && m.sender === 'agent') {
-                                                    // Função para normalizar conteúdo removendo cabeçalho (ex: "Andrey:\n" ou "Andrey - Departamento:\n")
-                                                    const normalizeContent = (content: string): string => {
-                                                        if (!content) return '';
-                                                        // Remove padrões como "Nome:\n" ou "Nome - Departamento:\n" do início
-                                                        const headerPattern = /^[^:]+(?: - [^:]+)?:\n?/;
-                                                        return content.replace(headerPattern, '').trim();
-                                                    };
-                                                    
-                                                    const normalizedLocal = normalizeContent(m.content || '');
-                                                    const normalizedMapped = normalizeContent(mapped.content || '');
+                                                    // Usa a função utilitária global para normalizar conteúdo
+                                                    const normalizedLocal = normalizeMessageContent(m.content, m.sender);
+                                                    const normalizedMapped = normalizeMessageContent(mapped.content, mapped.sender);
                                                     const contentMatch = normalizedLocal && normalizedMapped && 
                                                         normalizedLocal === normalizedMapped;
                                                     // Janela maior para mensagens do agente (até 60 segundos) para pegar mensagens recém-enviadas
@@ -2908,23 +2901,12 @@ const App: React.FC = () => {
                                                 console.log(`[App] 🔄 [DEBUG] Socket.IO: Atualizando mensagem existente do agente - messageIndex=${messageIndex}, localId=${chat.messages[messageIndex]?.id}, whatsappId=${mapped.whatsappMessageId}, originalContent="${mapped.content?.substring(0, 50)}"`);
                                                 const updatedMessages = [...chat.messages];
                                                 
-                                                // Normaliza o conteúdo removendo cabeçalho para manter consistência
+                                                // CRÍTICO: Normaliza o conteúdo removendo cabeçalho para manter consistência
                                                 // A mensagem local já tem o conteúdo sem cabeçalho, então preserva ele
-                                                const normalizeContent = (content: string): string => {
-                                                    if (!content) return '';
-                                                    let normalized = content;
-                                                    // Remove "Nome:\n" ou "Nome:\n\n"
-                                                    normalized = normalized.replace(/^[^:]+:\n+/g, '');
-                                                    // Remove "Nome - Departamento:\n" ou "Nome - Departamento:\n\n"
-                                                    normalized = normalized.replace(/^[^:]+ - [^:]+:\n+/g, '');
-                                                    return normalized.trim();
-                                                };
-                                                
-                                                // CRÍTICO: Preserva o conteúdo local se ele já estiver normalizado (sem cabeçalho)
-                                                // Isso evita que o cabeçalho seja re-adicionado se a mensagem do Socket.IO tiver o cabeçalho
+                                                // Usa a função utilitária global para garantir consistência
                                                 const localContent = updatedMessages[messageIndex].content || '';
-                                                const normalizedMappedContent = normalizeContent(mapped.content || '');
-                                                const normalizedLocalContent = normalizeContent(localContent);
+                                                const normalizedMappedContent = normalizeMessageContent(mapped.content, mapped.sender);
+                                                const normalizedLocalContent = normalizeMessageContent(localContent, updatedMessages[messageIndex].sender);
                                                 
                                                 // Se o conteúdo local já está normalizado e é igual ao normalizado do Socket.IO, preserva o local
                                                 // Caso contrário, usa o normalizado do Socket.IO
