@@ -1146,6 +1146,25 @@ const App: React.FC = () => {
                             }
                             return false;
                         };
+
+                        // Mescla campos de mídia/raw quando o registro existente não tem esses dados
+                        const mergeMediaFields = (base: Message, incoming: Message): Message => {
+                            let changed = false;
+                            let result = base;
+                            if (!base.mediaUrl && incoming.mediaUrl) {
+                                result = {
+                                    ...result,
+                                    mediaUrl: incoming.mediaUrl,
+                                    mimeType: incoming.mimeType || base.mimeType,
+                                    rawMessage: incoming.rawMessage || base.rawMessage
+                                };
+                                changed = true;
+                            } else if (!base.rawMessage && incoming.rawMessage) {
+                                result = { ...result, rawMessage: incoming.rawMessage };
+                                changed = true;
+                            }
+                            return changed ? result : base;
+                        };
                         
                         // Usa mensagens da API (que podem ter sido buscadas separadamente)
                         const apiMessagesForMerge = apiMessages;
@@ -1195,6 +1214,12 @@ const App: React.FC = () => {
                                           msg.timestamp.getTime() > existing.timestamp.getTime()) {
                                     // Nova é mais recente - substitui
                                     messageMap.set(msgKey, msg);
+                                } else {
+                                    // Mantém existente, mas se a nova tiver mídia/raw que falta, mescla
+                                    const merged = mergeMediaFields(existing, msg);
+                                    if (merged !== existing) {
+                                        messageMap.set(msgKey, merged);
+                                    }
                                 }
                             });
                             
@@ -1228,14 +1253,25 @@ const App: React.FC = () => {
                                           msg.timestamp.getTime() > existing.timestamp.getTime()) {
                                     // Local é mais recente - substitui
                                     messageMap.set(msgKey, msg);
+                                } else {
+                                    const merged = mergeMediaFields(existing, msg);
+                                    if (merged !== existing) {
+                                        messageMap.set(msgKey, merged);
+                                    }
                                 }
                             });
                         } else if (hasMoreLocalMessages) {
                             // PRIORIDADE: Adiciona mensagens locais primeiro (têm mais mensagens)
                             existingChat.messages.forEach(msg => {
                                 const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
-                                if (!messageMap.has(msgKey)) {
+                                const existing = messageMap.get(msgKey);
+                                if (!existing) {
                                     messageMap.set(msgKey, msg);
+                                } else {
+                                    const merged = mergeMediaFields(existing, msg);
+                                    if (merged !== existing) {
+                                        messageMap.set(msgKey, merged);
+                                    }
                                 }
                             });
                             
@@ -1265,6 +1301,14 @@ const App: React.FC = () => {
                                 
                                 if (!existsInLocal && !messageMap.has(msgKey)) {
                                     messageMap.set(msgKey, msg);
+                                } else {
+                                    const existing = messageMap.get(msgKey);
+                                    if (existing) {
+                                        const merged = mergeMediaFields(existing, msg);
+                                        if (merged !== existing) {
+                                            messageMap.set(msgKey, merged);
+                                        }
+                                    }
                                 }
                             });
                         } else {
@@ -1273,8 +1317,14 @@ const App: React.FC = () => {
                             apiMessagesForMerge.forEach(msg => {
                                 // Usa ID da mensagem ou gera um baseado em timestamp + conteúdo para evitar duplicatas
                                 const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
-                                if (!messageMap.has(msgKey)) {
+                                const existing = messageMap.get(msgKey);
+                                if (!existing) {
                                     messageMap.set(msgKey, msg);
+                                } else {
+                                    const merged = mergeMediaFields(existing, msg);
+                                    if (merged !== existing) {
+                                        messageMap.set(msgKey, merged);
+                                    }
                                 }
                             });
                             
@@ -1321,6 +1371,15 @@ const App: React.FC = () => {
                                     msg.timestamp.getTime() >= existingApiMsg.timestamp.getTime()) {
                                     // Mensagem local é mais recente ou tem whatsappMessageId, substitui a da API
                                     messageMap.set(msgKey, msg);
+                                    } else {
+                                        // API está no map (mais recente). Ainda assim, se local tiver mídia que falta na API, mescla.
+                                        const mapEntry = messageMap.get(msgKey);
+                                        if (mapEntry) {
+                                            const merged = mergeMediaFields(mapEntry, msg);
+                                            if (merged !== mapEntry) {
+                                                messageMap.set(msgKey, merged);
+                                            }
+                                        }
                                 }
                                 // Se a da API for mais recente, mantém a da API (já está no map)
                             } else {
@@ -1350,6 +1409,14 @@ const App: React.FC = () => {
                                 
                                 if (!alreadyInMap) {
                                     messageMap.set(msgKey, msg);
+                                    } else {
+                                        const existing = messageMap.get(msgKey);
+                                        if (existing) {
+                                            const merged = mergeMediaFields(existing, msg);
+                                            if (merged !== existing) {
+                                                messageMap.set(msgKey, merged);
+                                            }
+                                        }
                                 }
                             }
                         });
