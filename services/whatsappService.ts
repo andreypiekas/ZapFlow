@@ -1156,6 +1156,8 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
 
     let type: any = 'text';
     let mediaUrl: string | undefined = undefined;
+    let mimeType: string | undefined = undefined;
+    let fileName: string | undefined = undefined;
     
     if (msgObj.imageMessage) {
         type = 'image';
@@ -1205,7 +1207,7 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
                           (apiMsg as any).data?.base64;
         
         if (base64Data && typeof base64Data === 'string' && base64Data.length > 0) {
-            const mimeType = imageMsg?.mimetype || (apiMsg as any).mimetype || 'image/jpeg';
+            mimeType = imageMsg?.mimetype || (apiMsg as any).mimetype || 'image/jpeg';
             mediaUrl = `data:${mimeType};base64,${base64Data}`;
             // Log reduzido - apenas em debug se necessário
         }
@@ -1376,9 +1378,9 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     } else if (msgObj.audioMessage) {
         type = 'audio';
         const audioMsg = msgObj.audioMessage;
+        mimeType = audioMsg?.mimetype || 'audio/ogg; codecs=opus';
         // ✅ PRIORIDADE: Base64 do Webhook (quando Webhook Base64 está habilitado)
         if (audioMsg?.base64 && typeof audioMsg.base64 === 'string' && audioMsg.base64.length > 0) {
-            const mimeType = audioMsg.mimetype || 'audio/ogg; codecs=opus';
             mediaUrl = `data:${mimeType};base64,${audioMsg.base64}`;
         } else {
             mediaUrl = audioMsg.url || 
@@ -1389,9 +1391,9 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     } else if (msgObj.videoMessage) {
         type = 'video';
         const videoMsg = msgObj.videoMessage;
+        mimeType = videoMsg?.mimetype || 'video/mp4';
         // ✅ PRIORIDADE: Base64 do Webhook (quando Webhook Base64 está habilitado)
         if (videoMsg?.base64 && typeof videoMsg.base64 === 'string' && videoMsg.base64.length > 0) {
-            const mimeType = videoMsg.mimetype || 'video/mp4';
             mediaUrl = `data:${mimeType};base64,${videoMsg.base64}`;
         } else {
             mediaUrl = videoMsg.url || 
@@ -1415,9 +1417,10 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     } else if (msgObj.documentMessage) {
         type = 'document';
         const docMsg = msgObj.documentMessage;
+        mimeType = docMsg?.mimetype || 'application/pdf';
+        fileName = docMsg?.fileName || docMsg?.title || fileName;
         // ✅ PRIORIDADE: Base64 do Webhook (quando Webhook Base64 está habilitado)
         if (docMsg?.base64 && typeof docMsg.base64 === 'string' && docMsg.base64.length > 0) {
-            const mimeType = docMsg.mimetype || 'application/pdf';
             mediaUrl = `data:${mimeType};base64,${docMsg.base64}`;
         } else {
             mediaUrl = docMsg.url || 
@@ -1526,6 +1529,8 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         status: mapStatus(apiMsg.status),
         type,
         mediaUrl: mediaUrl, // URL da mídia (imagem, vídeo, áudio, documento, sticker)
+        mimeType,
+        fileName,
         author: author, // Salva o JID real para correção automática (sempre normalizado)
         whatsappMessageId: key.id, // Salva o ID real do WhatsApp para respostas
         rawMessage: apiMsg, // Salva o objeto completo para respostas (Evolution API precisa do objeto completo)
@@ -2582,11 +2587,72 @@ export const fetchMediaUrlByMessageId = async (
             const message = findMessageInResponse(data);
             
             if (message) {
-                // Extrai URL do imageMessage se estiver presente
-                const imageMsg = message.message?.imageMessage || message.imageMessage;
-                if (imageMsg && (imageMsg.url || imageMsg.mediaUrl || imageMsg.directPath)) {
-                    return imageMsg.url || imageMsg.mediaUrl || 
-                           (imageMsg.directPath ? `https://mmg.whatsapp.net/${imageMsg.directPath.replace(/^\//, '')}` : null);
+                const defaultMime =
+                    mediaType === 'video'
+                        ? 'video/mp4'
+                        : mediaType === 'audio'
+                        ? 'audio/ogg; codecs=opus'
+                        : mediaType === 'document'
+                        ? 'application/pdf'
+                        : 'image/jpeg';
+
+                const pickMediaObj = (msg: any) => {
+                    if (mediaType === 'video') {
+                        return msg?.message?.videoMessage || msg?.videoMessage || msg?.data?.videoMessage;
+                    }
+                    if (mediaType === 'audio') {
+                        return msg?.message?.audioMessage || msg?.audioMessage || msg?.data?.audioMessage;
+                    }
+                    if (mediaType === 'document') {
+                        return msg?.message?.documentMessage || msg?.documentMessage || msg?.data?.documentMessage;
+                    }
+                    return msg?.message?.imageMessage || msg?.imageMessage || msg?.data?.imageMessage;
+                };
+
+                const buildUrlFromMedia = (media: any): string | null => {
+                    if (!media) return null;
+
+                    if (media.base64 && typeof media.base64 === 'string') {
+                        const mime = media.mimetype || defaultMime;
+                        return `data:${mime};base64,${media.base64}`;
+                    }
+
+                    const candidate = media.url || media.mediaUrl || media.directPath;
+                    if (candidate && typeof candidate === 'string') {
+                        if (candidate.startsWith('http://') || candidate.startsWith('https://') || candidate.startsWith('data:')) {
+                            return candidate;
+                        }
+                        if (candidate.startsWith('/')) {
+                            return `https://mmg.whatsapp.net/${candidate.replace(/^\//, '')}`;
+                        }
+                        return candidate;
+                    }
+                    return null;
+                };
+
+                const mediaObj = pickMediaObj(message);
+                const mediaUrl = buildUrlFromMedia(mediaObj);
+                if (mediaUrl) return mediaUrl;
+
+                const fallbackCandidates = [
+                    message.url,
+                    message.mediaUrl,
+                    message.directPath,
+                    message.message?.url,
+                    message.message?.mediaUrl,
+                    message.message?.directPath
+                ];
+
+                for (const candidate of fallbackCandidates) {
+                    if (candidate && typeof candidate === 'string') {
+                        if (candidate.startsWith('http://') || candidate.startsWith('https://') || candidate.startsWith('data:')) {
+                            return candidate;
+                        }
+                        if (candidate.startsWith('/')) {
+                            return `https://mmg.whatsapp.net/${candidate.replace(/^\//, '')}`;
+                        }
+                        return candidate;
+                    }
                 }
             }
         }

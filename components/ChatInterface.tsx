@@ -1415,6 +1415,170 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const isValidUrl = (url: any): url is string => {
+    return typeof url === 'string' && url.trim().length > 0;
+  };
+
+  const findMediaUrlInRaw = (
+    rawMsg: any,
+    mediaType: 'image' | 'video' | 'document' | 'audio'
+  ): string | undefined => {
+    if (!rawMsg) return undefined;
+
+    const priorityProps =
+      mediaType === 'image'
+        ? ['imageMessage', 'message', 'media']
+        : mediaType === 'video'
+        ? ['videoMessage', 'imageMessage', 'message', 'media']
+        : mediaType === 'audio'
+        ? ['audioMessage', 'message', 'media']
+        : ['documentMessage', 'messageDocument', 'message', 'media'];
+
+    const possibleUrls: (string | undefined)[] = [
+      rawMsg?.message?.[`${mediaType}Message`]?.url,
+      rawMsg?.message?.[`${mediaType}Message`]?.mediaUrl,
+      rawMsg?.message?.[`${mediaType}Message`]?.directPath,
+      rawMsg?.[`${mediaType}Message`]?.url,
+      rawMsg?.[`${mediaType}Message`]?.mediaUrl,
+      rawMsg?.[`${mediaType}Message`]?.directPath,
+      rawMsg?.message?.url,
+      rawMsg?.message?.mediaUrl,
+      rawMsg?.url,
+      rawMsg?.mediaUrl,
+      (rawMsg as any)?.data?.message?.[`${mediaType}Message`]?.url,
+      (rawMsg as any)?.data?.message?.[`${mediaType}Message`]?.mediaUrl,
+      (rawMsg as any)?.data?.[`${mediaType}Message`]?.url,
+      (rawMsg as any)?.data?.[`${mediaType}Message`]?.mediaUrl
+    ];
+
+    for (const url of possibleUrls) {
+      if (isValidUrl(url)) return url;
+    }
+
+    const visited = new Set<any>();
+    const recurse = (obj: any, depth = 0, maxDepth = 5): string | undefined => {
+      if (!obj || depth > maxDepth) return undefined;
+      if (visited.has(obj)) return undefined;
+      visited.add(obj);
+
+      if (isValidUrl(obj.url)) return obj.url;
+      if (isValidUrl(obj.mediaUrl)) return obj.mediaUrl;
+      if (isValidUrl(obj.directPath)) return obj.directPath;
+
+      if (Array.isArray(obj)) {
+        for (const item of obj) {
+          const found = recurse(item, depth + 1, maxDepth);
+          if (found) return found;
+        }
+        return undefined;
+      }
+
+      if (typeof obj === 'object') {
+        for (const key of priorityProps) {
+          if (obj[key]) {
+            const found = recurse(obj[key], depth + 1, maxDepth);
+            if (found) return found;
+          }
+        }
+        for (const key in obj) {
+          if (obj.hasOwnProperty(key) && !priorityProps.includes(key)) {
+            const value = obj[key];
+            if (value && typeof value === 'object' && !(value instanceof Date) && !(value instanceof RegExp)) {
+              const found = recurse(value, depth + 1, maxDepth);
+              if (found) return found;
+            }
+          }
+        }
+      }
+      return undefined;
+    };
+
+    return recurse(rawMsg);
+  };
+
+  const scheduleMediaFetch = (msg: Message, mediaType: 'image' | 'video' | 'document' | 'audio') => {
+    const rawMsg = msg.rawMessage;
+    const messageId =
+      msg.whatsappMessageId ||
+      rawMsg?.key?.id ||
+      rawMsg?.data?.key?.id ||
+      rawMsg?.message?.key?.id;
+    const remoteJid =
+      rawMsg?.key?.remoteJid ||
+      rawMsg?.key?.remoteJidAlt ||
+      rawMsg?.data?.key?.remoteJid ||
+      rawMsg?.data?.key?.remoteJidAlt ||
+      rawMsg?.message?.key?.remoteJid;
+
+    if (!messageId || !remoteJid) return;
+
+    const fetchKey = `${mediaType}_fetch_${messageId}`;
+    const attemptsKey = `${mediaType}_fetchAttempts_${messageId}`;
+    const attemptsSoFar = Number((window as any)[attemptsKey] || 0);
+    const maxAttempts = 6;
+
+    if (attemptsSoFar >= maxAttempts) return;
+    if ((window as any)[fetchKey]) return;
+
+    (window as any)[fetchKey] = true;
+    (window as any)[attemptsKey] = attemptsSoFar + 1;
+    let foundAny = false;
+
+    const patchChatMedia = (mediaUrl?: string, mimeType?: string) => {
+      const chat = chats.find(c => c.id === (selectedChatId || ''));
+      if (!chat) return;
+      const idx = chat.messages.findIndex(
+        m => m.id === msg.id || m.whatsappMessageId === messageId
+      );
+      if (idx >= 0) {
+        const updatedMessages = [...chat.messages];
+        updatedMessages[idx] = {
+          ...updatedMessages[idx],
+          mediaUrl: mediaUrl ?? updatedMessages[idx].mediaUrl,
+          mimeType: mimeType ?? updatedMessages[idx].mimeType
+        };
+        onUpdateChat({ ...chat, messages: updatedMessages });
+      }
+    };
+
+    loadUserData<{ messageId: string; dataUrl: string; mimeType?: string }>('webhook_messages', messageId)
+      .then(webhookData => {
+        if (webhookData?.dataUrl) {
+          foundAny = true;
+          msg.mediaUrl = webhookData.dataUrl;
+          if (webhookData.mimeType) msg.mimeType = webhookData.mimeType;
+          patchChatMedia(webhookData.dataUrl, webhookData.mimeType);
+          return null;
+        }
+
+        if (apiConfig.baseUrl && apiConfig.apiKey) {
+          return fetchMediaUrlByMessageId(apiConfig, messageId, remoteJid, mediaType);
+        }
+        return null;
+      })
+      .then(url => {
+        if (url && !msg.mediaUrl) {
+          foundAny = true;
+          msg.mediaUrl = url;
+          patchChatMedia(url);
+        }
+      })
+      .catch(error => {
+        console.error('[ChatInterface] Erro ao buscar mídia via messageId:', error);
+      })
+      .finally(() => {
+        const delay = foundAny ? 60000 : 4000;
+        setTimeout(() => {
+          delete (window as any)[fetchKey];
+          if (foundAny) {
+            delete (window as any)[attemptsKey];
+          } else {
+            setMediaRetryTick(t => t + 1);
+          }
+        }, delay);
+      });
+  };
+
   // Helper para transformar URL relativa em absoluta se necessário
   const getMediaUrl = (url: string | undefined, mimeTypeHint?: string, mediaTypeHint?: Message['type']): string | undefined => {
     if (!url) return undefined;
@@ -1881,6 +2045,56 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         </div>
       );
     }
+    if (msg.type === 'video') {
+      let videoUrl = msg.mediaUrl;
+      if (!videoUrl && msg.rawMessage) {
+        videoUrl = findMediaUrlInRaw(msg.rawMessage, 'video');
+        if (videoUrl) {
+          msg.mediaUrl = videoUrl;
+        }
+      }
+
+      if (!videoUrl) {
+        scheduleMediaFetch(msg, 'video');
+        return (
+          <div className="flex flex-col">
+            <div className="p-4 bg-slate-700/50 rounded-lg text-sm text-slate-300">
+              Vídeo (URL não disponível)
+            </div>
+            {msg.content && msg.content !== 'Vídeo' && (
+              <p className={`text-sm mt-1 ${isUserMessage ? 'text-white' : ''}`}>{highlightedContent(msg.content)}</p>
+            )}
+          </div>
+        );
+      }
+
+      const finalVideoUrl = getMediaUrl(videoUrl, msg.mimeType, msg.type);
+      if (!finalVideoUrl) {
+        return (
+          <div className="flex flex-col">
+            <div className="p-4 bg-slate-700/50 rounded-lg text-sm text-slate-300">
+              Vídeo (URL não disponível)
+            </div>
+            {msg.content && msg.content !== 'Vídeo' && (
+              <p className={`text-sm mt-1 ${isUserMessage ? 'text-white' : ''}`}>{highlightedContent(msg.content)}</p>
+            )}
+          </div>
+        );
+      }
+
+      return (
+        <div className="flex flex-col">
+          <video
+            controls
+            className="rounded-lg max-w-full sm:max-w-sm mb-1 max-h-72 bg-black"
+            src={finalVideoUrl}
+          />
+          {msg.content && msg.content !== 'Vídeo' && (
+            <p className={`text-sm mt-1 ${isUserMessage ? 'text-white' : ''}`}>{highlightedContent(msg.content)}</p>
+          )}
+        </div>
+      );
+    }
     if (msg.type === 'audio' && msg.mediaUrl) {
       const audioUrl = getMediaUrl(msg.mediaUrl, msg.mimeType, msg.type);
       if (!audioUrl) {
@@ -1895,7 +2109,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       );
     }
     if (msg.type === 'document') {
-       const docUrl = getMediaUrl(msg.mediaUrl, msg.mimeType, msg.type);
+       let docUrl = msg.mediaUrl;
+       if (!docUrl && msg.rawMessage) {
+         docUrl = findMediaUrlInRaw(msg.rawMessage, 'document');
+         if (docUrl) {
+           msg.mediaUrl = docUrl;
+         }
+       }
+       if (!docUrl) {
+         scheduleMediaFetch(msg, 'document');
+       }
+       const finalDocUrl = docUrl ? getMediaUrl(docUrl, msg.mimeType, msg.type) : undefined;
        return (
            <div className={`flex items-center gap-3 p-3 rounded-lg ${isUserMessage ? 'bg-white/10' : 'bg-black/5'}`}>
                <div className={`p-2 rounded-full ${isUserMessage ? 'bg-white/20 text-white' : 'bg-white text-emerald-600'}`}>
@@ -1905,10 +2129,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                    <p className={`text-sm font-medium truncate ${isUserMessage ? 'text-white' : ''}`}>{msg.fileName || 'Documento'}</p>
                    <p className={`text-xs uppercase ${isUserMessage ? 'text-slate-300' : 'opacity-70'}`}>{msg.mimeType?.split('/')[1] || 'FILE'}</p>
                </div>
-               {docUrl && (
-                  <a href={docUrl} download={msg.fileName} className={`p-2 rounded-full ${isUserMessage ? 'text-white hover:bg-white/20' : 'text-emerald-700 hover:bg-emerald-100'}`}>
+               {finalDocUrl ? (
+                  <a href={finalDocUrl} download={msg.fileName} className={`p-2 rounded-full ${isUserMessage ? 'text-white hover:bg-white/20' : 'text-emerald-700 hover:bg-emerald-100'}`}>
                       <ArrowRightLeft className="rotate-90" size={16} />
                   </a>
+               ) : (
+                  <span className="text-xs text-slate-400">URL não disponível</span>
                )}
            </div>
        );
