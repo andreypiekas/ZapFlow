@@ -25,16 +25,26 @@ import { getNationalHolidays, getUpcomingHolidays, Holiday, BRAZILIAN_STATES } f
 
 // Função utilitária para normalizar conteúdo de mensagens do agente (remove cabeçalho)
 // CRÍTICO: O frontend renderiza o nome do agente separadamente, então o conteúdo NUNCA deve ter o cabeçalho
+// Esta função remove TODOS os padrões de cabeçalho, incluindo duplicados como "Andrey: Andrey:"
 const normalizeMessageContent = (content: string | undefined, sender: string | undefined): string => {
     if (!content || sender !== 'agent') {
         return content || '';
     }
-    // Remove padrões como "Nome:\n" ou "Nome - Departamento:\n" do início
     let normalized = content;
+    
+    // Remove múltiplos cabeçalhos duplicados (ex: "Andrey: Andrey: texto" -> "texto")
+    // Remove padrões repetidos como "Nome: Nome:" ou "Nome: Nome: Nome:"
+    while (normalized.match(/^[^:]+:\s*[^:]+:\s*/)) {
+        normalized = normalized.replace(/^[^:]+:\s*/, '');
+    }
+    
+    // Remove padrões como "Nome:\n" ou "Nome - Departamento:\n" do início
     // Remove "Nome:\n" ou "Nome:\n\n"
     normalized = normalized.replace(/^[^:]+:\n+/g, '');
     // Remove "Nome - Departamento:\n" ou "Nome - Departamento:\n\n"
     normalized = normalized.replace(/^[^:]+ - [^:]+:\n+/g, '');
+    
+    // Remove qualquer espaço em branco no início após remover cabeçalhos
     return normalized.trim();
 }; 
 
