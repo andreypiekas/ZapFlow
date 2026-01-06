@@ -3426,7 +3426,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                       <div className="flex justify-between items-center gap-1 mt-1 pr-2 pb-1">
                         <button
                           onClick={() => handleReplyToMessage(msg)}
-                          className={`opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded ${
+                          className={`opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1 rounded ${
                             msg.sender === 'user' ? 'hover:bg-white/10' : 'hover:bg-black/5'
                           }`}
                           title="Responder"
@@ -3443,7 +3443,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                             const y = Math.min(rect.bottom, window.innerHeight - menuHeight - 8);
                             setMessageMenu({ msg, x, y });
                           }}
-                          className={`opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded ${
+                          className={`opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1 rounded ${
                             msg.sender === 'user' ? 'hover:bg-white/10' : 'hover:bg-black/5'
                           }`}
                           title="Mais ações"

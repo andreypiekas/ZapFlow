@@ -22,9 +22,6 @@
 - Enviar/receber 10 mensagens seguidas → nenhuma duplicação visual por header e nenhuma mensagem salva no banco com header.
 
 ---
-
-## 🔴 Prioritário
-
 ### 2. Imagens não aparecem (mídia sem URL/base64)
 **Status:** ✅ Concluído  
 **Prioridade:** Alta (resolvido)  
@@ -109,6 +106,7 @@
   - Se não suportar, definir alternativa (ex.: selo apenas na UI + texto opcional).
 
 ---
+## 🔴 Prioritário
 
 ### 6. IP do servidor automático (zero configuração manual)
 **Status:** 🔴 Pendente  
