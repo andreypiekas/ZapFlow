@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw, Smile, Tag, Plus, Clock, User as UserIcon, AlertTriangle } from 'lucide-react';
+import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw, Smile, Tag, Plus, Clock, User as UserIcon, AlertTriangle, Eye } from 'lucide-react';
 import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow, Contact } from '../types';
 import { generateSmartReply } from '../services/geminiService';
 import { sendRealMessage, sendRealMessageWithId, sendRealMediaMessageWithId, blobToBase64, sendRealContact, sendDepartmentSelectionMessage, fetchMediaUrlByMessageId } from '../services/whatsappService';
@@ -252,6 +252,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   // Media Viewer (Lightbox) - estilo WhatsApp Web
   type ImageViewerState = { url: string; fileName?: string } | null;
   const [imageViewer, setImageViewer] = useState<ImageViewerState>(null);
+  type PdfViewerState = { url: string; fileName?: string } | null;
+  const [pdfViewer, setPdfViewer] = useState<PdfViewerState>(null);
+  const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null);
 
   const closeImageViewer = useCallback(() => setImageViewer(null), []);
   const openImageViewer = useCallback((url: string, fileName?: string) => {
@@ -259,22 +262,73 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     setImageViewer({ url, fileName });
   }, []);
 
-  const downloadImageViewer = useCallback(() => {
-    if (!imageViewer?.url) return;
-    const url = imageViewer.url;
-    const fileName = imageViewer.fileName || 'imagem';
-    try {
+  const closePdfViewer = useCallback(() => setPdfViewer(null), []);
+  const openPdfViewer = useCallback((url: string, fileName?: string) => {
+    if (!url) return;
+    setPdfViewer({ url, fileName });
+  }, []);
+
+  // Download robusto (evita navegar para data: no top frame). Para data URLs, converte em Blob + blob: URL.
+  const downloadFromUrl = useCallback((url: string | undefined, fileName?: string) => {
+    if (!url) return;
+    const name = (fileName && fileName.trim()) ? fileName.trim() : 'arquivo';
+
+    const clickAnchor = (href: string, downloadName?: string) => {
       const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
+      a.href = href;
+      if (downloadName) a.download = downloadName;
+      a.target = '_blank';
       a.rel = 'noreferrer';
       document.body.appendChild(a);
       a.click();
       a.remove();
+    };
+
+    try {
+      if (url.startsWith('data:')) {
+        const match = url.match(/^data:([^;,]+)?(;base64)?,(.*)$/);
+        const mimeType = (match?.[1] || 'application/octet-stream').trim();
+        const isBase64 = !!match?.[2];
+        const dataPart = match?.[3] || '';
+
+        let blob: Blob;
+        if (isBase64) {
+          const binary = atob(dataPart);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          blob = new Blob([bytes], { type: mimeType });
+        } else {
+          blob = new Blob([decodeURIComponent(dataPart)], { type: mimeType });
+        }
+
+        const objectUrl = URL.createObjectURL(blob);
+        clickAnchor(objectUrl, name);
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
+        return;
+      }
+
+      clickAnchor(url, name);
     } catch {
-      window.open(url, '_blank', 'noopener,noreferrer');
+      // Fallback: tenta abrir em nova aba
+      try {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } catch {
+        // noop
+      }
     }
-  }, [imageViewer]);
+  }, []);
+
+  const downloadImageViewer = useCallback(() => {
+    if (!imageViewer?.url) return;
+    downloadFromUrl(imageViewer.url, imageViewer.fileName || 'imagem');
+  }, [imageViewer, downloadFromUrl]);
+
+  const downloadPdfViewer = useCallback(() => {
+    if (!pdfViewer?.url) return;
+    downloadFromUrl(pdfViewer.url, pdfViewer.fileName || 'documento.pdf');
+  }, [pdfViewer, downloadFromUrl]);
 
   useEffect(() => {
     if (!imageViewer) return;
@@ -284,6 +338,58 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [imageViewer, closeImageViewer]);
+
+  useEffect(() => {
+    if (!pdfViewer) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closePdfViewer();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [pdfViewer, closePdfViewer]);
+
+  // Para evitar bloqueios/erros com data: em iframes/embeds, converte PDF data URL em blob: URL no viewer.
+  useEffect(() => {
+    if (!pdfViewer?.url) {
+      setPdfViewerUrl(null);
+      return;
+    }
+
+    const url = pdfViewer.url;
+    if (!url.startsWith('data:')) {
+      setPdfViewerUrl(url);
+      return;
+    }
+
+    let objectUrl: string | null = null;
+    try {
+      const match = url.match(/^data:([^;,]+)?(;base64)?,(.*)$/);
+      const mimeType = (match?.[1] || 'application/pdf').trim();
+      const isBase64 = !!match?.[2];
+      const dataPart = match?.[3] || '';
+
+      let blob: Blob;
+      if (isBase64) {
+        const binary = atob(dataPart);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        blob = new Blob([bytes], { type: mimeType });
+      } else {
+        blob = new Blob([decodeURIComponent(dataPart)], { type: mimeType });
+      }
+
+      objectUrl = URL.createObjectURL(blob);
+      setPdfViewerUrl(objectUrl);
+    } catch {
+      setPdfViewerUrl(url);
+    }
+
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [pdfViewer?.url]);
 
   // Link Preview cache (URL -> preview)
   type LinkPreviewState = { status: 'loading' | 'ready' | 'error'; data?: LinkPreview };
@@ -2332,10 +2438,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
          scheduleMediaFetch(msg, 'document');
        }
        const finalDocUrl = docUrl ? getMediaUrl(docUrl, msg.mimeType, msg.type) : undefined;
+       const isPdf = ((msg.mimeType || '').toLowerCase().includes('pdf')) || ((msg.fileName || '').toLowerCase().endsWith('.pdf'));
        const sizeLabel = formatFileSize(msg.fileSize);
        const timeLabel = msg.timestamp ? msg.timestamp.toLocaleString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : null;
        return (
-           <div className={`flex items-center gap-3 p-3 rounded-lg ${isUserMessage ? 'bg-white/10' : 'bg-black/5'}`}>
+           <div
+             className={`flex items-center gap-3 p-3 rounded-lg ${isUserMessage ? 'bg-white/10' : 'bg-black/5'} ${isPdf && finalDocUrl ? 'cursor-pointer hover:opacity-95' : ''}`}
+             title={isPdf && finalDocUrl ? 'Clique para visualizar' : undefined}
+             onClick={() => {
+               if (isPdf && finalDocUrl) openPdfViewer(finalDocUrl, msg.fileName || 'documento.pdf');
+             }}
+             onKeyDown={(e) => {
+               if (e.key === 'Enter' && isPdf && finalDocUrl) openPdfViewer(finalDocUrl, msg.fileName || 'documento.pdf');
+             }}
+             role={isPdf && finalDocUrl ? 'button' : undefined}
+             tabIndex={isPdf && finalDocUrl ? 0 : -1}
+           >
                <div className={`p-2 rounded-full ${isUserMessage ? 'bg-white/20 text-white' : 'bg-white text-emerald-600'}`}>
                    <FileIcon size={20} />
                </div>
@@ -2345,9 +2463,30 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                </div>
                <div className="flex flex-col items-end gap-1">
                  {finalDocUrl ? (
-                    <a href={finalDocUrl} download={msg.fileName} className={`p-2 rounded-full ${isUserMessage ? 'text-white hover:bg-white/20' : 'text-emerald-700 hover:bg-emerald-100'}`}>
+                    <div className="flex items-center gap-1">
+                      {isPdf && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openPdfViewer(finalDocUrl, msg.fileName || 'documento.pdf');
+                          }}
+                          className={`p-2 rounded-full ${isUserMessage ? 'text-white hover:bg-white/20' : 'text-emerald-700 hover:bg-emerald-100'}`}
+                          title="Visualizar"
+                        >
+                          <Eye size={16} />
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          downloadFromUrl(finalDocUrl, msg.fileName || (isPdf ? 'documento.pdf' : 'documento'));
+                        }}
+                        className={`p-2 rounded-full ${isUserMessage ? 'text-white hover:bg-white/20' : 'text-emerald-700 hover:bg-emerald-100'}`}
+                        title="Baixar"
+                      >
                         <ArrowRightLeft className="rotate-90" size={16} />
-                    </a>
+                      </button>
+                    </div>
                  ) : (
                     <span className="text-xs text-slate-400">URL não disponível</span>
                  )}
@@ -3466,6 +3605,51 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                   (e.target as HTMLImageElement).style.display = 'none';
                 }}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PDF Viewer */}
+      {pdfViewer && (
+        <div
+          className="absolute inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closePdfViewer();
+          }}
+        >
+          <div className="w-full max-w-5xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between gap-3 mb-3 text-white">
+              <div className="text-sm font-medium truncate">
+                {pdfViewer.fileName || 'Documento'}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={downloadPdfViewer}
+                  className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                  title="Baixar"
+                >
+                  <ArrowRightLeft className="rotate-90" size={18} />
+                </button>
+                <button
+                  onClick={closePdfViewer}
+                  className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                  title="Fechar (Esc)"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 rounded-lg bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">
+              {pdfViewerUrl ? (
+                <iframe
+                  src={pdfViewerUrl}
+                  title={pdfViewer.fileName || 'PDF'}
+                  className="w-full h-[80vh] bg-white"
+                />
+              ) : (
+                <div className="p-4 text-sm text-white/80">PDF indisponível para visualização</div>
+              )}
             </div>
           </div>
         </div>
