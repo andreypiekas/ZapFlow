@@ -454,11 +454,10 @@ const App: React.FC = () => {
           // Estados principais (prioridade): SC, PR, RS
           const priorityStates = ['SC', 'PR', 'RS'];
           
-          // Estados adicionais configurados pelo usuário (ou todos os demais se não configurado)
+          // Estados adicionais configurados pelo usuário
+          // IMPORTANTE: não buscar "todos os estados" automaticamente (caríssimo e estoura quota).
           const configuredStates = configData?.holidayStates || [];
-          const otherStates = configuredStates.length > 0 
-            ? configuredStates.filter(s => !priorityStates.includes(s))
-            : BRAZILIAN_STATES.map(s => s.code).filter(s => !priorityStates.includes(s));
+          const otherStates = configuredStates.filter(s => !priorityStates.includes(s));
           
           // Busca apenas municipais (getUpcomingHolidays retorna nacionais + municipais, então filtra)
           let allMunicipalHolidays: Holiday[] = [];
@@ -476,14 +475,14 @@ const App: React.FC = () => {
             allMunicipalHolidays.push(...municipalOnly);
           }
           
-          // Depois busca dos demais estados configurados
+          // Depois busca dos demais estados configurados (somente do banco; sem IA por padrão)
           if (otherStates.length > 0) {
             console.log(`[App] 🔍 Buscando feriados municipais dos demais estados (${otherStates.length} estados)...`);
             const otherHolidays = await getUpcomingHolidays(
               15, // Apenas próximos 15 dias
               otherStates,
               undefined,
-              geminiApiKey || undefined
+              undefined // evita disparar busca pesada via IA no dashboard
             );
             // Filtra apenas municipais
             const municipalOnly = otherHolidays.filter(h => h.type === 'municipal');

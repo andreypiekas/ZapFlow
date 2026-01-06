@@ -2174,11 +2174,9 @@ app.post('/api/holidays/municipal-cache', authenticateToken, dataLimiter, async 
       return res.status(400).json({ error: 'cityName, stateCode, year e holidays (array) são obrigatórios' });
     }
 
-    // Não salva arrays vazios no cache (economiza espaço e evita problemas)
-    if (holidays.length === 0) {
-      console.log(`[HolidaysCache] ⚠️ Array vazio para ${cityName}/${stateCode} (${year}), não salvando no cache`);
-      return res.json({ success: true, message: 'Array vazio, não salvo no cache' });
-    }
+    // Permite salvar array vazio no cache ("cache negativo") para evitar re-pesquisas
+    // repetidas por 10 dias quando a cidade não tem feriados municipais.
+    // Ainda atualiza last_updated via UPSERT.
 
     const holidaysJson = JSON.stringify(holidays);
     const yearInt = parseInt(year);
@@ -2199,11 +2197,16 @@ app.post('/api/holidays/municipal-cache', authenticateToken, dataLimiter, async 
 
     console.log(`[HolidaysCache] ✅ Cache salvo para ${cityName}/${stateCode} (${year}) - ${holidays.length} feriados`);
     
-    // Também salva na tabela permanente
+    // Também salva na tabela permanente (se houver feriados)
     try {
       let savedToDB = 0;
       let skippedInDB = 0;
       
+      if (!Array.isArray(holidays) || holidays.length === 0) {
+        console.log(`[HolidaysCache] ℹ️ Cache negativo salvo para ${cityName}/${stateCode} (${year}) - 0 feriados`);
+        return res.json({ success: true, message: 'Cache de feriados municipais salvo com sucesso (vazio)' });
+      }
+
       for (const holiday of holidays) {
         try {
           if (!holiday.date || !holiday.name) continue;

@@ -13,6 +13,7 @@ const pendingSearches = new Map<string, Promise<Holiday[]>>();
 export interface HolidaySearchStatus {
   isSearching: boolean;
   quotaExceeded: boolean;
+  source?: 'db' | 'ai' | 'mixed';
   currentCity?: string;
   currentState?: string;
   progressMessage?: string;
@@ -343,7 +344,12 @@ async function getMunicipalHolidaysByCity(
         return filteredHolidays;
       } else {
         console.log(`[HolidaysService] ⚠️ IA não encontrou feriados municipais para ${cityName}/${stateName}`);
-        // Não salva array vazio no cache (backend não aceita arrays vazios)
+        // Salva cache negativo (array vazio) para evitar re-pesquisa por 10 dias
+        try {
+          await saveMunicipalHolidaysCache(cityName, effectiveStateCode, year, []);
+        } catch (cacheError) {
+          console.warn(`[HolidaysService] Erro ao salvar cache negativo para ${cityName}/${effectiveStateCode}:`, cacheError);
+        }
         return [];
       }
       } catch (error) {
@@ -524,19 +530,21 @@ export async function getUpcomingHolidays(
   // Se tiver estados selecionados, busca feriados municipais
   if (selectedStates && selectedStates.length > 0) {
     const allMunicipalHolidays: Holiday[] = [];
+    let usedDbMunicipal = false;
+    let usedAiMunicipal = false;
+
+    const quotaExceededAtStart = await isGeminiQuotaExceeded();
     
     // Primeiro, tenta buscar da tabela permanente
     try {
-      const todayStr = today.toISOString().split('T')[0];
-      const municipalEndDateStr = municipalEndDate.toISOString().split('T')[0];
-      
       console.log(`[HolidaysService] 🔍 Buscando feriados municipais do banco para estados: ${selectedStates.join(', ')}`);
       
       for (const stateCode of selectedStates) {
         if (onStatusUpdate) {
           onStatusUpdate({
             isSearching: true,
-            quotaExceeded,
+            quotaExceeded: quotaExceededAtStart,
+            source: 'db',
             currentState: stateCode,
             progressMessage: `Buscando feriados de ${stateCode} no banco de dados...`
           });
@@ -560,6 +568,7 @@ export async function getUpcomingHolidays(
         
         if (formattedDBHolidays.length > 0) {
           allMunicipalHolidays.push(...formattedDBHolidays);
+          usedDbMunicipal = true;
           console.log(`[HolidaysService] ✅ Carregados ${formattedDBHolidays.length} feriados municipais do banco para ${stateCode} (filtrados para próximos 15 dias)`);
         } else {
           console.log(`[HolidaysService] ⚠️ Nenhum feriado municipal encontrado no banco para ${stateCode} nos próximos 15 dias`);
@@ -602,6 +611,7 @@ export async function getUpcomingHolidays(
             days,
             geminiApiKey
           );
+          usedAiMunicipal = true;
           
           // Se a cota foi excedida durante a busca, para
           const quotaExceededAfter = await isGeminiQuotaExceeded();
@@ -671,6 +681,7 @@ export async function getUpcomingHolidays(
               onStatusUpdate({
                 isSearching: true,
                 quotaExceeded: false,
+                source: usedDbMunicipal ? 'mixed' : 'ai',
                 progressMessage: `Encontrados ${formattedPriorityHolidays.length} feriados municipais dos estados principais`
               });
             }
@@ -694,6 +705,8 @@ export async function getUpcomingHolidays(
                 console.warn(`[HolidaysService] ⚠️ Cota excedida. Parando busca de ${stateCode}.`);
                 break;
               }
+
+              usedAiMunicipal = true;
               
               const state = BRAZILIAN_STATES.find(s => s.code === stateCode);
               const stateName = state?.name || stateCode;
@@ -716,6 +729,7 @@ export async function getUpcomingHolidays(
     // Busca tradicional cidade por cidade para os demais estados
     const quotaExceeded = await isGeminiQuotaExceeded();
     if (otherStates.length > 0 && !quotaExceeded) {
+      usedAiMunicipal = true;
       for (let i = 0; i < otherStates.length; i++) {
         // Verifica se a cota foi excedida antes de cada estado
         if (await isGeminiQuotaExceeded()) {
@@ -735,6 +749,17 @@ export async function getUpcomingHolidays(
           ...await getMunicipalHolidaysByState(stateCode, currentYear, (current, total) => {
             if (onProgress) {
               onProgress(`Processando ${stateName}: ${current}/${total} municípios...`);
+            }
+            if (onStatusUpdate) {
+              onStatusUpdate({
+                isSearching: true,
+                quotaExceeded: false,
+                source: 'ai',
+                currentState: stateCode,
+                citiesProcessed: current,
+                totalCities: total,
+                progressMessage: `Processando ${stateName}: ${current}/${total} municípios...`
+              });
             }
           }, geminiApiKey),
           ...(nextYear > currentYear ? await getMunicipalHolidaysByState(stateCode, nextYear, undefined, geminiApiKey) : [])
@@ -756,10 +781,14 @@ export async function getUpcomingHolidays(
     
     // Atualiza status final
     if (onStatusUpdate) {
-      const quotaExceeded = await isGeminiQuotaExceeded();
+      const quotaExceededFinal = await isGeminiQuotaExceeded();
+      const source: HolidaySearchStatus['source'] =
+        usedDbMunicipal && usedAiMunicipal ? 'mixed' : usedAiMunicipal ? 'ai' : 'db';
+
       onStatusUpdate({
         isSearching: false,
-        quotaExceeded,
+        quotaExceeded: quotaExceededFinal,
+        source,
         progressMessage: filteredMunicipal.length > 0 
           ? `Encontrados ${filteredMunicipal.length} feriados municipais` 
           : 'Nenhum feriado municipal encontrado'
@@ -771,6 +800,7 @@ export async function getUpcomingHolidays(
       onStatusUpdate({
         isSearching: false,
         quotaExceeded: false,
+        source: 'db',
         error: 'API Key do Gemini não configurada. Configure em Configurações > Google Gemini API Key.'
       });
     }
@@ -781,19 +811,22 @@ export async function getUpcomingHolidays(
       onStatusUpdate({
         isSearching: false,
         quotaExceeded: true,
+        source: 'db',
         progressMessage: 'Cota do Gemini excedida hoje. Tente novamente amanhã.'
       });
     } else if (onStatusUpdate) {
       onStatusUpdate({
         isSearching: false,
-        quotaExceeded: false
+        quotaExceeded: false,
+        source: 'db'
       });
     }
   } else if (onStatusUpdate) {
     // Sem estados selecionados
     onStatusUpdate({
       isSearching: false,
-      quotaExceeded: false
+      quotaExceeded: false,
+      source: 'db'
     });
   }
 

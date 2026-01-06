@@ -143,9 +143,14 @@
 ---
 
 ### 8. Feriados (dashboard + tela) — inconsistência + dedupe de pesquisa por cidade/estado
-**Status:** 🔴 Pendente (revalidação)  
+**Status:** ✅ Concluído  
 **Prioridade:** Alta  
 **Objetivo:** Tudo que aparece no dashboard deve aparecer na tela de feriados e vice‑versa; evitar buscas repetidas.
+
+**Implementação (resumo):**
+- Consistência Dashboard ↔ Tela: a tela `Feriados` agora usa, por padrão, os **mesmos estados do dashboard** (SC/PR/RS + `holidayStates`) e carrega municipais do **banco/cache**; busca via IA só ocorre quando o usuário seleciona estados manualmente.
+- Anti‑duplicidade / TTL: habilitado **cache negativo** (array vazio) para cidades sem feriados municipais, evitando re‑pesquisa por 10 dias; mantém respeito ao controle de cota do Gemini.
+- Status: indicador mostra **fonte** (Banco / IA / Banco+IA) e progresso melhorado durante varredura por municípios.
 
 **Tarefas detalhadas:**
 - Validar persistência e leitura do banco (nacionais + municipais).

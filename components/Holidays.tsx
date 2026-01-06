@@ -8,6 +8,7 @@ const Holidays: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
+  const [dashboardStates, setDashboardStates] = useState<string[]>(['SC', 'PR', 'RS']);
   const [days, setDays] = useState<number>(15);
   const [progressMessage, setProgressMessage] = useState<string>('');
   const [geminiApiKey, setGeminiApiKey] = useState<string>('');
@@ -24,6 +25,16 @@ const Holidays: React.FC = () => {
     const loadGeminiApiKey = async () => {
       try {
         const configData = await loadConfigFromBackend();
+        const priorityStates = ['SC', 'PR', 'RS'];
+        const configuredStates = Array.isArray(configData?.holidayStates) ? configData.holidayStates : [];
+        const normalizedConfigured = configuredStates
+          .map((s: any) => String(s || '').trim().toUpperCase())
+          .filter(Boolean);
+
+        const combinedStates = Array.from(new Set([...priorityStates, ...normalizedConfigured]))
+          .filter((code) => BRAZILIAN_STATES.some((s) => s.code === code));
+        setDashboardStates(combinedStates.length > 0 ? combinedStates : priorityStates);
+
         if (configData?.geminiApiKey) {
           setGeminiApiKey(configData.geminiApiKey);
         }
@@ -124,7 +135,7 @@ const Holidays: React.FC = () => {
 
   useEffect(() => {
     loadHolidays();
-  }, [selectedStates, days, geminiApiKey]);
+  }, [selectedStates, dashboardStates, days, geminiApiKey]);
 
   const loadHolidays = async () => {
     setIsLoading(true);
@@ -136,14 +147,21 @@ const Holidays: React.FC = () => {
     });
     
     try {
+      // Estados efetivos:
+      // - Se o usuário selecionar manualmente, usamos os estados selecionados e permitimos busca via IA.
+      // - Se estiver vazio, usamos os estados configurados no dashboard (somente leitura do banco; sem IA).
+      const hasManualSelection = selectedStates.length > 0;
+      const effectiveStates = hasManualSelection ? selectedStates : (dashboardStates.length > 0 ? dashboardStates : undefined);
+
       // Para feriados municipais, sempre usa 15 dias (cache atualiza a cada 10 dias)
-      const daysToSearch = selectedStates.length > 0 ? 15 : days;
+      const daysToSearch = hasManualSelection ? 15 : days;
       
       const upcomingHolidays = await getUpcomingHolidays(
         daysToSearch, 
-        selectedStates.length > 0 ? selectedStates : undefined,
+        effectiveStates,
         (message) => setProgressMessage(message),
-        geminiApiKey || undefined,
+        // IA só quando o usuário selecionar manualmente (evita buscas pesadas automáticas)
+        hasManualSelection ? (geminiApiKey || undefined) : undefined,
         (status) => setSearchStatus(status)
       );
       setHolidays(upcomingHolidays);
@@ -366,7 +384,7 @@ const Holidays: React.FC = () => {
               <div>
                 <h2 className="text-2xl font-futuristic text-slate-200">Feriados</h2>
                 <p className="text-slate-400 text-sm mt-1">
-                  Próximos {days} dias de feriados nacionais e municipais
+                  Próximos {days} dias • Municipais (até 15 dias)
                 </p>
               </div>
             </div>
@@ -390,6 +408,11 @@ const Holidays: React.FC = () => {
                   <RefreshCw size={16} className="animate-spin" />
                   <span className="text-sm font-medium">
                     {searchStatus.progressMessage || 'Buscando feriados...'}
+                    {searchStatus.source && (
+                      <span className="ml-2 text-xs text-slate-400">
+                        Fonte: {searchStatus.source === 'db' ? 'Banco' : searchStatus.source === 'ai' ? 'IA' : 'Banco + IA'}
+                      </span>
+                    )}
                     {searchStatus.currentCity && searchStatus.currentState && (
                       <span className="ml-2 text-slate-400">
                         ({searchStatus.currentCity}, {searchStatus.currentState})
@@ -458,8 +481,13 @@ const Holidays: React.FC = () => {
                 })}
               </div>
               <p className="text-xs text-slate-500 mt-2">
-                Selecione até 3 estados para buscar todos os feriados municipais. Deixe vazio para ver apenas feriados nacionais.
+                Selecione até 3 estados para **buscar via IA** (pode demorar). Deixe vazio para usar os estados do **Dashboard** (somente banco/cache).
               </p>
+              {selectedStates.length === 0 && dashboardStates.length > 0 && (
+                <p className="text-xs text-slate-500 mt-1">
+                  Estados do Dashboard: <span className="text-slate-300 font-medium">{dashboardStates.join(', ')}</span>
+                </p>
+              )}
               
               {/* Estados selecionados */}
               {selectedStates.length > 0 && (
