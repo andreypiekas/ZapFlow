@@ -1159,6 +1159,30 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     let mimeType: string | undefined = undefined;
     let fileName: string | undefined = undefined;
     let fileSize: number | undefined = undefined;
+
+    // Normaliza URLs de mídia vindas do WhatsApp (directPath/CDN) para um formato renderizável no browser.
+    // Ex.: "/v/t62.7119-24/..." ou "v/t62.7119-24/..." -> "https://mmg.whatsapp.net/v/t62.7119-24/..."
+    const normalizeWhatsAppCdnUrl = (raw: any): string | undefined => {
+        if (typeof raw !== 'string') return undefined;
+        const trimmed = raw.trim();
+        if (!trimmed) return undefined;
+        if (trimmed.startsWith('data:') || /^https?:\/\//i.test(trimmed)) return trimmed;
+        if (trimmed.startsWith('mmg.whatsapp.net/')) return `https://${trimmed}`;
+
+        const lower = trimmed.toLowerCase();
+        const isCdnPath =
+            lower.startsWith('/v/') ||
+            lower.startsWith('/mms/') ||
+            lower.startsWith('v/') ||
+            lower.startsWith('mms/');
+
+        if (isCdnPath) {
+            const withSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+            return `https://mmg.whatsapp.net${withSlash}`;
+        }
+
+        return trimmed;
+    };
     
     if (msgObj.imageMessage) {
         type = 'image';
@@ -1533,6 +1557,9 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
             // console.log(`[mapApiMessageToInternal] ✅ Mensagem detectada como resposta: ID=${quotedMessageId}, conteúdo="${quotedContent.substring(0, 50)}", sender original=${quotedSender}`);
         }
     }
+
+    // Garante que directPath do WhatsApp (CDN) vire uma URL utilizável.
+    mediaUrl = normalizeWhatsAppCdnUrl(mediaUrl) || mediaUrl;
 
     return {
         id: key.id || `msg_${Math.random()}`,

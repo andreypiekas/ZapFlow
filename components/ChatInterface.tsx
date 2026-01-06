@@ -1678,6 +1678,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
     const trimmed = String(url).trim();
 
+    // WhatsApp "directPath" (CDN) costuma vir como /v/... ou /mms/... e NÃO deve ser concatenado com apiConfig.baseUrl.
+    // Ex.: /v/t62.7119-24/... -> https://mmg.whatsapp.net/v/t62.7119-24/...
+    if (trimmed.startsWith('mmg.whatsapp.net/')) {
+      return `https://${trimmed}`;
+    }
+    if (trimmed.startsWith('/v/') || trimmed.startsWith('/mms/')) {
+      return `https://mmg.whatsapp.net${trimmed}`;
+    }
+    if (trimmed.startsWith('v/') || trimmed.startsWith('mms/')) {
+      return `https://mmg.whatsapp.net/${trimmed}`;
+    }
+
     // Se parece ser base64 puro (sem prefixo data:), converte para Data URL.
     // Isso evita o browser tentar fazer GET /<base64> na Evolution API.
     const maybeBase64 = trimmed.replace(/\s/g, '');
@@ -1822,13 +1834,38 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         );
     };
 
-    if (msg.type === 'sticker' && msg.mediaUrl) {
-        const stickerUrl = getMediaUrl(msg.mediaUrl, msg.mimeType, msg.type);
-        if (!stickerUrl) return <span className="text-sm opacity-70">Sticker (URL não disponível)</span>;
-        return <img src={stickerUrl} alt="Sticker" className="w-32 h-32 object-contain" onError={(e) => {
-          // console.error('[ChatInterface] Erro ao carregar sticker:', stickerUrl);
-          (e.target as HTMLImageElement).style.display = 'none';
-        }} />;
+    if (msg.type === 'sticker') {
+        let stickerUrl = msg.mediaUrl;
+        if (!stickerUrl && msg.rawMessage) {
+          stickerUrl = findMediaUrlInRaw(msg.rawMessage, 'image');
+          if (stickerUrl) {
+            msg.mediaUrl = stickerUrl;
+          }
+        }
+
+        if (!stickerUrl) {
+          // Melhor esforço: tenta resolver via webhook (base64) e/ou por messageId (como "image")
+          scheduleMediaFetch(msg, 'image');
+          return <span className="text-sm opacity-70">Sticker (URL não disponível)</span>;
+        }
+
+        const finalStickerUrl = getMediaUrl(stickerUrl, msg.mimeType, msg.type);
+        if (!finalStickerUrl) {
+          scheduleMediaFetch(msg, 'image');
+          return <span className="text-sm opacity-70">Sticker (URL não disponível)</span>;
+        }
+
+        return (
+          <img
+            src={finalStickerUrl}
+            alt="Sticker"
+            className="w-32 h-32 object-contain"
+            onError={(e) => {
+              // console.error('[ChatInterface] Erro ao carregar sticker:', finalStickerUrl);
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
+          />
+        );
     }
 
     if (msg.type === 'image') {
@@ -2195,19 +2232,55 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         </div>
       );
     }
-    if (msg.type === 'audio' && msg.mediaUrl) {
-      const audioUrl = getMediaUrl(msg.mediaUrl, msg.mimeType, msg.type);
+    if (msg.type === 'audio') {
+      let audioUrl = msg.mediaUrl;
+      if (!audioUrl && msg.rawMessage) {
+        audioUrl = findMediaUrlInRaw(msg.rawMessage, 'audio');
+        if (audioUrl) {
+          msg.mediaUrl = audioUrl;
+        }
+      }
+
       if (!audioUrl) {
+        scheduleMediaFetch(msg, 'audio');
+        return (
+          <div className="flex flex-col">
+            <div className="p-3 bg-slate-700/50 rounded-lg text-sm text-slate-300">
+              Áudio (URL não disponível)
+            </div>
+            {statusLabel && (
+              <span className="text-[11px] text-slate-400 mt-1">{statusLabel}</span>
+            )}
+          </div>
+        );
+      }
+
+      const finalAudioUrl = getMediaUrl(audioUrl, msg.mimeType, msg.type);
+      if (!finalAudioUrl) {
+        scheduleMediaFetch(msg, 'audio');
         return <span className="text-sm opacity-70">Áudio (URL não disponível)</span>;
       }
+
+      const sizeLabel = formatFileSize(msg.fileSize);
+      const timeLabel = msg.timestamp ? msg.timestamp.toLocaleString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : null;
+
       return (
-        <div className="flex items-center gap-2 min-w-[200px]">
-           <audio controls src={audioUrl} className="w-full h-8" onError={(e) => {
-             // console.error('[ChatInterface] Erro ao carregar áudio:', audioUrl);
-           }} />
-           {statusLabel && (
-             <span className="text-[11px] text-slate-400 whitespace-nowrap">{statusLabel}</span>
-           )}
+        <div className="flex flex-col gap-1 min-w-[220px]">
+          <audio
+            controls
+            src={finalAudioUrl}
+            className="w-full h-9"
+            onError={() => {
+              // console.error('[ChatInterface] Erro ao carregar áudio:', finalAudioUrl);
+            }}
+          />
+          <div className="text-[11px] text-slate-400 flex items-center justify-between leading-tight">
+            <div className="flex items-center gap-2">
+              {sizeLabel && <span>{sizeLabel}</span>}
+              {timeLabel && <span>{timeLabel}</span>}
+            </div>
+            {statusLabel && <span className="whitespace-nowrap">{statusLabel}</span>}
+          </div>
         </div>
       );
     }
