@@ -3913,9 +3913,20 @@ const App: React.FC = () => {
               chatId: updatedChat.id,
               msgCount: updatedChat.messages.length
             });
+            
+            // CRÍTICO: Normaliza mensagens do agente ANTES de salvar no banco
+            // Garante que mensagens do agente NUNCA tenham cabeçalho no banco
+            const normalizedChat = {
+              ...updatedChat,
+              messages: updatedChat.messages.map(msg => ({
+                ...msg,
+                content: normalizeMessageContent(msg.content, msg.sender)
+              }))
+            };
+            
             // Salva o chat completo usando saveData para incluir as mensagens
-            await apiService.saveData('chats', updatedChat.id, updatedChat);
-            console.log(`[App] ✅ [DEBUG] Chat completo salvo no banco: ${updatedChat.contactName} (${updatedChat.messages.length} mensagens)`);
+            await apiService.saveData('chats', normalizedChat.id, normalizedChat);
+            console.log(`[App] ✅ [DEBUG] Chat completo salvo no banco: ${normalizedChat.contactName} (${normalizedChat.messages.length} mensagens)`);
           } catch (error) {
             console.error(`[App] ❌ [DEBUG] Erro ao salvar chat completo no banco:`, error);
           }
