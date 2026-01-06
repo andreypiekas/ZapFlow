@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, MapPin, Flag, Building2, RefreshCw, AlertCircle, X, Download } from 'lucide-react';
-import { getUpcomingHolidays, getNationalHolidays, Holiday, BRAZILIAN_STATES } from '../services/holidaysService';
+import { getUpcomingHolidays, getNationalHolidays, Holiday, BRAZILIAN_STATES, HolidaySearchStatus } from '../services/holidaysService';
 import { loadConfig as loadConfigFromBackend, getUpcomingNationalHolidays, syncNationalHolidays, validateNationalHolidays } from '../services/apiService';
 
 const Holidays: React.FC = () => {
@@ -14,6 +14,10 @@ const Holidays: React.FC = () => {
   const [nationalHolidays, setNationalHolidays] = useState<Holiday[]>([]);
   const [isLoadingNational, setIsLoadingNational] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<string>('');
+  const [searchStatus, setSearchStatus] = useState<HolidaySearchStatus>({
+    isSearching: false,
+    quotaExceeded: false
+  });
 
   // Carrega a API key do Gemini ao montar o componente
   useEffect(() => {
@@ -126,6 +130,10 @@ const Holidays: React.FC = () => {
     setIsLoading(true);
     setError(null);
     setProgressMessage('');
+    setSearchStatus({
+      isSearching: true,
+      quotaExceeded: false
+    });
     
     try {
       // Para feriados municipais, sempre usa 15 dias (cache atualiza a cada 10 dias)
@@ -135,16 +143,27 @@ const Holidays: React.FC = () => {
         daysToSearch, 
         selectedStates.length > 0 ? selectedStates : undefined,
         (message) => setProgressMessage(message),
-        geminiApiKey || undefined
+        geminiApiKey || undefined,
+        (status) => setSearchStatus(status)
       );
       setHolidays(upcomingHolidays);
       setProgressMessage('');
+      setSearchStatus(prev => ({
+        ...prev,
+        isSearching: false
+      }));
     } catch (err: any) {
       console.error('[Holidays] Erro ao carregar feriados:', err);
       setError(err.message || 'Erro ao carregar feriados');
       setProgressMessage('');
+      setSearchStatus({
+        isSearching: false,
+        quotaExceeded: false,
+        error: err.message || 'Erro ao carregar feriados'
+      });
     } finally {
       setIsLoading(false);
+      setSearchStatus(prev => ({ ...prev, isSearching: false }));
     }
   };
 
@@ -361,6 +380,46 @@ const Holidays: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Indicadores de Status */}
+        {(searchStatus.isSearching || searchStatus.quotaExceeded || searchStatus.error) && (
+          <div className="px-6 py-3 border-b border-[#0D0F13] bg-[#0D0F13]">
+            <div className="flex items-center gap-3">
+              {searchStatus.isSearching && (
+                <div className="flex items-center gap-2 text-[#00E0D1]">
+                  <RefreshCw size={16} className="animate-spin" />
+                  <span className="text-sm font-medium">
+                    {searchStatus.progressMessage || 'Buscando feriados...'}
+                    {searchStatus.currentCity && searchStatus.currentState && (
+                      <span className="ml-2 text-slate-400">
+                        ({searchStatus.currentCity}, {searchStatus.currentState})
+                      </span>
+                    )}
+                    {searchStatus.citiesProcessed !== undefined && searchStatus.totalCities !== undefined && (
+                      <span className="ml-2 text-slate-400">
+                        {searchStatus.citiesProcessed}/{searchStatus.totalCities} cidades
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
+              {searchStatus.quotaExceeded && (
+                <div className="flex items-center gap-2 text-yellow-400">
+                  <AlertCircle size={16} />
+                  <span className="text-sm font-medium">
+                    Cota do Gemini excedida hoje. Tente novamente amanhã.
+                  </span>
+                </div>
+              )}
+              {searchStatus.error && !searchStatus.isSearching && (
+                <div className="flex items-center gap-2 text-red-400">
+                  <AlertCircle size={16} />
+                  <span className="text-sm font-medium">{searchStatus.error}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Filtros */}
         <div className="p-6 border-b border-[#0D0F13] bg-[#0D0F13]">
