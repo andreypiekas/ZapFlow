@@ -2841,8 +2841,7 @@ const App: React.FC = () => {
                                             if (shouldUpdate && messageIndex >= 0) {
                                                 // Atualiza mensagem local existente com dados da API (inclui whatsappMessageId e mediaUrl)
                                                 chatUpdated = true;
-                                            // Log removido para produção - muito verboso
-                                            // console.log(`[App] 🔄 Mensagem enviada atualizada com ID do WhatsApp no chat ${chat.contactName}`);
+                                                console.log(`[App] 🔄 [DEBUG] Socket.IO: Atualizando mensagem existente do agente - messageIndex=${messageIndex}, localId=${chat.messages[messageIndex]?.id}, whatsappId=${mapped.whatsappMessageId}`);
                                                 const updatedMessages = [...chat.messages];
                                                 // IMPORTANTE: Atualiza mediaUrl se estiver presente na mensagem mapeada
                                                 // Isso garante que URLs de mídia sejam atualizadas quando chegarem via WebSocket
