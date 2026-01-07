@@ -465,6 +465,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
 
   const selectedChat = chats.find(c => c.id === selectedChatId);
 
+  // Gera um ID local realmente único para evitar colisões quando o usuário envia muitas mensagens rapidamente.
+  // Colisões de ID fazem mensagens "sumirem" (React key + dedupe/merge).
+  const generateLocalMessageId = (): string => {
+    try {
+      const uuid = (globalThis as any)?.crypto?.randomUUID?.();
+      if (uuid) return `m_${uuid}`;
+    } catch {}
+    return `m_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  };
+
   // Derived States for Assignment
   const isAssigned = !!selectedChat?.assignedTo;
   const isAssignedToMe = selectedChat?.assignedTo === currentUser.id;
@@ -1293,7 +1303,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     const previewDataUrl = `data:${previewMimeType};base64,${base64Preview}`;
 
     const newMessage: Message = {
-      id: `m_${Date.now()}`,
+      id: generateLocalMessageId(),
       content: type === 'audio' ? 'Áudio' : (inputText || (type === 'image' ? 'Imagem' : 'Arquivo')),
       sender: 'agent',
       timestamp: new Date(),
@@ -1389,7 +1399,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         if (success) {
             // Cria mensagem local indicando que um contato foi enviado
             const newMessage: Message = {
-                id: `m_${Date.now()}`,
+                id: generateLocalMessageId(),
                 content: `📇 Contato enviado: ${contact.name}`,
                 sender: 'agent',
                 timestamp: new Date(),
@@ -1467,7 +1477,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     }
     
     const newMessage: Message = {
-      id: `m_${Date.now()}`,
+      id: generateLocalMessageId(),
       content: messageContent, // Mantém conteúdo original na mensagem local (sem nome/departamento)
       sender: 'agent',
       timestamp: new Date(),
@@ -1599,7 +1609,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       setIsSending(true);
       
       const newMessage: Message = {
-        id: `m_${Date.now()}`,
+        id: generateLocalMessageId(),
         content: 'Sticker',
         sender: 'agent',
         timestamp: new Date(),
@@ -1645,7 +1655,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const simulateCustomerReply = () => {
      if (!selectedChat) return;
      const reply: Message = {
-        id: `m_${Date.now()}`,
+        id: generateLocalMessageId(),
         content: "Obrigado pelo retorno. Pode me enviar mais detalhes?",
         sender: 'user',
         timestamp: new Date(),

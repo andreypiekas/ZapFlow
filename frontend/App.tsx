@@ -4137,7 +4137,8 @@ const App: React.FC = () => {
         }
         
         // Faz merge inteligente: preserva mensagens locais recentes e ordena corretamente
-        setChats(chats.map(c => {
+        // IMPORTANTE: usa setState funcional para evitar perda de mensagens em updates rápidos (envio em sequência / patch async)
+        setChats(currentChats => currentChats.map(c => {
             if (c.id === updatedChat.id) {
                 // Se o chat atualizado tem mensagens, faz merge preservando ordem
                 if (updatedChat.messages.length > 0 && c.messages.length > 0) {
@@ -4281,7 +4282,8 @@ const App: React.FC = () => {
             return c;
         }));
     } else {
-        setChats([updatedChat, ...chats]);
+        // setState funcional para não sobrescrever chats quando há múltiplos updates concorrentes
+        setChats(currentChats => [updatedChat, ...currentChats]);
     }
   };
 
