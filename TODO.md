@@ -367,7 +367,7 @@ Manter os arquivos de instucao e manuais, documentos
 ---
 
 ### 19. Usuário pode pertencer a vários departamentos
-**Status:** 🟡 Em implementação  
+**Status:** ✅ Concluído  
 **Prioridade:** Média/Alta  
 **Objetivo:** Permitir que um usuário (AGENT) tenha acesso e possa atender **mais de um departamento**, sem precisar criar contas duplicadas.
 
@@ -375,7 +375,49 @@ Manter os arquivos de instucao e manuais, documentos
 - Backend: suportar `departmentIds: string[]` em usuários (mantendo compatibilidade com `departmentId` legado).
 - Frontend: UI de usuários permitir **multi-seleção** de departamentos; filtros/visibilidade de chats devem considerar múltiplos departamentos.
 
+**Implementação (resumo):**
+- Banco: tabela `user_departments` (N:N) + backfill de `users.department_id` legado.
+- Backend: `/api/users` (GET/POST/PUT) e `login` retornam `departmentIds`; middleware auth carrega `departmentIds`.
+- Frontend: `UserSettings` com multi-select; filtros de chats consideram `departmentIds`.
+
 **Critérios de aceite:**
 - Um usuário AGENT pode ser associado a 2+ departamentos e **visualiza chats** de qualquer um deles.
 - Admin continua com **Acesso Total**.
 - Compatibilidade: usuários antigos com `departmentId` único continuam funcionando (vira `[departmentId]` automaticamente).
+
+---
+
+### 20. Mensagem pós seleção do setor (customizável na interface)
+**Status:** ✅ Concluído  
+**Prioridade:** Alta  
+**Objetivo:** Após o cliente escolher o setor (digitando o número), enviar uma **mensagem automática** confirmando que o atendimento foi direcionado ao setor **X** e que em instantes será atendido.
+
+**Escopo:**
+- Backend/DB: armazenar template no `/api/config` (global).
+- Frontend: campo em **Configurações** para editar o template (com placeholder do setor).
+- Runtime: ao processar a seleção do setor, enviar a mensagem ao cliente via Evolution API.
+
+**Implementação (resumo):**
+- Config: adicionada chave `departmentSelectionConfirmationTemplate` no `/api/config` (default incluído).
+- UI: `Configurações > Sistema / Evolution > Atendimento / Setores` com textarea (placeholder `{ {department} }`).
+- Runtime: ao processar a seleção numérica do setor, o sistema dispara `sendDepartmentSelectionConfirmationMessage(...)` para o cliente.
+
+**Critérios de aceite:**
+- Cliente escolhe setor → recebe mensagem de confirmação com o nome do setor.
+- Texto é editável na UI (sem precisar mexer em código).
+
+---
+
+### 21. Limpar departamento ao finalizar atendimento (evitar autoatribuição no próximo contato)
+**Status:** ✅ Concluído  
+**Prioridade:** Alta  
+**Objetivo:** Quando o atendente finalizar o chat, limpar o `departmentId` (e atribuição associada) para que, no próximo contato do cliente, o sistema **não roteie automaticamente** para o setor anterior e peça seleção novamente.
+
+**Implementação (resumo):**
+- Frontend: ao finalizar atendimento, seta `departmentId: null` e reseta flags de seleção; mantém `assignedTo` para histórico/visibilidade.
+- Backend: ao receber `status='closed'` em `/api/chats/:chatId`, força `departmentId=null` e reseta flags de seleção.
+- Filtro AGENT: inclui `assignedTo === currentUser.id` para manter chats visíveis mesmo com `departmentId=null`.
+
+**Critérios de aceite:**
+- Finalizar chat → `departmentId` é limpo (não roteia automaticamente no próximo contato).
+- Próximo contato do cliente → seleção de setor é solicitada novamente.

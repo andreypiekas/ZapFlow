@@ -778,6 +778,27 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
                   </div>
                 </div>
               </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                <div className="col-span-1 md:col-span-2">
+                  <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider mb-4 border-b border-[#0D0F13] pb-2">Atendimento / Setores</h3>
+                </div>
+
+                <div className="col-span-1 md:col-span-2">
+                  <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
+                    <MessageCircle size={16} /> Mensagem após seleção de setor (automática)
+                  </label>
+                  <textarea
+                    value={formData.departmentSelectionConfirmationTemplate || ''}
+                    onChange={(e) => setFormData({ ...formData, departmentSelectionConfirmationTemplate: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-[#0D0F13] bg-[#111316] text-slate-100 rounded-lg focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500 text-base min-h-[110px]"
+                    placeholder="Perfeito! Seu atendimento foi encaminhado para o setor {{department}}. Em instantes você será atendido."
+                  />
+                  <p className="text-xs text-slate-400 mt-1">
+                    Use <span className="font-mono">{'{{department}}'}</span> para inserir o nome do setor automaticamente.
+                  </p>
+                </div>
+              </div>
             </>
           )}
 

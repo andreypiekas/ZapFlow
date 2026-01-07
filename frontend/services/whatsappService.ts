@@ -2880,6 +2880,9 @@ export const generateDepartmentSelectionMessage = (departments: Department[]): s
     return message.trim();
 };
 
+export const DEFAULT_DEPARTMENT_SELECTION_CONFIRMATION_TEMPLATE =
+    'Perfeito! Seu atendimento foi encaminhado para o setor {{department}}. Em instantes você será atendido.';
+
 // Envia mensagem de seleção de setores
 export const sendDepartmentSelectionMessage = async (
     config: ApiConfig,
@@ -2892,6 +2895,38 @@ export const sendDepartmentSelectionMessage = async (
     }
     
     const message = generateDepartmentSelectionMessage(departments);
+    return await sendRealMessage(config, phone, message);
+};
+
+// Renderiza mensagem de confirmação pós-seleção do setor (cliente)
+export const renderDepartmentSelectionConfirmationMessage = (
+    template: string | undefined,
+    departmentName: string
+): string => {
+    const safeDepartment = (departmentName || '').trim() || 'Setor';
+    const rawTemplate = (typeof template === 'string' && template.trim().length > 0)
+        ? template.trim()
+        : DEFAULT_DEPARTMENT_SELECTION_CONFIRMATION_TEMPLATE;
+
+    // Suporta placeholders comuns (case-insensitive)
+    // - {{department}} / {{setor}}
+    // - {department} / {setor}
+    // - %DEPARTMENT%
+    return rawTemplate
+        .replace(/\{\{\s*(department|departmentName|setor|sector)\s*\}\}/gi, safeDepartment)
+        .replace(/\{\s*(department|departmentName|setor|sector)\s*\}/gi, safeDepartment)
+        .replace(/%DEPARTMENT%/gi, safeDepartment);
+};
+
+// Envia mensagem de confirmação ao cliente após ele selecionar o setor
+export const sendDepartmentSelectionConfirmationMessage = async (
+    config: ApiConfig,
+    phone: string,
+    departmentName: string,
+    template?: string
+): Promise<boolean> => {
+    const message = renderDepartmentSelectionConfirmationMessage(template, departmentName);
+    if (!message || !message.trim()) return false;
     return await sendRealMessage(config, phone, message);
 };
 

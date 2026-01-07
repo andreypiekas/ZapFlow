@@ -2020,6 +2020,10 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
     }
     if (status === 'closed') {
       chatData.endedAt = new Date().toISOString();
+      // Ao finalizar atendimento, limpa o departamento para evitar auto-roteamento no próximo contato
+      chatData.departmentId = null;
+      chatData.awaitingDepartmentSelection = false;
+      chatData.departmentSelectionSent = false;
     } else if (status === 'open' && chatData.endedAt) {
       chatData.endedAt = undefined;
     }
@@ -2504,7 +2508,8 @@ app.get('/api/config', authenticateToken, dataLimiter, async (req, res) => {
           googleClientId: '',
           geminiApiKey: '',
           holidayStates: [],
-          debugLogsEnabled: false
+          debugLogsEnabled: false,
+          departmentSelectionConfirmationTemplate: 'Perfeito! Seu atendimento foi encaminhado para o setor {{department}}. Em instantes você será atendido.'
         }
       });
     }

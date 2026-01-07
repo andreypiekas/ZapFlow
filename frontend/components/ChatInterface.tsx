@@ -1764,10 +1764,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     const updatedChat: Chat = {
       ...selectedChat,
       status: 'closed',
+      // Limpa departamento ao finalizar para evitar auto-roteamento no próximo atendimento
+      departmentId: null,
+      awaitingDepartmentSelection: false,
+      departmentSelectionSent: false,
       endedAt: new Date(),
       rating: undefined, // Será preenchido quando o cliente responder
       awaitingRating: withSurvey ? true : false, // Marca como aguardando avaliação se pesquisa foi enviada
-      assignedTo: undefined, // Clear assignment on close
+      // Mantém quem finalizou/atendeu para preservar histórico e visibilidade para o agente
+      assignedTo: selectedChat.assignedTo || currentUser?.id,
       activeWorkflow: undefined, // Clear workflow on finish
       messages: [
         ...selectedChat.messages,

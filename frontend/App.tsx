@@ -15,7 +15,7 @@ import Contacts from './components/Contacts';
 import ChatbotSettings from './components/ChatbotSettings';
 import Holidays from './components/Holidays';
 import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot, ChevronLeft, ChevronRight, Calendar, Flag } from 'lucide-react';
-import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance, sendDepartmentSelectionMessage, processDepartmentSelection } from './services/whatsappService';
+import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance, sendDepartmentSelectionMessage, sendDepartmentSelectionConfirmationMessage, processDepartmentSelection } from './services/whatsappService';
 import { processChatbotMessages } from './services/chatbotService'; 
 import { storageService } from './services/storageService';
 import { apiService, getBackendUrl, loadConfig as loadConfigFromBackend, saveConfig as saveConfigToBackend, getUpcomingNationalHolidays } from './services/apiService';
@@ -112,7 +112,8 @@ const loadConfig = (): ApiConfig => {
     googleClientId: '',
     geminiApiKey: '',
     holidayStates: [],
-    debugLogsEnabled: false
+    debugLogsEnabled: false,
+    departmentSelectionConfirmationTemplate: 'Perfeito! Seu atendimento foi encaminhado para o setor {{department}}. Em instantes você será atendido.'
   };
 };
 
@@ -681,7 +682,10 @@ const App: React.FC = () => {
             googleClientId: apiConfigData.googleClientId || '',
             geminiApiKey: apiConfigData.geminiApiKey || '',
             holidayStates: apiConfigData.holidayStates || [],
-            debugLogsEnabled: !!apiConfigData.debugLogsEnabled
+            debugLogsEnabled: !!apiConfigData.debugLogsEnabled,
+            departmentSelectionConfirmationTemplate: (typeof apiConfigData.departmentSelectionConfirmationTemplate === 'string')
+              ? apiConfigData.departmentSelectionConfirmationTemplate
+              : loadConfig().departmentSelectionConfirmationTemplate
           };
           
           // Verifica se há pelo menos um campo não vazio para considerar como configuração válida
@@ -1884,7 +1888,7 @@ const App: React.FC = () => {
                                 return isNew && msg.sender === 'user';
                             });
                             
-                            if (newUserMessages.length > 0 && finalDepartmentId === null && departments.length > 0) {
+                            if (newUserMessages.length > 0 && finalDepartmentId === null && departments.length > 0 && (existingChat.awaitingDepartmentSelection || existingChat.departmentSelectionSent)) {
                                 const lastNewUserMessage = newUserMessages[newUserMessages.length - 1];
                                 const messageContent = lastNewUserMessage.content.trim();
                                 const selectedDeptId = processDepartmentSelection(messageContent, departments);
@@ -1902,6 +1906,23 @@ const App: React.FC = () => {
                                     }
                                     
                                     const departmentName = departments.find(d => d.id === selectedDeptId)?.name || 'Departamento';
+
+                                    // Envia confirmação ao cliente (texto customizável via /api/config)
+                                    try {
+                                        const confirmationTarget = existingChat.contactNumber || (existingChat.id ? existingChat.id.split('@')[0] : '');
+                                        const digits = confirmationTarget.replace(/\D/g, '').length;
+                                        if (confirmationTarget && digits >= 10) {
+                                            sendDepartmentSelectionConfirmationMessage(
+                                                apiConfig,
+                                                confirmationTarget,
+                                                departmentName,
+                                                apiConfig.departmentSelectionConfirmationTemplate
+                                            ).catch(err => logger.debug('[App] Erro ao enviar confirmação pós-seleção:', err));
+                                        }
+                                    } catch (err) {
+                                        logger.debug('[App] Erro ao preparar confirmação pós-seleção:', err);
+                                    }
+
                                     mergedMessages.push({
                                         id: `sys_dept_${Date.now()}`,
                                         content: `Atendimento direcionado para ${departmentName}${assignedUser ? ` - Atribuído a ${assignedUser.name}` : ''}`,
@@ -3394,7 +3415,7 @@ const App: React.FC = () => {
                                             
                                             // Processa seleção de setores apenas se não estiver no banco (novos chats)
                                             // Chats no banco já têm departmentId fixo e não devem ser alterados via Socket.IO
-                                            if (mapped.sender === 'user' && !updatedChat.departmentId && departments.length > 0) {
+                                            if (mapped.sender === 'user' && !updatedChat.departmentId && departments.length > 0 && (updatedChat.awaitingDepartmentSelection || updatedChat.departmentSelectionSent)) {
                                                     const messageContent = mapped.content.trim();
                                                         const selectedDeptId = processDepartmentSelection(messageContent, departments);
                                                         
@@ -3408,6 +3429,23 @@ const App: React.FC = () => {
                                                             
                                                             // Adiciona mensagem de sistema
                                                             const departmentName = departments.find(d => d.id === selectedDeptId)?.name || 'Departamento';
+
+                                                            // Envia confirmação ao cliente (texto customizável via /api/config)
+                                                            try {
+                                                                const confirmationTarget = updatedChat.contactNumber || (updatedChat.id ? updatedChat.id.split('@')[0] : '');
+                                                                const digits = confirmationTarget.replace(/\D/g, '').length;
+                                                                if (confirmationTarget && digits >= 10) {
+                                                                    sendDepartmentSelectionConfirmationMessage(
+                                                                        apiConfig,
+                                                                        confirmationTarget,
+                                                                        departmentName,
+                                                                        apiConfig.departmentSelectionConfirmationTemplate
+                                                                    ).catch(err => logger.debug('[App] Erro ao enviar confirmação pós-seleção:', err));
+                                                                }
+                                                            } catch (err) {
+                                                                logger.debug('[App] Erro ao preparar confirmação pós-seleção:', err);
+                                                            }
+
                                                             updatedMessages.push({
                                                                 id: `sys_dept_${Date.now()}`,
                                                                 content: `Atendimento direcionado para ${departmentName}${assignedUser ? ` - Atribuído a ${assignedUser.name}` : ''}`,
@@ -5118,9 +5156,10 @@ const App: React.FC = () => {
           const userDeptIds = (Array.isArray(currentUser.departmentIds) && currentUser.departmentIds.length)
             ? currentUser.departmentIds
             : (currentUser.departmentId ? [currentUser.departmentId] : []);
+          const matchesAssigned = !!chat.assignedTo && chat.assignedTo === currentUser.id;
           const matchesDepartment = !!chat.departmentId && userDeptIds.includes(chat.departmentId);
           const matchesGeneral = !chat.departmentId && currentUser.allowGeneralConnection;
-          return matchesDepartment || matchesGeneral;
+          return matchesAssigned || matchesDepartment || matchesGeneral;
        });
     }
     return [];

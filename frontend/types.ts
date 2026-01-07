@@ -151,6 +151,7 @@ export interface ApiConfig {
   geminiApiKey?: string; // API Key do Google Gemini para respostas de IA
   holidayStates?: string[]; // Estados para buscar feriados municipais no dashboard
   debugLogsEnabled?: boolean; // Toggle para habilitar logs de debug no console (Dev)
+  departmentSelectionConfirmationTemplate?: string; // Template da mensagem automática após seleção do setor (use {{department}})
 }
 
 export type ViewState = 'dashboard' | 'chat' | 'connections' | 'departments' | 'settings' | 'users' | 'reports' | 'workflows' | 'contacts' | 'chatbot' | 'holidays';
