@@ -318,11 +318,31 @@ class ApiService {
   }
 
   // Criar novo usuário (apenas ADMIN)
-  async createUser(username: string, password: string, name: string, email?: string, role?: string): Promise<{ success: boolean; user?: any; error?: string }> {
+  async createUser(
+    username: string,
+    password: string,
+    name: string,
+    email?: string,
+    role?: string,
+    departmentIds?: string[]
+  ): Promise<{ success: boolean; user?: any; error?: string }> {
     try {
+      const normalizedDepartmentIds = Array.isArray(departmentIds)
+        ? Array.from(new Set(departmentIds.map(String).map(s => s.trim()).filter(Boolean)))
+        : undefined;
       const response = await this.request<{ success: boolean; user: any }>('/api/users', {
         method: 'POST',
-        body: JSON.stringify({ username, password, name, email, role }),
+        body: JSON.stringify({
+          username,
+          password,
+          name,
+          email,
+          role,
+          // Novo: multi departamentos (compat + futuro)
+          departmentIds: normalizedDepartmentIds,
+          // Compat: mantém o primeiro como departmentId
+          departmentId: normalizedDepartmentIds && normalizedDepartmentIds.length ? normalizedDepartmentIds[0] : undefined
+        }),
       });
       return response;
     } catch (error: any) {
@@ -349,11 +369,30 @@ class ApiService {
   }
 
   // Atualizar qualquer usuário (apenas ADMIN)
-  async updateUser(userId: string | number, name?: string, email?: string, role?: string, password?: string, departmentId?: string): Promise<{ success: boolean; user?: any; error?: string }> {
+  async updateUser(
+    userId: string | number,
+    name?: string,
+    email?: string,
+    role?: string,
+    password?: string,
+    departmentId?: string,
+    departmentIds?: string[]
+  ): Promise<{ success: boolean; user?: any; error?: string }> {
     try {
+      const normalizedDepartmentIds = Array.isArray(departmentIds)
+        ? Array.from(new Set(departmentIds.map(String).map(s => s.trim()).filter(Boolean)))
+        : undefined;
       const response = await this.request<{ success: boolean; user: any }>(`/api/users/${userId}`, {
         method: 'PUT',
-        body: JSON.stringify({ name, email, role, password, departmentId }),
+        body: JSON.stringify({
+          name,
+          email,
+          role,
+          password,
+          // Compat + novo
+          departmentId,
+          departmentIds: normalizedDepartmentIds
+        }),
       });
       return response;
     } catch (error: any) {

@@ -363,3 +363,19 @@ Manter os arquivos de instucao e manuais, documentos
 **Critério de aceite:**
 - Enviar/receber 20 mensagens seguidas (rápidas) → UI mostra **todas** (sem “pular” números).
 - Recarregar página → UI continua mostrando **todas** (consistência com Evolution).
+
+---
+
+### 19. Usuário pode pertencer a vários departamentos
+**Status:** 🟡 Em implementação  
+**Prioridade:** Média/Alta  
+**Objetivo:** Permitir que um usuário (AGENT) tenha acesso e possa atender **mais de um departamento**, sem precisar criar contas duplicadas.
+
+**Escopo:**
+- Backend: suportar `departmentIds: string[]` em usuários (mantendo compatibilidade com `departmentId` legado).
+- Frontend: UI de usuários permitir **multi-seleção** de departamentos; filtros/visibilidade de chats devem considerar múltiplos departamentos.
+
+**Critérios de aceite:**
+- Um usuário AGENT pode ser associado a 2+ departamentos e **visualiza chats** de qualquer um deles.
+- Admin continua com **Acesso Total**.
+- Compatibilidade: usuários antigos com `departmentId` único continuam funcionando (vira `[departmentId]` automaticamente).

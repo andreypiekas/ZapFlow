@@ -269,9 +269,13 @@ const findAvailableUserForDepartment = (
   chats: Chat[]
 ): User | null => {
   // Filtra usuários do departamento (excluindo ADMINs, que não têm departmentId)
-  const departmentUsers = users.filter(
-    user => user.departmentId === departmentId && user.role !== UserRole.ADMIN
-  );
+  const departmentUsers = users.filter(user => {
+    if (!user || user.role === UserRole.ADMIN) return false;
+    const ids = (Array.isArray(user.departmentIds) && user.departmentIds.length)
+      ? user.departmentIds
+      : (user.departmentId ? [user.departmentId] : []);
+    return ids.includes(departmentId);
+  });
   
   if (departmentUsers.length === 0) {
     return null;
@@ -802,7 +806,8 @@ const App: React.FC = () => {
             email: u.email || u.username,
             role: u.role as UserRole,
             avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=0D9488&color=fff`,
-            departmentId: u.departmentId || undefined, // Agora vem do banco de dados
+            departmentId: u.departmentId || undefined, // Compat (legado)
+            departmentIds: Array.isArray(u.departmentIds) ? u.departmentIds : (u.departmentId ? [u.departmentId] : []),
             allowGeneralConnection: false // Não está na tabela users, pode vir de user_data se necessário
           }));
           setUsers(formattedUsers);
@@ -4500,12 +4505,16 @@ const App: React.FC = () => {
   const handleAddUser = async (user: User) => {
     // Tenta criar o usuário no banco de dados via API
     try {
+      const deptIds = Array.isArray(user.departmentIds) && user.departmentIds.length
+        ? user.departmentIds
+        : (user.departmentId ? [user.departmentId] : []);
       const result = await apiService.createUser(
         user.email, // username é o email
         user.password || '', // senha
         user.name,
         user.email,
-        user.role
+        user.role,
+        deptIds
       );
       
       if (result.success && result.user) {
@@ -4517,6 +4526,7 @@ const App: React.FC = () => {
           role: result.user.role as UserRole,
           avatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(result.user.name)}&background=0D9488&color=fff`,
           departmentId: user.departmentId,
+          departmentIds: Array.isArray(user.departmentIds) && user.departmentIds.length ? user.departmentIds : (user.departmentId ? [user.departmentId] : []),
           allowGeneralConnection: user.allowGeneralConnection
         };
         setUsers(prevUsers => [...prevUsers, newUser]);
@@ -4577,13 +4587,17 @@ const App: React.FC = () => {
         if (currentUser?.role === UserRole.ADMIN) {
           const userId = parseInt(updatedUser.id);
           if (!isNaN(userId)) {
+            const deptIds = Array.isArray(updatedUser.departmentIds) && updatedUser.departmentIds.length
+              ? updatedUser.departmentIds
+              : (updatedUser.departmentId ? [updatedUser.departmentId] : []);
             result = await apiService.updateUser(
               userId,
               updatedUser.name,
               updatedUser.email,
               updatedUser.role,
               updatedUser.password, // Se houver senha, atualiza
-              updatedUser.departmentId // Adiciona departmentId
+              updatedUser.departmentId, // Compat
+              deptIds
             );
             if (result.success && result.user) {
               // Atualiza o estado com os dados retornados da API
@@ -4593,7 +4607,8 @@ const App: React.FC = () => {
                 name: result.user.name,
                 email: result.user.email || updatedUser.email,
                 role: result.user.role as UserRole,
-                departmentId: result.user.departmentId || updatedUser.departmentId
+                departmentId: result.user.departmentId || updatedUser.departmentId,
+                departmentIds: Array.isArray(result.user.departmentIds) ? result.user.departmentIds : (result.user.departmentId ? [result.user.departmentId] : (updatedUser.departmentIds || []))
               };
               setUsers(prevUsers => prevUsers.map(u => u.id === updatedUser.id ? updatedUserFromApi : u));
             }
@@ -5100,7 +5115,10 @@ const App: React.FC = () => {
     if (currentUser.role === UserRole.ADMIN) return chats;
     if (currentUser.role === UserRole.AGENT) {
        return chats.filter(chat => {
-          const matchesDepartment = chat.departmentId === currentUser.departmentId;
+          const userDeptIds = (Array.isArray(currentUser.departmentIds) && currentUser.departmentIds.length)
+            ? currentUser.departmentIds
+            : (currentUser.departmentId ? [currentUser.departmentId] : []);
+          const matchesDepartment = !!chat.departmentId && userDeptIds.includes(chat.departmentId);
           const matchesGeneral = !chat.departmentId && currentUser.allowGeneralConnection;
           return matchesDepartment || matchesGeneral;
        });
@@ -5238,7 +5256,19 @@ const App: React.FC = () => {
             <div className="col-span-1 md:col-span-3 bg-[#16191F] p-6 rounded-xl shadow-lg neon-border mt-4">
               <h3 className="text-lg font-futuristic text-slate-200 mb-4">Olá, {currentUser.name} ({currentUser.role === 'ADMIN' ? 'Administrador' : 'Agente'})</h3>
               <p className="text-slate-400">
-                {currentUser.role === 'ADMIN' ? "Você tem acesso total ao sistema." : `Você está visualizando os atendimentos do setor: ${departments.find(d => d.id === currentUser.departmentId)?.name || 'Nenhum'}.`}
+                {currentUser.role === 'ADMIN'
+                  ? "Você tem acesso total ao sistema."
+                  : (() => {
+                      const ids = (Array.isArray(currentUser.departmentIds) && currentUser.departmentIds.length)
+                        ? currentUser.departmentIds
+                        : (currentUser.departmentId ? [currentUser.departmentId] : []);
+                      const names = ids
+                        .map(id => departments.find(d => d.id === id)?.name)
+                        .filter(Boolean) as string[];
+                      const label = names.length ? Array.from(new Set(names)).join(', ') : 'Nenhum';
+                      return `Você está visualizando os atendimentos do(s) setor(es): ${label}.`;
+                    })()
+                }
                 {currentUser.role === 'AGENT' && currentUser.allowGeneralConnection && <span className="block mt-2 font-medium text-[#00E0D1]">Você tem permissão para acessar a Triagem (Geral).</span>}
               </p>
             </div>

@@ -20,7 +20,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>(UserRole.AGENT);
-  const [departmentId, setDepartmentId] = useState<string>('');
+  const [departmentIds, setDepartmentIds] = useState<string[]>([]);
   const [avatar, setAvatar] = useState('');
   const [allowGeneralConnection, setAllowGeneralConnection] = useState(false);
   
@@ -35,7 +35,10 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
       setEmail(currentUser.email);
       setPassword(currentUser.password || '');
       setRole(currentUser.role);
-      setDepartmentId(currentUser.departmentId || '');
+      const fromMulti = Array.isArray(currentUser.departmentIds) ? currentUser.departmentIds.filter(Boolean) : [];
+      const fromSingle = currentUser.departmentId ? [currentUser.departmentId] : [];
+      const merged = Array.from(new Set([...(fromMulti.length ? fromMulti : fromSingle)]));
+      setDepartmentIds(merged);
       setAvatar(currentUser.avatar);
       setAllowGeneralConnection(currentUser.allowGeneralConnection || false);
     } else {
@@ -44,7 +47,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
       setEmail('');
       setPassword('');
       setRole(UserRole.AGENT);
-      setDepartmentId('');
+      setDepartmentIds([]);
       setAvatar(`https://picsum.photos/200/200?random=${Date.now()}`);
       setAllowGeneralConnection(false);
     }
@@ -70,7 +73,13 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    const normalizedDepartmentIds =
+      role === UserRole.ADMIN
+        ? []
+        : Array.from(new Set((departmentIds || []).map(String).map(s => s.trim()).filter(Boolean)));
+    const primaryDepartmentId = normalizedDepartmentIds[0] || undefined;
+
     const userData: User = {
       id: editingUser ? editingUser.id : `user_${Date.now()}`,
       name,
@@ -78,7 +87,8 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
       password,
       role,
       avatar: avatar,
-      departmentId: role === UserRole.ADMIN ? undefined : departmentId || undefined,
+      departmentId: role === UserRole.ADMIN ? undefined : primaryDepartmentId,
+      departmentIds: role === UserRole.ADMIN ? [] : normalizedDepartmentIds,
       allowGeneralConnection
     };
 
@@ -91,8 +101,20 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
   };
 
   const getDepartmentName = (id?: string) => {
-    if (!id) return 'Todos (Admin)';
+    if (!id) return 'Sem Departamento';
     return departments.find(d => d.id === id)?.name || 'Sem Departamento';
+  };
+
+  const getUserDepartmentLabel = (user: User): string => {
+    if (user.role === UserRole.ADMIN) return 'Acesso Total';
+    const ids = Array.isArray(user.departmentIds) && user.departmentIds.length
+      ? user.departmentIds
+      : (user.departmentId ? [user.departmentId] : []);
+    const names = ids
+      .map(id => getDepartmentName(id))
+      .filter(Boolean);
+    const uniqueNames = Array.from(new Set(names));
+    return uniqueNames.length ? uniqueNames.join(', ') : 'Sem Departamento';
   };
 
   return (
@@ -154,7 +176,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
                     {user.role === UserRole.ADMIN ? (
                       <span className="text-slate-500 italic">Acesso Total</span>
                     ) : (
-                      getDepartmentName(user.departmentId)
+                      getUserDepartmentLabel(user)
                     )}
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-300">
@@ -281,18 +303,39 @@ const UserSettings: React.FC<UserSettingsProps> = ({ users, departments, onAddUs
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Departamento</label>
-                  <select 
-                    value={departmentId}
-                    onChange={(e) => setDepartmentId(e.target.value)}
-                    disabled={role === UserRole.ADMIN}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-white disabled:bg-slate-100 disabled:text-slate-400"
-                  >
-                    <option value="">Selecione...</option>
-                    {departments.map(dept => (
-                      <option key={dept.id} value={dept.id}>{dept.name}</option>
-                    ))}
-                  </select>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Departamentos</label>
+                  <div className={`w-full px-3 py-2 border border-slate-300 rounded-lg bg-white ${role === UserRole.ADMIN ? 'bg-slate-100 text-slate-400' : ''}`}>
+                    {role === UserRole.ADMIN ? (
+                      <span className="text-sm text-slate-500">Admin possui acesso total (não precisa de departamentos).</span>
+                    ) : departments.length === 0 ? (
+                      <span className="text-sm text-slate-500">Nenhum departamento cadastrado.</span>
+                    ) : (
+                      <div className="max-h-32 overflow-y-auto space-y-2 pr-1">
+                        {departments.map(dept => {
+                          const checked = departmentIds.includes(dept.id);
+                          return (
+                            <label key={dept.id} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  const isChecked = e.target.checked;
+                                  setDepartmentIds(prev => {
+                                    const next = new Set(prev);
+                                    if (isChecked) next.add(dept.id);
+                                    else next.delete(dept.id);
+                                    return Array.from(next);
+                                  });
+                                }}
+                                className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                              />
+                              <span className="truncate">{dept.name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               

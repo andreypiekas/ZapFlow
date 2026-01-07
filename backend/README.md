@@ -172,7 +172,7 @@ Resposta:
 **GET /api/users**
 - Lista todos os usuários
 - Requer role ADMIN
-- Retorna `departmentId` para cada usuário
+- Retorna `departmentId` (legado) e `departmentIds` (multi-departamentos) para cada usuário
 
 **POST /api/users**
 - Cria novo usuário
@@ -191,14 +191,15 @@ Resposta:
 **PUT /api/users/:id**
 - Atualiza usuário existente
 - Requer role ADMIN
-- Suporta `departmentId` para atribuir usuário a departamento
+- Suporta `departmentId` (legado) e `departmentIds` (novo) para atribuir usuário a um ou mais departamentos
 
 ```json
 {
   "name": "Nome do Usuário",
   "email": "usuario@exemplo.com",
   "role": "AGENT",
-  "departmentId": "dept_1",
+  "departmentId": "1",
+  "departmentIds": ["1", "2"],
   "password": "nova_senha"  // Opcional
 }
 ```

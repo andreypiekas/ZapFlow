@@ -1285,7 +1285,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   // Função auxiliar para formatar cabeçalho com nome e departamento
   const formatMessageHeader = (chat?: Chat): string => {
     if (!currentUser.name) return '';
-    const userDepartmentId = currentUser.departmentId || chat?.departmentId || selectedChat?.departmentId;
+    const userDeptIds =
+      (Array.isArray(currentUser.departmentIds) && currentUser.departmentIds.length)
+        ? currentUser.departmentIds
+        : (currentUser.departmentId ? [currentUser.departmentId] : []);
+
+    // Prioridade: departamento do chat. Se não houver, só usa o do usuário quando ele tem exatamente 1.
+    const userDepartmentId =
+      chat?.departmentId ||
+      selectedChat?.departmentId ||
+      (userDeptIds.length === 1 ? userDeptIds[0] : undefined);
     const userDepartment = userDepartmentId 
       ? departments.find(d => d.id === userDepartmentId)
       : null;
@@ -3493,8 +3502,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                       
                       {/* Nome e Setor para mensagens enviadas (agent) */}
                       {msg.sender === 'agent' && currentUser.name && (() => {
-                        // Tenta usar o departamento do usuário primeiro, depois o do chat como fallback
-                        const userDepartmentId = currentUser.departmentId || selectedChat?.departmentId;
+                        const userDeptIds =
+                          (Array.isArray(currentUser.departmentIds) && currentUser.departmentIds.length)
+                            ? currentUser.departmentIds
+                            : (currentUser.departmentId ? [currentUser.departmentId] : []);
+
+                        // Prioridade: departamento do chat. Se não houver, só usa o do usuário quando ele tem exatamente 1.
+                        const userDepartmentId =
+                          selectedChat?.departmentId ||
+                          (userDeptIds.length === 1 ? userDeptIds[0] : undefined);
                         const userDepartment = userDepartmentId 
                           ? departments.find(d => d.id === userDepartmentId)
                           : null;

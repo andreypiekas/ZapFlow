@@ -574,6 +574,20 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
       { expiresIn: JWT_EXPIRES_IN, algorithm: JWT_ALGORITHM }
     );
 
+    // Carrega departamentos (multi) para o usuário logado
+    let deptIds = [];
+    try {
+      const deptRes = await pool.query(
+        'SELECT department_id::text AS id FROM user_departments WHERE user_id = $1 ORDER BY department_id',
+        [user.id]
+      );
+      deptIds = deptRes.rows.map(r => String(r.id));
+    } catch {
+      deptIds = [];
+    }
+    const legacyDept = user.department_id ? String(user.department_id) : null;
+    if (legacyDept && !deptIds.includes(legacyDept)) deptIds.push(legacyDept);
+
     res.json({
       token,
       user: {
@@ -581,7 +595,9 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
         username: user.username,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: user.role,
+        departmentId: user.department_id || undefined,
+        departmentIds: deptIds
       }
     });
   } catch (error) {
@@ -905,7 +921,23 @@ app.get('/api/users', authenticateToken, dataLimiter, async (req, res) => {
     }
 
     const result = await pool.query(
-      'SELECT id, username, name, email, role, department_id FROM users ORDER BY name',
+      `
+        SELECT
+          u.id,
+          u.username,
+          u.name,
+          u.email,
+          u.role,
+          u.department_id,
+          COALESCE(
+            ARRAY_AGG(ud.department_id::text) FILTER (WHERE ud.department_id IS NOT NULL),
+            '{}'
+          ) AS department_ids
+        FROM users u
+        LEFT JOIN user_departments ud ON ud.user_id = u.id
+        GROUP BY u.id, u.username, u.name, u.email, u.role, u.department_id
+        ORDER BY u.name
+      `,
       []
     );
 
@@ -915,7 +947,13 @@ app.get('/api/users', authenticateToken, dataLimiter, async (req, res) => {
       name: row.name,
       email: row.email || row.username,
       role: row.role,
-      departmentId: row.department_id || undefined
+      departmentId: row.department_id || undefined,
+      departmentIds: (() => {
+        const ids = Array.isArray(row.department_ids) ? row.department_ids.filter(Boolean).map(String) : [];
+        const legacy = row.department_id ? String(row.department_id) : null;
+        if (legacy && !ids.includes(legacy)) ids.push(legacy);
+        return ids;
+      })()
     })));
   } catch (error) {
     console.error('Erro ao listar usuários:', error);
@@ -932,7 +970,7 @@ app.post('/api/users', authenticateToken, dataLimiter, async (req, res) => {
       return res.status(403).json({ error: 'Apenas administradores podem criar usuários' });
     }
 
-    const { username, password, name, email, role } = req.body;
+    const { username, password, name, email, role, departmentId, departmentIds } = req.body;
 
     if (!username || !password || !name) {
       return res.status(400).json({ error: 'username, password e name são obrigatórios' });
@@ -947,18 +985,76 @@ app.post('/api/users', authenticateToken, dataLimiter, async (req, res) => {
     // Hash da senha
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Criar usuário
-    const result = await pool.query(
-      `INSERT INTO users (username, password_hash, name, email, role) 
-       VALUES ($1, $2, $3, $4, $5) 
-       RETURNING id, username, name, email, role`,
-      [username, hashedPassword, name, email || username, role || 'AGENT']
-    );
+    // Normaliza departamentos (novo: departmentIds; compat: departmentId)
+    const normalizedDepartmentIds = (() => {
+      const effectiveRole = (role || 'AGENT');
+      if (effectiveRole === 'ADMIN') return [];
+      if (Array.isArray(departmentIds)) return departmentIds.map(String).map(s => s.trim()).filter(Boolean);
+      if (departmentId) return [String(departmentId).trim()].filter(Boolean);
+      return [];
+    })();
 
-    res.status(201).json({
-      success: true,
-      user: result.rows[0]
-    });
+    const deptInts = normalizedDepartmentIds
+      .map(v => Number.parseInt(String(v), 10))
+      .filter(n => Number.isFinite(n) && n > 0);
+
+    // Valida IDs de departamentos (somente departamentos do admin criador)
+    if (deptInts.length > 0) {
+      const deptCheck = await pool.query(
+        'SELECT id FROM departments WHERE user_id = $1 AND id = ANY($2::int[])',
+        [req.user.id, deptInts]
+      );
+      if (deptCheck.rows.length !== deptInts.length) {
+        return res.status(400).json({ error: 'departmentIds inválidos ou não pertencem ao usuário administrador' });
+      }
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const primaryDept = deptInts.length > 0 ? String(deptInts[0]) : null;
+
+      // Criar usuário (mantém department_id como compat / "primário")
+      const result = await client.query(
+        `INSERT INTO users (username, password_hash, name, email, role, department_id) 
+         VALUES ($1, $2, $3, $4, $5, $6) 
+         RETURNING id, username, name, email, role, department_id`,
+        [username, hashedPassword, name, email || username, role || 'AGENT', primaryDept]
+      );
+
+      const newUserId = result.rows[0].id;
+
+      if (deptInts.length > 0) {
+        const values = deptInts.map((_, i) => `($1, $${i + 2})`).join(', ');
+        await client.query(
+          `INSERT INTO user_departments (user_id, department_id)
+           VALUES ${values}
+           ON CONFLICT (user_id, department_id) DO NOTHING`,
+          [newUserId, ...deptInts]
+        );
+      }
+
+      await client.query('COMMIT');
+
+      res.status(201).json({
+        success: true,
+        user: {
+          id: result.rows[0].id,
+          username: result.rows[0].username,
+          name: result.rows[0].name,
+          email: result.rows[0].email,
+          role: result.rows[0].role,
+          departmentId: result.rows[0].department_id || undefined,
+          departmentIds: deptInts.map(String)
+        }
+      });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
   } catch (error) {
     console.error('Erro ao criar usuário:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
@@ -1015,7 +1111,7 @@ app.put('/api/users/:id', authenticateToken, dataLimiter, async (req, res) => {
       return res.status(400).json({ error: 'ID inválido' });
     }
 
-    const { name, email, role, password, departmentId } = req.body;
+    const { name, email, role, password, departmentId, departmentIds } = req.body;
 
     const updateFields = [];
     const params = [];
@@ -1038,9 +1134,55 @@ app.put('/api/users/:id', authenticateToken, dataLimiter, async (req, res) => {
       updateFields.push(`password_hash = $${paramIndex++}`);
       params.push(hashedPassword);
     }
-    if (departmentId !== undefined) {
+
+    // Carrega role atual para decidir regras de departamento (ex.: ADMIN não usa departamentos)
+    const existingUserRes = await pool.query('SELECT role FROM users WHERE id = $1', [userId]);
+    if (existingUserRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+    const existingRole = existingUserRes.rows[0].role;
+    const finalRole = role || existingRole;
+
+    const wantsDepartmentUpdate = departmentIds !== undefined || departmentId !== undefined || finalRole === 'ADMIN';
+
+    // Normaliza departamentos (novo: departmentIds; compat: departmentId)
+    let normalizedDeptIds = null; // null => não altera
+    if (wantsDepartmentUpdate) {
+      if (finalRole === 'ADMIN') {
+        normalizedDeptIds = [];
+      } else if (departmentIds !== undefined) {
+        if (departmentIds === null) {
+          normalizedDeptIds = [];
+        } else if (Array.isArray(departmentIds)) {
+          normalizedDeptIds = departmentIds.map(String).map(s => s.trim()).filter(Boolean);
+        } else {
+          return res.status(400).json({ error: 'departmentIds deve ser um array' });
+        }
+      } else if (departmentId !== undefined) {
+        normalizedDeptIds = departmentId ? [String(departmentId).trim()].filter(Boolean) : [];
+      }
+    }
+
+    const deptInts = Array.isArray(normalizedDeptIds)
+      ? normalizedDeptIds
+          .map(v => Number.parseInt(String(v), 10))
+          .filter(n => Number.isFinite(n) && n > 0)
+      : [];
+
+    // Se estamos alterando departamentos, valida e atualiza coluna legacy `department_id`
+    if (normalizedDeptIds !== null) {
+      if (deptInts.length > 0) {
+        const deptCheck = await pool.query(
+          'SELECT id FROM departments WHERE user_id = $1 AND id = ANY($2::int[])',
+          [req.user.id, deptInts]
+        );
+        if (deptCheck.rows.length !== deptInts.length) {
+          return res.status(400).json({ error: 'departmentIds inválidos ou não pertencem ao usuário administrador' });
+        }
+      }
+
       updateFields.push(`department_id = $${paramIndex++}`);
-      params.push(departmentId || null);
+      params.push(deptInts.length > 0 ? String(deptInts[0]) : null);
     }
 
     if (updateFields.length === 0) {
@@ -1050,26 +1192,64 @@ app.put('/api/users/:id', authenticateToken, dataLimiter, async (req, res) => {
     updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
     params.push(userId);
 
-    const result = await pool.query(
-      `UPDATE users SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING id, username, name, email, role, department_id`,
-      params
-    );
+    // Usa transação quando também atualiza user_departments (many-to-many)
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Usuário não encontrado' });
-    }
+      const result = await client.query(
+        `UPDATE users SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING id, username, name, email, role, department_id`,
+        params
+      );
 
-    res.json({ 
-      success: true, 
-      user: {
-        id: result.rows[0].id,
-        username: result.rows[0].username,
-        name: result.rows[0].name,
-        email: result.rows[0].email,
-        role: result.rows[0].role,
-        departmentId: result.rows[0].department_id || undefined
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Usuário não encontrado' });
       }
-    });
+
+      let finalDeptIds = [];
+      if (normalizedDeptIds !== null) {
+        // Replace set de departamentos
+        await client.query('DELETE FROM user_departments WHERE user_id = $1', [userId]);
+        if (deptInts.length > 0) {
+          const values = deptInts.map((_, i) => `($1, $${i + 2})`).join(', ');
+          await client.query(
+            `INSERT INTO user_departments (user_id, department_id)
+             VALUES ${values}
+             ON CONFLICT (user_id, department_id) DO NOTHING`,
+            [userId, ...deptInts]
+          );
+        }
+        finalDeptIds = deptInts.map(String);
+      } else {
+        // Sem alteração explícita: retorna departamentos atuais (best-effort)
+        const deptRes = await client.query(
+          'SELECT department_id::text AS id FROM user_departments WHERE user_id = $1 ORDER BY department_id',
+          [userId]
+        );
+        finalDeptIds = deptRes.rows.map(r => String(r.id));
+      }
+
+      await client.query('COMMIT');
+
+      res.json({
+        success: true,
+        user: {
+          id: result.rows[0].id,
+          username: result.rows[0].username,
+          name: result.rows[0].name,
+          email: result.rows[0].email,
+          role: result.rows[0].role,
+          departmentId: result.rows[0].department_id || undefined,
+          departmentIds: finalDeptIds
+        }
+      });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
   } catch (error) {
     console.error('Erro ao atualizar usuário:', error);
     res.status(500).json({ error: 'Erro interno do servidor' });
@@ -1128,10 +1308,24 @@ app.put('/api/user/profile', authenticateToken, dataLimiter, async (req, res) =>
 // Listar departamentos
 app.get('/api/departments', authenticateToken, dataLimiter, async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT id, name, description, color FROM departments WHERE user_id = $1 ORDER BY name',
-      [req.user.id]
-    );
+    // Para AGENT: retorna departamentos atribuídos (user_departments) + departamentos próprios (se houver).
+    // Para ADMIN: mantém comportamento atual (departamentos do próprio admin).
+    const result = req.user.role === 'ADMIN'
+      ? await pool.query(
+          'SELECT id, name, description, color FROM departments WHERE user_id = $1 ORDER BY name',
+          [req.user.id]
+        )
+      : await pool.query(
+          `
+            SELECT DISTINCT d.id, d.name, d.description, d.color
+            FROM departments d
+            LEFT JOIN user_departments ud
+              ON ud.department_id = d.id AND ud.user_id = $1
+            WHERE d.user_id = $1 OR ud.user_id = $1
+            ORDER BY d.name
+          `,
+          [req.user.id]
+        );
     res.json(result.rows.map(row => ({
       id: row.id.toString(),
       name: row.name,

@@ -28,10 +28,14 @@ const Login: React.FC<LoginProps> = ({ users, onLogin }) => {
           // Converte o usuário da API para o formato esperado
           const user: User = {
             id: response.user.id.toString(),
-            username: response.user.username,
             name: response.user.name,
             email: response.user.email || email,
             role: response.user.role as UserRole,
+            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(response.user.name || email)}&background=0D9488&color=fff`,
+            departmentId: response.user.departmentId || undefined,
+            departmentIds: Array.isArray(response.user.departmentIds)
+              ? response.user.departmentIds
+              : (response.user.departmentId ? [response.user.departmentId] : []),
             password: '' // Não armazena senha
           };
           onLogin(user);

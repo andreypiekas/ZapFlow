@@ -106,6 +106,29 @@ async function migrate() {
       )
     `);
 
+    // ========================================================================
+    // Many-to-many: usuários podem pertencer a vários departamentos
+    // Mantém compatibilidade com users.department_id (legado)
+    // ========================================================================
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_departments (
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        department_id INTEGER NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, department_id)
+      )
+    `);
+
+    // Backfill: se existir users.department_id numérico, cria vínculo em user_departments
+    await client.query(`
+      INSERT INTO user_departments (user_id, department_id)
+      SELECT u.id, (u.department_id)::int
+      FROM users u
+      WHERE u.department_id IS NOT NULL
+        AND u.department_id ~ '^[0-9]+$'
+      ON CONFLICT (user_id, department_id) DO NOTHING
+    `);
+
     // Criar tabela de contatos
     await client.query(`
       CREATE TABLE IF NOT EXISTS contacts (
@@ -153,6 +176,8 @@ async function migrate() {
     // Criar índices para melhor performance
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_departments_user_id ON departments(user_id);
+      CREATE INDEX IF NOT EXISTS idx_user_departments_user_id ON user_departments(user_id);
+      CREATE INDEX IF NOT EXISTS idx_user_departments_department_id ON user_departments(department_id);
       CREATE INDEX IF NOT EXISTS idx_contacts_user_id ON contacts(user_id);
       CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts(phone);
       CREATE INDEX IF NOT EXISTS idx_quick_replies_user_id ON quick_replies(user_id);

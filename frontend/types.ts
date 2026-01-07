@@ -21,7 +21,10 @@ export interface User {
   password?: string;
   role: UserRole;
   avatar: string;
+  // Compat (legado): departamento único
   departmentId?: string;
+  // Novo: usuário pode pertencer a múltiplos departamentos
+  departmentIds?: string[];
   allowGeneralConnection?: boolean; // Permite ver chats sem departamento
 }
 
