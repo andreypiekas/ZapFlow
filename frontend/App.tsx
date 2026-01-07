@@ -1960,6 +1960,9 @@ const App: React.FC = () => {
                             tags: dbChat?.tags || existingChat.tags,
                             status: finalStatus, // Status final com prioridade ABSOLUTA do banco
                             rating: dbChat?.rating || existingChat.rating,
+                            // IMPORTANTE: unreadCount é controle de UI e deve ser preservado do estado local.
+                            // A API frequentemente retorna 0 e o sync (2s) acabava "apagando" o contador.
+                            unreadCount: typeof (existingChat as any).unreadCount === 'number' ? (existingChat as any).unreadCount : 0,
                             awaitingRating: dbChat?.awaitingRating !== undefined ? dbChat.awaitingRating : existingChat.awaitingRating,
                             awaitingDepartmentSelection: dbChat?.awaitingDepartmentSelection !== undefined ? dbChat.awaitingDepartmentSelection : existingChat.awaitingDepartmentSelection,
                             departmentSelectionSent: dbChat?.departmentSelectionSent !== undefined ? dbChat.departmentSelectionSent : (existingChat.departmentSelectionSent || false),
