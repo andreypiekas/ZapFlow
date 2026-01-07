@@ -5156,8 +5156,11 @@ const App: React.FC = () => {
                 <div className="space-y-2">
                   {upcomingHolidays.map((holiday, index) => {
                     // Parse da data sem problemas de timezone (YYYY-MM-DD)
-                    const [year, month, day] = holiday.date.split('-').map(Number);
-                    const holidayDate = new Date(year, month - 1, day);
+                    // Observação: alguns backends/DBs podem devolver `YYYY-MM-DDT00:00:00.000Z` (ou com espaço).
+                    // Para manter robustez, normalizamos para apenas a parte `YYYY-MM-DD` antes do parse.
+                    const normalizedDate = (holiday.date || '').split('T')[0].split(' ')[0];
+                    const [year, month, day] = normalizedDate.split('-').map(Number);
+                    const holidayDate = new Date(year, (month || 1) - 1, day || 1);
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
                     holidayDate.setHours(0, 0, 0, 0);
