@@ -1942,7 +1942,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     if (!raw) return null;
     const trimmed = raw.trim();
     if (!trimmed) return null;
-    return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+
+    // Evita Mixed Content: se a página está em HTTPS, assume HTTPS para URLs sem protocolo (ex.: www.exemplo.com)
+    try {
+      if (typeof window !== 'undefined' && window.location?.protocol === 'https:') {
+        return `https://${trimmed}`;
+      }
+    } catch {
+      // ignore
+    }
+
+    return `http://${trimmed}`;
   };
 
   const extractUrls = (text: string | undefined): string[] => {

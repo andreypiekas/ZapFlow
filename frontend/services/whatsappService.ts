@@ -26,6 +26,18 @@ export const normalizeJid = (jid: string | null | undefined): string => {
     return user + '@s.whatsapp.net';
 };
 
+// Cache simples de compatibilidade de endpoints por baseUrl.
+// Objetivo: evitar spam de 404/500 no console (e no Network) em setups onde certos endpoints não existem.
+const unsupportedEvolutionEndpointsByBaseUrl = {
+    fetchMessages: new Set<string>(),
+    includeMessagesInFindChats: new Set<string>(),
+    fetchAllMessages: new Set<string>()
+};
+
+const getEvolutionBaseUrlKey = (config: ApiConfig): string => {
+    return (config.baseUrl || '').trim().replace(/\/+$/, '');
+};
+
 // Formata telefone para o padrão internacional (DDI + DDD + Num)
 // Brasil: DDI (2) + DDD (2) + Número (8 fixo ou 9 celular) = 12 ou 13 dígitos
 const formatPhoneForApi = (phone: string): string => {
@@ -1586,6 +1598,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         // 1. Descobre a instância correta para evitar 404
         const active = await findActiveInstance(config);
         const instanceName = active?.instanceName || config.instanceName;
+        const baseUrlKey = getEvolutionBaseUrlKey(config);
 
         if (!instanceName) {
             // Silencioso para não poluir logs se desconectado
@@ -1620,6 +1633,11 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                 
                 // Tenta buscar mensagens diretamente para construir chats
                 try {
+                    if (unsupportedEvolutionEndpointsByBaseUrl.fetchMessages.has(baseUrlKey)) {
+                        console.warn(`[fetchChats] Endpoint fetchMessages já marcado como não suportado para ${baseUrlKey}. Pulando.`);
+                        return [];
+                    }
+
                     const resMsg = await fetch(`${config.baseUrl}/message/fetchMessages/${instanceName}`, {
                         method: 'POST',
                         headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' },
@@ -1628,6 +1646,10 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                     
                     if (resMsg.ok) {
                         rawData = await resMsg.json();
+                    } else if (resMsg.status === 404) {
+                        unsupportedEvolutionEndpointsByBaseUrl.fetchMessages.add(baseUrlKey);
+                        console.warn(`[fetchChats] Endpoint fetchMessages não encontrado (404). Pulando sincronização.`);
+                        return [];
                     } else {
                         // Se fetchMessages também falhar, retorna vazio mas não bloqueia
                         console.warn(`[fetchChats] Endpoint fetchMessages também falhou (${resMsg.status}). Continuando sem sincronização da Evolution API.`);
@@ -1643,19 +1665,27 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             } else {
                 // Outros erros - tenta fallback
                 try {
-                    const resMsg = await fetch(`${config.baseUrl}/message/fetchMessages/${instanceName}`, {
-                        method: 'POST',
-                        headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ limit: 50 }) 
-                    });
-                    
-                    if (resMsg.ok) {
-                        rawData = await resMsg.json();
-                    } else if (resMsg.status === 404) {
-                        console.warn(`[fetchChats] Endpoint fetchMessages não encontrado (404). Pulando sincronização.`);
-                        return [];
-                    } else {
-                        // Fallback Final: fetchAllMessages (V2 antigo)
+                    if (!unsupportedEvolutionEndpointsByBaseUrl.fetchMessages.has(baseUrlKey)) {
+                        const resMsg = await fetch(`${config.baseUrl}/message/fetchMessages/${instanceName}`, {
+                            method: 'POST',
+                            headers: { 'apikey': config.apiKey, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ limit: 50 }) 
+                        });
+                        
+                        if (resMsg.ok) {
+                            rawData = await resMsg.json();
+                        } else if (resMsg.status === 404) {
+                            unsupportedEvolutionEndpointsByBaseUrl.fetchMessages.add(baseUrlKey);
+                            console.warn(`[fetchChats] Endpoint fetchMessages não encontrado (404). Pulando sincronização.`);
+                            return [];
+                        } else {
+                            // Se falhou, tenta fetchAllMessages (V2 antigo)
+                            unsupportedEvolutionEndpointsByBaseUrl.fetchMessages.add(baseUrlKey); // evita retries caros
+                        }
+                    }
+
+                    // Fallback Final: fetchAllMessages (V2 antigo) — best-effort
+                    if (!rawData && !unsupportedEvolutionEndpointsByBaseUrl.fetchAllMessages.has(baseUrlKey)) {
                         try {
                             const resAll = await fetch(`${config.baseUrl}/message/fetchAllMessages/${instanceName}`, {
                                 method: 'GET',
@@ -1664,6 +1694,7 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                             if (resAll.ok) {
                                 rawData = await resAll.json();
                             } else if (resAll.status === 404) {
+                                unsupportedEvolutionEndpointsByBaseUrl.fetchAllMessages.add(baseUrlKey);
                                 console.warn(`[fetchChats] Endpoint fetchAllMessages não encontrado (404). Pulando sincronização.`);
                                 return [];
                             }
@@ -2243,8 +2274,37 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         // Extrai o "número" do JID (pode ser DDI+DDD+num OU @lid). Usado apenas para comparação flexível.
         const phoneNumber = normalizedChatId.split('@')[0];
         const phoneDigits = phoneNumber.replace(/\D/g, '');
-        
-        const messages: Message[] = [];
+
+        const baseUrlKey = getEvolutionBaseUrlKey(config);
+        const messagesMap = new Map<string, Message>();
+        let sortOrder = 0;
+
+        const addMessage = (msg: Message) => {
+            const key =
+                msg.whatsappMessageId ||
+                msg.id ||
+                `${msg.sender}_${msg.timestamp?.getTime() || 0}_${(msg.content || '').slice(0, 50)}`;
+
+            const existing = messagesMap.get(key);
+            if (!existing) {
+                (msg as any)._sortOrder = (msg as any)._sortOrder ?? sortOrder++;
+                messagesMap.set(key, msg);
+                return;
+            }
+
+            // Merge conservador: não perde mídia/rawMessage se já existirem no cache
+            const merged: Message = {
+                ...existing,
+                ...msg,
+                mediaUrl: existing.mediaUrl || msg.mediaUrl,
+                rawMessage: (existing as any).rawMessage || (msg as any).rawMessage,
+                mimeType: (existing as any).mimeType || (msg as any).mimeType,
+                fileName: (existing as any).fileName || (msg as any).fileName,
+                fileSize: (existing as any).fileSize || (msg as any).fileSize
+            };
+            (merged as any)._sortOrder = (existing as any)._sortOrder ?? (merged as any)._sortOrder ?? sortOrder++;
+            messagesMap.set(key, merged);
+        };
         
         // Helper: match flexível (chatId vs remoteJid/remoteJidAlt), tolera DDI e casos @lid.
         const matchesChat = (candidateJid: any): boolean => {
@@ -2303,7 +2363,7 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                         }
                         const mapped = mapApiMessageToInternal(item);
                         if (mapped) {
-                            messages.push(mapped);
+                            addMessage(mapped);
                         }
                     }
                     return; // Processou como mensagem, não precisa continuar
@@ -2334,7 +2394,7 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                     if (matchesChat(item.remoteJid) || matchesChat((item as any).remoteJidAlt)) {
                         const mapped = mapApiMessageToInternal(item);
                         if (mapped) {
-                            messages.push(mapped);
+                            addMessage(mapped);
                         }
                     }
                     return; // Processou como mensagem alternativa, não precisa continuar
@@ -2363,44 +2423,68 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         // SOLUÇÃO: Mensagens serão atualizadas via WebSocket quando os dados completos chegarem
         // ou via busca automática usando fetchMediaUrlByMessageId quando messageId estiver disponível
         // 
-        // Endpoint /message/fetchMessages não existe (retorna 404) em ambas as versões
-        // NOTA: Removido include: ['messages'] de todos os endpoints para evitar erro 500
-        // Versões afetadas: 2.3.4 e 2.3.6 (problema mais comum na 2.3.6)
-        const endpoints = [
-            // ✅ Preferencial: fetchMessages retorna a lista real de mensagens (evita perder bursts).
-            // Em algumas versões pode retornar 404; por isso é best-effort.
-            {
+        // Tenta múltiplos endpoints e formatos de query.
+        // Nota: algumas instalações/versões não expõem /message/fetchMessages (404). Para evitar spam, cacheamos isso por baseUrl.
+        // Nota: include: ['messages'] pode retornar 500 em algumas versões/datasets; também cacheamos e desabilitamos se necessário.
+        const endpoints: Array<{ url: string; body?: any; isFindChats: boolean; kind: 'fetchMessages' | 'findChatsInclude' | 'findChats' }> = [];
+
+        // 1) findChats com include de messages (quando suportado) — melhor chance de trazer histórico completo sem endpoints de mensagens.
+        if (!unsupportedEvolutionEndpointsByBaseUrl.includeMessagesInFindChats.has(baseUrlKey)) {
+            endpoints.push({
+                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
+                body: { where: { remoteJid: normalizedChatId }, include: ['messages'], limit: 1 },
+                isFindChats: true,
+                kind: 'findChatsInclude'
+            });
+            endpoints.push({
+                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
+                body: { where: { remoteJid: phoneNumber }, include: ['messages'], limit: 1 },
+                isFindChats: true,
+                kind: 'findChatsInclude'
+            });
+        }
+
+        // 2) fetchMessages (best-effort) — em alguns setups retorna 404 (endpoint inexistente)
+        if (!unsupportedEvolutionEndpointsByBaseUrl.fetchMessages.has(baseUrlKey)) {
+            endpoints.push({
                 url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
                 body: { where: { remoteJid: normalizedChatId }, limit: Math.max(50, limit) },
-                isFindChats: false
-            },
-            {
+                isFindChats: false,
+                kind: 'fetchMessages'
+            });
+            endpoints.push({
                 url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
                 body: { where: { remoteJid: phoneNumber }, limit: Math.max(50, limit) },
-                isFindChats: false
-            },
-            {
+                isFindChats: false,
+                kind: 'fetchMessages'
+            });
+            endpoints.push({
                 url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
                 body: { limit: Math.max(50, limit) },
-                isFindChats: false
-            },
-            // Fallbacks: findChats (pode trazer apenas "últimas N" em algumas versões/configs)
-            {
-                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
-                body: { where: { remoteJid: normalizedChatId }, limit: 1000 },
-                isFindChats: true
-            },
-            {
-                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
-                body: { where: { remoteJid: phoneNumber }, limit: 1000 },
-                isFindChats: true
-            },
-            {
-                url: `${config.baseUrl}/chat/findChats/${instanceName}`,
-                body: { where: {}, limit: 1000 },
-                isFindChats: true
-            }
-        ];
+                isFindChats: false,
+                kind: 'fetchMessages'
+            });
+        }
+
+        // 3) Fallbacks: findChats sem include (pode trazer apenas lastMessage em algumas versões/configs)
+        endpoints.push({
+            url: `${config.baseUrl}/chat/findChats/${instanceName}`,
+            body: { where: { remoteJid: normalizedChatId }, limit: 1000 },
+            isFindChats: true,
+            kind: 'findChats'
+        });
+        endpoints.push({
+            url: `${config.baseUrl}/chat/findChats/${instanceName}`,
+            body: { where: { remoteJid: phoneNumber }, limit: 1000 },
+            isFindChats: true,
+            kind: 'findChats'
+        });
+        endpoints.push({
+            url: `${config.baseUrl}/chat/findChats/${instanceName}`,
+            body: { where: {}, limit: 1000 },
+            isFindChats: true,
+            kind: 'findChats'
+        });
         
         for (let i = 0; i < endpoints.length; i++) {
             const endpoint = endpoints[i];
@@ -2473,12 +2557,12 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                                         const normalizedJid = normalizeJid(matchingChat.message.key.remoteJid);
                                         if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
                                             const mapped = mapApiMessageToInternal(matchingChat.message);
-                                            if (mapped) messages.push(mapped);
+                                            if (mapped) addMessage(mapped);
                                         }
                                     } else {
                                         // Tenta processar como mensagem direta (sem key)
                                         const mapped = mapApiMessageToInternal(matchingChat.message);
-                                        if (mapped) messages.push(mapped);
+                                        if (mapped) addMessage(mapped);
                                     }
                                 } else if (matchingChat.lastMessage && typeof matchingChat.lastMessage === 'object') {
                                     // lastMessage como objeto único
@@ -2486,18 +2570,18 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                                         const normalizedJid = normalizeJid(matchingChat.lastMessage.key.remoteJid);
                                         if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
                                             const mapped = mapApiMessageToInternal(matchingChat.lastMessage);
-                                            if (mapped) messages.push(mapped);
+                                            if (mapped) addMessage(mapped);
                                         }
                                     } else {
                                         const mapped = mapApiMessageToInternal(matchingChat.lastMessage);
-                                        if (mapped) messages.push(mapped);
+                                        if (mapped) addMessage(mapped);
                                     }
                                 } else if (matchingChat.key && matchingChat.key.remoteJid) {
                                     // O próprio chat pode ser uma mensagem
                                     const normalizedJid = normalizeJid(matchingChat.key.remoteJid);
                                     if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
                                         const mapped = mapApiMessageToInternal(matchingChat);
-                                        if (mapped) messages.push(mapped);
+                                        if (mapped) addMessage(mapped);
                                     }
                                 }
                             });
@@ -2520,15 +2604,22 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                         });
                     }
                     
-                    // Se encontrou mensagens, para de tentar outros endpoints
-                    if (messages.length > 0) {
-                        // Log removido para produção - muito verboso
-                        // console.log(`[fetchChatMessages] ✅ ${messages.length} mensagens encontradas`);
+                    // Se já atingiu o limite, pode parar de tentar (evita trabalho extra)
+                    if (messagesMap.size >= limit) {
                         break;
                     }
                 } else {
+                    // Cacheia endpoints inexistentes/instáveis para evitar spam e reduzir custo.
+                    if (res.status === 404 && endpoint.kind === 'fetchMessages') {
+                        unsupportedEvolutionEndpointsByBaseUrl.fetchMessages.add(baseUrlKey);
+                    }
+                    if ((res.status === 500 || res.status === 404) && endpoint.kind === 'findChatsInclude') {
+                        // Algumas versões/datasets retornam 500 quando include=['messages'] está presente
+                        unsupportedEvolutionEndpointsByBaseUrl.includeMessagesInFindChats.add(baseUrlKey);
+                    }
+
                     // Só loga erros 404 se não for fetchMessages (endpoint pode não existir em algumas versões)
-                    if (res.status !== 404 || !endpoint.url.includes('/message/fetchMessages/')) {
+                    if (res.status !== 404 || endpoint.kind !== 'fetchMessages') {
                         const errorText = await res.text().catch(() => '');
                         let errorJson: any = { message: errorText || 'No error text' };
                         try {
@@ -2548,7 +2639,7 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         
         // Ordena por timestamp, respeitando ordem cronológica real
         // SEMPRE usa o timestamp real para garantir ordem correta de envio/recebimento
-        const sortedMessages = messages.sort((a, b) => {
+        const sortedMessages = Array.from(messagesMap.values()).sort((a, b) => {
             const timeA = a.timestamp?.getTime() || 0;
             const timeB = b.timestamp?.getTime() || 0;
             const timeDiff = timeA - timeB;
