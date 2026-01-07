@@ -843,6 +843,15 @@ const App: React.FC = () => {
       return;
     }
 
+    // Ajuste fino: menor janela segura para “recebimento” (UI reagir rápido) sem explodir processamento.
+    // - WebSocket (messages.upsert): micro-batch curto com max-wait (evita ficar adiando em burst contínuo).
+    // - Polling (syncChats): mais rápido quando WS não está conectado; normal quando WS está conectado.
+    const WS_UPSERT_DEBOUNCE_MS = 25;
+    const WS_UPSERT_MAX_WAIT_MS = 100;
+    const CHAT_POLL_CONNECTED_MS = 2000;
+    const CHAT_POLL_NOT_CONNECTED_MS = 1000;
+    const currentPollMsRef = { current: CHAT_POLL_NOT_CONNECTED_MS } as { current: number };
+
     // Flag para evitar múltiplas execuções simultâneas
     let isSyncing = false;
 
@@ -2396,6 +2405,17 @@ const App: React.FC = () => {
       }
     };
 
+    const startPolling = (ms: number) => {
+      const next = Math.max(500, Math.floor(ms)); // nunca abaixo de 500ms (segurança)
+      if (intervalIdRef.current && currentPollMsRef.current === next) return;
+      if (intervalIdRef.current) {
+        clearInterval(intervalIdRef.current);
+        intervalIdRef.current = null;
+      }
+      currentPollMsRef.current = next;
+      intervalIdRef.current = setInterval(syncChats, next);
+    };
+
     // Limpa intervalo anterior se existir (evita múltiplos intervalos)
     if (intervalIdRef.current) {
       clearInterval(intervalIdRef.current);
@@ -2414,11 +2434,10 @@ const App: React.FC = () => {
       }, 100);
     });
     
-    // Polling a cada 2 segundos para detectar mensagens (reduzido de 100ms para evitar re-renderizações constantes)
-    // IMPORTANTE: Só cria novo intervalo se não existir um já rodando
-    if (!intervalIdRef.current) {
-      intervalIdRef.current = setInterval(syncChats, 2000);
-    }
+    // Polling para detectar mensagens:
+    // - quando WS não está conectado: mais rápido (menor possível seguro)
+    // - quando WS está conectado: normal (WS é tempo real)
+    startPolling(CHAT_POLL_NOT_CONNECTED_MS);
     
     // Inicializa Socket.IO de forma assíncrona
     const initWebSocket = async (isReconnect: boolean = false) => {
@@ -2522,6 +2541,7 @@ const App: React.FC = () => {
                 });
                 wsReconnectAttemptsRef.current = 0;
                 setWsStatus('connected');
+                startPolling(CHAT_POLL_CONNECTED_MS);
                 
                 // Loga todos os listeners registrados para debug
                 if (allListeners.length > 0) {
@@ -2541,6 +2561,7 @@ const App: React.FC = () => {
                     console.log(`[App] ℹ️ Socket.IO desconectado: ${reason}`);
                     setWsStatus('disconnected');
                 }
+                startPolling(CHAT_POLL_NOT_CONNECTED_MS);
             });
             
             // Event: connect_error
@@ -2549,6 +2570,7 @@ const App: React.FC = () => {
                 if (wsReconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
                     console.warn('[App] ⚠️ Socket.IO: Erro ao conectar. Sistema funcionando via polling (sincronização periódica).');
                     setWsStatus('failed');
+                    startPolling(CHAT_POLL_NOT_CONNECTED_MS);
                     } else {
                     setWsStatus('connecting');
                     console.warn(`[App] ⚠️ Socket.IO: Erro de conexão (tentativa ${wsReconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS}):`, error.message);
@@ -2587,10 +2609,11 @@ const App: React.FC = () => {
                 });
             }
             
-            // Debounce para processar múltiplas mensagens rápidas em batch
-            // Agrupa mensagens por remoteJid e processa em batch após 100ms
+            // Micro-batch para processar múltiplas mensagens rápidas em batch (menor possível seguro)
+            // Agrupa mensagens por remoteJid e processa com debounce curto (25ms) e max-wait (100ms).
             const messageQueue = new Map<string, any[]>();
             const messageProcessTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+            const messageFirstSeenAt = new Map<string, number>();
             
             const processMessageBatch = (remoteJid: string, messages: any[]) => {
                 // Processa todas as mensagens do batch
@@ -2754,9 +2777,20 @@ const App: React.FC = () => {
                         }
                         messageQueue.get(remoteJid)?.push(messageData);
 
+                        const now = Date.now();
+                        if (!messageFirstSeenAt.has(remoteJid)) {
+                          messageFirstSeenAt.set(remoteJid, now);
+                        }
+
                         if (messageProcessTimeouts.has(remoteJid)) {
                             clearTimeout(messageProcessTimeouts.get(remoteJid)!);
                         }
+
+                        const firstAt = messageFirstSeenAt.get(remoteJid) || now;
+                        const elapsed = now - firstAt;
+                        const maxWaitRemaining = WS_UPSERT_MAX_WAIT_MS - elapsed;
+                        const delay = Math.max(0, Math.min(WS_UPSERT_DEBOUNCE_MS, maxWaitRemaining));
+
                         messageProcessTimeouts.set(
                             remoteJid,
                             setTimeout(() => {
@@ -2765,7 +2799,8 @@ const App: React.FC = () => {
                                 processMessageBatch(remoteJid, messagesToProcess);
                                 messageQueue.delete(remoteJid);
                                 messageProcessTimeouts.delete(remoteJid);
-                            }, 100)
+                                messageFirstSeenAt.delete(remoteJid);
+                            }, delay)
                         );
                     });
                 } catch (err) {
