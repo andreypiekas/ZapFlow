@@ -67,6 +67,44 @@ const loadConfig = (): ApiConfig => {
   };
 };
 
+// Quando o frontend roda em HTTPS por IP (via Nginx), a Evolution API continua em HTTP na porta 8080.
+// Se o usuário configurar baseUrl como https://<IP>:8080 (ou http://<IP>:8080), o browser quebra com
+// ERR_SSL_PROTOCOL_ERROR ou Mixed Content. Aqui fazemos um auto-upgrade seguro:
+// - Se a página está em https e a baseUrl aponta para o MESMO hostname, usamos window.location.origin
+//   (Nginx proxy) ao invés de acessar :8080 diretamente.
+const normalizeEvolutionBaseUrlForHttps = (baseUrl: string): string => {
+  const raw = (baseUrl || '').trim().replace(/\/+$/, '');
+  if (!raw) return '';
+
+  try {
+    if (typeof window === 'undefined' || !window.location) return raw;
+    const { protocol, hostname, origin } = window.location;
+
+    if (protocol !== 'https:') return raw;
+
+    try {
+      const parsed = new URL(raw);
+      if (parsed.hostname === hostname) {
+        return origin;
+      }
+    } catch {
+      // Se veio sem protocolo, tenta parsear como http:// e validar hostname
+      try {
+        const parsed = new URL(`http://${raw}`);
+        if (parsed.hostname === hostname) {
+          return origin;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    return raw;
+  } catch {
+    return raw;
+  }
+};
+
 // TODO: Remover localStorage - backend é obrigatório
 const loadUserSession = (): User | null => {
   try {
@@ -578,7 +616,7 @@ const App: React.FC = () => {
         if (apiConfigData !== null) {
           // Sempre atualiza, mesmo se alguns campos estiverem vazios
           const loadedConfig = {
-            baseUrl: apiConfigData.baseUrl || '',
+            baseUrl: normalizeEvolutionBaseUrlForHttps(apiConfigData.baseUrl || ''),
             apiKey: apiConfigData.apiKey || '',
             authenticationApiKey: apiConfigData.authenticationApiKey || '',
             instanceName: apiConfigData.instanceName || 'zapflow',
@@ -3904,7 +3942,10 @@ const App: React.FC = () => {
     try {
       const backendConfig = await loadConfigFromBackend();
       if (backendConfig) {
-        setApiConfig(backendConfig);
+        setApiConfig({
+          ...backendConfig,
+          baseUrl: normalizeEvolutionBaseUrlForHttps(backendConfig.baseUrl || '')
+        });
         console.log('[App] ✅ Configurações carregadas do banco de dados');
       } else {
         console.log('[App] ℹ️ Nenhuma configuração encontrada no banco de dados, usando padrão');
@@ -4313,13 +4354,17 @@ const App: React.FC = () => {
   };
 
   const handleSaveConfig = async (newConfig: ApiConfig) => {
+    const normalizedConfig: ApiConfig = {
+      ...newConfig,
+      baseUrl: normalizeEvolutionBaseUrlForHttps(newConfig.baseUrl || '')
+    };
     // Atualiza o estado
-    setApiConfig(newConfig);
+    setApiConfig(normalizedConfig);
     
     // Se usuário está logado, salva no backend
     if (currentUser) {
       try {
-        const saved = await saveConfigToBackend(newConfig);
+        const saved = await saveConfigToBackend(normalizedConfig);
         if (saved) {
           addNotification('Configurações salvas', 'As configurações foram salvas com sucesso no banco de dados.', 'success');
         } else {
@@ -4333,7 +4378,7 @@ const App: React.FC = () => {
     } else {
       // Fallback para localStorage se não estiver logado (temporário)
       try {
-        const saved = await storageService.save('config', newConfig);
+        const saved = await storageService.save('config', normalizedConfig);
         if (saved) {
           addNotification('Configurações salvas', 'As configurações foram salvas localmente.', 'success');
         } else {
