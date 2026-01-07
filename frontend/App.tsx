@@ -1839,6 +1839,8 @@ const App: React.FC = () => {
                         let finalStatus: 'open' | 'pending' | 'closed';
                         let finalAssignedTo: string | undefined;
                         let finalDepartmentId: string | null;
+                        let finalAwaitingDepartmentSelection: boolean | undefined;
+                        let finalDepartmentSelectionSent: boolean;
                         
                         // PRIORIDADE ABSOLUTA: Status do banco SEMPRE tem prioridade
                         // Se o chat está no banco, usa APENAS os dados do banco (status, assignedTo, departmentId)
@@ -1866,6 +1868,14 @@ const App: React.FC = () => {
                             });
                         }
                         
+                        // Flags de seleção de departamento (podem existir mesmo quando o chat já está no banco)
+                        finalAwaitingDepartmentSelection = dbChat?.awaitingDepartmentSelection !== undefined
+                          ? dbChat.awaitingDepartmentSelection
+                          : existingChat.awaitingDepartmentSelection;
+                        finalDepartmentSelectionSent = dbChat?.departmentSelectionSent !== undefined
+                          ? dbChat.departmentSelectionSent
+                          : (existingChat.departmentSelectionSent || false);
+                        
                         // Detecta se há novas mensagens reais (não apenas reordenação)
                         const hasNewMessagesAfterMerge = mergedMessages.length > existingChat.messages.length;
                         const lastMergedMsg = mergedMessages.length > 0 ? mergedMessages[mergedMessages.length - 1] : null;
@@ -1875,9 +1885,11 @@ const App: React.FC = () => {
                         // Se sim, reabre para 'pending' (isso já foi tratado acima na verificação de dbChat)
                         const wasReopened = dbChat?.status === 'closed' && hasNewMessagesAfterMerge && lastMergedMsg?.sender === 'user';
                         
-                        // Processa seleção de setores apenas se não estiver no banco (novos chats)
-                        // Chats no banco já têm departmentId fixo
-                        if (!dbChat && hasNewMessagesAfterMerge) {
+                        // Processa seleção de setor quando o chat está aguardando seleção e ainda não tem departmentId.
+                        // Importante: isso deve funcionar MESMO se o chat já existe no banco (ex.: atendente enviou mensagem antes do cliente escolher o setor).
+                        // Caso o Socket.IO perca o evento, o polling (syncChats) deve cobrir.
+                        let shouldPersistSelectionUpdate = false;
+                        if (hasNewMessagesAfterMerge) {
                             const newUserMessages = mergedMessages.filter(msg => {
                                 const isNew = !existingChat.messages.some(existingMsg => 
                                     existingMsg.id === msg.id || 
@@ -1888,13 +1900,18 @@ const App: React.FC = () => {
                                 return isNew && msg.sender === 'user';
                             });
                             
-                            if (newUserMessages.length > 0 && finalDepartmentId === null && departments.length > 0 && (existingChat.awaitingDepartmentSelection || existingChat.departmentSelectionSent)) {
+                            const isAwaitingDeptSelection = !!finalAwaitingDepartmentSelection || !!finalDepartmentSelectionSent;
+                            
+                            if (newUserMessages.length > 0 && finalDepartmentId === null && departments.length > 0 && isAwaitingDeptSelection) {
                                 const lastNewUserMessage = newUserMessages[newUserMessages.length - 1];
                                 const messageContent = lastNewUserMessage.content.trim();
                                 const selectedDeptId = processDepartmentSelection(messageContent, departments);
                                 
                                 if (selectedDeptId) {
                                     finalDepartmentId = selectedDeptId;
+                                    finalAwaitingDepartmentSelection = false;
+                                    finalDepartmentSelectionSent = true;
+                                    shouldPersistSelectionUpdate = true;
                                     
                                     // Encontra usuário disponível do departamento
                                     const assignedUser = findAvailableUserForDepartment(selectedDeptId, users, currentChats);
@@ -1975,7 +1992,7 @@ const App: React.FC = () => {
                                             );
                                         }
                                     }
-                                } else if (!existingChat.departmentSelectionSent) {
+                                } else if (!finalDepartmentSelectionSent) {
                                     // Primeira mensagem sem departamento: envia seleção
                                     sendDepartmentSelectionMessage(apiConfig, existingChat.contactNumber, departments)
                                         .then(sent => {
@@ -1988,6 +2005,42 @@ const App: React.FC = () => {
                                             }
                                         }).catch(err => console.error('[App] Erro ao enviar seleção de setores:', err));
                                 }
+                            } else if (newUserMessages.length > 0 && finalDepartmentId === null && departments.length > 0 && !finalDepartmentSelectionSent) {
+                                // Ainda não enviou a mensagem de seleção (mesmo que o chat já esteja no banco): envia agora e marca flags.
+                                sendDepartmentSelectionMessage(apiConfig, existingChat.contactNumber, departments)
+                                  .then(sent => {
+                                    if (sent) {
+                                      handleUpdateChat({
+                                        ...existingChat,
+                                        departmentSelectionSent: true,
+                                        awaitingDepartmentSelection: true
+                                      });
+                                    }
+                                  }).catch(err => console.error('[App] Erro ao enviar seleção de setores:', err));
+                            }
+                            
+                            // Se processou a seleção via polling, persiste no banco (best-effort)
+                            if (shouldPersistSelectionUpdate) {
+                              setTimeout(() => {
+                                try {
+                                  handleUpdateChat({
+                                    ...existingChat,
+                                    ...realChat,
+                                    id: shouldUpdateId ? realChat.id : existingChat.id,
+                                    contactName: existingChat.contactName,
+                                    contactAvatar: existingChat.contactAvatar,
+                                    contactNumber: existingChat.contactNumber || realChat.contactNumber,
+                                    messages: mergedMessages,
+                                    departmentId: finalDepartmentId,
+                                    assignedTo: finalAssignedTo,
+                                    status: finalStatus,
+                                    awaitingDepartmentSelection: false,
+                                    departmentSelectionSent: true
+                                  });
+                                } catch (err) {
+                                  logger.debug('[App] Erro ao persistir seleção de setor via syncChats:', err);
+                                }
+                              }, 0);
                             }
                         }
                         
@@ -2087,8 +2140,8 @@ const App: React.FC = () => {
                             // unreadCount: soma das novas mensagens do usuário desde o último snapshot local
                             unreadCount: computedUnreadCount,
                             awaitingRating: dbChat?.awaitingRating !== undefined ? dbChat.awaitingRating : existingChat.awaitingRating,
-                            awaitingDepartmentSelection: dbChat?.awaitingDepartmentSelection !== undefined ? dbChat.awaitingDepartmentSelection : existingChat.awaitingDepartmentSelection,
-                            departmentSelectionSent: dbChat?.departmentSelectionSent !== undefined ? dbChat.departmentSelectionSent : (existingChat.departmentSelectionSent || false),
+                            awaitingDepartmentSelection: finalAwaitingDepartmentSelection,
+                            departmentSelectionSent: finalDepartmentSelectionSent,
                             activeWorkflow: dbChat?.activeWorkflow || existingChat.activeWorkflow,
                             endedAt: dbChat?.endedAt || existingChat.endedAt,
                             lastMessage: mergedMessages.length > 0 ? 
