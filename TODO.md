@@ -335,3 +335,26 @@ Manter os arquivos de instucao e manuais, documentos
 - Permissão **granted**: receber mensagem com a aba em segundo plano → notificação aparece.
 - Aba em foco: receber mensagem → **não** deve aparecer notificação do navegador (apenas toast/som interno).
 - Permissão **default/denied**: receber mensagem → não aparece notificação e não deve abrir prompt automático.
+
+---
+
+### 18. Mensagens faltando na UI (Evolution 2.3.4) — bursts/recebimento parcial
+**Status:** 🔴 Bloqueador (não resolvido)  
+**Prioridade:** Alta  
+**Objetivo:** Garantir que a UI mostre **100%** das mensagens existentes na Evolution, mesmo quando chegam muitas mensagens seguidas.
+
+**Cenário real (sintoma):**
+- Evolution mostra todas as mensagens (ex.: “1..7”)
+- UI às vezes mostra apenas parte (ex.: só “2” e “7”)
+
+**Impacto:**
+- Atendimento fica inconsistente (perda de contexto / risco operacional)
+
+**Pistas / hipóteses:**
+- Payload do `messages.upsert` pode vir em formatos diferentes (batch) e alguns itens não são processados.
+- Diferença de `remoteJid` vs `remoteJidAlt` (casos `@lid`) em eventos rápidos.
+- Sincronização por REST (`fetchChatMessages`) ainda pode não trazer histórico completo dependendo do endpoint/limite/versão.
+
+**Critério de aceite:**
+- Enviar/receber 20 mensagens seguidas (rápidas) → UI mostra **todas** (sem “pular” números).
+- Recarregar página → UI continua mostrando **todas** (consistência com Evolution).

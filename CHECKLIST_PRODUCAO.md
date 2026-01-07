@@ -2,7 +2,7 @@
 
 **Versão:** 1.3.0  
 **Data:** 2025-01-XX  
-**Status:** Em desenvolvimento → Pronto para produção
+**Status:** Em desenvolvimento (⚠️ não pronto para produção)
 
 ---
 
@@ -97,7 +97,7 @@
 - [ ] **Backup automático** do banco de dados
 - [ ] **Rotação de logs** para evitar disco cheio
 - [ ] **Senha padrão do admin** alterada em produção
-- [ ] **Firewall configurado** (UFW/iptables)
+- [x] **Firewall configurado** (UFW) — `install/autoinstall.txt` habilita UFW e libera portas essenciais
 - [ ] **Fail2ban** configurado para SSH e API
 
 #### Estabilidade & Performance
@@ -107,10 +107,10 @@
 - [ ] **Monitoramento de saúde** (Uptime monitoring)
 - [ ] **Alertas** para falhas críticas (email, Slack, etc.)
 - [ ] **Connection pooling** otimizado para PostgreSQL
-- [ ] **Índices no banco** para queries frequentes
+- [x] **Índices no banco** para queries frequentes (criados nas migrações: `backend/scripts/migrate.js` + scripts de feriados/cache)
 - [ ] **Cache** para dados frequentemente acessados (Redis)
 - [ ] **Compressão** de respostas HTTP (gzip)
-- [ ] **Timeout** configurado para requisições longas
+- [x] **Timeout** configurado para requisições longas (Nginx no deploy/autoconfig define `proxy_read_timeout`/`proxy_send_timeout`, ex.: Socket.IO 3600s)
 - [ ] **Graceful shutdown** do servidor
 
 #### Testes
@@ -126,17 +126,18 @@
 #### Funcionalidades Pendentes
 
 - [ ] **Exibir nome e setor** nas mensagens enviadas
-- [ ] **Mensagem automática** de seleção de setores para novos contatos
+- [x] **Mensagem automática** de seleção de setores para novos contatos (frontend envia seleção quando chat está sem departamento)
 - [x] **Corrigir chatbot** (marcação de mensagens enviadas implementada) ✅ CORRIGIDO
 - [ ] **Ajustar relatórios** (contagem de avaliações não funciona)
 - [ ] **Enviar contato** da lista de contatos pelo chat
-- [ ] **Reformular aba Conexão** (integração completa com Evolution API)
+- [x] **Reformular aba Conexão** (integração completa com Evolution API: instâncias, QRCode, status, create/delete)
 
 #### Correções de Bugs Conhecidos
 
 - [x] **WebSocket desconectando** (code 1006) - ✅ CORRIGIDO: Migrado para Socket.IO Client com fallback automático
 - [ ] **Chats sem mensagens** - API não retorna mensagens mesmo com `include: ['messages']`
-- [ ] **Erro 413 Payload Too Large** - já aumentado para 50MB, mas pode precisar de otimização
+- [ ] **Mensagens faltando na UI (Evolution 2.3.4)** - Em bursts (muitas mensagens seguidas) a UI pode mostrar apenas parte, apesar de a Evolution conter todas.
+- [x] **Erro 413 Payload Too Large** - limites ajustados (backend 50MB + Nginx `client_max_body_size 60m` no deploy/autoconfig); ainda pode precisar de otimização
 - [ ] **Processamento de mensagens** - melhorar fallback quando API não retorna formato esperado
 - [ ] **Envio de contatos** - Contato está sendo enviado mas WhatsApp mostra "convidar para WhatsApp" ao invés de reconhecer como contato existente. Testar diferentes formatos de número no vCard (com/sem +, com/sem código do país) e verificar se Evolution API requer formato específico para reconhecimento
 
@@ -193,38 +194,39 @@
 
 ### Fase 1: Segurança e Estabilidade (1-2 semanas)
 
-1. ✅ Configurar HTTPS com Let's Encrypt
-2. ✅ Implementar rate limiting
-3. ✅ Adicionar headers de segurança
-4. ✅ Configurar firewall e Fail2ban
-5. ✅ Implementar logging estruturado
-6. ✅ Configurar backup automático
-7. ✅ Alterar senha padrão do admin
-8. ✅ Adicionar validação de input robusta
-9. ✅ Implementar tratamento de erros completo
-10. ✅ Configurar monitoramento básico
+- [ ] Configurar HTTPS com Let's Encrypt (certificado SSL válido)
+- [x] Implementar rate limiting
+- [x] Adicionar headers de segurança
+- [x] Configurar firewall (UFW)
+- [ ] Configurar Fail2ban
+- [ ] Implementar logging estruturado
+- [ ] Configurar backup automático
+- [ ] Alterar senha padrão do admin
+- [ ] Adicionar validação de input robusta (schema + sanitização)
+- [ ] Implementar tratamento de erros completo
+- [ ] Configurar monitoramento básico
 
 ### Fase 2: Correções Críticas (1 semana)
 
-1. ✅ Corrigir WebSocket (limite de tentativas, backoff)
-2. ✅ Corrigir busca de mensagens da API
-3. ✅ Melhorar processamento de mensagens
-4. ✅ Adicionar testes básicos
+- [x] Corrigir WebSocket (limite de tentativas, backoff)
+- [ ] Corrigir busca de mensagens da API (histórico completo / bursts)
+- [ ] Melhorar processamento de mensagens (fallbacks e consistência)
+- [ ] Adicionar testes básicos
 
 ### Fase 3: Funcionalidades Pendentes (2-3 semanas)
 
-1. ✅ Exibir nome e setor nas mensagens
-2. ✅ Mensagem automática de seleção de setores
-3. ✅ Corrigir chatbot (marcação de mensagens enviadas)
-4. ✅ Ajustar relatórios
-5. ✅ Reformular aba Conexão
+- [ ] Exibir nome e setor nas mensagens
+- [x] Mensagem automática de seleção de setores
+- [x] Corrigir chatbot (marcação de mensagens enviadas)
+- [ ] Ajustar relatórios
+- [x] Reformular aba Conexão
 
 ### Fase 4: Melhorias e Otimizações (contínuo)
 
-1. ✅ CI/CD pipeline
-2. ✅ Testes automatizados
-3. ✅ Monitoramento avançado
-4. ✅ Otimizações de performance
+- [ ] CI/CD pipeline
+- [ ] Testes automatizados
+- [ ] Monitoramento avançado
+- [ ] Otimizações de performance
 
 ---
 
@@ -294,8 +296,9 @@ Antes de colocar em produção, verificar:
 1. ~~**WebSocket instável**: Pode causar perda de mensagens em tempo real~~ ✅ CORRIGIDO: Socket.IO com fallback para polling
 2. **Chats sem mensagens**: Usuários podem ver conversas vazias
 3. ~~**Chatbot não funcional**: Automação não está operacional~~ ✅ CORRIGIDO - Agora marca mensagens como enviadas
-4. **Relatórios incompletos**: Avaliações não são contabilizadas
+4. **Mensagens faltando na UI (Evolution 2.3.4)**: bursts podem não refletir 100% na interface, apesar de existir no Evolution
 5. **Sem testes automatizados**: Mudanças podem quebrar funcionalidades existentes
+6. **Relatórios incompletos**: Avaliações não são contabilizadas
 
 ### Dependências Externas
 
