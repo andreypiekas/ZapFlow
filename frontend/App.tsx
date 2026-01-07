@@ -2634,7 +2634,16 @@ const App: React.FC = () => {
                         return;
                     }
                     
-                    const remoteJid = normalizeJid(messageData.key.remoteJid || messageData.key.remoteJidAlt || '');
+                    // IMPORTANTE: alguns ambientes recebem mensagens com `remoteJid` em formato `@lid` (identificador interno),
+                    // mas também trazem `remoteJidAlt` com o JID real do contato. Para não "perder" mensagens em bursts,
+                    // sempre preferimos o ALT quando o remoteJid é `@lid`.
+                    const rawRemoteJid = messageData.key.remoteJid || '';
+                    const rawRemoteJidAlt = messageData.key.remoteJidAlt || '';
+                    const effectiveRemoteJid =
+                      (rawRemoteJid && rawRemoteJid.includes('@lid') && rawRemoteJidAlt) ? rawRemoteJidAlt :
+                      (rawRemoteJid || rawRemoteJidAlt || '');
+
+                    const remoteJid = normalizeJid(effectiveRemoteJid);
                     if (!remoteJid) {
                         logger.debug('[App] 🔍 [DEBUG] Socket.IO messages.upsert: remoteJid ausente', { key: messageData.key });
                         return;
@@ -3676,7 +3685,13 @@ const App: React.FC = () => {
                 try {
                     // Processa atualizações de status (entregue, lida, etc.)
                     if (data && data.key && data.update) {
-                        const remoteJid = normalizeJid(data.key.remoteJid);
+                        const rawRemoteJid = data.key.remoteJid || '';
+                        const rawRemoteJidAlt = (data.key as any).remoteJidAlt || '';
+                        const effectiveRemoteJid =
+                          (rawRemoteJid && rawRemoteJid.includes('@lid') && rawRemoteJidAlt) ? rawRemoteJidAlt :
+                          (rawRemoteJid || rawRemoteJidAlt || '');
+
+                        const remoteJid = normalizeJid(effectiveRemoteJid);
                         const updateStatus = data.update.status;
                         
                         if (remoteJid && updateStatus) {
