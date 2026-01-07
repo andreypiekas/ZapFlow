@@ -522,6 +522,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     }
   }, [selectedChatId, selectedChat]); // Inclui selectedChat para detectar quando o objeto é atualizado
 
+  // Comportamento tipo WhatsApp Web:
+  // Se o chat está aberto/visível na view de Atendimento, consideramos as mensagens como "lidas"
+  // (evita contador subir no chat que o usuário está olhando).
+  useEffect(() => {
+    if (!selectedChatId || !selectedChat) return;
+    if (!isViewActive) return;
+    if ((selectedChat.unreadCount || 0) <= 0) return;
+
+    onUpdateChat({
+      ...selectedChat,
+      unreadCount: 0
+    });
+  }, [selectedChatId, isViewActive, selectedChat?.messages?.length, selectedChat?.unreadCount]);
+
   const normalizePhoneForMatch = (phone: string | undefined | null) => {
     return String(phone || '').replace(/\D/g, '');
   };

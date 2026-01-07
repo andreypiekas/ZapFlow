@@ -1592,16 +1592,40 @@ const App: React.FC = () => {
                                                         return 0;
                                                     });
                                                 
-                                                // Detecta se há novas mensagens recebidas
-                                                const newReceivedMessages = apiMessages.filter(apiMsg => 
-                                                    apiMsg.sender === 'user' && 
-                                                    !c.messages.some(existingMsg => 
-                                                        existingMsg.id === apiMsg.id || 
-                                                        (existingMsg.timestamp && apiMsg.timestamp && 
-                                                         Math.abs(existingMsg.timestamp.getTime() - apiMsg.timestamp.getTime()) < 5000 &&
-                                                         existingMsg.content === apiMsg.content)
-                                                    )
-                                                );
+                                                // Detecta se há novas mensagens recebidas (robusto: whatsappMessageId > id > timestamp+conteúdo)
+                                                const existingMessageKeys = new Set<string>();
+                                                (c.messages || []).forEach(existingMsg => {
+                                                    if (!existingMsg) return;
+                                                    const wa = (existingMsg as any).whatsappMessageId;
+                                                    const id = (existingMsg as any).id;
+                                                    if (wa) existingMessageKeys.add(`wa_${wa}`);
+                                                    if (id) existingMessageKeys.add(`id_${id}`);
+                                                });
+
+                                                const newReceivedMessages = apiMessages.filter(apiMsg => {
+                                                    if (!apiMsg || apiMsg.sender !== 'user') return false;
+
+                                                    const wa = (apiMsg as any).whatsappMessageId;
+                                                    const id = (apiMsg as any).id;
+
+                                                    if (wa && existingMessageKeys.has(`wa_${wa}`)) return false;
+                                                    if (id && existingMessageKeys.has(`id_${id}`)) return false;
+
+                                                    // Fallback: evita duplicatas por timestamp+conteúdo em janela curta
+                                                    const apiTs = apiMsg.timestamp ? new Date(apiMsg.timestamp as any).getTime() : 0;
+                                                    const apiContent = typeof apiMsg.content === 'string' ? apiMsg.content.trim() : '';
+                                                    if (apiTs && apiContent) {
+                                                        const isDupByTimeAndContent = (c.messages || []).some(existingMsg => {
+                                                            if (!existingMsg) return false;
+                                                            const exTs = existingMsg.timestamp ? new Date(existingMsg.timestamp as any).getTime() : 0;
+                                                            const exContent = typeof existingMsg.content === 'string' ? existingMsg.content.trim() : '';
+                                                            return exContent === apiContent && exTs && Math.abs(exTs - apiTs) < 5000;
+                                                        });
+                                                        if (isDupByTimeAndContent) return false;
+                                                    }
+
+                                                    return true;
+                                                });
                                                 
                                                 if (newReceivedMessages.length > 0 && currentUser) {
                                                     const lastNewMsg = newReceivedMessages[newReceivedMessages.length - 1];
@@ -1946,6 +1970,30 @@ const App: React.FC = () => {
                           }
                         }
                         
+                        // Calcula unreadCount com base em novas mensagens do usuário
+                        // (sync roda a cada ~2s e a API pode não fornecer unreadCount confiável)
+                        const prevUnreadCount = typeof (existingChat as any).unreadCount === 'number' ? (existingChat as any).unreadCount : 0;
+                        const getUnreadKey = (m: any): string => {
+                          const wa = (m as any)?.whatsappMessageId;
+                          const id = (m as any)?.id;
+                          if (wa) return `wa_${wa}`;
+                          if (id) return `id_${id}`;
+                          const ts = (m as any)?.timestamp ? new Date((m as any).timestamp as any).getTime() : 0;
+                          const sender = (m as any)?.sender || '';
+                          const content = typeof (m as any)?.content === 'string' ? (m as any).content.trim() : '';
+                          return `sig_${sender}_${ts}_${content}`;
+                        };
+                        const existingUnreadKeys = new Set<string>();
+                        (existingChat.messages || []).forEach(m => {
+                          if (!m) return;
+                          existingUnreadKeys.add(getUnreadKey(m));
+                        });
+                        const newUserMessagesCount = (mergedMessages || []).filter(m => {
+                          if (!m || (m as any).sender !== 'user') return false;
+                          return !existingUnreadKeys.has(getUnreadKey(m));
+                        }).length;
+                        const computedUnreadCount = prevUnreadCount + newUserMessagesCount;
+
                         const mergedChat = {
                             ...realChat,
                             messages: mergedMessages, // Usa mensagens mescladas
@@ -1960,9 +2008,8 @@ const App: React.FC = () => {
                             tags: dbChat?.tags || existingChat.tags,
                             status: finalStatus, // Status final com prioridade ABSOLUTA do banco
                             rating: dbChat?.rating || existingChat.rating,
-                            // IMPORTANTE: unreadCount é controle de UI e deve ser preservado do estado local.
-                            // A API frequentemente retorna 0 e o sync (2s) acabava "apagando" o contador.
-                            unreadCount: typeof (existingChat as any).unreadCount === 'number' ? (existingChat as any).unreadCount : 0,
+                            // unreadCount: soma das novas mensagens do usuário desde o último snapshot local
+                            unreadCount: computedUnreadCount,
                             awaitingRating: dbChat?.awaitingRating !== undefined ? dbChat.awaitingRating : existingChat.awaitingRating,
                             awaitingDepartmentSelection: dbChat?.awaitingDepartmentSelection !== undefined ? dbChat.awaitingDepartmentSelection : existingChat.awaitingDepartmentSelection,
                             departmentSelectionSent: dbChat?.departmentSelectionSent !== undefined ? dbChat.departmentSelectionSent : (existingChat.departmentSelectionSent || false),
