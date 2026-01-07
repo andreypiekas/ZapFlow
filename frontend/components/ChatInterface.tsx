@@ -2276,16 +2276,46 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       return trimmed;
     }
 
-    // Se já é uma URL absoluta (http:// ou https://), retorna como está
+    // Se já é uma URL absoluta (http:// ou https://), normaliza para evitar Mixed Content quando a UI roda em HTTPS.
     if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      // Se é uma URL da Evolution API e temos API key, adiciona como query parameter
-      // Evolution API pode requerer autenticação para acessar mídia
-      if (apiConfig.baseUrl && trimmed.includes(apiConfig.baseUrl.replace(/^https?:\/\//, '').split(':')[0]) && apiConfig.apiKey) {
-        const urlObj = new URL(trimmed);
-        urlObj.searchParams.set('apikey', apiConfig.apiKey);
+      try {
+        const pageIsHttps = typeof window !== 'undefined' && window.location?.protocol === 'https:';
+        let urlObj = new URL(trimmed);
+
+        // Se a URL aponta para o mesmo host da Evolution (apiConfig.baseUrl), reescreve para usar o origin do baseUrl.
+        // Isso resolve casos onde a Evolution retorna http://<host>:8080/... mas o usuário acessa via https://<host>/ (Nginx proxy).
+        try {
+          if (apiConfig.baseUrl) {
+            const base = new URL(apiConfig.baseUrl.replace(/\/$/, ''));
+            if (urlObj.hostname === base.hostname) {
+              urlObj = new URL(`${base.protocol}//${base.host}${urlObj.pathname}${urlObj.search}${urlObj.hash}`);
+            }
+          }
+        } catch {
+          // ignore
+        }
+
+        // Fallback: se a página é HTTPS e a URL é HTTP, tenta upgrade para HTTPS (evita Mixed Content).
+        if (pageIsHttps && urlObj.protocol === 'http:') {
+          urlObj.protocol = 'https:';
+        }
+
+        // Se é URL da Evolution (mesmo host do baseUrl), adiciona apikey quando disponível
+        try {
+          if (apiConfig.baseUrl && apiConfig.apiKey) {
+            const base = new URL(apiConfig.baseUrl.replace(/\/$/, ''));
+            if (urlObj.hostname === base.hostname) {
+              urlObj.searchParams.set('apikey', apiConfig.apiKey);
+            }
+          }
+        } catch {
+          // ignore
+        }
+
         return urlObj.toString();
+      } catch {
+        return trimmed;
       }
-      return trimmed;
     }
 
     // Se é uma URL relativa e temos baseUrl configurado, transforma em absoluta
@@ -2546,33 +2576,37 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
           // Log temporário para debug - quando não encontra URL mas há rawMessage
           const imageMsgObj = rawMsg?.message?.imageMessage || rawMsg?.imageMessage;
           
-          // Log completo para debug - força exibição de todos os detalhes
-          console.warn('[ChatInterface] ⚠️ Imagem sem URL no rawMessage:', {
-            msgId: msg.id,
-            msgType: msg.type,
-            hasRawMessage: !!rawMsg,
-            rawMsgKeys: rawMsg ? Object.keys(rawMsg).slice(0, 15) : [],
-            hasMessage: !!rawMsg?.message,
-            messageKeys: rawMsg?.message ? Object.keys(rawMsg.message).slice(0, 15) : [],
-            hasImageMessage: !!imageMsgObj,
-            imageMessageType: imageMsgObj ? typeof imageMsgObj : 'n/a',
-            imageMessageIsEmpty: imageMsgObj ? Object.keys(imageMsgObj).length === 0 : true,
-            imageMessageKeys: imageMsgObj && typeof imageMsgObj === 'object' ? Object.keys(imageMsgObj) : [],
-            imageMessageContent: imageMsgObj ? JSON.stringify(imageMsgObj).substring(0, 500) : 'n/a',
-            // Verifica valores específicos
-            hasUrl: !!(imageMsgObj?.url),
-            hasMediaUrl: !!(imageMsgObj?.mediaUrl),
-            hasDirectPath: !!(imageMsgObj?.directPath),
-            urlValue: imageMsgObj?.url ? imageMsgObj.url.substring(0, 100) : 'não encontrado',
-            mediaUrlValue: imageMsgObj?.mediaUrl ? imageMsgObj.mediaUrl.substring(0, 100) : 'não encontrado',
-            directPathValue: imageMsgObj?.directPath ? imageMsgObj.directPath.substring(0, 100) : 'não encontrado'
-          });
+          // Log pesado apenas quando debug estiver habilitado (evita spam no console)
+          if (apiConfig.debugLogsEnabled) {
+            console.warn('[ChatInterface] ⚠️ Imagem sem URL no rawMessage:', {
+              msgId: msg.id,
+              msgType: msg.type,
+              hasRawMessage: !!rawMsg,
+              rawMsgKeys: rawMsg ? Object.keys(rawMsg).slice(0, 15) : [],
+              hasMessage: !!rawMsg?.message,
+              messageKeys: rawMsg?.message ? Object.keys(rawMsg.message).slice(0, 15) : [],
+              hasImageMessage: !!imageMsgObj,
+              imageMessageType: imageMsgObj ? typeof imageMsgObj : 'n/a',
+              imageMessageIsEmpty: imageMsgObj ? Object.keys(imageMsgObj).length === 0 : true,
+              imageMessageKeys: imageMsgObj && typeof imageMsgObj === 'object' ? Object.keys(imageMsgObj) : [],
+              imageMessageContent: imageMsgObj ? JSON.stringify(imageMsgObj).substring(0, 500) : 'n/a',
+              // Verifica valores específicos
+              hasUrl: !!(imageMsgObj?.url),
+              hasMediaUrl: !!(imageMsgObj?.mediaUrl),
+              hasDirectPath: !!(imageMsgObj?.directPath),
+              urlValue: imageMsgObj?.url ? imageMsgObj.url.substring(0, 100) : 'não encontrado',
+              mediaUrlValue: imageMsgObj?.mediaUrl ? imageMsgObj.mediaUrl.substring(0, 100) : 'não encontrado',
+              directPathValue: imageMsgObj?.directPath ? imageMsgObj.directPath.substring(0, 100) : 'não encontrado'
+            });
+          }
           
           // Log adicional com estrutura completa para debug (força visualização no console)
-          if (imageMsgObj) {
+          if (imageMsgObj && apiConfig.debugLogsEnabled) {
             console.log('[ChatInterface] 🔍 ESTRUTURA COMPLETA DO imageMessage:', imageMsgObj);
             console.log('[ChatInterface] 🔍 rawMessage COMPLETO:', rawMsg);
+          }
             
+          if (imageMsgObj) {
             // Verifica se há messageId ou key.id que possa ser usado para buscar a URL/base64
             // (alguns formatos podem encapsular key em data.key)
             const messageId =
@@ -2586,11 +2620,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
               rawMsg?.data?.key?.remoteJid ||
               rawMsg?.data?.key?.remoteJidAlt;
             if (messageId && remoteJid) {
-              console.log('[ChatInterface] 🔍 Possível buscar URL usando:', {
-                messageId,
-                remoteJid,
-                hasApiConfig: !!(apiConfig.baseUrl && apiConfig.apiKey)
-              });
+              if (apiConfig.debugLogsEnabled) {
+                console.log('[ChatInterface] 🔍 Possível buscar URL usando:', {
+                  messageId,
+                  remoteJid,
+                  hasApiConfig: !!(apiConfig.baseUrl && apiConfig.apiKey)
+                });
+              }
               
               // Tenta buscar URL/base64 da mídia usando messageId (async, não bloqueia renderização)
               // Usa uma flag para evitar múltiplas buscas simultâneas para a mesma mensagem,
@@ -2616,7 +2652,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                   .then(webhookData => {
                     if (webhookData?.dataUrl) {
                       foundAny = true;
-                      console.log('[ChatInterface] ✅ Base64 encontrado no banco (webhook):', messageId);
+                      if (apiConfig.debugLogsEnabled) {
+                        console.log('[ChatInterface] ✅ Base64 encontrado no banco (webhook):', messageId);
+                      }
                       msg.mediaUrl = webhookData.dataUrl;
 
                       // Atualiza o chat para forçar re-render
@@ -2642,7 +2680,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                   .then(url => {
                     if (url && !msg.mediaUrl) {
                       foundAny = true;
-                      console.log('[ChatInterface] ✅ URL encontrada via messageId:', url.substring(0, 100));
+                      if (apiConfig.debugLogsEnabled) {
+                        console.log('[ChatInterface] ✅ URL encontrada via messageId:', url.substring(0, 100));
+                      }
                       msg.mediaUrl = url;
 
                       // Tenta atualizar no chat para forçar re-render
@@ -2656,7 +2696,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         }
                       }
                     } else if (!url && !msg.mediaUrl) {
-                      console.log('[ChatInterface] ⚠️ URL/base64 ainda não disponível (provável atraso do webhook).');
+                      if (apiConfig.debugLogsEnabled) {
+                        console.log('[ChatInterface] ⚠️ URL/base64 ainda não disponível (provável atraso do webhook).');
+                      }
                     }
                   })
                   .catch(error => {
@@ -2953,7 +2995,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             <>
               {previewState.data.image && (
                 <img
-                  src={previewState.data.image}
+                  src={getMediaUrl(previewState.data.image, undefined, 'image') || previewState.data.image}
                   alt={previewState.data.title || hostLabel || 'Link'}
                   className="w-16 h-16 object-cover rounded-md flex-shrink-0 border border-slate-200/70"
                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -3060,7 +3102,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             >
               <div className="flex justify-between items-start mb-1">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <img src={chat.contactAvatar} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                  <img src={getMediaUrl(chat.contactAvatar, undefined, 'image') || chat.contactAvatar} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-slate-200 text-sm flex items-center gap-1">
                       <span className="truncate">{chat.contactName}</span>
@@ -3184,7 +3226,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         <ArrowLeft size={24} />
                         </button>
 
-                        <img src={selectedChat.contactAvatar} alt="" className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white" />
+                        <img src={getMediaUrl(selectedChat.contactAvatar, undefined, 'image') || selectedChat.contactAvatar} alt="" className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white" />
                         
                         {/* Contact Info / Editing Mode */}
                         <div className="flex-1 overflow-hidden">
@@ -3848,7 +3890,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                                 onClick={() => handleStartNewChat(contact)}
                                 className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-50 last:border-0 flex items-center gap-2"
                              >
-                                <img src={contact.avatar || 'https://ui-avatars.com/api/?name=' + contact.name} className="w-6 h-6 rounded-full" />
+                                <img src={getMediaUrl(contact.avatar, undefined, 'image') || contact.avatar || 'https://ui-avatars.com/api/?name=' + contact.name} className="w-6 h-6 rounded-full" />
                                 <div>
                                     <p className="text-sm font-medium text-slate-800">{contact.name}</p>
                                     <p className="text-xs text-slate-500">{contact.phone}</p>
@@ -3911,7 +3953,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                     className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-50 last:border-0 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <img 
-                      src={contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}`} 
+                      src={getMediaUrl(contact.avatar, undefined, 'image') || contact.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}`} 
                       className="w-10 h-10 rounded-full"
                       alt={contact.name}
                     />
@@ -4144,7 +4186,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         <div className={`w-5 h-5 rounded border flex items-center justify-center ${checked ? 'bg-[#00E0D1] border-[#00E0D1] text-[#0D0F13]' : 'border-white/20 text-transparent'}`}>
                           <Check size={14} />
                         </div>
-                        <img src={c.contactAvatar} alt="" className="w-8 h-8 rounded-full bg-white flex-shrink-0" />
+                        <img src={getMediaUrl(c.contactAvatar, undefined, 'image') || c.contactAvatar} alt="" className="w-8 h-8 rounded-full bg-white flex-shrink-0" />
                         <div className="flex-1 min-w-0">
                           <div className="text-sm text-slate-200 font-medium truncate">
                             {c.contactName || c.contactNumber || c.id}
@@ -4199,7 +4241,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               <div className="flex items-center gap-3">
                 <img
-                  src={selectedChat.contactAvatar}
+                  src={getMediaUrl(selectedChat.contactAvatar, undefined, 'image') || selectedChat.contactAvatar}
                   alt=""
                   className="w-12 h-12 rounded-full bg-white flex-shrink-0"
                 />
@@ -4434,7 +4476,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                               <div className="mt-2 flex gap-3">
                                 {previewState.data.image && (
                                   <img
-                                    src={previewState.data.image}
+                                    src={getMediaUrl(previewState.data.image, undefined, 'image') || previewState.data.image}
                                     alt={previewState.data.title || item.host}
                                     className="w-14 h-14 object-cover rounded-md flex-shrink-0 border border-white/10"
                                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -4565,7 +4607,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             </div>
             <div className="flex-1 rounded-lg bg-black/40 border border-white/10 overflow-auto flex items-center justify-center p-2">
               <img
-                src={imageViewer.url}
+                src={getMediaUrl(imageViewer.url, undefined, 'image') || imageViewer.url}
                 alt={imageViewer.fileName || 'Imagem'}
                 className="max-h-[80vh] max-w-full object-contain"
                 onError={(e) => {
@@ -4610,7 +4652,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             <div className="flex-1 rounded-lg bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">
               {pdfViewerUrl ? (
                 <iframe
-                  src={pdfViewerUrl}
+                  src={getMediaUrl(pdfViewerUrl, pdfViewer.mimeType, 'document') || pdfViewerUrl}
                   title={pdfViewer.fileName || 'PDF'}
                   className="w-full h-[80vh] bg-white"
                 />
@@ -4655,7 +4697,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             <div className="flex-1 rounded-lg bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">
               <video
                 controls
-                src={videoViewer.url}
+                src={getMediaUrl(videoViewer.url, videoViewer.mimeType, 'video') || videoViewer.url}
                 className="w-full h-[80vh] bg-black"
               />
             </div>

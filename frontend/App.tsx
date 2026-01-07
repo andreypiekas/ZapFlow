@@ -53,6 +53,55 @@ const normalizeMessageContent = (content: string | undefined, sender: string | u
     return normalized.trim();
 }; 
 
+// Dedup robusto: trata casos onde uma fonte usa `id` e outra usa `whatsappMessageId` para a mesma mensagem.
+// Também usa comparação por conteúdo normalizado + janela de tempo como fallback.
+const toTimestampMs = (value: any): number => {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  const n = Number(value);
+  if (Number.isFinite(n) && n > 0) {
+    // Heurística: timestamps em segundos (< ~2033) -> ms
+    return n < 2000000000 ? n * 1000 : n;
+  }
+  const d = new Date(value);
+  const ms = d.getTime();
+  return Number.isFinite(ms) ? ms : 0;
+};
+
+const areMessagesDuplicate = (msg1: Message, msg2: Message): boolean => {
+  if (!msg1 || !msg2) return false;
+
+  const wa1 = (msg1 as any).whatsappMessageId as string | undefined;
+  const wa2 = (msg2 as any).whatsappMessageId as string | undefined;
+  const id1 = (msg1 as any).id as string | undefined;
+  const id2 = (msg2 as any).id as string | undefined;
+
+  // ID do WhatsApp (key.id) é o match mais confiável
+  if (wa1 && wa2 && wa1 === wa2) return true;
+
+  // Casos comuns: um lado salva key.id em `id` e o outro em `whatsappMessageId`
+  if (wa1 && id2 && wa1 === id2) return true;
+  if (wa2 && id1 && wa2 === id1) return true;
+
+  // Fallback: ids idênticos
+  if (id1 && id2 && id1 === id2) return true;
+
+  // Fallback final: sender + conteúdo normalizado + janela de tempo
+  if (msg1.sender !== msg2.sender) return false;
+  const c1 = normalizeMessageContent(msg1.content, msg1.sender).trim();
+  const c2 = normalizeMessageContent(msg2.content, msg2.sender).trim();
+  if (!c1 || !c2) return false;
+  if (c1 !== c2) return false;
+
+  const t1 = toTimestampMs(msg1.timestamp);
+  const t2 = toTimestampMs(msg2.timestamp);
+  if (!t1 || !t2) return false;
+
+  // Mensagens do agente podem ter delays maiores entre "optimistic" e confirmação (Socket/REST)
+  const windowMs = msg1.sender === 'agent' ? 60000 : 15000;
+  return Math.abs(t1 - t2) <= windowMs;
+};
+
 // Carrega configuração padrão (será substituída quando usuário fizer login)
 const loadConfig = (): ApiConfig => {
   return {
@@ -1177,24 +1226,7 @@ const App: React.FC = () => {
                         
                         // Função para verificar se mensagens são duplicadas
                         const isDuplicate = (msg1: Message, msg2: Message): boolean => {
-                            if (msg1.whatsappMessageId && msg2.whatsappMessageId) {
-                                return msg1.whatsappMessageId === msg2.whatsappMessageId;
-                            }
-                            if (msg1.id && msg2.id) {
-                                return msg1.id === msg2.id;
-                            }
-                            const time1 = msg1.timestamp?.getTime() || 0;
-                            const time2 = msg2.timestamp?.getTime() || 0;
-                            if (time1 === time2 && time1 !== 0) {
-                                const content1 = msg1.content?.trim() || '';
-                                const content2 = msg2.content?.trim() || '';
-                                const sender1 = msg1.sender || '';
-                                const sender2 = msg2.sender || '';
-                                if (content1 === content2 && content1 !== '' && sender1 === sender2) {
-                                    return true;
-                                }
-                            }
-                            return false;
+                            return areMessagesDuplicate(msg1, msg2);
                         };
 
                         // Mescla campos de mídia/raw quando o registro existente não tem esses dados
@@ -1313,7 +1345,7 @@ const App: React.FC = () => {
                         } else if (hasMoreLocalMessages) {
                             // PRIORIDADE: Adiciona mensagens locais primeiro (têm mais mensagens)
                             existingChat.messages.forEach(msg => {
-                                const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
+                                const msgKey = getMessageKey(msg);
                                 const existing = messageMap.get(msgKey);
                                 if (!existing) {
                                     messageMap.set(msgKey, msg);
@@ -1327,7 +1359,7 @@ const App: React.FC = () => {
                             
                             // Depois adiciona mensagens da API que não estão nas locais
                             apiMessagesForMerge.forEach(msg => {
-                                const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
+                                const msgKey = getMessageKey(msg);
                                 // Verifica se já existe nas mensagens locais
                                 const existsInLocal = Array.from(messageMap.values()).some(localMsg => {
                                     if (localMsg.whatsappMessageId && msg.whatsappMessageId && 
@@ -1368,7 +1400,7 @@ const App: React.FC = () => {
                             // Primeiro, adiciona todas as mensagens da API (histórico real)
                             apiMessagesForMerge.forEach(msg => {
                                 // Usa ID da mensagem ou gera um baseado em timestamp + conteúdo para evitar duplicatas
-                                const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
+                                const msgKey = getMessageKey(msg);
                                 const existing = messageMap.get(msgKey);
                                 if (!existing) {
                                     messageMap.set(msgKey, msg);
@@ -1384,7 +1416,7 @@ const App: React.FC = () => {
                             // Se uma mensagem local existe na API, prioriza a local se for mais recente
                             existingChat.messages.forEach(msg => {
                             // Verifica se a mensagem já existe na API (pode ter sido sincronizada)
-                            const msgKey = msg.id || `${msg.timestamp?.getTime() || Date.now()}_${msg.content?.substring(0, 20) || ''}`;
+                            const msgKey = getMessageKey(msg);
                             const existingApiMsg = apiMessagesForMerge.find(apiMsg => {
                                 // Verifica por ID do WhatsApp (mais confiável)
                                 if (apiMsg.whatsappMessageId && msg.whatsappMessageId && 
@@ -4094,6 +4126,8 @@ const App: React.FC = () => {
               ...updatedChat,
               messages: updatedChat.messages.map(msg => ({
                 ...msg,
+                // Canonicaliza o ID quando temos whatsappMessageId, evitando duplicação (DB vs Socket/REST).
+                id: (msg as any).whatsappMessageId || (msg as any).id,
                 content: normalizeMessageContent(msg.content, msg.sender)
               }))
             };
@@ -4205,27 +4239,7 @@ const App: React.FC = () => {
                     
                     // Função para verificar se mensagens são duplicadas
                     const isDuplicate = (msg1: Message, msg2: Message): boolean => {
-                        // Se ambas têm whatsappMessageId e são iguais, são duplicatas
-                        if (msg1.whatsappMessageId && msg2.whatsappMessageId) {
-                            return msg1.whatsappMessageId === msg2.whatsappMessageId;
-                        }
-                        // Se ambas têm id e são iguais, são duplicatas
-                        if (msg1.id && msg2.id) {
-                            return msg1.id === msg2.id;
-                        }
-                        // Se têm mesmo timestamp, conteúdo e sender, são duplicatas
-                        const time1 = msg1.timestamp?.getTime() || 0;
-                        const time2 = msg2.timestamp?.getTime() || 0;
-                        if (time1 === time2 && time1 !== 0) {
-                            const content1 = msg1.content?.trim() || '';
-                            const content2 = msg2.content?.trim() || '';
-                            const sender1 = msg1.sender || '';
-                            const sender2 = msg2.sender || '';
-                            if (content1 === content2 && content1 !== '' && sender1 === sender2) {
-                                return true;
-                            }
-                        }
-                        return false;
+                        return areMessagesDuplicate(msg1, msg2);
                     };
                     
                     const messageMap = new Map<string, Message>();

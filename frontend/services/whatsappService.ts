@@ -1160,7 +1160,18 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     // Ignora mensagens de protocolo ou vazias
     if (!content && !msgObj.imageMessage && !msgObj.audioMessage && !msgObj.stickerMessage && !msgObj.videoMessage && !msgObj.documentMessage) return null;
 
-    const key = apiMsg.key || {};
+    // Alguns payloads vêm embrulhados (ex.: { message: { key, message } } ou { data: { key, message } }).
+    // Mantém compatibilidade e evita gerar IDs aleatórios (causa duplicação no merge/UI).
+    const key =
+        apiMsg.key ||
+        apiMsg?.message?.key ||
+        apiMsg?.data?.key ||
+        apiMsg?.data?.message?.key ||
+        apiMsg?.message?.data?.key ||
+        {};
+
+    // ID estável (prioriza key.id quando existir; fallback para id/messageId quando REST não traz key)
+    const stableMessageId: string | undefined = (key as any)?.id || extractEvolutionMessageId(apiMsg);
     const ts = apiMsg.messageTimestamp || apiMsg.timestamp || Date.now();
     const tsNum = Number(ts);
     // Corrige timestamp em segundos para milissegundos se necessário
@@ -1574,7 +1585,7 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
     mediaUrl = normalizeWhatsAppCdnUrl(mediaUrl) || mediaUrl;
 
     return {
-        id: key.id || `msg_${Math.random()}`,
+        id: stableMessageId || `msg_${Math.random()}`,
         content,
         sender: key.fromMe ? 'agent' : 'user',
         timestamp,
@@ -1585,7 +1596,9 @@ export const mapApiMessageToInternal = (apiMsg: any): Message | null => {
         fileName,
         fileSize,
         author: author, // Salva o JID real para correção automática (sempre normalizado)
-        whatsappMessageId: key.id, // Salva o ID real do WhatsApp para respostas
+        // whatsappMessageId deve ser o ID real do WhatsApp (key.id). Não faça fallback para apiMsg.id
+        // para não quebrar quoted/replies quando o REST devolve apenas IDs internos do banco.
+        whatsappMessageId: (key as any)?.id, // Salva o ID real do WhatsApp para respostas
         rawMessage: apiMsg, // Salva o objeto completo para respostas (Evolution API precisa do objeto completo)
         replyTo: replyTo // Informação sobre a mensagem que está sendo respondida
     };
@@ -2347,8 +2360,8 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
 
                     // Aceita mensagens que correspondem ao JID (ou ao ALT) com comparação flexível
                     if (matchesChat(remoteJid) || matchesChat(remoteJidAlt)) {
-                        // Log para debug de imagens sem URL
-                        if (item.message?.imageMessage || item.imageMessage) {
+                        // Log para debug de imagens sem URL (apenas quando debug estiver habilitado)
+                        if (config.debugLogsEnabled && (item.message?.imageMessage || item.imageMessage)) {
                             const hasUrl = !!(item.message?.imageMessage?.url || item.imageMessage?.url);
                             if (!hasUrl) {
                                 console.warn('[fetchChatMessages] ⚠️ Imagem sem URL detectada na resposta REST:', {
