@@ -1056,3 +1056,87 @@ export const deleteChat = async (chatId: string): Promise<{ success: boolean; me
   }
 };
 
+// ==================== Telegram (Relatório diário) ====================
+
+export interface TelegramReportStatus {
+  lastSentAt?: string | null;
+  lastReason?: string | null;
+  lastDurationMs?: number | null;
+  lastErrorAt?: string | null;
+  lastError?: string | null;
+}
+
+export interface TelegramReportConfig {
+  enabled: boolean;
+  time: string; // HH:MM
+  timezone: string; // IANA (ex: America/Sao_Paulo)
+  chatId: string;
+  botTokenConfigured: boolean;
+  status?: TelegramReportStatus | null;
+}
+
+export const loadTelegramReportConfig = async (): Promise<TelegramReportConfig | null> => {
+  try {
+    const response = await apiService.request<{ success: boolean; config: TelegramReportConfig }>(
+      '/api/integrations/telegram-report',
+      { method: 'GET' }
+    );
+
+    return response?.config || null;
+  } catch (error: any) {
+    console.error('[ApiService] Erro ao carregar config do Telegram:', error);
+    return null;
+  }
+};
+
+export const saveTelegramReportConfig = async (
+  config: { enabled: boolean; time: string; timezone: string; chatId: string; botToken?: string }
+): Promise<{ success: boolean; config?: TelegramReportConfig; error?: string }> => {
+  try {
+    const response = await apiService.request<{ success: boolean; config: TelegramReportConfig }>(
+      '/api/integrations/telegram-report',
+      { method: 'PUT', body: JSON.stringify({ config }) }
+    );
+
+    if (response?.success) {
+      return { success: true, config: response.config };
+    }
+
+    return { success: false, error: 'Falha ao salvar' };
+  } catch (error: any) {
+    console.error('[ApiService] Erro ao salvar config do Telegram:', error);
+    return { success: false, error: error?.message || 'Erro ao salvar' };
+  }
+};
+
+export const testTelegramReportConfig = async (
+  botToken: string,
+  chatId: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const response = await apiService.request<{ success: boolean }>(
+      '/api/integrations/telegram-report/test',
+      { method: 'POST', body: JSON.stringify({ botToken, chatId }) }
+    );
+
+    return { success: !!response?.success };
+  } catch (error: any) {
+    console.error('[ApiService] Erro ao testar Telegram:', error);
+    return { success: false, error: error?.message || 'Erro ao testar Telegram' };
+  }
+};
+
+export const sendTelegramReportNow = async (): Promise<{ success: boolean; durationMs?: number; error?: string }> => {
+  try {
+    const response = await apiService.request<{ success: boolean; durationMs?: number }>(
+      '/api/integrations/telegram-report/send-now',
+      { method: 'POST' }
+    );
+
+    return { success: !!response?.success, durationMs: response?.durationMs };
+  } catch (error: any) {
+    console.error('[ApiService] Erro ao enviar relatório Telegram agora:', error);
+    return { success: false, error: error?.message || 'Erro ao enviar relatório' };
+  }
+};
+

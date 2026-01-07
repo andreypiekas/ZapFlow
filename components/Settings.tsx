@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { ApiConfig, User, UserRole } from '../types';
-import { Save, Server, Shield, Globe, User as UserIcon, Bell, Lock, RefreshCw, Database, HardDrive, Sparkles, Trash2, AlertTriangle, CheckCircle, Calendar, Bug } from 'lucide-react';
+import { Save, Server, Shield, Globe, User as UserIcon, Bell, Lock, RefreshCw, Database, HardDrive, Sparkles, Trash2, AlertTriangle, CheckCircle, Calendar, Bug, Send, MessageCircle, Clock, BookOpen } from 'lucide-react';
 import { fetchAllInstances, fetchInstanceDetails, InstanceInfo } from '../services/whatsappService';
-import { checkApiHealth, getAuthToken, cleanupInvalidChats } from '../services/apiService';
+import { checkApiHealth, getAuthToken, cleanupInvalidChats, loadTelegramReportConfig, saveTelegramReportConfig, sendTelegramReportNow, testTelegramReportConfig, TelegramReportConfig } from '../services/apiService';
 import { BRAZILIAN_STATES } from '../services/holidaysService';
 import { storageService } from '../services/storageService';
 
@@ -16,6 +16,7 @@ interface SettingsProps {
 const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
   const isAdmin = currentUser?.role === UserRole.ADMIN;
   const [formData, setFormData] = useState<ApiConfig>(config);
+  const [integrationTab, setIntegrationTab] = useState<'google' | 'telegram'>('google');
   const [showSuccess, setShowSuccess] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
   const [instances, setInstances] = useState<InstanceInfo[]>([]);
@@ -27,11 +28,46 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
   const [isCleaningChats, setIsCleaningChats] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<{ success: boolean; summary?: any; message?: string } | null>(null);
 
+  // Telegram (relatório diário)
+  const [telegramConfig, setTelegramConfig] = useState<TelegramReportConfig>({
+    enabled: false,
+    time: '08:00',
+    timezone: 'America/Sao_Paulo',
+    chatId: '',
+    botTokenConfigured: false,
+    status: null
+  });
+  const [telegramBotTokenDraft, setTelegramBotTokenDraft] = useState<string>('');
+  const [isLoadingTelegramConfig, setIsLoadingTelegramConfig] = useState(false);
+  const [isSavingTelegramConfig, setIsSavingTelegramConfig] = useState(false);
+  const [isTestingTelegram, setIsTestingTelegram] = useState(false);
+  const [isSendingTelegramNow, setIsSendingTelegramNow] = useState(false);
+  const [telegramFeedback, setTelegramFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+
   // Sincroniza formData quando config muda (importante para carregar dados salvos)
   useEffect(() => {
     setFormData(config);
     setSelectedInstanceName(config.instanceName || '');
   }, [config]);
+
+  // Carrega config do Telegram (relatório diário) — apenas ADMIN
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    const loadTelegram = async () => {
+      setIsLoadingTelegramConfig(true);
+      try {
+        const cfg = await loadTelegramReportConfig();
+        if (cfg) {
+          setTelegramConfig(cfg);
+        }
+      } finally {
+        setIsLoadingTelegramConfig(false);
+      }
+    };
+
+    loadTelegram();
+  }, [isAdmin]);
 
   // Carrega lista de instâncias quando a tela é aberta e não está em modo demo
   useEffect(() => {
@@ -229,6 +265,102 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
       setIsCleaningChats(false);
       // Limpa o resultado após 5 segundos
       setTimeout(() => setCleanupResult(null), 5000);
+    }
+  };
+
+  const refreshTelegramConfig = async () => {
+    if (!isAdmin) return;
+    setIsLoadingTelegramConfig(true);
+    try {
+      const cfg = await loadTelegramReportConfig();
+      if (cfg) setTelegramConfig(cfg);
+    } finally {
+      setIsLoadingTelegramConfig(false);
+    }
+  };
+
+  const handleSaveTelegramConfig = async () => {
+    if (!isAdmin) return;
+
+    setIsSavingTelegramConfig(true);
+    setTelegramFeedback(null);
+
+    try {
+      const payload = {
+        enabled: !!telegramConfig.enabled,
+        time: telegramConfig.time || '08:00',
+        timezone: telegramConfig.timezone || 'America/Sao_Paulo',
+        chatId: telegramConfig.chatId || '',
+        botToken: telegramBotTokenDraft.trim() ? telegramBotTokenDraft.trim() : undefined
+      };
+
+      const result = await saveTelegramReportConfig(payload);
+
+      if (result.success && result.config) {
+        setTelegramConfig(result.config);
+        setTelegramBotTokenDraft('');
+        setTelegramFeedback({ type: 'success', message: '✅ Telegram configurado com sucesso.' });
+        await refreshTelegramConfig();
+      } else {
+        setTelegramFeedback({ type: 'error', message: result.error || 'Erro ao salvar Telegram.' });
+      }
+    } catch (error: any) {
+      setTelegramFeedback({ type: 'error', message: error?.message || 'Erro ao salvar Telegram.' });
+    } finally {
+      setIsSavingTelegramConfig(false);
+    }
+  };
+
+  const handleTestTelegram = async () => {
+    if (!isAdmin) return;
+
+    const botToken = telegramBotTokenDraft.trim();
+    const chatId = (telegramConfig.chatId || '').trim();
+
+    if (!botToken) {
+      setTelegramFeedback({
+        type: 'info',
+        message: 'Para testar, informe o BOT TOKEN. Por segurança o token não é exibido depois.'
+      });
+      return;
+    }
+
+    if (!chatId) {
+      setTelegramFeedback({ type: 'error', message: 'Informe o Chat ID para testar.' });
+      return;
+    }
+
+    setIsTestingTelegram(true);
+    setTelegramFeedback(null);
+
+    try {
+      const result = await testTelegramReportConfig(botToken, chatId);
+      if (result.success) {
+        setTelegramFeedback({ type: 'success', message: '✅ Mensagem de teste enviada no Telegram.' });
+      } else {
+        setTelegramFeedback({ type: 'error', message: result.error || 'Falha ao enviar teste.' });
+      }
+    } finally {
+      setIsTestingTelegram(false);
+    }
+  };
+
+  const handleSendTelegramReportNow = async () => {
+    if (!isAdmin) return;
+
+    setIsSendingTelegramNow(true);
+    setTelegramFeedback(null);
+
+    try {
+      const result = await sendTelegramReportNow();
+      if (result.success) {
+        setTelegramFeedback({ type: 'success', message: '✅ Relatório enviado agora.' });
+        await refreshTelegramConfig();
+      } else {
+        setTelegramFeedback({ type: 'error', message: result.error || 'Falha ao enviar relatório.' });
+      }
+    } finally {
+      setIsSendingTelegramNow(false);
     }
   };
 
@@ -432,124 +564,334 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, currentUser }) => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
                   <div className="col-span-1 md:col-span-2">
-                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Google Integration</h3>
-                  </div>
-                  
-                  <div className="col-span-1 md:col-span-2">
-                    <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
-                      <UserIcon size={16} /> Google Client ID (OAuth 2.0)
-                    </label>
-                    <input 
-                      type="text" 
-                      value={formData.googleClientId || ''}
-                      onChange={(e) => setFormData({...formData, googleClientId: e.target.value})}
-                      className="w-full px-4 py-2.5 border border-[#0D0F13] bg-[#111316] text-slate-100 rounded-lg focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500 text-base"
-                      placeholder="ex: 123456789-abcdefgh.apps.googleusercontent.com"
-                    />
-                    <p className="text-xs text-slate-400 mt-1">
-                        Necessário para sincronizar contatos. Crie em <a href="https://console.cloud.google.com/apis/credentials" target="_blank" className="text-blue-500 underline">Google Cloud Console</a>.
-                    </p>
-                  </div>
-
-                  <div className="col-span-1 md:col-span-2">
-                    <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
-                      <Sparkles size={16} /> Google Gemini API Key
-                    </label>
-                    <input 
-                      type="password" 
-                      value={formData.geminiApiKey || ''}
-                      onChange={(e) => setFormData({...formData, geminiApiKey: e.target.value})}
-                      className="w-full px-4 py-2.5 border border-[#0D0F13] bg-[#111316] text-slate-100 rounded-lg focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500 text-base"
-                      placeholder="ex: AIzaSy..."
-                    />
-                    <p className="text-xs text-slate-400 mt-1">
-                        Necessário para respostas inteligentes de IA. Obtenha em <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-blue-500 underline">Google AI Studio</a>.
-                    </p>
-                  </div>
-
-                  <div className="col-span-1 md:col-span-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
-                      <Calendar size={16} /> Estados para Feriados Municipais no Dashboard
-                    </label>
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 max-h-64 overflow-y-auto">
-                      <p className="text-xs text-slate-600 mb-3">
-                        Selecione os estados para buscar feriados municipais. <strong>SC, PR e RS</strong> são sempre buscados primeiro (prioridade).
-                      </p>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                        {BRAZILIAN_STATES.map(state => {
-                          const isSelected = (formData.holidayStates || []).includes(state.code);
-                          const isPriority = ['SC', 'PR', 'RS'].includes(state.code);
-                          
-                          return (
-                            <label
-                              key={state.code}
-                              className={`flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors border ${
-                                isPriority
-                                  ? 'bg-blue-50 border-blue-300'
-                                  : isSelected
-                                  ? 'bg-emerald-50 border-emerald-300'
-                                  : 'bg-white border-slate-200 hover:bg-slate-50'
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isSelected || isPriority}
-                                disabled={isPriority}
-                                onChange={(e) => {
-                                  const currentStates = formData.holidayStates || [];
-                                  if (e.target.checked) {
-                                    if (!currentStates.includes(state.code) && !isPriority) {
-                                      setFormData({...formData, holidayStates: [...currentStates, state.code]});
-                                    }
-                                  } else {
-                                    if (!isPriority) {
-                                      setFormData({...formData, holidayStates: currentStates.filter(s => s !== state.code)});
-                                    }
-                                  }
-                                }}
-                                className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 disabled:opacity-50"
-                              />
-                              <span className={`text-sm ${isPriority ? 'font-semibold text-blue-700' : 'text-slate-700'}`}>
-                                {state.code}
-                              </span>
-                              {isPriority && (
-                                <span className="text-xs text-blue-600">(Prioridade)</span>
-                              )}
-                            </label>
-                          );
-                        })}
-                      </div>
-                      <p className="text-xs text-slate-500 mt-3">
-                        <strong>Estados principais (SC, PR, RS):</strong> Sempre buscados primeiro. <br />
-                        <strong>Outros estados:</strong> Buscados depois, apenas se selecionados acima.
-                      </p>
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Integrações</h3>
+                    <div className="inline-flex items-center gap-1 rounded-lg border border-[#0D0F13] bg-[#111316] p-1">
+                      <button
+                        type="button"
+                        onClick={() => setIntegrationTab('google')}
+                        className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                          integrationTab === 'google'
+                            ? 'bg-[#16191F] text-[#00E0D1]'
+                            : 'text-slate-300 hover:bg-[#16191F] hover:text-slate-100'
+                        }`}
+                      >
+                        Google / IA
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIntegrationTab('telegram')}
+                        className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                          integrationTab === 'telegram'
+                            ? 'bg-[#16191F] text-[#00E0D1]'
+                            : 'text-slate-300 hover:bg-[#16191F] hover:text-slate-100'
+                        }`}
+                      >
+                        Telegram
+                      </button>
                     </div>
+                    <p className="text-xs text-slate-400 mt-2 flex items-center gap-2">
+                      <BookOpen size={14} />
+                      Tutorial do relatório diário: <span className="font-mono">docs/TELEGRAM_RELATORIO_DIARIO.md</span>
+                    </p>
                   </div>
 
-                  {/* Debug do Dev (logs no console) - Apenas Admin */}
-                  {isAdmin && (
-                    <div className="col-span-1 md:col-span-2">
-                      <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
-                        <Bug size={16} /> Debug do Dev (logs no console)
-                      </label>
-                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                        <label className="relative inline-flex items-center cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={!!formData.debugLogsEnabled}
-                            onChange={(e) => setFormData({ ...formData, debugLogsEnabled: e.target.checked })}
-                            className="sr-only peer"
-                          />
-                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                          <span className="ml-3 text-sm font-medium text-slate-700">
-                            {formData.debugLogsEnabled ? 'Ativado' : 'Desativado'}
-                          </span>
+                  {integrationTab === 'google' && (
+                    <>
+                      <div className="col-span-1 md:col-span-2">
+                        <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
+                          <UserIcon size={16} /> Google Client ID (OAuth 2.0)
                         </label>
-                        <p className="text-xs text-slate-600 mt-2">
-                          Quando ativado, habilita logs de <strong>debug</strong> no F12 para diagnóstico (reduz ruído para usuário final).
+                        <input 
+                          type="text" 
+                          value={formData.googleClientId || ''}
+                          onChange={(e) => setFormData({...formData, googleClientId: e.target.value})}
+                          className="w-full px-4 py-2.5 border border-[#0D0F13] bg-[#111316] text-slate-100 rounded-lg focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500 text-base"
+                          placeholder="ex: 123456789-abcdefgh.apps.googleusercontent.com"
+                        />
+                        <p className="text-xs text-slate-400 mt-1">
+                            Necessário para sincronizar contatos. Crie em <a href="https://console.cloud.google.com/apis/credentials" target="_blank" className="text-blue-500 underline">Google Cloud Console</a>.
                         </p>
                       </div>
-                    </div>
+
+                      <div className="col-span-1 md:col-span-2">
+                        <label className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
+                          <Sparkles size={16} /> Google Gemini API Key
+                        </label>
+                        <input 
+                          type="password" 
+                          value={formData.geminiApiKey || ''}
+                          onChange={(e) => setFormData({...formData, geminiApiKey: e.target.value})}
+                          className="w-full px-4 py-2.5 border border-[#0D0F13] bg-[#111316] text-slate-100 rounded-lg focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500 text-base"
+                          placeholder="ex: AIzaSy..."
+                        />
+                        <p className="text-xs text-slate-400 mt-1">
+                            Necessário para respostas inteligentes de IA. Obtenha em <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-blue-500 underline">Google AI Studio</a>.
+                        </p>
+                      </div>
+
+                      <div className="col-span-1 md:col-span-2">
+                        <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                          <Calendar size={16} /> Estados para Feriados Municipais no Dashboard
+                        </label>
+                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 max-h-64 overflow-y-auto">
+                          <p className="text-xs text-slate-600 mb-3">
+                            Selecione os estados para buscar feriados municipais. <strong>SC, PR e RS</strong> são sempre buscados primeiro (prioridade).
+                          </p>
+                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                            {BRAZILIAN_STATES.map(state => {
+                              const isSelected = (formData.holidayStates || []).includes(state.code);
+                              const isPriority = ['SC', 'PR', 'RS'].includes(state.code);
+                              
+                              return (
+                                <label
+                                  key={state.code}
+                                  className={`flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors border ${
+                                    isPriority
+                                      ? 'bg-blue-50 border-blue-300'
+                                      : isSelected
+                                      ? 'bg-emerald-50 border-emerald-300'
+                                      : 'bg-white border-slate-200 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected || isPriority}
+                                    disabled={isPriority}
+                                    onChange={(e) => {
+                                      const currentStates = formData.holidayStates || [];
+                                      if (e.target.checked) {
+                                        if (!currentStates.includes(state.code) && !isPriority) {
+                                          setFormData({...formData, holidayStates: [...currentStates, state.code]});
+                                        }
+                                      } else {
+                                        if (!isPriority) {
+                                          setFormData({...formData, holidayStates: currentStates.filter(s => s !== state.code)});
+                                        }
+                                      }
+                                    }}
+                                    className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500 disabled:opacity-50"
+                                  />
+                                  <span className={`text-sm ${isPriority ? 'font-semibold text-blue-700' : 'text-slate-700'}`}>
+                                    {state.code}
+                                  </span>
+                                  {isPriority && (
+                                    <span className="text-xs text-blue-600">(Prioridade)</span>
+                                  )}
+                                </label>
+                              );
+                            })}
+                          </div>
+                          <p className="text-xs text-slate-500 mt-3">
+                            <strong>Estados principais (SC, PR, RS):</strong> Sempre buscados primeiro. <br />
+                            <strong>Outros estados:</strong> Buscados depois, apenas se selecionados acima.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Debug do Dev (logs no console) - Apenas Admin */}
+                      {isAdmin && (
+                        <div className="col-span-1 md:col-span-2">
+                          <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                            <Bug size={16} /> Debug do Dev (logs no console)
+                          </label>
+                          <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                            <label className="relative inline-flex items-center cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={!!formData.debugLogsEnabled}
+                                onChange={(e) => setFormData({ ...formData, debugLogsEnabled: e.target.checked })}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                              <span className="ml-3 text-sm font-medium text-slate-700">
+                                {formData.debugLogsEnabled ? 'Ativado' : 'Desativado'}
+                              </span>
+                            </label>
+                            <p className="text-xs text-slate-600 mt-2">
+                              Quando ativado, habilita logs de <strong>debug</strong> no F12 para diagnóstico (reduz ruído para usuário final).
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {integrationTab === 'telegram' && (
+                    <>
+                      <div className="col-span-1 md:col-span-2">
+                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-4">
+                          <div className="flex items-start gap-3">
+                            <MessageCircle className="text-slate-600 mt-0.5 flex-shrink-0" size={20} />
+                            <div>
+                              <h4 className="font-semibold text-slate-800 text-sm">Relatório diário via Telegram</h4>
+                              <p className="text-slate-600 text-xs mt-1 leading-relaxed">
+                                Envia um resumo diário com métricas do banco (tamanho/contagens/top data_types) e status de quota do Gemini.
+                                O token do bot não é exibido por segurança.
+                              </p>
+                            </div>
+                          </div>
+
+                          {telegramFeedback && (
+                            <div className={`p-3 rounded-md border text-xs ${
+                              telegramFeedback.type === 'success'
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                                : telegramFeedback.type === 'info'
+                                ? 'bg-blue-50 border-blue-200 text-blue-800'
+                                : 'bg-red-50 border-red-200 text-red-800'
+                            }`}>
+                              {telegramFeedback.message}
+                            </div>
+                          )}
+
+                          {isLoadingTelegramConfig ? (
+                            <div className="text-xs text-slate-600 flex items-center gap-2">
+                              <RefreshCw size={14} className="animate-spin" />
+                              Carregando configuração do Telegram...
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="col-span-1 md:col-span-2">
+                                <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                                  <Bell size={16} /> Ativar relatório diário
+                                </label>
+                                <div className="bg-white border border-slate-200 rounded-lg p-4">
+                                  <label className="relative inline-flex items-center cursor-pointer select-none">
+                                    <input
+                                      type="checkbox"
+                                      checked={!!telegramConfig.enabled}
+                                      onChange={(e) => setTelegramConfig({ ...telegramConfig, enabled: e.target.checked })}
+                                      className="sr-only peer"
+                                    />
+                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                                    <span className="ml-3 text-sm font-medium text-slate-700">
+                                      {telegramConfig.enabled ? 'Ativado' : 'Desativado'}
+                                    </span>
+                                  </label>
+                                  <p className="text-xs text-slate-600 mt-2">
+                                    O backend envia automaticamente quando o relógio bater o horário configurado (no timezone escolhido).
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                                  <Clock size={16} /> Horário (HH:MM)
+                                </label>
+                                <input
+                                  type="time"
+                                  value={telegramConfig.time || '08:00'}
+                                  onChange={(e) => setTelegramConfig({ ...telegramConfig, time: e.target.value })}
+                                  className="w-full px-4 py-2.5 border border-slate-200 bg-white text-slate-900 rounded-lg focus:ring-2 focus:ring-emerald-300 focus:border-emerald-500 outline-none text-base"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                                  <Globe size={16} /> Timezone (IANA)
+                                </label>
+                                <input
+                                  type="text"
+                                  value={telegramConfig.timezone || 'America/Sao_Paulo'}
+                                  onChange={(e) => setTelegramConfig({ ...telegramConfig, timezone: e.target.value })}
+                                  className="w-full px-4 py-2.5 border border-slate-200 bg-white text-slate-900 rounded-lg focus:ring-2 focus:ring-emerald-300 focus:border-emerald-500 outline-none placeholder:text-slate-400 text-base"
+                                  placeholder="America/Sao_Paulo"
+                                />
+                                <p className="text-xs text-slate-500 mt-1">Ex.: America/Sao_Paulo</p>
+                              </div>
+
+                              <div className="col-span-1 md:col-span-2">
+                                <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                                  <MessageCircle size={16} /> Chat ID (destino)
+                                </label>
+                                <input
+                                  type="text"
+                                  value={telegramConfig.chatId || ''}
+                                  onChange={(e) => setTelegramConfig({ ...telegramConfig, chatId: e.target.value })}
+                                  className="w-full px-4 py-2.5 border border-slate-200 bg-white text-slate-900 rounded-lg focus:ring-2 focus:ring-emerald-300 focus:border-emerald-500 outline-none placeholder:text-slate-400 text-base"
+                                  placeholder="ex: 123456789 ou -1001234567890"
+                                />
+                                <p className="text-xs text-slate-500 mt-1">
+                                  Para grupos, geralmente começa com <span className="font-mono">-100...</span>.
+                                </p>
+                              </div>
+
+                              <div className="col-span-1 md:col-span-2">
+                                <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                                  <Shield size={16} /> Bot Token (não é exibido depois)
+                                </label>
+                                <input
+                                  type="password"
+                                  value={telegramBotTokenDraft}
+                                  onChange={(e) => setTelegramBotTokenDraft(e.target.value)}
+                                  className="w-full px-4 py-2.5 border border-slate-200 bg-white text-slate-900 rounded-lg focus:ring-2 focus:ring-emerald-300 focus:border-emerald-500 outline-none placeholder:text-slate-400 text-base"
+                                  placeholder={telegramConfig.botTokenConfigured ? '•••••• (já configurado) — preencha para trocar' : 'Cole o token do BotFather'}
+                                />
+                                <p className="text-xs text-slate-500 mt-1">
+                                  {telegramConfig.botTokenConfigured
+                                    ? 'Token já configurado. Para trocar, informe um novo token e salve.'
+                                    : 'Crie um bot no BotFather e cole o token aqui.'}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={handleSaveTelegramConfig}
+                              disabled={isSavingTelegramConfig || isLoadingTelegramConfig}
+                              className={`px-4 py-2 rounded-md text-sm font-semibold flex items-center gap-2 transition-colors ${
+                                isSavingTelegramConfig || isLoadingTelegramConfig
+                                  ? 'bg-slate-300 text-slate-600 cursor-not-allowed'
+                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                              }`}
+                            >
+                              <Save size={16} />
+                              {isSavingTelegramConfig ? 'Salvando...' : 'Salvar Telegram'}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={handleSendTelegramReportNow}
+                              disabled={isSendingTelegramNow || isLoadingTelegramConfig}
+                              className={`px-4 py-2 rounded-md text-sm font-semibold flex items-center gap-2 transition-colors ${
+                                isSendingTelegramNow || isLoadingTelegramConfig
+                                  ? 'bg-slate-300 text-slate-600 cursor-not-allowed'
+                                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+                              }`}
+                            >
+                              <Send size={16} />
+                              {isSendingTelegramNow ? 'Enviando...' : 'Enviar agora'}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={handleTestTelegram}
+                              disabled={isTestingTelegram}
+                              className={`px-4 py-2 rounded-md text-sm font-semibold flex items-center gap-2 transition-colors ${
+                                isTestingTelegram
+                                  ? 'bg-slate-300 text-slate-600 cursor-not-allowed'
+                                  : 'bg-slate-800 hover:bg-slate-900 text-white'
+                              }`}
+                              title="Envia mensagem simples de teste usando o token digitado (não salva)."
+                            >
+                              <MessageCircle size={16} />
+                              {isTestingTelegram ? 'Testando...' : 'Enviar teste'}
+                            </button>
+                          </div>
+
+                          {!!telegramConfig.status && (
+                            <div className="text-xs text-slate-600 space-y-1">
+                              <p><strong>Status:</strong></p>
+                              <p>• Último envio: {telegramConfig.status?.lastSentAt || '—'}</p>
+                              {telegramConfig.status?.lastErrorAt && (
+                                <p className="text-red-700">• Erro: {telegramConfig.status?.lastErrorAt} — {telegramConfig.status?.lastError}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
                   )}
               </div>
 

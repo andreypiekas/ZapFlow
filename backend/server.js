@@ -9,6 +9,13 @@ import dns from 'dns';
 import net from 'net';
 import os from 'os';
 import { ensureEvolutionWebhookConfigured } from './services/evolutionWebhookService.js';
+import {
+  ensureTelegramReportSchedulerConfigured,
+  getTelegramReportConfig,
+  saveTelegramReportConfig,
+  sendTelegramReportNow,
+  sendTelegramTestMessage
+} from './services/telegramReportService.js';
 
 dotenv.config();
 
@@ -2228,6 +2235,14 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     ensureEvolutionWebhookConfigured({ pool, serverIP, port: PORT })
       .catch(() => {});
   }, 4000);
+
+  // ========================================================================
+  // Relatório diário via Telegram — scheduler (best-effort)
+  // ========================================================================
+  setTimeout(() => {
+    ensureTelegramReportSchedulerConfigured({ pool })
+      .catch(() => {});
+  }, 6000);
 });
 
 // Tratamento de erros
@@ -2354,6 +2369,110 @@ app.put('/api/config', authenticateToken, dataLimiter, async (req, res) => {
   } catch (error) {
     console.error('Erro ao salvar configurações:', error);
     res.status(500).json({ error: 'Erro ao salvar configurações' });
+  }
+});
+
+// ============================================================================
+// Integração: Telegram (Relatório diário)
+// Configs ficam no banco (user_data global) e NÃO fazem parte do /api/config,
+// para evitar expor token em clientes não-admin.
+// ============================================================================
+
+const requireAdminRole = async (req, res) => {
+  const userResult = await pool.query('SELECT role FROM users WHERE id = $1', [req.user.id]);
+  if (userResult.rows.length === 0 || userResult.rows[0].role !== 'ADMIN') {
+    res.status(403).json({ error: 'Apenas administradores podem configurar o Telegram' });
+    return false;
+  }
+  return true;
+};
+
+// Buscar configuração do relatório Telegram (ADMIN)
+app.get('/api/integrations/telegram-report', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    if (!(await requireAdminRole(req, res))) return;
+
+    const cfg = await getTelegramReportConfig({ pool });
+
+    // Não retorna o token (apenas se está configurado)
+    res.json({
+      success: true,
+      config: {
+        enabled: cfg.enabled,
+        time: cfg.time,
+        timezone: cfg.timezone,
+        chatId: cfg.chatId,
+        botTokenConfigured: cfg.botTokenConfigured,
+        status: cfg.status
+      }
+    });
+  } catch (error) {
+    console.error('[TelegramReport] Erro ao carregar config:', error);
+    res.status(500).json({ error: 'Erro ao carregar configuração do Telegram' });
+  }
+});
+
+// Salvar configuração do relatório Telegram (ADMIN)
+app.put('/api/integrations/telegram-report', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    if (!(await requireAdminRole(req, res))) return;
+
+    const config = req.body?.config;
+    if (!config || typeof config !== 'object') {
+      return res.status(400).json({ error: 'config é obrigatório e deve ser um objeto' });
+    }
+
+    const saved = await saveTelegramReportConfig({ pool, config });
+
+    // Recarrega scheduler com a config atual
+    await ensureTelegramReportSchedulerConfigured({ pool });
+
+    res.json({ success: true, config: saved });
+  } catch (error) {
+    console.error('[TelegramReport] Erro ao salvar config:', error);
+    res.status(500).json({ error: 'Erro ao salvar configuração do Telegram' });
+  }
+});
+
+// Enviar mensagem de teste (ADMIN) — usa token/chatId do body (não salva)
+app.post('/api/integrations/telegram-report/test', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    if (!(await requireAdminRole(req, res))) return;
+
+    const botToken = typeof req.body?.botToken === 'string' ? req.body.botToken.trim() : '';
+    const chatId = typeof req.body?.chatId === 'string' ? req.body.chatId.trim() : '';
+
+    if (!botToken || !chatId) {
+      return res.status(400).json({ error: 'botToken e chatId são obrigatórios para teste' });
+    }
+
+    await sendTelegramTestMessage({ pool, botToken, chatId });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[TelegramReport] Erro no teste:', error);
+    res.status(400).json({ error: error?.message || 'Falha ao enviar mensagem de teste' });
+  }
+});
+
+// Enviar relatório agora (ADMIN)
+app.post('/api/integrations/telegram-report/send-now', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    if (!(await requireAdminRole(req, res))) return;
+
+    const result = await sendTelegramReportNow({ pool, reason: 'manual' });
+
+    if (result?.success) {
+      return res.json({ success: true, durationMs: result.durationMs });
+    }
+
+    if (result?.skipped && result?.reason === 'missing_config') {
+      return res.status(400).json({ error: 'Telegram não configurado (token/chatId ausentes)' });
+    }
+
+    return res.status(500).json({ error: result?.error || 'Falha ao enviar relatório agora' });
+  } catch (error) {
+    console.error('[TelegramReport] Erro ao enviar agora:', error);
+    res.status(500).json({ error: 'Erro ao enviar relatório agora' });
   }
 });
 

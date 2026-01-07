@@ -200,13 +200,19 @@
 ---
 
 ### 11. Relatório diário via Telegram (uso/consumo/armazenamento)
-**Status:** 🟢 Planejado  
+**Status:** ✅ Concluído  
 **Objetivo:** Enviar relatório automático diário (status do sistema).
 
-**Tarefas detalhadas:**
-- Criar job diário no backend (cron) para coletar métricas.
-- Enviar via Bot Telegram (chatId configurado).
-- Métricas: volume de chats/mensagens, tamanho do DB, falhas, quota Gemini, etc.
+**Implementação (resumo):**
+- Backend: `backend/services/telegramReportService.js` com scheduler diário (hora + timezone) e envio via Bot API.
+- Persistência: config global salva no banco em `user_data` (`data_type = integrations`, `data_key = telegram_report`) + status em `telegram_report_status`.
+- Segurança: token do bot **não é exposto** no `/api/config` (endpoints dedicados para admin).
+- Frontend: nova **aba Telegram** em `components/Settings.tsx` para ativar/desativar, definir horário/timezone/chatId/token + botões **Enviar teste** e **Enviar agora**.
+- Docs: tutorial em `docs/TELEGRAM_RELATORIO_DIARIO.md`.
+
+**Critério de aceite (atingido):**
+- Admin configura Telegram e consegue **Enviar teste** e **Enviar agora**.
+- Com o relatório ativado, backend envia automaticamente 1x ao dia no horário configurado.
 
 ---
 
