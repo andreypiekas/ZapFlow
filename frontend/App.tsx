@@ -1338,7 +1338,9 @@ const App: React.FC = () => {
                                         return true;
                                     }
                                     if (localMsg.content && msg.content && localMsg.sender === msg.sender) {
-                                        const contentMatch = localMsg.content.trim() === msg.content.trim();
+                                        const normalizedLocal = normalizeMessageContent(localMsg.content, localMsg.sender).trim();
+                                        const normalizedIncoming = normalizeMessageContent(msg.content, msg.sender).trim();
+                                        const contentMatch = normalizedLocal !== '' && normalizedLocal === normalizedIncoming;
                                         const timeWindow = msg.sender === 'agent' ? 30000 : 10000;
                                         const timeMatch = localMsg.timestamp && msg.timestamp && 
                                             Math.abs(localMsg.timestamp.getTime() - msg.timestamp.getTime()) < timeWindow;
@@ -1395,8 +1397,9 @@ const App: React.FC = () => {
                                 }
                                 // Para mensagens do agente, usa janela maior (30 segundos) e verifica conteúdo normalizado
                                 if (msg.sender === 'agent' && apiMsg.sender === 'agent') {
-                                    const contentMatch = apiMsg.content && msg.content && 
-                                        apiMsg.content.trim() === msg.content.trim();
+                                    const normalizedApi = normalizeMessageContent(apiMsg.content, apiMsg.sender).trim();
+                                    const normalizedLocal = normalizeMessageContent(msg.content, msg.sender).trim();
+                                    const contentMatch = normalizedApi !== '' && normalizedApi === normalizedLocal;
                                     const timeMatch = apiMsg.timestamp && msg.timestamp && 
                                         Math.abs(apiMsg.timestamp.getTime() - msg.timestamp.getTime()) < 30000;
                                     if (contentMatch && timeMatch) {
@@ -1405,9 +1408,12 @@ const App: React.FC = () => {
                                 }
                                 // Para outras mensagens, compara por conteúdo e timestamp próximo (10 segundos)
                                 if (apiMsg.timestamp && msg.timestamp && apiMsg.content && msg.content) {
-                                    const contentMatch = apiMsg.content.trim() === msg.content.trim();
+                                    const normalizedApi = normalizeMessageContent(apiMsg.content, apiMsg.sender).trim();
+                                    const normalizedLocal = normalizeMessageContent(msg.content, msg.sender).trim();
+                                    const senderMatch = apiMsg.sender === msg.sender;
+                                    const contentMatch = normalizedApi !== '' && normalizedApi === normalizedLocal;
                                     const timeDiff = Math.abs(apiMsg.timestamp.getTime() - msg.timestamp.getTime());
-                                    if (contentMatch && timeDiff < 10000) {
+                                    if (senderMatch && contentMatch && timeDiff < 10000) {
                                         return true;
                                     }
                                 }
@@ -1446,7 +1452,9 @@ const App: React.FC = () => {
                                     }
                                     // Verifica por conteúdo + timestamp (para mensagens do agente, usa janela maior)
                                     if (m.content && msg.content && m.sender === msg.sender) {
-                                        const contentMatch = m.content.trim() === msg.content.trim();
+                                        const normalizedExisting = normalizeMessageContent(m.content, m.sender).trim();
+                                        const normalizedIncoming = normalizeMessageContent(msg.content, msg.sender).trim();
+                                        const contentMatch = normalizedExisting !== '' && normalizedExisting === normalizedIncoming;
                                         const timeWindow = msg.sender === 'agent' ? 30000 : 10000;
                                         const timeMatch = m.timestamp && msg.timestamp && 
                                             Math.abs(m.timestamp.getTime() - msg.timestamp.getTime()) < timeWindow;
@@ -1519,8 +1527,9 @@ const App: React.FC = () => {
                                                         }
                                                         // Para mensagens do agente, usa janela maior (30 segundos)
                                                         if (msg.sender === 'agent' && m.sender === 'agent') {
-                                                            const contentMatch = m.content && msg.content && 
-                                                                m.content.trim() === msg.content.trim();
+                                                            const normalizedExisting = normalizeMessageContent(m.content, m.sender).trim();
+                                                            const normalizedIncoming = normalizeMessageContent(msg.content, msg.sender).trim();
+                                                            const contentMatch = normalizedExisting !== '' && normalizedExisting === normalizedIncoming;
                                                             const timeMatch = m.timestamp && msg.timestamp && 
                                                                 Math.abs(m.timestamp.getTime() - msg.timestamp.getTime()) < 30000;
                                                             if (contentMatch && timeMatch) {
@@ -1529,7 +1538,7 @@ const App: React.FC = () => {
                                                         }
                                                         // Para outras mensagens, usa janela menor (10 segundos)
                                                         if (m.content && msg.content && 
-                                                            m.content.trim() === msg.content.trim() &&
+                                                            normalizeMessageContent(m.content, m.sender).trim() === normalizeMessageContent(msg.content, msg.sender).trim() &&
                                                             m.sender === msg.sender &&
                                                             m.timestamp && msg.timestamp && 
                                                             Math.abs(m.timestamp.getTime() - msg.timestamp.getTime()) < 10000) {

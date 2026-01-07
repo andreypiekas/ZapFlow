@@ -155,7 +155,7 @@ export const getSystemStatus = async (config: ApiConfig) => {
 
     const response = await fetch(`${config.baseUrl}/instance/connectionState/${targetInstance}`, {
       method: 'GET',
-      headers: { 'apikey': config.apiKey }
+      headers: { 'apikey': getAuthKey(config) }
     });
     
     // Tolerância a erros 500/502 durante sync

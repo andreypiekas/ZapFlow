@@ -48,6 +48,11 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
     // Atualiza lista de instâncias
     const allInstances = await fetchAllInstances(config);
     setInstances(allInstances);
+
+    // Se existir alguma instância conectada (open) diferente da selecionada, sugere correção.
+    // Isso evita o cenário confuso: UI mostra "close" mas mensagens ainda são enviadas porque
+    // o sistema pode auto-detectar uma instância ativa para os endpoints de envio.
+    const connectedInstance = allInstances.find(i => i && i.status === 'open');
     
     // Verifica status da instância selecionada
     const currentConfig = { ...config, instanceName: selectedInstance };
@@ -63,13 +68,16 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
         'error': 'Erro na API'
     };
     
+    // Sugestão de instância (prioriza a conectada)
+    const suggestedInstanceName =
+        (connectedInstance?.instanceName && connectedInstance.instanceName !== selectedInstance)
+          ? connectedInstance.instanceName
+          : (details?.isMismatch && details.name ? details.name : null);
+    setDetectedName(suggestedInstanceName);
+
     if (details && details.state) {
         const friendlyStatus = statusMap[details.state] || details.state || 'unknown';
         setDetailedStatus(friendlyStatus);
-        
-        if (details.isMismatch && details.name) {
-            setDetectedName(details.name);
-        }
 
         if (details.state === 'open') {
             setStatus('connected');
@@ -454,9 +462,13 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                     <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-xl neon-border">
                       <div className="flex items-center gap-2 mb-2">
                         <AlertTriangle className="text-amber-400" size={18} strokeWidth={2} />
-                        <p className="text-sm text-amber-400 font-futuristic">Nome Incorreto Detectado</p>
+                        <p className="text-sm text-amber-400 font-futuristic">Instância Ativa Detectada</p>
                       </div>
-                      <p className="text-xs text-amber-300 mb-2">A API detectou um nome diferente: <strong>{detectedName}</strong></p>
+                      <p className="text-xs text-amber-300 mb-2">
+                        Existe uma instância <strong>conectada</strong> diferente da selecionada: <strong>{detectedName}</strong>.
+                        <br />
+                        Se você estiver enviando mensagens normalmente, é bem provável que o sistema esteja usando essa instância ativa.
+                      </p>
                       <button 
                         onClick={handleFixName} 
                         className="w-full px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-400 text-sm rounded-lg transition-all"

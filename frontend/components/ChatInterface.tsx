@@ -782,6 +782,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
           const result = await sendRealMessageWithId(apiConfig, targetNumber, messageToSend);
           if (result.success && result.messageId) {
             patchMessageInChatSnapshot(chatSnapshotAfterLocalAdd, localId, {
+              id: result.messageId, // Unifica ID local com ID real (evita duplicação no merge)
               whatsappMessageId: result.messageId,
               rawMessage: (result.raw ?? localMsg.rawMessage)
             });
@@ -820,6 +821,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         const result = await sendRealMediaMessageWithId(apiConfig, targetNumber, blob, captionToSend, sendMediaType, fileName);
         if (result.success && result.messageId) {
           patchMessageInChatSnapshot(chatSnapshotAfterLocalAdd, localId, {
+            id: result.messageId, // Unifica ID local com ID real (evita duplicação no merge)
             whatsappMessageId: result.messageId,
             rawMessage: (result.raw ?? localMsg.rawMessage)
           });
@@ -1347,9 +1349,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         const patchedChat = {
           ...chatSnapshotAfterLocalAdd,
           messages: chatSnapshotAfterLocalAdd.messages.map(m => {
-            if (m.id === newMessage.id) {
+            const shouldPatch =
+              m.id === newMessage.id ||
+              m.id === result.messageId ||
+              m.whatsappMessageId === result.messageId;
+            if (shouldPatch) {
               return {
                 ...m,
+                id: result.messageId, // Unifica o ID com o ID real do WhatsApp (evita duplicação por chaves diferentes)
                 whatsappMessageId: result.messageId,
                 rawMessage: (result.raw ?? m.rawMessage)
               };
@@ -1522,9 +1529,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             const patchedChat = {
                 ...chatSnapshotAfterLocalAdd,
                 messages: chatSnapshotAfterLocalAdd.messages.map(m => {
-                    if (m.id === newMessage.id) {
+                    const shouldPatch =
+                      m.id === newMessage.id ||
+                      m.id === result.messageId ||
+                      m.whatsappMessageId === result.messageId;
+                    if (shouldPatch) {
                         return {
                             ...m,
+                            id: result.messageId, // Unifica o ID com o ID real do WhatsApp (evita duplicação por chaves diferentes)
                             whatsappMessageId: result.messageId,
                             rawMessage: (result.raw ?? m.rawMessage)
                         };
