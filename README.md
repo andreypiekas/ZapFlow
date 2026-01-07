@@ -93,6 +93,7 @@ Este é o guia mais completo e atualizado, incluindo:
 **Deploy:**
 - **[install/deploy.txt](./install/deploy.txt)** - Deploy em produção com domínio e HTTPS
 - **[install/deploy_hostgator.txt](./install/deploy_hostgator.txt)** - Deploy específico para HostGator
+- **[docs/HTTPS_POR_IP_AUTOCONFIG.md](./docs/HTTPS_POR_IP_AUTOCONFIG.md)** - HTTPS mesmo acessando por IP (sem domínio) + autoconfig
 
 **Segurança:**
 - **[install/security_hostgator.txt](./install/security_hostgator.txt)** - Segurança avançada

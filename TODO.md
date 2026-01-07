@@ -235,19 +235,23 @@
 ## 🔒 Infra / Deploy
 
 ### 13. HTTPS mesmo acessando por IP + arquivo de autoconfiguração
-**Status:** 🔴 Pendente  
+**Status:** ✅ Concluído  
 **Prioridade:** Alta  
 **Objetivo:** Permitir acesso via `https://<IP>` sem depender de domínio e sem exigir configuração manual; o processo deve gerar um **arquivo de autoconfiguração**.
 
-**Tarefas detalhadas:**
-- Gerar certificado TLS para uso por IP (ex.: **CA interna/self‑signed**) e salvar em um local padrão (ex.: `certs/`).
-- Criar **arquivo de autoconfiguração** (ex.: `install/https_autoconfig.ps1` / `install/https_autoconfig.sh` ou `install/https_autoconfig.json`) que:
-  - Detecta IP automaticamente.
-  - Configura reverse proxy (ex.: Nginx/Caddy) para `https://<IP>`.
-  - Força redirecionamento `http -> https`.
-  - Ajusta `.env`/config (`VITE_API_URL`, `BASE_URL`, etc.) para usar HTTPS.
-  - Garante WebSocket (Socket.IO) funcionando em HTTPS e CORS correto.
-- Documentar o passo de confiar no certificado (quando necessário) em Windows/Android.
+**Implementação (resumo):**
+- Autoconfig (Linux): `install/https_autoconfig.sh`
+  - Detecta IP automaticamente
+  - Gera certificado self‑signed com **SAN IP** e salva em `/etc/zentria/certs/`
+  - Copia o cert público para `certs/zentria-ip.crt` (ignorado no git)
+  - Configura Nginx com `80 → 443` e proxy:
+    - `/` → frontend (`:5173`)
+    - `/api/` → backend (`:3001`)
+    - `/instance/`, `/message/`, `/chat/`, `/socket.io/` → Evolution (`:8080`) com upgrade (WSS)
+- Helper (Windows): `install/https_autoconfig.ps1` (importa o cert no store confiável do Windows).
+- Docs: `docs/HTTPS_POR_IP_AUTOCONFIG.md` (inclui passos Windows/Android e troubleshooting).
+- Docker: `docker-compose.yml` aceita override de URL pública via `EVOLUTION_SERVER_URL`.
+- Backend: `backend/config.example.env` atualizado (envs novos + proxy/HSTS + rate limiting).
 
 **Critério de aceite:**
 - Abrir `https://<IP>` e usar login + chats + mídias + WebSocket sem falhas.

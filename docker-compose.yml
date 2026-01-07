@@ -17,7 +17,9 @@ services:
       - SERVER_PORT=8080
       # Use SERVER_IP via env/.env do Docker Compose para evitar IP hardcoded (zero configuração manual).
       # Ex.: SERVER_IP=192.168.0.10 -> SERVER_URL=http://192.168.0.10:8080
-      - SERVER_URL=http://${SERVER_IP:-localhost}:8080
+      # Se você estiver usando Nginx com HTTPS por IP/domínio, pode sobrescrever:
+      #   EVOLUTION_SERVER_URL=https://SEU_HOST
+      - SERVER_URL=${EVOLUTION_SERVER_URL:-http://${SERVER_IP:-localhost}:8080}
       - AUTHENTICATION_API_KEY=B8349283-F143-429D-B6C2-9386E8016558
       - WEBSOCKET_ENABLED=true
       - DATABASE_ENABLED=true
