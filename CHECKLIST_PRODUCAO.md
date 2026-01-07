@@ -71,7 +71,7 @@
 - [x] **README.md** principal com visão geral
 - [x] **INSTALACAO_BACKEND.md** com passo a passo
 - [x] **backend/README.md** com documentação da API
-- [x] **ROTEIRO_IMPLANTACAO.md** com funcionalidades pendentes
+- [x] **TODO.md** com funcionalidades pendentes / roadmap
 - [x] **Guia de troubleshooting** básico
 - [x] **Documentação de análise de erros** (docs/)
 
@@ -125,7 +125,7 @@
 
 #### Funcionalidades Pendentes
 
-- [ ] **Exibir nome e setor** nas mensagens enviadas (ROTEIRO_IMPLANTACAO.md)
+- [ ] **Exibir nome e setor** nas mensagens enviadas
 - [ ] **Mensagem automática** de seleção de setores para novos contatos
 - [x] **Corrigir chatbot** (marcação de mensagens enviadas implementada) ✅ CORRIGIDO
 - [ ] **Ajustar relatórios** (contagem de avaliações não funciona)

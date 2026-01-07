@@ -294,3 +294,44 @@ Manter os arquivos de instucao e manuais, documentos
 - Docs/Scripts/PM2/Docker: atualizar nomes e referências.
 - Fazer varredura por `ZapFlow`/`zapflow` e substituir com critério (não quebrar chaves/IDs; definir estratégia de migração de `localStorage` se necessário).
 
+---
+
+### 16. Abas dentro da tela de Configurações (organização/UX)
+**Status:** 🟡 Em definição  
+**Prioridade:** Média  
+**Objetivo:** Transformar a tela de **Configurações** em abas (reduzir scroll e organizar por contexto).
+
+**Sugestão de abas:**
+- **Sistema / Evolution API**
+- **Integrações** (Google/IA, Telegram)
+- **Notificações**
+- **Manutenção**
+
+**Tarefas detalhadas:**
+- Criar navegação por abas na `frontend/components/Settings.tsx`.
+- Quebrar em subcomponentes por aba (manutenção).
+- Garantir comportamento correto para **Admin vs Não‑Admin** (não-admin vê apenas “Notificações”).
+- (Opcional) Persistir aba selecionada no `localStorage`.
+
+**Critério de aceite:**
+- Navegação por abas funciona e não altera o comportamento atual de salvar configurações.
+
+---
+
+### 17. Validar fluxo de notificações do navegador
+**Status:** 🟡 Em validação  
+**Prioridade:** Alta  
+**Objetivo:** Garantir que a notificação do navegador seja **previsível** e **não invasiva**.
+
+**Regras desejadas:**
+- **Permissão** só é solicitada por **ação do usuário** (Configurações).
+- **Browser notification** só aparece quando **a janela não está em foco** e a permissão já está **granted**.
+- Nunca disparar `Notification.requestPermission()` automaticamente ao receber mensagem.
+
+**Implementação (ajuste realizado):**
+- `frontend/App.tsx`: removido pedido automático de permissão; `showBrowserNotification()` só exibe quando `permission === 'granted'`; gate corrigido para notificar apenas sem foco.
+
+**Checklist de teste (manual):**
+- Permissão **granted**: receber mensagem com a aba em segundo plano → notificação aparece.
+- Aba em foco: receber mensagem → **não** deve aparecer notificação do navegador (apenas toast/som interno).
+- Permissão **default/denied**: receber mensagem → não aparece notificação e não deve abrir prompt automático.

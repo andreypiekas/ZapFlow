@@ -3790,37 +3790,9 @@ const App: React.FC = () => {
     });
   }, [contacts]); // Executa quando contatos mudam
 
-  // Solicita permissão para notificações do navegador após login
-  const requestNotificationPermission = () => {
-    if ('Notification' in window) {
-      if (Notification.permission === 'default') {
-        Notification.requestPermission().then(permission => {
-          if (permission === 'granted') {
-            console.log('[App] ✅ Permissão de notificações concedida');
-            addNotification('Notificações Ativadas', 'Você receberá notificações quando novas mensagens chegarem.', 'success', false, false);
-          } else if (permission === 'denied') {
-            console.warn('[App] ⚠️ Permissão de notificações negada');
-            addNotification('Notificações Desativadas', 'As notificações do navegador foram negadas. Você pode ativá-las nas configurações do navegador.', 'warning', false, false);
-          }
-        }).catch(err => {
-          console.warn('[App] Erro ao solicitar permissão de notificações:', err);
-        });
-      } else if (Notification.permission === 'denied') {
-        addNotification('Notificações Bloqueadas', 'As notificações estão bloqueadas. Desbloqueie nas configurações do navegador para receber alertas.', 'warning', false, false);
-      }
-    }
-  };
-
-  useEffect(() => {
-    if (currentUser && 'Notification' in window && Notification.permission === 'default') {
-      // Solicita permissão após um pequeno delay para garantir que é após interação do usuário
-      const timer = setTimeout(() => {
-        requestNotificationPermission();
-      }, 2000);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [currentUser]);
+  // Notificações do navegador:
+  // - A permissão deve ser solicitada via ação explícita do usuário (tela de Configurações).
+  // - O app só tenta exibir notificações quando a permissão já foi concedida.
 
   // Função para tocar som de notificação
   const playNotificationSound = () => {
@@ -3860,52 +3832,33 @@ const App: React.FC = () => {
       return;
     }
 
-    // Se a permissão ainda não foi solicitada, solicita agora
-    if (Notification.permission === 'default') {
-      Notification.requestPermission().then(permission => {
-        if (permission === 'granted') {
-          // Tenta mostrar a notificação novamente após permissão concedida
-          showBrowserNotification(title, message);
-        } else {
-          console.warn('[App] Permissão de notificações negada pelo usuário');
-        }
-      }).catch(err => {
-        console.warn('[App] Erro ao solicitar permissão de notificações:', err);
+    // Só exibe se a permissão já foi concedida (evita prompts inesperados/sem gesto do usuário)
+    if (Notification.permission !== 'granted') {
+      return;
+    }
+
+    try {
+      const notification = new Notification(title, {
+        body: message,
+        icon: '/favicon.svg',
+        badge: '/favicon.svg',
+        tag: 'zentria-message',
+        requireInteraction: false,
+        silent: false // Garante que o som do sistema seja reproduzido
       });
-      return;
-    }
-
-    // Se a permissão foi negada, não tenta mostrar
-    if (Notification.permission === 'denied') {
-      console.warn('[App] Permissão de notificações foi negada');
-      return;
-    }
-
-    // Se a permissão foi concedida, mostra a notificação
-    if (Notification.permission === 'granted') {
-      try {
-        const notification = new Notification(title, {
-          body: message,
-          icon: '/favicon.ico',
-          badge: '/favicon.ico',
-          tag: 'zentria-message',
-          requireInteraction: false,
-          silent: false // Garante que o som do sistema seja reproduzido
-        });
-        
-        // Fecha a notificação após 5 segundos
-        setTimeout(() => {
-          notification.close();
-        }, 5000);
-        
-        // Foca na janela quando clica na notificação
-        notification.onclick = () => {
-          window.focus();
-          notification.close();
-        };
-      } catch (err) {
-        console.warn('[App] Erro ao mostrar notificação do navegador:', err);
-      }
+      
+      // Fecha a notificação após 5 segundos
+      setTimeout(() => {
+        notification.close();
+      }, 5000);
+      
+      // Foca na janela quando clica na notificação
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+      };
+    } catch (err) {
+      console.warn('[App] Erro ao mostrar notificação do navegador:', err);
     }
   };
 
@@ -3918,10 +3871,9 @@ const App: React.FC = () => {
       playNotificationSound();
     }
     
-    // Mostra notificação do navegador se solicitado (sempre que não estiver em foco ou quando solicitado explicitamente)
+    // Mostra notificação do navegador se solicitado (somente quando a janela não está em foco)
     if (showBrowser) {
-      // Mostra notificação se a página não está em foco OU se a permissão foi concedida
-      if (!document.hasFocus() || Notification.permission === 'granted') {
+      if (!document.hasFocus()) {
         showBrowserNotification(title, message);
       }
     }
