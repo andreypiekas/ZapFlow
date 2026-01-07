@@ -2627,86 +2627,106 @@ const App: React.FC = () => {
                         }
                     }
                     
-                    // Extrai dados da mensagem
-                    const messageData = data.message || data;
-                    if (!messageData || !messageData.key) {
-                        logger.debug('[App] 🔍 [DEBUG] Socket.IO messages.upsert: messageData ou key ausente', { hasMessage: !!data.message, hasData: !!data, hasKey: !!messageData?.key });
-                        return;
-                    }
-                    
-                    // IMPORTANTE: alguns ambientes recebem mensagens com `remoteJid` em formato `@lid` (identificador interno),
-                    // mas também trazem `remoteJidAlt` com o JID real do contato. Para não "perder" mensagens em bursts,
-                    // sempre preferimos o ALT quando o remoteJid é `@lid`.
-                    const rawRemoteJid = messageData.key.remoteJid || '';
-                    const rawRemoteJidAlt = messageData.key.remoteJidAlt || '';
-                    const effectiveRemoteJid =
-                      (rawRemoteJid && rawRemoteJid.includes('@lid') && rawRemoteJidAlt) ? rawRemoteJidAlt :
-                      (rawRemoteJid || rawRemoteJidAlt || '');
-
-                    const remoteJid = normalizeJid(effectiveRemoteJid);
-                    if (!remoteJid) {
-                        logger.debug('[App] 🔍 [DEBUG] Socket.IO messages.upsert: remoteJid ausente', { key: messageData.key });
-                        return;
-                    }
-                    
-                    // Log para debug
-                    const messageContent = messageData.message?.conversation || messageData.message?.extendedTextMessage?.text || messageData.message?.imageMessage?.caption || 'sem conteúdo';
-                    const messageStatus = messageData.status || 'sem status';
-                    const fromMe = messageData.key?.fromMe || false;
-                    const hasImageMessage = !!(messageData.message?.imageMessage || messageData.imageMessage);
-                    const imageUrl = messageData.message?.imageMessage?.url || messageData.imageMessage?.url || messageData.url || 'não encontrado';
-                    
-                    // Log detalhado para imagens
-                    if (hasImageMessage) {
-                        logger.debug('[App] 🖼️ [DEBUG] Socket.IO: Imagem detectada na mensagem recebida:', {
-                            hasMessageImageMessage: !!messageData.message?.imageMessage,
-                            hasImageMessage: !!messageData.imageMessage,
-                            messageImageMessageKeys: messageData.message?.imageMessage ? Object.keys(messageData.message.imageMessage) : [],
-                            imageMessageKeys: messageData.imageMessage ? Object.keys(messageData.imageMessage) : [],
-                            messageImageMessageUrl: messageData.message?.imageMessage?.url || 'não encontrado',
-                            imageMessageUrl: messageData.imageMessage?.url || 'não encontrado',
-                            messageImageMessageDirectPath: messageData.message?.imageMessage?.directPath || 'não encontrado',
-                            imageMessageDirectPath: messageData.imageMessage?.directPath || 'não encontrado',
-                            fullMessageDataStructure: JSON.stringify(messageData).substring(0, 2000)
-                        });
-                    }
-                    
-                    logger.debug(`[App] 🔍 [DEBUG] Socket.IO messages.upsert recebido: remoteJid=${remoteJid}, fromMe=${fromMe}, status=${messageStatus}, content="${messageContent.substring(0, 50)}", hasImage=${hasImageMessage}, imageUrl=${typeof imageUrl === 'string' ? imageUrl.substring(0, 100) : imageUrl}`);
-                    
-                    // Log específico para mensagens do agente
-                    if (fromMe) {
-                        logger.debug(`[App] 🎯 [DEBUG] Socket.IO: Mensagem do AGENTE detectada! fromMe=${fromMe}, content="${messageContent.substring(0, 100)}"`);
-                    }
-                    
-                    // Se é uma imagem e encontrou URL, garante que ela seja preservada na estrutura
-                    if (hasImageMessage && imageUrl && imageUrl !== 'não encontrado' && typeof imageUrl === 'string') {
-                        // Garante que a URL esteja na estrutura correta antes de processar
-                        if (messageData.message?.imageMessage && !messageData.message.imageMessage.url) {
-                            messageData.message.imageMessage.url = imageUrl;
-                            logger.debug('[App] ✅ [DEBUG] Socket.IO: URL preservada em message.imageMessage.url');
-                        } else if (messageData.imageMessage && !messageData.imageMessage.url) {
-                            messageData.imageMessage.url = imageUrl;
-                            logger.debug('[App] ✅ [DEBUG] Socket.IO: URL preservada em imageMessage.url');
+                    // Evolution/Socket.IO pode enviar:
+                    // - um objeto de mensagem (com key)
+                    // - um wrapper { message: {...} }
+                    // - um wrapper { messages: [...] } (batch, comum em bursts)
+                    // - um wrapper { data: ... } / { data: { messages: [...] } }
+                    const extractUpsertMessages = (payload: any): any[] => {
+                        if (!payload) return [];
+                        if (Array.isArray(payload)) return payload;
+                        if (Array.isArray(payload.messages)) return payload.messages;
+                        if (payload.message) return Array.isArray(payload.message) ? payload.message : [payload.message];
+                        if (payload.data) {
+                            const d = payload.data;
+                            if (Array.isArray(d)) return d;
+                            if (Array.isArray(d.messages)) return d.messages;
+                            if (d.message) return Array.isArray(d.message) ? d.message : [d.message];
+                            return [d];
                         }
+                        return [payload];
+                    };
+
+                    const upsertMessages = extractUpsertMessages(data)
+                        .flat()
+                        .filter((m: any) => m && typeof m === 'object')
+                        .filter((m: any) => !!(m.key || m?.message?.key));
+
+                    if (upsertMessages.length === 0) {
+                        logger.debug('[App] 🔍 [DEBUG] Socket.IO messages.upsert: nenhum item com key encontrado', {
+                            hasData: !!data,
+                            dataType: typeof data,
+                            dataKeys: data && typeof data === 'object' ? Object.keys(data).slice(0, 15) : [],
+                            hasMessage: !!(data as any)?.message,
+                            hasMessages: Array.isArray((data as any)?.messages),
+                            hasDataField: !!(data as any)?.data
+                        });
+                        return;
                     }
-                    
-                    // Adiciona mensagem à fila para processamento em batch
-                    if (!messageQueue.has(remoteJid)) {
-                        messageQueue.set(remoteJid, []);
-                    }
-                    messageQueue.get(remoteJid)?.push(messageData);
-                    
-                    // Limpa timeout anterior e cria novo
-                    if (messageProcessTimeouts.has(remoteJid)) {
-                        clearTimeout(messageProcessTimeouts.get(remoteJid)!);
-                    }
-                    messageProcessTimeouts.set(remoteJid, setTimeout(() => {
-                        const messagesToProcess = messageQueue.get(remoteJid) || [];
-                        logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Processando batch de ${messagesToProcess.length} mensagens para ${remoteJid}`);
-                        processMessageBatch(remoteJid, messagesToProcess);
-                        messageQueue.delete(remoteJid);
-                        messageProcessTimeouts.delete(remoteJid);
-                    }, 100));
+
+                    // Enfileira TODAS as mensagens do payload (incluindo batch)
+                    upsertMessages.forEach((messageData: any) => {
+                        const key = messageData.key || messageData?.message?.key;
+                        if (!key) return;
+
+                        // Preferência: remoteJidAlt quando remoteJid é @lid
+                        const rawRemoteJid = key.remoteJid || '';
+                        const rawRemoteJidAlt = key.remoteJidAlt || '';
+                        const effectiveRemoteJid =
+                            (rawRemoteJid && rawRemoteJid.includes('@lid') && rawRemoteJidAlt)
+                                ? rawRemoteJidAlt
+                                : (rawRemoteJid || rawRemoteJidAlt || '');
+
+                        const remoteJid = normalizeJid(effectiveRemoteJid);
+                        if (!remoteJid) return;
+
+                        // Log para debug (por mensagem)
+                        const messageContent =
+                            messageData.message?.conversation ||
+                            messageData.message?.extendedTextMessage?.text ||
+                            messageData.message?.imageMessage?.caption ||
+                            'sem conteúdo';
+                        const messageStatus = messageData.status || 'sem status';
+                        const fromMe = key?.fromMe || false;
+                        const hasImageMessage = !!(messageData.message?.imageMessage || messageData.imageMessage);
+                        const imageUrl =
+                            messageData.message?.imageMessage?.url ||
+                            messageData.imageMessage?.url ||
+                            messageData.url ||
+                            'não encontrado';
+
+                        logger.debug(
+                            `[App] 🔍 [DEBUG] Socket.IO messages.upsert item: remoteJid=${remoteJid}, fromMe=${fromMe}, status=${messageStatus}, content="${String(messageContent).substring(0, 50)}"`
+                        );
+
+                        // Se é uma imagem e encontrou URL, garante que ela seja preservada na estrutura
+                        if (hasImageMessage && imageUrl && imageUrl !== 'não encontrado' && typeof imageUrl === 'string') {
+                            if (messageData.message?.imageMessage && !messageData.message.imageMessage.url) {
+                                messageData.message.imageMessage.url = imageUrl;
+                            } else if (messageData.imageMessage && !messageData.imageMessage.url) {
+                                messageData.imageMessage.url = imageUrl;
+                            }
+                        }
+
+                        if (!messageQueue.has(remoteJid)) {
+                            messageQueue.set(remoteJid, []);
+                        }
+                        messageQueue.get(remoteJid)?.push(messageData);
+
+                        if (messageProcessTimeouts.has(remoteJid)) {
+                            clearTimeout(messageProcessTimeouts.get(remoteJid)!);
+                        }
+                        messageProcessTimeouts.set(
+                            remoteJid,
+                            setTimeout(() => {
+                                const messagesToProcess = messageQueue.get(remoteJid) || [];
+                                logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Processando batch de ${messagesToProcess.length} mensagens para ${remoteJid}`);
+                                processMessageBatch(remoteJid, messagesToProcess);
+                                messageQueue.delete(remoteJid);
+                                messageProcessTimeouts.delete(remoteJid);
+                            }, 100)
+                        );
+                    });
                 } catch (err) {
                     console.error('[App] ❌ Erro ao processar mensagem Socket.IO:', err);
                 }
