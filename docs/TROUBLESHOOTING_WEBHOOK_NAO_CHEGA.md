@@ -178,7 +178,7 @@ Recomendada: **v2.3.4** (conforme `docker-compose.yml`)
 pm2 status
 
 # Se não estiver, iniciar
-cd /home/piekas/ZapFlow
+cd /home/piekas/zentria
 pm2 start backend/server.js --name backend
 
 # Verificar porta

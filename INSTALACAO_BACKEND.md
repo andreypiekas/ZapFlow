@@ -103,7 +103,7 @@ node scripts/fix-chat-data-keys.js
 node scripts/clean-invalid-chats.js
 ```
 
-**Nota:** O script `autoinstall.txt` executa todas essas migrações automaticamente durante a instalação.
+**Nota:** O script `install/autoinstall.txt` executa todas essas migrações automaticamente durante a instalação.
 ```
 
 ### 5. Iniciar Servidor
@@ -127,15 +127,15 @@ ip addr show | grep "inet " | grep -v 127.0.0.1
 
 ### 6. Configurar Frontend
 
-No arquivo `.env` do frontend (raiz do projeto), adicione:
+No arquivo `frontend/.env` (pasta do frontend), adicione:
 
 ```env
-VITE_API_URL=http://SEU_IP_SERVIDOR:3001/api
+VITE_API_URL=http://SEU_IP_SERVIDOR:3001
 ```
 
 **Substitua `SEU_IP_SERVIDOR` pelo IP real do seu servidor.**
 
-Ou configure no `vite.config.ts` se necessário.
+Ou configure no `frontend/vite.config.ts` se necessário.
 
 ## Verificação
 
@@ -177,7 +177,7 @@ Para produção:
 5. **Use um processo manager** como PM2:
 ```bash
 npm install -g pm2
-pm2 start server.js --name zapflow-backend
+pm2 start server.js --name zentria-backend
 pm2 save
 pm2 startup
 ```

@@ -2,7 +2,7 @@
 
 ## 🚀 Comando Rápido (Copie e Cole)
 
-Execute na VM no diretório `/home/piekas/ZapFlow`:
+Execute na VM no diretório `/home/piekas/zentria`:
 
 ```bash
 # Opção 1: Editar diretamente (mais rápido)
@@ -52,7 +52,7 @@ Deve mostrar: `image: evoapicloud/evolution-api:v2.3.4`
 Se o diretório estiver vinculado ao Git:
 
 ```bash
-cd /home/piekas/ZapFlow
+cd /home/piekas/zentria
 git pull origin main
 docker compose up -d
 ```

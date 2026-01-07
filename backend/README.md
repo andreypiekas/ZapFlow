@@ -1,6 +1,6 @@
-# ZapFlow Backend API
+# Zentria Backend API
 
-Backend API para persistência de dados do ZapFlow usando PostgreSQL.
+Backend API para persistência de dados do **Zentria** usando PostgreSQL.
 
 ## Pré-requisitos
 
@@ -19,13 +19,17 @@ npm install
 2. **Configure o banco de dados PostgreSQL:**
 ```bash
 # Crie o banco de dados
-createdb zapflow
+createdb zentria
 
 # Ou usando psql:
 psql -U postgres
-CREATE DATABASE zapflow;
+CREATE DATABASE zentria;
 \q
 ```
+
+**Compatibilidade (upgrade):** se sua instalação antiga usava o banco `zapflow`, você pode:
+- Manter como está e definir `DB_NAME=zapflow` no `.env`, ou
+- Renomear o banco: `ALTER DATABASE zapflow RENAME TO zentria;`
 
 3. **Configure as variáveis de ambiente:**
 ```bash
@@ -94,11 +98,11 @@ ip addr show | grep "inet " | grep -v 127.0.0.1
 
 ```env
 # PostgreSQL (localhost está correto aqui, pois o PostgreSQL roda no mesmo servidor)
-DATABASE_URL=postgresql://usuario:senha@localhost:5432/zapflow
+DATABASE_URL=postgresql://usuario:senha@localhost:5432/zentria
 # ou
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=zapflow
+DB_NAME=zentria
 DB_USER=postgres
 DB_PASSWORD=sua_senha
 
@@ -369,7 +373,7 @@ Resposta:
 **Erro de conexão com PostgreSQL:**
 - Verifique se o PostgreSQL está rodando
 - Confirme as credenciais no .env
-- Teste a conexão: `psql -U postgres -d zapflow`
+      - Teste a conexão: `psql -U postgres -d zentria`
 
 **Erro de autenticação:**
 - Verifique se o token está sendo enviado no header Authorization

@@ -22,7 +22,7 @@ ssh usuario@seu-servidor
 
 ```bash
 cd /caminho/para/seu/projeto
-# Exemplo: cd /opt/zapflow
+# Exemplo: cd /opt/zentria
 ```
 
 ### 3. Fazer Backup do Banco de Dados (Recomendado)
@@ -66,7 +66,7 @@ Para:
 image: evoapicloud/evolution-api:latest
 ```
 
-**OU** se você estiver usando os scripts de instalação (`setup_evolution.txt`, `autoinstall.txt`, etc.), eles já foram atualizados no repositório.
+**OU** se você estiver usando os scripts de instalação (`install/setup_evolution.txt`, `install/autoinstall.txt`, etc.), eles já foram atualizados no repositório.
 
 ### 6. Baixar a Nova Imagem
 
@@ -151,8 +151,8 @@ docker logs evolution_api --tail 100
 curl http://localhost:8080/instance/fetchInstances \
   -H "apikey: B8349283-F143-429D-B6C2-9386E8016558"
 
-# Verificar status de conexão
-curl http://localhost:8080/instance/connectionState/ZapFlow \
+# Verificar status de conexão (substitua pelo nome da sua instância)
+curl http://localhost:8080/instance/connectionState/Zentria \
   -H "apikey: B8349283-F143-429D-B6C2-9386E8016558"
 ```
 

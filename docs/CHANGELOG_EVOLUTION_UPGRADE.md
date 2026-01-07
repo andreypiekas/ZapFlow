@@ -7,19 +7,19 @@
 ## 📦 Arquivos Atualizados
 
 ### Arquivos de Configuração Docker
-- ✅ `setup_evolution.txt` - Imagem atualizada para `evoapicloud/evolution-api:latest`
-- ✅ `autoinstall.txt` - Imagem atualizada para `evoapicloud/evolution-api:latest`
-- ✅ `manual_instalacao.txt` - Imagem atualizada para `evoapicloud/evolution-api:latest`
-- ✅ `manual_instalacao_completo.txt` - Imagem atualizada para `evoapicloud/evolution-api:latest`
+- ✅ `install/setup_evolution.txt` - Imagem atualizada para `evoapicloud/evolution-api:latest`
+- ✅ `install/autoinstall.txt` - Imagem atualizada para `evoapicloud/evolution-api:latest`
+- ✅ `install/manual_instalacao.txt` - Imagem atualizada para `evoapicloud/evolution-api:latest`
+- ✅ `install/manual_instalacao_completo.txt` - Imagem atualizada para `evoapicloud/evolution-api:latest`
 
 ### Documentação
 - ✅ `README.md` - Referências atualizadas para latest
 - ✅ `ANALISE_ERROS.md` - Referências atualizadas para latest
-- ✅ `services/whatsappService.ts` - Comentário atualizado
+- ✅ `frontend/services/whatsappService.ts` - Comentário atualizado
 
 ## 💾 Backup
 
-Todos os arquivos originais foram salvos em: `backup_evolution_v2.2.3/`
+Todos os arquivos originais foram salvos em: `archive/backup_evolution_v2.2.3/`
 
 ## 🔄 Próximos Passos
 
@@ -59,7 +59,7 @@ Após atualizar, verificar:
 
 ## ⚠️ Notas Importantes
 
-- **Backup criado:** Todos os arquivos originais estão em `backup_evolution_v2.2.3/`
+- **Backup criado:** Todos os arquivos originais estão em `archive/backup_evolution_v2.2.3/`
 - **Rollback:** Se necessário, restaure os arquivos do backup
 - **Configurações:** As variáveis de ambiente permanecem as mesmas
 - **Banco de Dados:** Não deve ser necessário migração de dados

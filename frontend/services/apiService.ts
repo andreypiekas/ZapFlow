@@ -74,7 +74,10 @@ class ApiService {
   }
 
   private getToken(): string | null {
-    const encrypted = localStorage.getItem('zapflow_auth_token');
+    const encrypted = SecurityService.getItemWithFallback(
+      SecurityService.KEY_AUTH_TOKEN,
+      SecurityService.LEGACY_KEY_AUTH_TOKEN
+    );
     if (!encrypted) return null;
     
     // Tenta descriptografar o token se estiver criptografado
@@ -137,8 +140,19 @@ class ApiService {
       // Salva token e usuário apenas se não estiver configurado para usar apenas PostgreSQL
       if (!storageService.getUseOnlyPostgreSQL()) {
         // Criptografa dados sensíveis antes de salvar
-        localStorage.setItem('zapflow_auth_token', SecurityService.encrypt(response.token));
-        localStorage.setItem('zapflow_user', SecurityService.encrypt(JSON.stringify(response.user)));
+        const encToken = SecurityService.encrypt(response.token);
+        const encUser = SecurityService.encrypt(JSON.stringify(response.user));
+
+        localStorage.setItem(SecurityService.KEY_AUTH_TOKEN, encToken);
+        localStorage.setItem(SecurityService.KEY_USER, encUser);
+
+        // Compat: mantém as chaves antigas também (permite downgrade sem perder sessão)
+        try {
+          localStorage.setItem(SecurityService.LEGACY_KEY_AUTH_TOKEN, encToken);
+          localStorage.setItem(SecurityService.LEGACY_KEY_USER, encUser);
+        } catch {
+          // noop
+        }
       }
     }
     
@@ -147,8 +161,10 @@ class ApiService {
 
   logout(): void {
     // Remove dados sensíveis do localStorage
-    localStorage.removeItem('zapflow_auth_token');
-    localStorage.removeItem('zapflow_user');
+    localStorage.removeItem(SecurityService.KEY_AUTH_TOKEN);
+    localStorage.removeItem(SecurityService.KEY_USER);
+    localStorage.removeItem(SecurityService.LEGACY_KEY_AUTH_TOKEN);
+    localStorage.removeItem(SecurityService.LEGACY_KEY_USER);
   }
 
   // Operações de dados
@@ -599,7 +615,7 @@ export const apiService = new ApiService();
 
 // Funções auxiliares exportadas
 export const getAuthToken = (): string | null => {
-  return localStorage.getItem('zapflow_auth_token');
+  return SecurityService.getItemWithFallback(SecurityService.KEY_AUTH_TOKEN, SecurityService.LEGACY_KEY_AUTH_TOKEN);
 };
 
 export const checkApiHealth = async (): Promise<boolean> => {

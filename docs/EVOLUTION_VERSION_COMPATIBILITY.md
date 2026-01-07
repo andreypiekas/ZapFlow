@@ -60,7 +60,7 @@ docker-compose up -d
 
 ## Compatibilidade do Código
 
-O código do ZapFlow foi desenvolvido para funcionar com ambas as versões:
+O código do Zentria foi desenvolvido para funcionar com ambas as versões:
 
 - ✅ Suporte para `mediatype` no nível raiz (2.3.4 e 2.3.6)
 - ✅ Tratamento de `imageMessage` vazio

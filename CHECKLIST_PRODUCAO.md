@@ -1,4 +1,4 @@
-# 📋 Checklist de Produção - ZapFlow Manager
+# 📋 Checklist de Produção - Zentria Manager
 
 **Versão:** 1.3.0  
 **Data:** 2025-01-XX  
@@ -56,7 +56,7 @@
 
 ### 🚀 Infraestrutura & Deploy
 
-- [x] **Scripts de instalação automatizada** (autoinstall.txt)
+- [x] **Scripts de instalação automatizada** (`install/autoinstall.txt`)
 - [x] **Scripts de setup backend** (Linux e Windows)
 - [x] **Documentação de instalação** completa
 - [x] **Guia de deploy** para HostGator VPS

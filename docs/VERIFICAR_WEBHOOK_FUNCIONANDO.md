@@ -102,7 +102,7 @@ Verifique se o base64 foi salvo no banco:
 
 ```sql
 -- Conectar ao PostgreSQL
-psql -U postgres -d zapflow
+psql -U postgres -d zentria
 
 -- Ver mensagens salvas pelo webhook
 SELECT 

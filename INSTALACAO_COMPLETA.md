@@ -189,7 +189,7 @@ npm run dev
 npm install -g pm2
 
 # Iniciar servidor
-pm2 start server.js --name zapflow-backend
+pm2 start server.js --name zentria-backend
 
 # Salvar configuração
 pm2 save
@@ -228,10 +228,10 @@ npm install
 
 ### 2. Configurar Variáveis de Ambiente (Opcional)
 
-Crie um arquivo `.env` na raiz (se necessário):
+Crie um arquivo `frontend/.env` (se necessário):
 
 ```env
-VITE_API_URL=http://SEU_IP_SERVIDOR:3001/api
+VITE_API_URL=http://SEU_IP_SERVIDOR:3001
 ```
 
 ### 3. Build de Produção
@@ -240,7 +240,7 @@ VITE_API_URL=http://SEU_IP_SERVIDOR:3001/api
 npm run build
 ```
 
-Isso criará a pasta `dist/` com os arquivos otimizados.
+Isso criará a pasta `frontend/dist/` com os arquivos otimizados.
 
 ### 4. Servir Frontend
 
@@ -255,7 +255,9 @@ npm run dev
 npm install -g serve
 
 # Iniciar servidor
-pm2 start serve --name zapflow-front -- -s dist -l 5173
+cd frontend
+pm2 start "serve -s dist -l 5173" --name zentria-front
+cd ..
 pm2 save
 ```
 
@@ -265,7 +267,7 @@ server {
     listen 80;
     server_name seu-dominio.com;
 
-    root /caminho/para/ZapFlow/dist;
+    root /caminho/para/zentria/frontend/dist;
     index index.html;
 
     location / {
@@ -298,7 +300,7 @@ sudo usermod -aG docker $USER
 Siga as instruções em `install/setup_evolution.txt` ou use o script automático:
 
 ```bash
-bash install/autoinstall.sh
+bash install/autoinstall.txt
 ```
 
 ### 3. Verificar Evolution API

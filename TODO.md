@@ -14,9 +14,9 @@
 - Deduplicação por `whatsappMessageId` + normalização defensiva para mensagens antigas.
 
 **Arquivos principais:**
-- `App.tsx`
-- `components/ChatInterface.tsx`
-- `services/whatsappService.ts`
+- `frontend/App.tsx`
+- `frontend/components/ChatInterface.tsx`
+- `frontend/services/whatsappService.ts`
 
 **Critério de aceite:**
 - Enviar/receber 10 mensagens seguidas → nenhuma duplicação visual por header e nenhuma mensagem salva no banco com header.
@@ -30,7 +30,7 @@
 **Correções efetivas:**
 - Backend: webhook salva base64 de forma robusta em `webhook_messages` (PostgreSQL).
 - Frontend: busca `webhook_messages` por `messageId` (inclui `data.key.id`), faz retry controlado e preserva `mediaUrl`/`rawMessage` ao mesclar mensagens (evita sobreposição por cópias sem mídia).
-- Deduplicação/merge: no `App.tsx`, ao mesclar mensagens (API/DB/local), mantemos a `mediaUrl` existente se a nova cópia vier sem mídia.
+- Deduplicação/merge: no `frontend/App.tsx`, ao mesclar mensagens (API/DB/local), mantemos a `mediaUrl` existente se a nova cópia vier sem mídia.
 
 **Critério de aceite (atingido):**
 - Enviar/receber imagens/vídeos/PDFs → continuam aparecendo após sync e F5, sem voltar “URL não disponível”.
@@ -169,9 +169,9 @@
 **Objetivo:** Usuário final não deve ver logs excessivos; dev pode reativar.
 
 **Implementação (resumo):**
-- Criado `services/logger.ts` com níveis (`error/warn/info/debug`) e flag `debugLogsEnabled`.
+- Criado `frontend/services/logger.ts` com níveis (`error/warn/info/debug`) e flag `debugLogsEnabled`.
 - Adicionado toggle em **Configurações** (“Debug do Dev”) persistido no `/api/config`.
-- Logs `[DEBUG]` do `App.tsx` migrados para `logger.debug()` (silencioso por padrão; aparece quando ativado).
+- Logs `[DEBUG]` do `frontend/App.tsx` migrados para `logger.debug()` (silencioso por padrão; aparece quando ativado).
 
 **Tarefas detalhadas:**
 - Criar `logger` com níveis (`error/warn/info/debug`).
@@ -207,7 +207,7 @@
 - Backend: `backend/services/telegramReportService.js` com scheduler diário (hora + timezone) e envio via Bot API.
 - Persistência: config global salva no banco em `user_data` (`data_type = integrations`, `data_key = telegram_report`) + status em `telegram_report_status`.
 - Segurança: token do bot **não é exposto** no `/api/config` (endpoints dedicados para admin).
-- Frontend: nova **aba Telegram** em `components/Settings.tsx` para ativar/desativar, definir horário/timezone/chatId/token + botões **Enviar teste** e **Enviar agora**.
+- Frontend: nova **aba Telegram** em `frontend/components/Settings.tsx` para ativar/desativar, definir horário/timezone/chatId/token + botões **Enviar teste** e **Enviar agora**.
 - Docs: tutorial em `docs/TELEGRAM_RELATORIO_DIARIO.md`.
 
 **Critério de aceite (atingido):**
@@ -261,21 +261,32 @@
 ## 🧹 Organização / Branding
 
 ### 14. Reorganizar arquivos do projeto + README
-**Status:** 🔴 Pendente  
+**Status:** ✅ Concluído  
 **Prioridade:** Média  
 **Objetivo:** Organizar a estrutura do repositório e garantir um `README.md` único e confiável.
+Manter os arquivos de instucao e manuais, documentos
 
 **Tarefas detalhadas:**
 - Padronizar pastas (`frontend/`, `backend/`, `docs/`, `install/`, `scripts/`) e mover arquivos conforme necessário.
 - Remover/arquivar duplicidades (ex.: backups, manuais repetidos) sem quebrar o fluxo de instalação.
-- Atualizar `README.md` com setup (Windows/Linux), variáveis `.env`, e troubleshooting.
+- Atualizar `README.md` com direcoes para os arquivos de instalacao, ajustes e configuracoes (Windows/Linux), variáveis `.env`, e troubleshooting.
 
 ---
 
 ### 15. Renomear “ZapFlow” → “Zentria” (novo nome do produto)
-**Status:** 🔴 Pendente  
+**Status:** ✅ Concluído  
 **Prioridade:** Alta  
 **Objetivo:** Alterar o branding em todo o sistema (UI, docs, scripts, serviços), mantendo compatibilidade.
+
+**Implementação (resumo):**
+- Branding atualizado para **Zentria** em UI/backend/docs/scripts (sem “ZapFlow” em arquivos ativos).
+- Compatibilidade preservada:
+  - **LocalStorage:** chaves legadas `zapflow_*` continuam sendo lidas e migradas (best‑effort) para `zentria_*`.
+  - **Banco:** instalações antigas podem manter `DB_NAME=zapflow` (opcional renomear banco para `zentria`).
+  - **PM2:** processos legados `zapflow-*` são removidos/limpos quando aplicável.
+- Script de migração para servidores já rodando versões antigas:
+  - `scripts/migrate_zapflow_to_zentria.sh`
+  - `scripts/migrate_zapflow_to_zentria.ps1`
 
 **Tarefas detalhadas:**
 - Frontend: atualizar textos/títulos/labels (incl. telas e menu).

@@ -1,11 +1,11 @@
-# Script de instalação e configuração do backend ZapFlow (PowerShell)
-# Autor: ZapFlow Team
+# Script de instalação e configuração do backend Zentria (PowerShell)
+# Autor: Zentria Team
 # Versão: 1.0.0
 
 $ErrorActionPreference = "Stop"
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  Instalação do Backend ZapFlow" -ForegroundColor Cyan
+Write-Host "  Instalação do Backend Zentria" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -68,7 +68,7 @@ if ($SCRIPT_DIR_NAME -eq "scripts") {
 # Verificar se está na raiz do projeto
 if (-not (Test-Path "backend")) {
     Write-Host "❌ Erro: Diretório 'backend' não encontrado." -ForegroundColor Red
-    Write-Host "Execute este script da raiz do projeto ZapFlow ou da pasta scripts/."
+    Write-Host "Execute este script da raiz do projeto Zentria ou da pasta scripts/."
     Write-Host "Diretório atual: $(Get-Location)"
     exit 1
 }
@@ -173,8 +173,8 @@ if ([string]::IsNullOrWhiteSpace($DB_HOST)) { $DB_HOST = $SUGGESTED_HOST }
 $DB_PORT = Read-Host "Porta [$SUGGESTED_PORT] (porta alta para evitar conflitos)"
 if ([string]::IsNullOrWhiteSpace($DB_PORT)) { $DB_PORT = $SUGGESTED_PORT }
 
-$DB_NAME = Read-Host "Nome do banco [zapflow]"
-if ([string]::IsNullOrWhiteSpace($DB_NAME)) { $DB_NAME = "zapflow" }
+$DB_NAME = Read-Host "Nome do banco [zentria]"
+if ([string]::IsNullOrWhiteSpace($DB_NAME)) { $DB_NAME = "zentria" }
 
 $DB_USER = Read-Host "Usuário [postgres]"
 if ([string]::IsNullOrWhiteSpace($DB_USER)) { $DB_USER = "postgres" }
@@ -365,8 +365,8 @@ Write-Host "   cd backend" -ForegroundColor Yellow
 Write-Host "   npm run dev" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "2. Configure o frontend (opcional):"
-Write-Host "   Adicione no .env do frontend:"
-Write-Host "   VITE_API_URL=http://${SERVER_IP}:$SERVER_PORT/api" -ForegroundColor Yellow
+Write-Host "   Adicione em frontend\\.env (ou crie o arquivo):"
+Write-Host "   VITE_API_URL=http://${SERVER_IP}:$SERVER_PORT" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "3. Credenciais padrão do admin:"
 Write-Host "   Username: admin" -ForegroundColor Yellow

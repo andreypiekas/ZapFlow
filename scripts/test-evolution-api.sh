@@ -7,7 +7,7 @@
 # - Se não for informado, tenta usar SERVER_IP (ou localhost)
 BASE_URL="${BASE_URL:-http://${SERVER_IP:-localhost}:8080}"
 API_KEY="B8349283-F143-429D-B6C2-9386E8016558"
-INSTANCE_NAME="ZapFlow"
+INSTANCE_NAME="Zentria"
 
 echo "=========================================="
 echo "Teste de Endpoints da Evolution API"

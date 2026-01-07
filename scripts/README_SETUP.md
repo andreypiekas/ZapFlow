@@ -1,6 +1,6 @@
 # Scripts de Instalação do Backend
 
-Scripts automatizados para instalação e configuração do backend ZapFlow.
+Scripts automatizados para instalação e configuração do backend Zentria.
 
 ## Como Usar
 
@@ -30,7 +30,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 1. ✅ Verifica se Node.js 18+ está instalado
 2. ✅ Verifica/instala PostgreSQL
-3. ✅ Cria o banco de dados `zapflow`
+3. ✅ Cria o banco de dados `zentria`
 4. ✅ Instala dependências do backend (`npm install`)
 5. ✅ Cria arquivo `.env` com configurações
 6. ✅ Executa migração do banco de dados
@@ -60,8 +60,8 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
    ```
 
 3. **Faça login:**
-   - Username: `admin`
-   - Password: `admin123`
+   - Username: `admin@piekas.com`
+   - Password: `123`
    - ⚠️ **ALTERE A SENHA EM PRODUÇÃO!**
 
 ## Configuração Manual (Alternativa)

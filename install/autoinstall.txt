@@ -680,39 +680,13 @@ cd "$PROJECT_ROOT" || error_exit "Não foi possível retornar ao diretório raiz
 # ==============================================================================
 echo -e "${BLUE}[8/9] Configurando Frontend...${NC}"
 
-# Garantir que estamos no diretório raiz do projeto
-if [ ! -f "package.json" ]; then
-    # Tentar encontrar o diretório do projeto
-    if [ -d "Zentria" ] && [ -f "Zentria/package.json" ]; then
-        cd Zentria
-        PROJECT_ROOT="$(pwd)"
-    elif [ -d "zentria" ] && [ -f "zentria/package.json" ]; then
-        cd zentria
-        PROJECT_ROOT="$(pwd)"
-    elif [ -d "ZapFlow" ] && [ -f "ZapFlow/package.json" ]; then
-        cd ZapFlow
-        PROJECT_ROOT="$(pwd)"
-    elif [ -d "zapflow" ] && [ -f "zapflow/package.json" ]; then
-        cd zapflow
-        PROJECT_ROOT="$(pwd)"
-    else
-        error_exit "package.json não encontrado. Certifique-se de estar no diretório raiz do projeto."
-    fi
-fi
-
-# Verificar se package.json tem o script build
-if ! grep -q '"build"' package.json; then
-    info "Adicionando script build ao package.json..."
-    if grep -q '"scripts"' package.json; then
-        # Tentar adicionar build aos scripts
-        if command -v jq &> /dev/null; then
-            jq '.scripts.build = "vite build"' package.json > package.json.tmp && mv package.json.tmp package.json
-        else
-            # Fallback: adicionar manualmente
-            sed -i '/"scripts"/a\    "build": "vite build",' package.json 2>/dev/null || {
-                warning "Não foi possível adicionar script build automaticamente"
-            }
-        fi
+# Zentria agora usa estrutura /frontend (monorepo)
+if [ -d "frontend" ] && [ -f "frontend/package.json" ]; then
+    cd frontend || error_exit "Não foi possível acessar a pasta frontend"
+else
+    # Compat: estrutura antiga (frontend na raiz)
+    if [ ! -f "package.json" ]; then
+        error_exit "frontend/package.json não encontrado. Certifique-se de que o repositório foi clonado corretamente."
     fi
 fi
 
@@ -759,11 +733,14 @@ fi
 # ==============================================================================
 echo -e "${BLUE}[9/9] Finalizando...${NC}"
 
+# Garante que estamos no diretório raiz do projeto antes de iniciar serviços
+cd "$PROJECT_ROOT" || error_exit "Não foi possível retornar ao diretório raiz"
+
 # Iniciar backend com PM2 (se os arquivos existirem e migração foi bem-sucedida)
 if [ "$BACKEND_AVAILABLE" = true ] && [ -f "backend/server.js" ]; then
-    pm2 delete zapflow-backend 2>/dev/null || true
+    pm2 delete zentria-backend 2>/dev/null || true
     cd backend
-    if pm2 start server.js --name zapflow-backend --update-env; then
+    if pm2 start server.js --name zentria-backend --update-env; then
         success "Backend iniciado com PM2"
         
         # Aguardar servidor iniciar
@@ -802,9 +779,10 @@ fi
 
 # Iniciar frontend com PM2
 info "Iniciando frontend com PM2..."
-pm2 delete zapflow-front 2>/dev/null || true
+pm2 delete zentria-front 2>/dev/null || true
+cd "$PROJECT_ROOT/frontend" 2>/dev/null || cd "$PROJECT_ROOT" || true
 if [ -d "dist" ]; then
-    if pm2 start "serve -s dist -l 5173" --name zapflow-front; then
+    if pm2 start "serve -s dist -l 5173" --name zentria-front; then
         success "Frontend iniciado com PM2"
         pm2 save || true
         # Tentar configurar startup automático
@@ -853,10 +831,10 @@ echo -e "   4. Configurar Chatbot em ${YELLOW}Configurações > Chatbot${NC} (op
 echo ""
 echo -e "${BLUE}Comandos úteis:${NC}"
 echo -e "   ${YELLOW}pm2 status${NC}                    - Ver status de todos os serviços"
-echo -e "   ${YELLOW}pm2 logs zapflow-backend${NC}     - Ver logs do backend"
-echo -e "   ${YELLOW}pm2 logs zapflow-front${NC}       - Ver logs do frontend"
-echo -e "   ${YELLOW}pm2 restart zapflow-backend${NC}  - Reiniciar backend"
-echo -e "   ${YELLOW}pm2 restart zapflow-front${NC}    - Reiniciar frontend"
+echo -e "   ${YELLOW}pm2 logs zentria-backend${NC}     - Ver logs do backend"
+echo -e "   ${YELLOW}pm2 logs zentria-front${NC}       - Ver logs do frontend"
+echo -e "   ${YELLOW}pm2 restart zentria-backend${NC}  - Reiniciar backend"
+echo -e "   ${YELLOW}pm2 restart zentria-front${NC}    - Reiniciar frontend"
 echo ""
 echo -e "${BLUE}Testar APIs:${NC}"
 echo -e "   ${YELLOW}curl http://${SERVER_IP}:3001/api/health${NC}     - Backend API Health Check"

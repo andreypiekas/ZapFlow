@@ -8,7 +8,7 @@
 # Substitua pelos seus valores
 $baseUrl = "http://SEU_IP_SERVIDOR:8080"
 $apiKey = "B8349283-F143-429D-B6C2-9386E8016558"
-$instanceName = "ZapFlow"
+$instanceName = "Zentria"
 $chatId = "554984329374@s.whatsapp.net"
 $phoneNumber = "554984329374"
 
@@ -44,7 +44,7 @@ curl -X POST "$baseUrl/chat/findChats/$instanceName" `
 ### 2. Teste via Postman
 
 1. Crie uma nova requisição POST
-2. URL: `http://SEU_IP_SERVIDOR:8080/message/fetchMessages/ZapFlow`
+2. URL: `http://SEU_IP_SERVIDOR:8080/message/fetchMessages/Zentria`
 3. Headers:
    - `apikey: B8349283-F143-429D-B6C2-9386E8016558`
    - `Content-Type: application/json`
@@ -82,7 +82,7 @@ Verifique se as seguintes variáveis estão configuradas no docker-compose.yml:
 Abra o console do navegador e execute:
 
 ```javascript
-const ws = new WebSocket('ws://SEU_IP_SERVIDOR:8080/chat/ZapFlow');
+const ws = new WebSocket('ws://SEU_IP_SERVIDOR:8080/chat/Zentria');
 ws.onopen = () => console.log('WebSocket conectado!');
 ws.onmessage = (event) => console.log('Mensagem recebida:', event.data);
 ws.onerror = (error) => console.error('Erro:', error);

@@ -16,7 +16,7 @@ Olá, tudo bem?
 ```
 
 ### Requisitos Técnicos
-- **Arquivo:** `components/ChatInterface.tsx`
+- **Arquivo:** `frontend/components/ChatInterface.tsx`
 - **Modificações:**
   1. Adicionar exibição do nome do usuário e setor acima da mensagem enviada
   2. Nome e setor em **negrito**
@@ -45,9 +45,9 @@ Adicionar opção no chat para enviar um contato da lista de contatos cadastrado
 
 ### Requisitos Técnicos
 - **Arquivos:**
-  - `components/ChatInterface.tsx` - Interface do chat
-  - `services/whatsappService.ts` - Serviço de envio de mensagens
-  - `types.ts` - Tipos de dados
+  - `frontend/components/ChatInterface.tsx` - Interface do chat
+  - `frontend/services/whatsappService.ts` - Serviço de envio de mensagens
+  - `frontend/types.ts` - Tipos de dados
 
 ### Funcionalidades
 1. Botão/ícone para abrir lista de contatos
@@ -91,9 +91,9 @@ Boa tarde! Favor selecionar o departamento para atendimento:
 
 ### Requisitos Técnicos
 - **Arquivos:**
-  - `App.tsx` - Lógica de detecção de novo contato
-  - `services/whatsappService.ts` - Envio de mensagem automática
-  - `components/ChatInterface.tsx` - Processamento de resposta
+  - `frontend/App.tsx` - Lógica de detecção de novo contato
+  - `frontend/services/whatsappService.ts` - Envio de mensagem automática
+  - `frontend/components/ChatInterface.tsx` - Processamento de resposta
 
 ### Funcionalidades
 1. Detectar novo contato (sem departamento atribuído)
@@ -120,7 +120,7 @@ Boa tarde! Favor selecionar o departamento para atendimento:
 Os relatórios não estão contando as avaliações recebidas no final do atendimento.
 
 ### Requisitos Técnicos
-- **Arquivo:** `components/ReportsDashboard.tsx`
+- **Arquivo:** `frontend/components/ReportsDashboard.tsx`
 - **Verificar:**
   1. Se avaliações estão sendo salvas corretamente
   2. Se relatórios estão buscando avaliações do banco/estado
@@ -144,8 +144,8 @@ O chatbot não está funcionando conforme configurado.
 
 ### Requisitos Técnicos
 - **Arquivos:**
-  - `components/ChatbotSettings.tsx` - Configurações do chatbot
-  - `services/geminiService.ts` - Serviço de IA (se aplicável)
+  - `frontend/components/ChatbotSettings.tsx` - Configurações do chatbot
+  - `frontend/services/geminiService.ts` - Serviço de IA (se aplicável)
   - Lógica de processamento de mensagens do chatbot
 
 ### Investigação Necessária
@@ -180,7 +180,7 @@ Reformular a aba de conexão para integrar com o serviço Evolution API que roda
 6. Configurar instância (nome, webhook, etc.)
 
 ### Requisitos Técnicos
-- **Arquivo:** `components/Connection.tsx`
+- **Arquivo:** `frontend/components/Connection.tsx`
 - **Endpoints Evolution API:**
   - `GET /instance/fetchInstances` - Listar instâncias
   - `POST /instance/create` - Criar instância

@@ -19,7 +19,7 @@ Este guia habilita acesso via **`https://<IP>`** mesmo sem domínio, usando **ce
 No servidor onde o Zentria está rodando:
 
 ```bash
-cd /caminho/do/projeto/ZapFlow
+cd /caminho/do/projeto/zentria
 chmod +x install/https_autoconfig.sh
 ./install/https_autoconfig.sh
 ```

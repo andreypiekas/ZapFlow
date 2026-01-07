@@ -107,8 +107,10 @@ Os scripts abaixo podem ser executados diretamente ou criados no servidor a part
 ### Scripts Shell (.sh)
 *   **[scripts/upgrade_evolution.sh](./scripts/upgrade_evolution.sh)**: Atualiza Evolution API para a versão mais recente.
 *   **[scripts/factory_reset_complete.sh](./scripts/factory_reset_complete.sh)**: **Cuidado!** Apaga tudo e reinicia a instalação (Factory Reset completo).
+*   **[scripts/migrate_zapflow_to_zentria.sh](./scripts/migrate_zapflow_to_zentria.sh)**: Migração de instalações antigas (ZapFlow → Zentria).
 *   **[scripts/setup_backend.sh](./scripts/setup_backend.sh)**: Instala e configura o backend PostgreSQL automaticamente (Linux/macOS).
 *   **[scripts/setup_backend.ps1](./scripts/setup_backend.ps1)**: Instala e configura o backend PostgreSQL automaticamente (Windows).
+*   **[scripts/migrate_zapflow_to_zentria.ps1](./scripts/migrate_zapflow_to_zentria.ps1)**: Migração de instalações antigas (ZapFlow → Zentria) no Windows.
 
 ### Scripts de Instalação (.txt - criar como .sh no servidor)
 *   **[install/setup_evolution.txt](./install/setup_evolution.txt)**: Instala Docker, Banco de Dados e API do zero.

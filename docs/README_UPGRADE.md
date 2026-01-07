@@ -6,10 +6,10 @@
 
 ```bash
 # 1. Dar permissão de execução
-chmod +x upgrade_evolution.sh
+chmod +x scripts/upgrade_evolution.sh
 
 # 2. Executar o script
-./upgrade_evolution.sh
+./scripts/upgrade_evolution.sh
 ```
 
 ## O que o script faz
@@ -81,7 +81,7 @@ curl http://localhost:8080/instance/fetchInstances \
 ## Troubleshooting
 
 ### Erro: "Container não encontrado"
-- Execute primeiro o script de instalação (`setup_evolution.txt`)
+- Execute primeiro o script de instalação (`install/setup_evolution.txt`)
 
 ### Erro: "Docker não está rodando"
 ```bash
@@ -108,9 +108,9 @@ docker restart evolution_api
 
 ## Diferenças dos Scripts
 
-- **`setup_evolution.txt`**: Instalação completa do zero
-- **`autoinstall.txt`**: Instalação automatizada completa (inclui frontend)
-- **`upgrade_evolution.sh`**: Apenas upgrade da Evolution API (mantém dados)
+- **`install/setup_evolution.txt`**: Instalação completa do zero
+- **`install/autoinstall.txt`**: Instalação automatizada completa (inclui frontend)
+- **`scripts/upgrade_evolution.sh`**: Apenas upgrade da Evolution API (mantém dados)
 
 ## Suporte
 

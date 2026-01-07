@@ -374,7 +374,7 @@ const Connection: React.FC<ConnectionProps> = ({ config, onNavigateToSettings, o
                     type="text"
                     value={newInstanceName}
                     onChange={(e) => setNewInstanceName(e.target.value)}
-                    placeholder="Nome da instância (ex: ZapFlow)"
+                    placeholder="Nome da instância (ex: Zentria)"
                     className="w-full px-3 py-2 border border-[#0D0F13] bg-[#111316] text-slate-200 rounded-lg text-sm mb-3 focus:ring-2 focus:ring-[#00E0D1] focus:border-[#00E0D1] outline-none placeholder:text-slate-500"
                     onKeyDown={(e) => e.key === 'Enter' && handleCreateInstance()}
                   />

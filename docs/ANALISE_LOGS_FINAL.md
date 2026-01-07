@@ -1,4 +1,4 @@
-# 📊 Análise Final dos Logs - ZapFlow
+# 📊 Análise Final dos Logs - Zentria
 
 ## ✅ Funcionando Corretamente
 
@@ -16,7 +16,7 @@
 
 ### 1. **WebSocket Falhando (Não Crítico)**
 ```
-WebSocket connection to 'ws://SEU_IP_SERVIDOR:8080/chat/ZapFlow' failed
+WebSocket connection to 'ws://SEU_IP_SERVIDOR:8080/chat/Zentria' failed
 [App] WebSocket desconectado (code: 1006, reason: sem motivo)
 [App] Tentando reconectar WebSocket em 5s... (tentativa 1/5)
 ```

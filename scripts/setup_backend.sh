@@ -270,10 +270,10 @@ check_docker_postgres() {
             echo -e "${BLUE}     Usuário: ${DOCKER_PG_USER}${NC}"
             echo -e "${BLUE}     Banco: ${DOCKER_PG_DB}${NC}"
             echo ""
-            echo -e "${GREEN}   O ZapFlow usará PostgreSQL NATIVO separado:${NC}"
+            echo -e "${GREEN}   O Zentria usará PostgreSQL NATIVO separado:${NC}"
             echo -e "${GREEN}     Porta: 54321 (para evitar conflitos)${NC}"
-            echo -e "${GREEN}     Banco: zapflow${NC}"
-            echo -e "${GREEN}     Usuário: zapflow_user${NC}"
+            echo -e "${GREEN}     Banco: zentria${NC}"
+            echo -e "${GREEN}     Usuário: zentria_user${NC}"
         fi
     fi
     
@@ -286,14 +286,14 @@ check_docker_postgres() {
 detect_postgresql() {
     echo "Detectando instalações do PostgreSQL..."
     
-    # Verificar instalação existente do ZapFlow primeiro
+    # Verificar instalação existente do Zentria primeiro
     if check_existing_zentria_install; then
         SUGGESTED_HOST="localhost"
         SUGGESTED_PORT="$EXISTING_PORT"
         SUGGESTED_DB="$EXISTING_DB"
         SUGGESTED_USER="$EXISTING_USER"
         SUGGESTED_PASSWORD="$EXISTING_PASSWORD"
-        echo -e "${GREEN}✅ Usando configuração existente do ZapFlow${NC}"
+        echo -e "${GREEN}✅ Usando configuração existente do Zentria${NC}"
         return 0
     fi
     
@@ -589,14 +589,14 @@ echo ""
 # 3. Configurar banco de dados
 echo -e "${YELLOW}[3/7] Configurando banco de dados...${NC}"
 
-# Se já existe instalação do ZapFlow, usar automaticamente
+# Se já existe instalação do Zentria, usar automaticamente
 if [ "$EXISTING_INSTALL" = true ]; then
-    echo -e "${GREEN}✅ Usando instalação existente do ZapFlow${NC}"
+    echo -e "${GREEN}✅ Usando instalação existente do Zentria${NC}"
     DB_HOST="${SUGGESTED_HOST:-localhost}"
     DB_PORT="${SUGGESTED_PORT:-54321}"
     DB_NAME="${SUGGESTED_DB:-zentria}"
     DB_USER="${SUGGESTED_USER:-zentria_user}"
-    DB_PASSWORD="${SUGGESTED_PASSWORD:-zapflow_secure_password_2024}"
+    DB_PASSWORD="${SUGGESTED_PASSWORD:-zentria_secure_password_2024}"
     echo "  Host: $DB_HOST"
     echo "  Porta: $DB_PORT"
     echo "  Banco: $DB_NAME"
@@ -621,7 +621,7 @@ if [ "$EXISTING_INSTALL" != true ]; then
     read -r DB_PORT
     DB_PORT=${DB_PORT:-${SUGGESTED_PORT:-54321}}
 
-    echo -n "Nome do banco [zapflow]: "
+    echo -n "Nome do banco [zentria]: "
     read -r DB_NAME
     DB_NAME=${DB_NAME:-zentria}
 
@@ -637,11 +637,11 @@ if [ "$EXISTING_INSTALL" != true ]; then
     if [ "$DB_NAME" = "evolution" ] || [ "$DB_USER" = "user" ]; then
         echo -e "${RED}⚠️  ATENÇÃO: Você está tentando usar configurações do Docker (Evolution API)!${NC}"
         echo -e "${RED}   Banco 'evolution' e usuário 'user' são do container Docker.${NC}"
-        echo -e "${YELLOW}   O ZapFlow precisa de um PostgreSQL NATIVO separado.${NC}"
+        echo -e "${YELLOW}   O Zentria precisa de um PostgreSQL NATIVO separado.${NC}"
         echo ""
-        echo "Recomendado para ZapFlow:"
-        echo "  - Banco: zapflow"
-        echo "  - Usuário: zapflow_user ou postgres"
+        echo "Recomendado para Zentria:"
+        echo "  - Banco: zentria"
+        echo "  - Usuário: zentria_user ou postgres"
         echo "  - Porta: 54321 (para evitar conflitos)"
         echo ""
         read -p "Deseja continuar mesmo assim? (s/n): " CONTINUE_DOCKER
@@ -891,13 +891,14 @@ if ! command -v pm2 &> /dev/null; then
     echo -e "${GREEN}✅ PM2 instalado${NC}"
 fi
 
-# Parar instância anterior se existir
+# Parar instâncias anteriores (novo + legado)
+pm2 delete zentria-backend 2>/dev/null || true
 pm2 delete zapflow-backend 2>/dev/null || true
 
 # Iniciar servidor com PM2
 echo "Iniciando servidor backend com PM2..."
 cd "$PROJECT_ROOT/backend"
-pm2 start server.js --name zapflow-backend --cwd "$(pwd)"
+pm2 start server.js --name zentria-backend --cwd "$(pwd)"
 pm2 save
 
 # Configurar PM2 para iniciar no boot
@@ -914,9 +915,9 @@ echo "Aguardando servidor iniciar..."
 sleep 5
 
 # Verificar se servidor está rodando
-if pm2 list | grep -q "zapflow-backend.*online"; then
+if pm2 list | grep -q "zentria-backend.*online"; then
     echo -e "${GREEN}✅ Servidor backend iniciado com PM2${NC}"
-    echo -e "${GREEN}   Status: $(pm2 jlist | grep -o '"zapflow-backend"[^}]*"status":"[^"]*' | grep -o '"status":"[^"]*' | cut -d'"' -f4)${NC}"
+    echo -e "${GREEN}   Status: $(pm2 jlist | grep -o '\"zentria-backend\"[^}]*\"status\":\"[^\"]*' | grep -o '\"status\":\"[^\"]*' | cut -d'\"' -f4)${NC}"
     
     # Testar conectividade da API
     echo "Testando conectividade da API..."
@@ -941,7 +942,7 @@ if pm2 list | grep -q "zapflow-backend.*online"; then
         echo ""
         echo "Verifique:"
         echo "  1. Se o servidor está rodando: pm2 status"
-        echo "  2. Logs do servidor: pm2 logs zapflow-backend"
+        echo "  2. Logs do servidor: pm2 logs zentria-backend"
         echo "  3. Se a porta está aberta no firewall:"
         echo "     sudo ufw allow ${SERVER_PORT:-3001}/tcp"
         echo "     ou"
@@ -950,7 +951,7 @@ if pm2 list | grep -q "zapflow-backend.*online"; then
     fi
 else
     echo -e "${YELLOW}⚠️  Servidor pode não ter iniciado corretamente${NC}"
-    echo "Verifique: pm2 logs zapflow-backend"
+    echo "Verifique: pm2 logs zentria-backend"
 fi
 
 echo ""
@@ -965,25 +966,32 @@ echo -e "   ${GREEN}✅ Health: http://${SERVER_IP}:${SERVER_PORT:-3001}/api/hea
 echo ""
 echo -e "${BLUE}Comandos úteis:${NC}"
 echo -e "   ${YELLOW}pm2 status${NC}                    - Ver status do servidor"
-echo -e "   ${YELLOW}pm2 logs zapflow-backend${NC}     - Ver logs do servidor"
-echo -e "   ${YELLOW}pm2 restart zapflow-backend${NC}  - Reiniciar servidor"
-echo -e "   ${YELLOW}pm2 stop zapflow-backend${NC}     - Parar servidor"
+echo -e "   ${YELLOW}pm2 logs zentria-backend${NC}     - Ver logs do servidor"
+echo -e "   ${YELLOW}pm2 restart zentria-backend${NC}  - Reiniciar servidor"
+echo -e "   ${YELLOW}pm2 stop zentria-backend${NC}     - Parar servidor"
 # Configurar .env do frontend
 echo ""
 echo -e "${YELLOW}Configurando .env do frontend...${NC}"
 cd "$PROJECT_ROOT"
 
-if [ ! -f ".env" ]; then
-    echo "VITE_API_URL=http://${SERVER_IP}:${SERVER_PORT:-3001}" > .env
-    echo -e "${GREEN}✅ Arquivo .env do frontend criado com URL do backend${NC}"
+# Em layout novo (monorepo), o Vite lê variáveis em frontend/.env.
+# Em layout antigo, mantemos compat com .env na raiz.
+ENV_TARGET="$PROJECT_ROOT/.env"
+if [ -d "$PROJECT_ROOT/frontend" ] && [ -f "$PROJECT_ROOT/frontend/package.json" ]; then
+    ENV_TARGET="$PROJECT_ROOT/frontend/.env"
+fi
+
+if [ ! -f "$ENV_TARGET" ]; then
+    echo "VITE_API_URL=http://${SERVER_IP}:${SERVER_PORT:-3001}" > "$ENV_TARGET"
+    echo -e "${GREEN}✅ Arquivo .env do frontend criado em ${ENV_TARGET}${NC}"
 else
     # Adicionar ou atualizar VITE_API_URL no .env existente
-    if grep -q "VITE_API_URL" .env; then
-        sed -i "s|VITE_API_URL=.*|VITE_API_URL=http://${SERVER_IP}:${SERVER_PORT:-3001}|" .env
+    if grep -q "VITE_API_URL" "$ENV_TARGET"; then
+        sed -i "s|VITE_API_URL=.*|VITE_API_URL=http://${SERVER_IP}:${SERVER_PORT:-3001}|" "$ENV_TARGET"
     else
-        echo "VITE_API_URL=http://${SERVER_IP}:${SERVER_PORT:-3001}" >> .env
+        echo "VITE_API_URL=http://${SERVER_IP}:${SERVER_PORT:-3001}" >> "$ENV_TARGET"
     fi
-    echo -e "${GREEN}✅ Variável VITE_API_URL configurada no .env${NC}"
+    echo -e "${GREEN}✅ Variável VITE_API_URL configurada em ${ENV_TARGET}${NC}"
 fi
 echo "   📝 VITE_API_URL=http://${SERVER_IP}:${SERVER_PORT:-3001}"
 echo ""
@@ -996,8 +1004,8 @@ echo -e "   ${GREEN}✅ Arquivo .env do frontend configurado automaticamente${NC
 echo -e "   ${YELLOW}VITE_API_URL=http://${SERVER_IP}:${SERVER_PORT:-3001}${NC}"
 echo ""
 echo "2. Credenciais padrão do admin:"
-echo -e "   ${YELLOW}Username: admin${NC}"
-echo -e "   ${YELLOW}Password: admin123${NC}"
+echo -e "   ${YELLOW}Username: admin@piekas.com${NC}"
+echo -e "   ${YELLOW}Password: 123${NC}"
 echo -e "   ${RED}⚠️  ALTERE A SENHA EM PRODUÇÃO!${NC}"
 echo ""
 echo "3. Teste a API:"
@@ -1014,8 +1022,8 @@ elif command -v firewall-cmd &> /dev/null; then
 else
     echo -e "   ${YELLOW}Configure o firewall para permitir a porta ${SERVER_PORT:-3001}${NC}"
 fi
-echo -e "   ${YELLOW}Verifique logs: pm2 logs zapflow-backend${NC}"
-echo -e "   ${YELLOW}Reinicie se necessário: pm2 restart zapflow-backend${NC}"
+echo -e "   ${YELLOW}Verifique logs: pm2 logs zentria-backend${NC}"
+echo -e "   ${YELLOW}Reinicie se necessário: pm2 restart zentria-backend${NC}"
 echo ""
 
 # Voltar para a raiz do projeto

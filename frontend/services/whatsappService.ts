@@ -262,7 +262,7 @@ export const createInstance = async (
         console.error('[createInstance] ❌ AUTHENTICATION_API_KEY não configurada');
         if (typeof window !== 'undefined') {
             setTimeout(() => {
-                alert('❌ Erro de Configuração\n\nA AUTHENTICATION_API_KEY não está configurada.\n\nPor favor:\n1. Vá em Configurações do ZapFlow\n2. Preencha o campo "AUTHENTICATION_API_KEY (Servidor)"\n3. Use a mesma chave do arquivo docker-compose.yml (variável AUTHENTICATION_API_KEY)\n4. Salve e tente novamente');
+                alert('❌ Erro de Configuração\n\nA AUTHENTICATION_API_KEY não está configurada.\n\nPor favor:\n1. Vá em Configurações do Zentria\n2. Preencha o campo "AUTHENTICATION_API_KEY (Servidor)"\n3. Use a mesma chave do arquivo docker-compose.yml (variável AUTHENTICATION_API_KEY)\n4. Salve e tente novamente');
             }, 100);
         }
         return null;
@@ -387,7 +387,7 @@ export const createInstance = async (
                 // Mostra alerta para o usuário
                 if (typeof window !== 'undefined') {
                     setTimeout(() => {
-                        alert('❌ Erro de Autenticação\n\nA AUTHENTICATION_API_KEY configurada não corresponde à chave do servidor.\n\nPor favor:\n1. Abra o arquivo docker-compose.yml do servidor Evolution API\n2. Localize a variável AUTHENTICATION_API_KEY\n3. Vá em Configurações do ZapFlow\n4. Cole a mesma chave no campo "AUTHENTICATION_API_KEY (Servidor)"\n5. Salve e tente novamente\n\nA AUTHENTICATION_API_KEY deve ser exatamente igual à do docker-compose.yml!');
+                        alert('❌ Erro de Autenticação\n\nA AUTHENTICATION_API_KEY configurada não corresponde à chave do servidor.\n\nPor favor:\n1. Abra o arquivo docker-compose.yml do servidor Evolution API\n2. Localize a variável AUTHENTICATION_API_KEY\n3. Vá em Configurações do Zentria\n4. Cole a mesma chave no campo "AUTHENTICATION_API_KEY (Servidor)"\n5. Salve e tente novamente\n\nA AUTHENTICATION_API_KEY deve ser exatamente igual à do docker-compose.yml!');
                     }, 100);
                 }
             }

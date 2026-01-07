@@ -41,7 +41,7 @@ services:
       
       # --- CONFIGURAÇÃO DE ESTABILIDADE (GOLDILOCKS v5) ---
       # Define cliente para garantir a geração do QR Code
-      - CONFIG_SESSION_PHONE_CLIENT=ZapFlow
+      - CONFIG_SESSION_PHONE_CLIENT=Zentria
       - CONFIG_SESSION_PHONE_NAME=Chrome
       - CONFIG_SESSION_PHONE_OS=Windows
       

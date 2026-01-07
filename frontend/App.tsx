@@ -58,7 +58,7 @@ const loadConfig = (): ApiConfig => {
   return {
     baseUrl: '', 
     apiKey: '',
-    instanceName: 'zapflow',
+    instanceName: 'zentria',
     isDemo: false,
     googleClientId: '',
     geminiApiKey: '',
@@ -115,7 +115,7 @@ const loadUserSession = (): User | null => {
     
     // TODO: Remover este bloco - backend é obrigatório
     // Fallback temporário para localStorage (será removido)
-  const saved = localStorage.getItem('zapflow_user');
+    const saved = SecurityService.getItemWithFallback(SecurityService.KEY_USER, SecurityService.LEGACY_KEY_USER);
     if (saved) {
       // Tenta descriptografar se estiver criptografado
       let decrypted = saved;
@@ -135,7 +135,7 @@ const loadUserSession = (): User | null => {
 
 const loadDepartmentsFromStorage = (): Department[] => {
   try {
-    const saved = localStorage.getItem('zapflow_departments');
+    const saved = SecurityService.getItemWithFallback('zentria_departments', 'zapflow_departments');
     if (saved) {
       return JSON.parse(saved);
     }
@@ -147,7 +147,7 @@ const loadDepartmentsFromStorage = (): Department[] => {
 
 const loadQuickRepliesFromStorage = (): QuickReply[] => {
   try {
-    const saved = localStorage.getItem('zapflow_quickReplies');
+    const saved = SecurityService.getItemWithFallback('zentria_quickReplies', 'zapflow_quickReplies');
     if (saved) {
       return JSON.parse(saved);
     }
@@ -159,7 +159,7 @@ const loadQuickRepliesFromStorage = (): QuickReply[] => {
 
 const loadWorkflowsFromStorage = (): Workflow[] => {
   try {
-    const saved = localStorage.getItem('zapflow_workflows');
+    const saved = SecurityService.getItemWithFallback('zentria_workflows', 'zapflow_workflows');
     if (saved) {
       return JSON.parse(saved);
     }
@@ -171,7 +171,7 @@ const loadWorkflowsFromStorage = (): Workflow[] => {
 
 const loadChatbotConfigFromStorage = (): ChatbotConfig => {
   try {
-    const saved = localStorage.getItem('zapflow_chatbotConfig');
+    const saved = SecurityService.getItemWithFallback('zentria_chatbotConfig', 'zapflow_chatbotConfig');
     if (saved) {
       return JSON.parse(saved);
     }
@@ -183,7 +183,7 @@ const loadChatbotConfigFromStorage = (): ChatbotConfig => {
 
 const loadViewStateFromStorage = (): ViewState => {
   try {
-    const saved = localStorage.getItem('zapflow_currentView');
+    const saved = SecurityService.getItemWithFallback('zentria_currentView', 'zapflow_currentView');
     if (saved && ['dashboard', 'chats', 'contacts', 'settings', 'connection', 'departments', 'users', 'quickMessages', 'workflows', 'reports', 'chatbot', 'holidays'].includes(saved)) {
       return saved as ViewState;
     }
@@ -195,7 +195,7 @@ const loadViewStateFromStorage = (): ViewState => {
 
 const loadSidebarStateFromStorage = (): boolean => {
   try {
-    const saved = localStorage.getItem('zapflow_sidebarCollapsed');
+    const saved = SecurityService.getItemWithFallback('zentria_sidebarCollapsed', 'zapflow_sidebarCollapsed');
     if (saved !== null) {
       return JSON.parse(saved);
     }
@@ -242,7 +242,7 @@ const App: React.FC = () => {
   // Carrega chats do localStorage se existir, senão usa INITIAL_CHATS
   const loadChatsFromStorage = (): Chat[] => {
     try {
-      const saved = localStorage.getItem('zapflow_chats');
+      const saved = SecurityService.getItemWithFallback('zentria_chats', 'zapflow_chats');
       if (saved) {
         const parsed = JSON.parse(saved);
         // Converte timestamps de string para Date
@@ -264,7 +264,7 @@ const App: React.FC = () => {
   // Carrega usuários do localStorage se existir, senão usa INITIAL_USERS
   const loadUsersFromStorage = (): User[] => {
     try {
-      const saved = localStorage.getItem('zapflow_users');
+      const saved = SecurityService.getItemWithFallback('zentria_users', 'zapflow_users');
       if (saved) {
         const parsed = JSON.parse(saved);
         return parsed;
@@ -278,7 +278,7 @@ const App: React.FC = () => {
   // Carrega contatos do localStorage se existir, senão usa array vazio
   const loadContactsFromStorage = (): Contact[] => {
     try {
-      const saved = localStorage.getItem('zapflow_contacts');
+      const saved = SecurityService.getItemWithFallback('zentria_contacts', 'zapflow_contacts');
       if (saved) {
         const parsed = JSON.parse(saved);
         // Converte lastSync de string para Date se existir
@@ -383,13 +383,17 @@ const App: React.FC = () => {
       try {
         // Salva usuário apenas se não estiver configurado para usar apenas PostgreSQL
         if (!storageService.getUseOnlyPostgreSQL()) {
-          localStorage.setItem('zapflow_user', SecurityService.encrypt(JSON.stringify(currentUser)));
+          const encUser = SecurityService.encrypt(JSON.stringify(currentUser));
+          localStorage.setItem(SecurityService.KEY_USER, encUser);
+          // Compat: mantém chave antiga também
+          try { localStorage.setItem(SecurityService.LEGACY_KEY_USER, encUser); } catch {}
         }
     } catch (e) {
         console.error('[App] Erro ao salvar sessão do usuário:', e);
     }
     } else {
-      localStorage.removeItem('zapflow_user');
+      localStorage.removeItem(SecurityService.KEY_USER);
+      localStorage.removeItem(SecurityService.LEGACY_KEY_USER);
     }
   }, [currentUser]);
 
@@ -619,7 +623,7 @@ const App: React.FC = () => {
             baseUrl: normalizeEvolutionBaseUrlForHttps(apiConfigData.baseUrl || ''),
             apiKey: apiConfigData.apiKey || '',
             authenticationApiKey: apiConfigData.authenticationApiKey || '',
-            instanceName: apiConfigData.instanceName || 'zapflow',
+            instanceName: apiConfigData.instanceName || 'zentria',
             isDemo: apiConfigData.isDemo || false,
             googleClientId: apiConfigData.googleClientId || '',
             geminiApiKey: apiConfigData.geminiApiKey || '',
@@ -3884,7 +3888,7 @@ const App: React.FC = () => {
           body: message,
           icon: '/favicon.ico',
           badge: '/favicon.ico',
-          tag: 'zapflow-message',
+          tag: 'zentria-message',
           requireInteraction: false,
           silent: false // Garante que o som do sistema seja reproduzido
         });
@@ -3935,7 +3939,10 @@ const App: React.FC = () => {
     setCurrentUser(user);
     // Salva usuário apenas se não estiver configurado para usar apenas PostgreSQL
     if (!storageService.getUseOnlyPostgreSQL()) {
-      localStorage.setItem('zapflow_user', SecurityService.encrypt(JSON.stringify(user)));
+      const encUser = SecurityService.encrypt(JSON.stringify(user));
+      localStorage.setItem(SecurityService.KEY_USER, encUser);
+      // Compat: mantém chave antiga também
+      try { localStorage.setItem(SecurityService.LEGACY_KEY_USER, encUser); } catch {}
     }
     
     // Carrega configurações do backend após login
@@ -3962,7 +3969,8 @@ const App: React.FC = () => {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('zapflow_user');
+    localStorage.removeItem(SecurityService.KEY_USER);
+    localStorage.removeItem(SecurityService.LEGACY_KEY_USER);
     setCurrentUser(null);
     setCurrentView('dashboard');
     setIsMobileMenuOpen(false);
@@ -4458,8 +4466,11 @@ const App: React.FC = () => {
           // Salva no localStorage apenas se não estiver configurado para usar apenas PostgreSQL
           if (!storageService.getUseOnlyPostgreSQL()) {
             try {
-              localStorage.setItem('zapflow_user', SecurityService.encrypt(JSON.stringify(updatedCurrentUser)));
-    } catch (e) {
+              const encUser = SecurityService.encrypt(JSON.stringify(updatedCurrentUser));
+              localStorage.setItem(SecurityService.KEY_USER, encUser);
+              // Compat: mantém chave antiga também
+              try { localStorage.setItem(SecurityService.LEGACY_KEY_USER, encUser); } catch {}
+            } catch (e) {
               console.error('[App] Erro ao salvar usuário no localStorage:', e);
             }
           }

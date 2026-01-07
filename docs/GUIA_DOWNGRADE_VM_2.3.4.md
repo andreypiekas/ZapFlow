@@ -112,8 +112,12 @@ vi docker-compose.yml
 
 **Opção 1: Usar o script auxiliar (recomendado)**
 ```bash
-# Baixar o script (se ainda não estiver no servidor)
-wget -O /tmp/verificar_tags_evolution.sh https://raw.githubusercontent.com/andreypiekas/ZapFlow/main/install/verificar_tags_evolution.sh
+# Se você já tem o projeto clonado no servidor:
+cp install/verificar_tags_evolution.sh /tmp/verificar_tags_evolution.sh
+
+# Se você NÃO tem o projeto clonado, baixe do GitHub (ajuste a URL do repositório):
+# wget -O /tmp/verificar_tags_evolution.sh https://raw.githubusercontent.com/SEU_USUARIO/SEU_REPO/main/install/verificar_tags_evolution.sh
+
 chmod +x /tmp/verificar_tags_evolution.sh
 /tmp/verificar_tags_evolution.sh
 ```

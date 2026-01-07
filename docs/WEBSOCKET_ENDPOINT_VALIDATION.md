@@ -2,7 +2,7 @@
 
 ## Problema Identificado
 
-O erro `404 Not Found` ao acessar `http://SEU_IP_SERVIDOR:8080/chat/ZapFlow` indica que esse endpoint **não existe** na Evolution API.
+O erro `404 Not Found` ao acessar `http://SEU_IP_SERVIDOR:8080/chat/Zentria` indica que esse endpoint **não existe** na Evolution API.
 
 ## Endpoints Corretos da Evolution API
 
@@ -30,7 +30,7 @@ O erro `404 Not Found` ao acessar `http://SEU_IP_SERVIDOR:8080/chat/ZapFlow` ind
 ### ❌ Endpoints que NÃO EXISTEM:
 
 1. **GET /chat/{instanceName}** - ❌ Não existe (retorna 404)
-2. **GET /chat/ZapFlow** - ❌ Não existe (retorna 404)
+2. **GET /chat/Zentria** - ❌ Não existe (retorna 404)
 
 ## WebSocket - Endpoint Correto
 
@@ -40,17 +40,17 @@ O WebSocket da Evolution API **NÃO usa** o endpoint `/chat/{instanceName}`.
 
 1. **Socket.IO** (mais comum):
    ```
-   ws://SEU_IP_SERVIDOR:8080/socket.io/?EIO=4&transport=websocket&instance=ZapFlow
+   ws://SEU_IP_SERVIDOR:8080/socket.io/?EIO=4&transport=websocket&instance=Zentria
    ```
 
 2. **WebSocket direto** (se configurado):
    ```
-   ws://SEU_IP_SERVIDOR:8080/ws/ZapFlow
+   ws://SEU_IP_SERVIDOR:8080/ws/Zentria
    ```
 
 3. **WebSocket com autenticação**:
    ```
-   ws://SEU_IP_SERVIDOR:8080/socket.io/?instance=ZapFlow
+   ws://SEU_IP_SERVIDOR:8080/socket.io/?instance=Zentria
    ```
 
 ## Como Verificar o Endpoint Correto
@@ -81,12 +81,12 @@ environment:
 No navegador (Console do DevTools):
 ```javascript
 // Teste 1: Socket.IO
-const ws1 = new WebSocket('ws://SEU_IP_SERVIDOR:8080/socket.io/?EIO=4&transport=websocket&instance=ZapFlow');
+const ws1 = new WebSocket('ws://SEU_IP_SERVIDOR:8080/socket.io/?EIO=4&transport=websocket&instance=Zentria');
 ws1.onopen = () => console.log('✅ Socket.IO conectado');
 ws1.onerror = (e) => console.error('❌ Socket.IO erro:', e);
 
 // Teste 2: WebSocket direto
-const ws2 = new WebSocket('ws://SEU_IP_SERVIDOR:8080/ws/ZapFlow');
+const ws2 = new WebSocket('ws://SEU_IP_SERVIDOR:8080/ws/Zentria');
 ws2.onopen = () => console.log('✅ WebSocket direto conectado');
 ws2.onerror = (e) => console.error('❌ WebSocket direto erro:', e);
 ```

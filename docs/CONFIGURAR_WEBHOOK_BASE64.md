@@ -46,7 +46,7 @@ http://SEU_IP:8080
    ```
    
    **Nota:** 
-   - Substitua `SEU_IP_BACKEND` pelo IP do servidor onde está rodando o backend do ZapFlow
+   - Substitua `SEU_IP_BACKEND` pelo IP do servidor onde está rodando o backend do Zentria
    - A porta padrão é `3001`, mas verifique no seu `backend/server.js` ou `.env`
    - Para produção com domínio público, use HTTPS:
      ```
@@ -110,7 +110,7 @@ Quando uma mensagem com mídia for recebida, você verá nos logs:
 
 1. Envie uma imagem pelo WhatsApp para o número conectado na Evolution API
 2. Verifique os logs do backend
-3. Verifique se a imagem aparece corretamente no chat do ZapFlow
+3. Verifique se a imagem aparece corretamente no chat do Zentria
 
 ## 🔍 Como Funciona
 

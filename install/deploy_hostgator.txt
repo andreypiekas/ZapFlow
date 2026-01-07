@@ -1,6 +1,6 @@
 
 ==============================================================================
-GUIA DE DEPLOY - HOSTGATOR VPS (ZAPFLOW)
+GUIA DE DEPLOY - HOSTGATOR VPS (ZENTRIA)
 ==============================================================================
 
 IMPORTANTE: Este guia é exclusivo para planos VPS ou DEDICADO.
@@ -42,8 +42,8 @@ PASSO 3: INSTALAÇÃO DO SISTEMA
 Agora que o Ubuntu está limpo, siga o procedimento padrão do projeto.
 
 1. Clone o projeto:
-   git clone https://github.com/andreypiekas/ZapFlow.git
-   cd ZapFlow
+   git clone https://github.com/SEU_USUARIO/SEU_REPO.git zentria
+   cd zentria
 
 2. Crie a memória SWAP (ESSENCIAL em VPS HostGator para não travar):
    fallocate -l 4G /swapfile
@@ -53,14 +53,16 @@ Agora que o Ubuntu está limpo, siga o procedimento padrão do projeto.
    echo '/swapfile none swap sw 0 0' | tee -a /etc/fstab
 
 3. Instale o Docker e a API (Use o script automático):
-   cp setup_evolution.txt setup.sh
+   cp install/setup_evolution.txt setup.sh
    chmod +x setup.sh
    ./setup.sh
 
 4. Instale o Frontend:
    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
    apt install -y nodejs
+   cd frontend
    npm install
+   cd ..
    # ATENÇÃO: O Build será feito no PASSO 5 ou 6 dependendo do seu domínio
 
 ------------------------------------------------------------------------------
@@ -82,22 +84,24 @@ PASSO 5: CONFIGURAR ACESSO PADRÃO (SUBDOMÍNIO)
 
 1. Build padrão:
    # Verificar se está no diretório correto
-   if [ ! -f "package.json" ]; then
-       echo "⚠️  package.json não encontrado. Certifique-se de estar no diretório raiz do projeto."
+   if [ ! -f "frontend/package.json" ]; then
+       echo "⚠️  frontend/package.json não encontrado. Certifique-se de estar no diretório raiz do projeto."
        exit 1
    fi
    
    # Verificar se o script build existe
-   if ! grep -q '"build"' package.json; then
-       echo "⚠️  Script 'build' não encontrado no package.json."
+   if ! grep -q '"build"' frontend/package.json; then
+       echo "⚠️  Script 'build' não encontrado no frontend/package.json."
        echo "   Certifique-se de que o package.json está atualizado."
        exit 1
    fi
    
+   cd frontend
    npm install
    npm run build
    npm install -g pm2 serve
-   pm2 start "serve -s dist -l 5173" --name zapflow-front
+   pm2 start "serve -s dist -l 5173" --name zentria-front
+   cd ..
 
 2. Configure Nginx conforme guia anterior (proxy_pass para porta 5173).
 
@@ -108,9 +112,11 @@ Use este passo se você quer acessar via: https://www.eprosatacado.com.br/atendi
 
 1. **Build com Caminho Base:**
    Precisamos avisar ao React que ele vai rodar dentro de /atendimento.
-   No terminal da VPS, dentro da pasta ZapFlow:
+   No terminal da VPS, dentro da pasta zentria:
 
+   cd frontend
    npx vite build --base=/atendimento/
+   cd ..
 
    (Isso cria a pasta 'dist' configurada corretamente).
 
@@ -128,9 +134,9 @@ Use este passo se você quer acessar via: https://www.eprosatacado.com.br/atendi
        # root /var/www/html;
        # index index.html;
 
-       # --- Configuração do ZapFlow (/atendimento) ---
+       # --- Configuração do Zentria (/atendimento) ---
        location /atendimento {
-           alias /root/ZapFlow/dist; # Caminho exato onde está a pasta dist
+           alias /root/zentria/frontend/dist; # Caminho exato onde está a pasta dist
            try_files $uri $uri/ /atendimento/index.html;
        }
 

@@ -80,7 +80,7 @@ const dnsPromises = dns.promises;
 // Configuração do PostgreSQL
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 
-    `postgresql://${process.env.DB_USER || 'postgres'}:${process.env.DB_PASSWORD || ''}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME || 'zapflow'}`
+    `postgresql://${process.env.DB_USER || 'postgres'}:${process.env.DB_PASSWORD || ''}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME || 'zentria'}`
 });
 
 // Middleware CORS
@@ -471,7 +471,7 @@ const fetchUrlForPreview = async (startUrl) => {
         redirect: 'manual',
         signal: controller.signal,
         headers: {
-          'User-Agent': 'ZapFlow-LinkPreview/1.0',
+          'User-Agent': 'Zentria-LinkPreview/1.0',
           'Accept': 'text/html,application/xhtml+xml'
         }
       });
@@ -2305,7 +2305,7 @@ app.get('/api/config', authenticateToken, dataLimiter, async (req, res) => {
         config: {
           baseUrl: '',
           apiKey: '',
-          instanceName: 'zapflow',
+          instanceName: 'zentria',
           isDemo: false,
           googleClientId: '',
           geminiApiKey: '',

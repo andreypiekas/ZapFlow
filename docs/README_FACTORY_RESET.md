@@ -2,7 +2,7 @@
 
 ## ⚠️ ATENÇÃO
 
-Este script remove **TUDO** relacionado ao Evolution API e ZapFlow:
+Este script remove **TUDO** relacionado ao Evolution API e Zentria:
 - ✅ Containers (Evolution API, PostgreSQL, Redis)
 - ✅ Volumes (incluindo **TODOS os dados do banco de dados**)
 - ✅ Imagens Docker
@@ -16,13 +16,13 @@ Este script remove **TUDO** relacionado ao Evolution API e ZapFlow:
 ### 1. Dar Permissão de Execução
 
 ```bash
-chmod +x factory_reset_complete.sh
+chmod +x scripts/factory_reset_complete.sh
 ```
 
 ### 2. Executar o Script
 
 ```bash
-./factory_reset_complete.sh
+./scripts/factory_reset_complete.sh
 ```
 
 ### 3. Seguir as Instruções
@@ -86,10 +86,10 @@ O script tem **múltiplas confirmações**:
 
 ```bash
 # 1. Dar permissão
-chmod +x factory_reset_complete.sh
+chmod +x scripts/factory_reset_complete.sh
 
 # 2. Executar
-./factory_reset_complete.sh
+./scripts/factory_reset_complete.sh
 
 # 3. Seguir instruções:
 #    - Fazer backup? (s/N): s
@@ -106,10 +106,10 @@ Para reinstalar do zero:
 
 ```bash
 # Opção 1: Instalação completa automatizada
-./autoinstall.txt
+bash install/autoinstall.txt
 
 # Opção 2: Setup Evolution API apenas
-./setup_evolution.txt
+bash install/setup_evolution.txt
 
 # Opção 3: Manual
 # Editar docker-compose.yml e executar
@@ -141,7 +141,7 @@ docker system prune -a --volumes -f
 
 ### Erro: "Permission denied"
 ```bash
-chmod +x factory_reset_complete.sh
+chmod +x scripts/factory_reset_complete.sh
 ```
 
 ### Erro: "Container is running"
@@ -159,10 +159,10 @@ docker volume rm -f evolution_postgres_data evolution_redis_data
 
 ## 📚 Arquivos Relacionados
 
-- `factory_reset_complete.sh` - Script de limpeza completa
-- `setup_evolution.txt` - Instalação do Evolution API
-- `autoinstall.txt` - Instalação completa automatizada
-- `upgrade_evolution.sh` - Script de upgrade
+- `scripts/factory_reset_complete.sh` - Script de limpeza completa
+- `install/setup_evolution.txt` - Instalação do Evolution API
+- `install/autoinstall.txt` - Instalação completa automatizada
+- `scripts/upgrade_evolution.sh` - Script de upgrade
 
 ## ⚠️ Avisos Finais
 

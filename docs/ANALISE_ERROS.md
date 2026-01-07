@@ -1,4 +1,4 @@
-# Análise de Erros - ZapFlow
+# Análise de Erros - Zentria
 
 ## 📋 Resumo Executivo
 
@@ -20,7 +20,7 @@ Análise do arquivo de erros (`e:\Downloads\error`) com **22.237 linhas** de log
 ```
 
 **Causa Provável:**
-- WebSocket tentando conectar em `ws://SEU_IP_SERVIDOR:8080/chat/ZapFlow`
+- WebSocket tentando conectar em `ws://SEU_IP_SERVIDOR:8080/chat/Zentria`
 - Code 1006 indica conexão anormal (sem handshake de fechamento)
 - Pode ser: servidor não aceitando conexões WS, firewall, ou instância não disponível
 
@@ -29,7 +29,7 @@ Análise do arquivo de erros (`e:\Downloads\error`) com **22.237 linhas** de log
 - Aplicação tenta reconectar a cada 5 segundos, gerando spam de logs
 
 **Localização no Código:**
-- `App.tsx` linhas 354-580 (função `initWebSocket`)
+- `frontend/App.tsx` linhas 354-580 (função `initWebSocket`)
 
 ---
 
@@ -42,7 +42,7 @@ Análise do arquivo de erros (`e:\Downloads\error`) com **22.237 linhas** de log
 [fetchChatMessages] ✅ Chat correspondente encontrado: 554984329374@s.whatsapp.net
 [fetchChatMessages] Estrutura do chat: {hasMessages: false, messagesType: 'undefined', messagesIsArray: false, messagesLength: 0, ...}
 [fetchChatMessages] ⚠️ Chat encontrado mas sem mensagens no campo messages
-[fetchChatMessages] ⚠️ Nenhuma mensagem encontrada em http://SEU_IP_SERVIDOR:8080/chat/findChats/ZapFlow
+[fetchChatMessages] ⚠️ Nenhuma mensagem encontrada em http://SEU_IP_SERVIDOR:8080/chat/findChats/Zentria
 ```
 
 **Causa Provável:**
@@ -55,7 +55,7 @@ Análise do arquivo de erros (`e:\Downloads\error`) com **22.237 linhas** de log
 - Usuário vê conversas vazias mesmo quando há mensagens no WhatsApp
 
 **Localização no Código:**
-- `services/whatsappService.ts` linhas 803-1102 (função `fetchChatMessages`)
+- `frontend/services/whatsappService.ts` linhas 803-1102 (função `fetchChatMessages`)
 - Especificamente linhas 1039-1047 onde tenta fallback
 
 ---
@@ -80,7 +80,7 @@ Análise do arquivo de erros (`e:\Downloads\error`) com **22.237 linhas** de log
 - Logs excessivos indicando processamento falho
 
 **Localização no Código:**
-- `services/whatsappService.ts` linhas 850-933 (função `processMessages` interna)
+- `frontend/services/whatsappService.ts` linhas 850-933 (função `processMessages` interna)
 
 ---
 
@@ -138,7 +138,7 @@ cdn.tailwindcss.com should not be used in production. To use Tailwind CSS in pro
   - Verificar se Evolution API requer parâmetros diferentes
   - Implementar busca direta de mensagens quando chat não tem `messages`
 
-**Arquivo:** `services/whatsappService.ts` linha ~950-960
+**Arquivo:** `frontend/services/whatsappService.ts` linha ~950-960
 
 #### 2. **Melhorar Tratamento de Erro WebSocket**
 - **Problema:** Reconexão infinita sem validação
@@ -148,7 +148,7 @@ cdn.tailwindcss.com should not be used in production. To use Tailwind CSS in pro
   - Adicionar backoff exponencial (5s → 10s → 20s → 40s)
   - Mostrar status visual ao usuário quando WebSocket falhar
 
-**Arquivo:** `App.tsx` linhas 554-576
+**Arquivo:** `frontend/App.tsx` linhas 554-576
 
 ### Prioridade MÉDIA
 
@@ -159,7 +159,7 @@ cdn.tailwindcss.com should not be used in production. To use Tailwind CSS in pro
   - Logs mais detalhados da estrutura recebida
   - Tentar extrair mensagens de diferentes níveis da resposta JSON
 
-**Arquivo:** `services/whatsappService.ts` linhas 850-933
+**Arquivo:** `frontend/services/whatsappService.ts` linhas 850-933
 
 #### 4. **Reduzir Logs Excessivos**
 - **Problema:** Logs de debug usando `console.error` geram spam
@@ -200,7 +200,7 @@ cdn.tailwindcss.com should not be used in production. To use Tailwind CSS in pro
 ## 📝 Notas Técnicas
 
 - **Servidor:** `SEU_IP_SERVIDOR:8080`
-- **Instância:** `ZapFlow`
+- **Instância:** `Zentria`
 - **API:** Evolution API
 - **Formato esperado:** Chats com array `messages` dentro
 - **Formato recebido:** Chats sem campo `messages` ou com `messages: []`

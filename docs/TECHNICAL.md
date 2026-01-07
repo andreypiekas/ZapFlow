@@ -1,4 +1,4 @@
-# 📘 Documentação Técnica - ZapFlow Manager
+# 📘 Documentação Técnica - Zentria Manager
 
 **Versão:** 1.3.0  
 **Última Atualização:** 2025-01-XX
@@ -9,7 +9,7 @@
 
 ### Visão Geral
 
-O ZapFlow Manager é uma aplicação full-stack que combina:
+O Zentria Manager é uma aplicação full-stack que combina:
 - **Frontend React** (SPA) para interface do usuário
 - **Backend API Node.js/Express** para persistência de dados
 - **Evolution API** (Docker) para comunicação com WhatsApp
@@ -55,26 +55,31 @@ O ZapFlow Manager é uma aplicação full-stack que combina:
 
 ```
 /
-├── App.tsx                 # Componente principal
-├── index.tsx              # Entry point
-├── index.html             # HTML base
-├── vite.config.ts        # Configuração Vite
-├── tailwind.config.js    # Configuração Tailwind
-├── postcss.config.js     # Configuração PostCSS
-├── tsconfig.json         # Configuração TypeScript
-├── components/           # Componentes React
-│   ├── ChatInterface.tsx
-│   ├── Settings.tsx
-│   ├── Login.tsx
-│   └── ...
-├── services/            # Serviços e lógica de negócio
-│   ├── apiService.ts    # Comunicação com backend
-│   ├── whatsappService.ts # Comunicação com Evolution API
-│   ├── chatbotService.ts # Lógica do chatbot
-│   ├── securityService.ts # Criptografia de dados
-│   └── storageService.ts # Persistência híbrida
-├── types.ts             # Definições TypeScript
-└── constants.ts         # Constantes da aplicação
+├── frontend/
+│   ├── App.tsx                 # Componente principal
+│   ├── index.tsx              # Entry point
+│   ├── index.html             # HTML base
+│   ├── vite.config.ts        # Configuração Vite
+│   ├── tailwind.config.js    # Configuração Tailwind
+│   ├── postcss.config.js     # Configuração PostCSS
+│   ├── tsconfig.json         # Configuração TypeScript
+│   ├── components/           # Componentes React
+│   │   ├── ChatInterface.tsx
+│   │   ├── Settings.tsx
+│   │   ├── Login.tsx
+│   │   └── ...
+│   ├── services/              # Serviços e lógica de negócio
+│   │   ├── apiService.ts       # Comunicação com backend
+│   │   ├── whatsappService.ts  # Comunicação com Evolution API
+│   │   ├── chatbotService.ts   # Lógica do chatbot
+│   │   ├── securityService.ts  # Criptografia de dados
+│   │   └── storageService.ts   # Persistência híbrida
+│   ├── types.ts               # Definições TypeScript
+│   └── constants.ts           # Constantes da aplicação
+├── backend/                   # Backend API (Express/PostgreSQL)
+├── docs/                      # Documentação
+├── install/                   # Scripts/manuais de instalação
+└── scripts/                   # Scripts utilitários
 ```
 
 ### Socket.IO Client
@@ -449,9 +454,9 @@ npm run preview
 ```
 
 **Arquivos gerados:**
-- `dist/index.html` - HTML otimizado
-- `dist/assets/index-*.css` - CSS minificado (Tailwind)
-- `dist/assets/index-*.js` - JavaScript minificado e otimizado
+- `frontend/dist/index.html` - HTML otimizado
+- `frontend/dist/assets/index-*.css` - CSS minificado (Tailwind)
+- `frontend/dist/assets/index-*.js` - JavaScript minificado e otimizado
 
 ### Backend
 

@@ -1,6 +1,9 @@
 # Guia: Verificar e Configurar PostgreSQL para o Backend
 
-O backend do ZapFlow precisa de uma instância PostgreSQL rodando. Este guia ajuda a verificar e configurar.
+O backend do **Zentria** precisa de uma instância PostgreSQL rodando. Este guia ajuda a verificar e configurar.
+
+**Compatibilidade (upgrade):** se você já tinha uma instalação antiga, seu banco pode se chamar `zapflow`.
+Nesse caso, mantenha `DB_NAME=zapflow` no `backend/.env` ou renomeie o banco para `zentria`.
 
 ## 🔍 Verificar se PostgreSQL está rodando
 
@@ -23,7 +26,7 @@ ss -tulpn | grep 5432
 
 ```bash
 # Ver variáveis de ambiente do backend
-cd /home/piekas/ZapFlow
+cd /home/piekas/zentria
 cat backend/.env 2>/dev/null || echo "Arquivo .env não encontrado"
 ```
 
@@ -37,33 +40,33 @@ Adicionar serviço PostgreSQL ao `docker-compose.yml`:
 services:
   # ... serviços existentes ...
   
-  zapflow_postgres:
+  zentria_postgres:
     image: postgres:15-alpine
-    container_name: zapflow_postgres
+    container_name: zentria_postgres
     restart: always
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=sua_senha_aqui
-      - POSTGRES_DB=zapflow
+      - POSTGRES_DB=zentria
     ports:
       - "5432:5432"  # Ou outra porta como 54321 para evitar conflitos
     volumes:
-      - zapflow_postgres_data:/var/lib/postgresql/data
+      - zentria_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d zapflow"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d zentria"]
       interval: 5s
       timeout: 5s
       retries: 5
 
 volumes:
   # ... volumes existentes ...
-  zapflow_postgres_data:
+  zentria_postgres_data:
 ```
 
 **Iniciar:**
 ```bash
-cd /home/piekas/ZapFlow
-docker-compose up -d zapflow_postgres
+cd /home/piekas/zentria
+docker-compose up -d zentria_postgres
 ```
 
 ### Opção 2: Instalar PostgreSQL no Sistema
@@ -83,28 +86,28 @@ sudo -u postgres psql
 
 No psql:
 ```sql
-CREATE DATABASE zapflow;
-CREATE USER postgres WITH PASSWORD 'sua_senha';
-GRANT ALL PRIVILEGES ON DATABASE zapflow TO postgres;
+CREATE DATABASE zentria;
+CREATE USER zentria_user WITH PASSWORD 'sua_senha';
+GRANT ALL PRIVILEGES ON DATABASE zentria TO zentria_user;
 \q
 ```
 
 ### Opção 3: Configurar para usar PostgreSQL da Evolution API (Não recomendado)
 
-Se quiser usar o mesmo PostgreSQL, precisa criar o banco `zapflow` no container `evolution_postgres`:
+Se quiser usar o mesmo PostgreSQL, precisa criar o banco `zentria` no container `evolution_postgres`:
 
 ```bash
 # Entrar no container
 docker exec -it evolution_postgres psql -U user -d evolution
 
-# No psql, criar banco zapflow
-CREATE DATABASE zapflow;
+# No psql, criar banco zentria
+CREATE DATABASE zentria;
 \q
 
 # Criar usuário se necessário
 docker exec -it evolution_postgres psql -U user
-CREATE USER zapflow_user WITH PASSWORD 'senha';
-GRANT ALL PRIVILEGES ON DATABASE zapflow TO zapflow_user;
+CREATE USER zentria_user WITH PASSWORD 'senha';
+GRANT ALL PRIVILEGES ON DATABASE zentria TO zentria_user;
 \q
 ```
 
@@ -113,7 +116,7 @@ GRANT ALL PRIVILEGES ON DATABASE zapflow TO zapflow_user;
 Criar/editar `backend/.env`:
 
 ```bash
-cd /home/piekas/ZapFlow/backend
+cd /home/piekas/zentria/backend
 nano .env
 ```
 
@@ -121,12 +124,12 @@ nano .env
 
 ```env
 # Opção 1: Usando Docker (porta 5432 padrão)
-DATABASE_URL=postgresql://postgres:sua_senha@localhost:5432/zapflow
+DATABASE_URL=postgresql://postgres:sua_senha@localhost:5432/zentria
 
 # Ou configurar individualmente:
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=zapflow
+DB_NAME=zentria
 DB_USER=postgres
 DB_PASSWORD=sua_senha
 
@@ -148,20 +151,20 @@ CORS_ORIGIN=http://SEU_IP_SERVIDOR:5173,http://localhost:5173
 
 ```bash
 # Se usando Docker
-docker exec -it zapflow_postgres psql -U postgres -d zapflow -c "SELECT version();"
+docker exec -it zentria_postgres psql -U postgres -d zentria -c "SELECT version();"
 
 # Se usando sistema
-psql -U postgres -d zapflow -h localhost -c "SELECT version();"
+psql -U postgres -d zentria -h localhost -c "SELECT version();"
 ```
 
 ### 2. Testar conexão do backend
 
 ```bash
-cd /home/piekas/ZapFlow
+cd /home/piekas/zentria
 node -e "
 import('pg').then(({ Pool }) => {
   const pool = new Pool({
-    connectionString: 'postgresql://postgres:sua_senha@localhost:5432/zapflow'
+    connectionString: 'postgresql://postgres:sua_senha@localhost:5432/zentria'
   });
   pool.query('SELECT NOW()').then(res => {
     console.log('✅ Conexão OK:', res.rows[0]);
@@ -177,8 +180,8 @@ import('pg').then(({ Pool }) => {
 ### 3. Reiniciar backend
 
 ```bash
-pm2 restart backend
-pm2 logs backend --lines 20
+pm2 restart zentria-backend
+pm2 logs zentria-backend --lines 20
 ```
 
 ## 🗄️ Criar Tabelas Necessárias
@@ -187,7 +190,7 @@ O backend precisa das tabelas criadas. Verificar se o banco está inicializado:
 
 ```bash
 # Conectar ao banco
-psql -U postgres -d zapflow -h localhost
+psql -U postgres -d zentria -h localhost
 
 # Verificar tabelas existentes
 \dt
@@ -214,7 +217,7 @@ psql -U postgres -d zapflow -h localhost
 
 **Solução:**
 1. Verificar senha no `.env`
-2. Testar senha: `psql -U postgres -h localhost -d zapflow`
+2. Testar senha: `psql -U postgres -h localhost -d zentria`
 3. Se necessário, redefinir senha:
    ```bash
    sudo -u postgres psql
@@ -223,14 +226,14 @@ psql -U postgres -d zapflow -h localhost
 
 ### Erro: "database does not exist"
 
-**Causa:** Banco `zapflow` não foi criado.
+**Causa:** Banco `zentria` não foi criado.
 
 **Solução:**
 ```bash
 # Criar banco
-sudo -u postgres createdb zapflow
+sudo -u postgres createdb zentria
 # ou
-psql -U postgres -c "CREATE DATABASE zapflow;"
+psql -U postgres -c "CREATE DATABASE zentria;"
 ```
 
 ## 📝 Próximos Passos

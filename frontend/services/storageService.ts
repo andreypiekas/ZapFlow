@@ -73,6 +73,22 @@ class StorageService {
 
   private getLocalStorageKey(dataType: DataType): string {
     const keyMap: Record<DataType, string> = {
+      config: 'zentria_config',
+      chats: 'zentria_chats',
+      contacts: 'zentria_contacts',
+      users: 'zentria_users',
+      departments: 'zentria_departments',
+      quickReplies: 'zentria_quickReplies',
+      workflows: 'zentria_workflows',
+      chatbotConfig: 'zentria_chatbotConfig',
+      viewState: 'zentria_currentView',
+      sidebarState: 'zentria_sidebarCollapsed',
+    };
+    return keyMap[dataType] || `zentria_${dataType}`;
+  }
+
+  private getLegacyLocalStorageKey(dataType: DataType): string {
+    const keyMap: Record<DataType, string> = {
       config: 'zapflow_config',
       chats: 'zapflow_chats',
       contacts: 'zapflow_contacts',
@@ -85,6 +101,22 @@ class StorageService {
       sidebarState: 'zapflow_sidebarCollapsed',
     };
     return keyMap[dataType] || `zapflow_${dataType}`;
+  }
+
+  private getLocalStorageItem(dataType: DataType): string | null {
+    const primaryKey = this.getLocalStorageKey(dataType);
+    const primary = localStorage.getItem(primaryKey);
+    if (primary !== null) return primary;
+
+    const legacyKey = this.getLegacyLocalStorageKey(dataType);
+    const legacy = localStorage.getItem(legacyKey);
+    if (legacy !== null) {
+      // Migra best-effort para a chave nova
+      try { localStorage.setItem(primaryKey, legacy); } catch {}
+      return legacy;
+    }
+
+    return null;
   }
 
   async load<T>(dataType: DataType, key?: string): Promise<T | null> {
@@ -111,7 +143,7 @@ class StorageService {
     if (!this.useOnlyPostgreSQL) {
       try {
         const storageKey = this.getLocalStorageKey(dataType);
-        const saved = localStorage.getItem(storageKey);
+        const saved = this.getLocalStorageItem(dataType);
         if (saved) {
           // Descriptografa se for um dado sensível
           let decrypted = saved;
@@ -160,7 +192,7 @@ class StorageService {
     if (!this.useOnlyPostgreSQL) {
       try {
         const storageKey = this.getLocalStorageKey(dataType);
-        const saved = localStorage.getItem(storageKey);
+        const saved = this.getLocalStorageItem(dataType);
         if (!saved) return {};
 
         let decrypted = saved;
@@ -258,7 +290,7 @@ class StorageService {
       
       if (key) {
         // Se há uma key, salva como objeto
-        const existing = localStorage.getItem(storageKey);
+        const existing = this.getLocalStorageItem(dataType);
         let data: any = {};
         if (existing) {
           try {
@@ -359,13 +391,20 @@ class StorageService {
   private deleteFromLocalStorage(dataType: DataType, key: string): boolean {
     try {
       const storageKey = this.getLocalStorageKey(dataType);
-      const existing = localStorage.getItem(storageKey);
+      const existing = this.getLocalStorageItem(dataType);
       
       if (existing) {
-        const data = JSON.parse(existing);
+        const decrypted = this.isSensitiveDataType(dataType)
+          ? SecurityService.decrypt(existing)
+          : existing;
+        const data = JSON.parse(decrypted);
         if (typeof data === 'object' && data !== null) {
           delete data[key];
-          localStorage.setItem(storageKey, JSON.stringify(data));
+          const dataString = JSON.stringify(data);
+          const finalValue = this.isSensitiveDataType(dataType)
+            ? SecurityService.encrypt(dataString)
+            : dataString;
+          localStorage.setItem(storageKey, finalValue);
         } else {
           localStorage.removeItem(storageKey);
         }
