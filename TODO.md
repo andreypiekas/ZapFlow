@@ -297,7 +297,7 @@ Manter os arquivos de instucao e manuais, documentos
 ---
 
 ### 16. Abas dentro da tela de Configurações (organização/UX)
-**Status:** 🟡 Em definição  
+**Status:** ✅ Concluído  
 **Prioridade:** Média  
 **Objetivo:** Transformar a tela de **Configurações** em abas (reduzir scroll e organizar por contexto).
 
@@ -308,10 +308,15 @@ Manter os arquivos de instucao e manuais, documentos
 - **Manutenção**
 
 **Tarefas detalhadas:**
-- Criar navegação por abas na `frontend/components/Settings.tsx`.
-- Quebrar em subcomponentes por aba (manutenção).
-- Garantir comportamento correto para **Admin vs Não‑Admin** (não-admin vê apenas “Notificações”).
-- (Opcional) Persistir aba selecionada no `localStorage`.
+- ✅ Criar navegação por abas na `frontend/components/Settings.tsx`.
+- ✅ Quebrar em subcomponentes por aba (manutenção).
+- ✅ Garantir comportamento correto para **Admin vs Não‑Admin** (não-admin vê apenas “Notificações”).
+- ✅ Persistir aba selecionada no `localStorage`.
+
+**Implementação (realizada):**
+- Abas: **Sistema / Evolution**, **Integrações**, **Notificações**, **Manutenção**.
+- Persistência: `localStorage` (`zentria_settings_activeTab`).
+- Subcomponentes internos: `TabButton`, `BrowserNotificationsSection`, `MaintenanceSection`.
 
 **Critério de aceite:**
 - Navegação por abas funciona e não altera o comportamento atual de salvar configurações.
