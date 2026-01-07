@@ -83,14 +83,16 @@
 
 #### Segurança
 
-- [ ] **JWT_SECRET forte** em produção (não usar fallback)
-- [ ] **Rate limiting** no backend (prevenir brute force) ⚠️ TEMPORARIAMENTE DESABILITADO - Ver backend/server.js linha 50
-  - [ ] Reativar `generalLimiter`, `loginLimiter` e `dataLimiter` antes de produção
-  - [ ] Ajustar limites para não bloquear requisições legítimas
+- [x] **JWT_SECRET forte** em produção (backend recusa iniciar sem `JWT_SECRET` quando `NODE_ENV=production`)
+- [x] **Rate limiting** no backend (prevenir brute force / abuso de API)
+  - [x] `generalLimiter`, `loginLimiter`, `dataLimiter` e `webhookLimiter` (habilitado por padrão em produção)
+  - [x] Ajuste via env: `ENABLE_RATE_LIMITING`, `*_RATE_LIMIT_*`
   - [ ] Testar com carga real para definir valores adequados
-- [ ] **Validação de input** robusta (sanitização, validação de tipos)
+- [x] **Validação de input (básica)** (dataType/key/ids nas rotas críticas)
+- [ ] **Validação de schema** para payloads complexos (ex.: Zod/Joi) + sanitização mais completa
 - [ ] **HTTPS obrigatório** (certificado SSL válido)
-- [ ] **Headers de segurança** (HSTS, CSP, X-Frame-Options, etc.)
+- [x] **Headers de segurança (básicos)** (`X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, HSTS condicional)
+- [ ] **CSP / hardening avançado** (avaliar impacto no frontend antes de ativar)
 - [ ] **Logs de auditoria** (quem fez o quê e quando)
 - [ ] **Backup automático** do banco de dados
 - [ ] **Rotação de logs** para evitar disco cheio

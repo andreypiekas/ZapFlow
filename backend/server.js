@@ -14,6 +14,59 @@ dotenv.config();
 
 const { Pool } = pg;
 const app = express();
+
+// ============================================================================
+// Segurança - Flags e validações básicas de ambiente
+// ============================================================================
+const isProd = (process.env.NODE_ENV || '').toLowerCase() === 'production';
+
+const parseBoolEnv = (value, defaultValue = false) => {
+  if (value === undefined || value === null) return defaultValue;
+  const v = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'y', 'on'].includes(v)) return true;
+  if (['0', 'false', 'no', 'n', 'off'].includes(v)) return false;
+  return defaultValue;
+};
+
+// Rate limiting: habilitado por padrão em produção (pode desabilitar via env)
+const ENABLE_RATE_LIMITING = process.env.ENABLE_RATE_LIMITING !== undefined
+  ? parseBoolEnv(process.env.ENABLE_RATE_LIMITING, false)
+  : isProd;
+
+// HSTS: só faz sentido quando há HTTPS; browsers ignoram header em HTTP
+const ENABLE_HSTS = process.env.ENABLE_HSTS !== undefined
+  ? parseBoolEnv(process.env.ENABLE_HSTS, true)
+  : isProd;
+const HSTS_MAX_AGE = Number.parseInt(process.env.HSTS_MAX_AGE || '15552000', 10); // 180 dias
+
+// JWT: em produção, JWT_SECRET é obrigatório (não usar fallback)
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  if (isProd) {
+    console.error('[SECURITY] ❌ JWT_SECRET não definido. Em produção este valor é obrigatório.');
+    process.exit(1);
+  }
+  console.warn('[SECURITY] ⚠️ JWT_SECRET não definido. Usando fallback inseguro APENAS para dev.');
+}
+const EFFECTIVE_JWT_SECRET = JWT_SECRET || 'insecure_dev_fallback_change_me';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const JWT_ALGORITHM = 'HS256';
+
+// Trust proxy: por segurança, NÃO confiamos em X-Forwarded-* por padrão.
+// Em produção com Nginx/Proxy, configure TRUST_PROXY=1 (ou true).
+const TRUST_PROXY = process.env.TRUST_PROXY;
+if (TRUST_PROXY !== undefined) {
+  if (parseBoolEnv(TRUST_PROXY, false)) {
+    app.set('trust proxy', 1);
+  } else {
+    const n = Number(TRUST_PROXY);
+    app.set('trust proxy', Number.isFinite(n) ? n : false);
+  }
+}
+
+// Remove header que revela tecnologia
+app.disable('x-powered-by');
+
 const PORT = process.env.PORT || 3001;
 const dnsPromises = dns.promises;
 
@@ -24,7 +77,11 @@ const pool = new Pool({
 });
 
 // Middleware CORS
-const corsOrigins = process.env.CORS_ORIGIN?.split(',').map(o => o.trim()) || ['http://localhost:5173', 'http://localhost:3000'];
+const corsOrigins = (process.env.CORS_ORIGIN?.split(',').map(o => o.trim()).filter(Boolean)) || ['http://localhost:5173', 'http://localhost:3000'];
+// Em dev, permitir origens na rede privada (LAN) por conveniência; em prod, desabilitado por padrão.
+const allowPrivateNetworkCors = process.env.CORS_ALLOW_PRIVATE_NETWORK !== undefined
+  ? parseBoolEnv(process.env.CORS_ALLOW_PRIVATE_NETWORK, false)
+  : !isProd;
 // IP do servidor (opcional): usado para liberar CORS do IP do host quando não for localhost.
 // Se não estiver definido, tentamos detectar automaticamente (zero configuração manual).
 const detectServerIp = () => {
@@ -55,6 +112,15 @@ app.use(cors({
     if (!origin) {
       return callback(null, true);
     }
+
+    let parsedOrigin;
+    try {
+      parsedOrigin = new URL(origin);
+    } catch {
+      return callback(null, false);
+    }
+
+    const originHost = parsedOrigin.hostname;
     
     // Verificar se origin está na lista permitida
     if (corsOrigins.includes(origin) || corsOrigins.includes('*')) {
@@ -62,18 +128,33 @@ app.use(cors({
     }
     
     // Permitir se origin contém localhost
-    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+    if (originHost === 'localhost' || originHost === '127.0.0.1' || originHost === '::1') {
       return callback(null, true);
     }
     
     // Permitir se origin contém o IP do servidor (frontend e outros serviços na mesma rede)
-    if (serverIP && origin.includes(serverIP)) {
+    if (serverIP && originHost === serverIP) {
       return callback(null, true);
     }
     
-    // Permitir requisições da mesma rede local (192.168.x.x)
-    if (origin.match(/^https?:\/\/192\.168\./)) {
-      return callback(null, true);
+    // Permitir requisições na rede privada (LAN) APENAS se explicitamente habilitado (ou dev default)
+    if (allowPrivateNetworkCors) {
+      const kind = net.isIP(originHost);
+      if (kind === 4) {
+        if (
+          originHost.startsWith('10.') ||
+          originHost.startsWith('192.168.') ||
+          originHost.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./)
+        ) {
+          return callback(null, true);
+        }
+      }
+      if (kind === 6) {
+        const normalized = originHost.toLowerCase();
+        if (normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80')) {
+          return callback(null, true);
+        }
+      }
     }
     
     // Se chegou aqui, rejeita (mas não loga como erro para evitar spam)
@@ -81,122 +162,103 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'apikey']
+  allowedHeaders: ['Content-Type', 'Authorization', 'apikey', 'X-Webhook-Secret']
 }));
+
+// Headers básicos de segurança (evita dependência externa; CSP/HSTS completos ficam para o item 13)
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+
+  const isHttps = !!req.secure || String(req.headers['x-forwarded-proto'] || '').toLowerCase() === 'https';
+  if (ENABLE_HSTS && isHttps && Number.isFinite(HSTS_MAX_AGE) && HSTS_MAX_AGE > 0) {
+    res.setHeader('Strict-Transport-Security', `max-age=${HSTS_MAX_AGE}; includeSubDomains`);
+  }
+
+  next();
+});
 // Aumentar limite do body parser para permitir payloads grandes (chats com muitas mensagens)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // ============================================================================
-// RATE LIMITING - Prevenção de Brute Force e DDoS
+// RATE LIMITING - Prevenção de Brute Force e abuso de API
 // ============================================================================
-// ⚠️ TEMPORARIAMENTE DESABILITADO - Ver CHECKLIST_PRODUCAO.md para reativar
-// TODO: Revisar e reativar rate limiting antes de produção
+// - Por padrão: habilitado quando NODE_ENV=production
+// - Ajustes via env:
+//   ENABLE_RATE_LIMITING=true|false
+//   RATE_LIMIT_WINDOW_MINUTES, RATE_LIMIT_MAX
+//   LOGIN_RATE_LIMIT_WINDOW_MINUTES, LOGIN_RATE_LIMIT_MAX
+//   DATA_RATE_LIMIT_WINDOW_SECONDS, DATA_RATE_LIMIT_MAX
+//   WEBHOOK_RATE_LIMIT_WINDOW_SECONDS, WEBHOOK_RATE_LIMIT_MAX
 // ============================================================================
 
-// Rate limiter geral para todas as rotas (proteção básica)
-// const generalLimiter = rateLimit({
-//   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '15') * 60 * 1000, // 15 minutos por padrão
-//   max: parseInt(process.env.RATE_LIMIT_MAX || '1000'), // 100 requisições por janela
-//   message: {
-//     error: 'Muitas requisições deste IP, tente novamente mais tarde.',
-//     retryAfter: '15 minutos'
-//   },
-//   standardHeaders: true, // Retorna informações de rate limit nos headers `RateLimit-*`
-//   legacyHeaders: false, // Desabilita headers `X-RateLimit-*`
-//   // Função para obter o IP do cliente (considera proxies/load balancers)
-//   keyGenerator: (req) => {
-//     return req.ip || 
-//            req.headers['x-forwarded-for']?.split(',')[0] || 
-//            req.headers['x-real-ip'] || 
-//            req.connection.remoteAddress || 
-//            'unknown';
-//   },
-//   // Handler customizado para erros
-//   handler: (req, res) => {
-//     res.status(429).json({
-//       error: 'Muitas requisições deste IP, tente novamente mais tarde.',
-//       retryAfter: Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000) + ' segundos'
-//     });
-//   },
-//   // Skip rate limiting para health checks (não conta no limite)
-//   skip: (req) => {
-//     return req.path === '/api/health' || req.path === '/';
-//   }
-// });
+const noopLimiter = (req, res, next) => next();
 
-// Rate limiter RESTRITIVO para login (prevenção de brute force)
-// const loginLimiter = rateLimit({
-//   windowMs: parseInt(process.env.LOGIN_RATE_LIMIT_WINDOW_MS || '15') * 60 * 1000, // 15 minutos
-//   max: parseInt(process.env.LOGIN_RATE_LIMIT_MAX || '5'), // Apenas 5 tentativas de login por 15 minutos
-//   message: {
-//     error: 'Muitas tentativas de login. Por segurança, tente novamente em alguns minutos.',
-//     retryAfter: '15 minutos'
-//   },
-//   standardHeaders: true,
-//   legacyHeaders: false,
-//   keyGenerator: (req) => {
-//     // Para login, também considerar o username para rate limiting mais inteligente
-//     const username = req.body?.username || 'unknown';
-//     const ip = req.ip || 
-//                req.headers['x-forwarded-for']?.split(',')[0] || 
-//                req.headers['x-real-ip'] || 
-//                req.connection.remoteAddress || 
-//                'unknown';
-//     return `login:${ip}:${username}`;
-//   },
-//   handler: (req, res) => {
-//     const retryAfter = Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000);
-//     const ip = req.ip || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
-//     const username = req.body?.username || 'unknown';
-//     
-//     // Log de tentativas bloqueadas para auditoria (movido para dentro do handler - onLimitReached foi removido no v7)
-//     console.warn(`[SECURITY] Rate limit atingido para login - IP: ${ip}, Username: ${username}, Tentativas: ${req.rateLimit.totalHits}`);
-//     
-//     res.status(429).json({
-//       error: 'Muitas tentativas de login. Por segurança, sua conta foi temporariamente bloqueada.',
-//       retryAfter: `${Math.ceil(retryAfter / 60)} minutos`,
-//       message: 'Por favor, aguarde antes de tentar novamente. Se você esqueceu sua senha, entre em contato com o administrador.'
-//     });
-//   }
-// });
+const generalLimiter = ENABLE_RATE_LIMITING ? rateLimit({
+  windowMs: Number.parseInt(process.env.RATE_LIMIT_WINDOW_MINUTES || '15', 10) * 60 * 1000,
+  max: Number.parseInt(process.env.RATE_LIMIT_MAX || '1000', 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas requisições deste IP, tente novamente mais tarde.' },
+  skip: (req) => req.path === '/api/health' || req.path === '/',
+  handler: (req, res) => {
+    const retryAfter = Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000);
+    res.status(429).json({ error: 'Muitas requisições. Tente novamente mais tarde.', retryAfter: `${retryAfter}s` });
+  }
+}) : noopLimiter;
 
-// Rate limiter para rotas de dados (proteção contra abuso de API)
-// const dataLimiter = rateLimit({
-//   windowMs: parseInt(process.env.DATA_RATE_LIMIT_WINDOW_MS || '1') * 60 * 1000, // 1 minuto
-//   max: parseInt(process.env.DATA_RATE_LIMIT_MAX || '200'), // 200 requisições por minuto (aumentado para evitar 429 em sincronizações frequentes)
-//   message: {
-//     error: 'Muitas requisições de dados. Aguarde um momento antes de continuar.',
-//     retryAfter: '1 minuto'
-//   },
-//   standardHeaders: true,
-//   legacyHeaders: false,
-//   keyGenerator: (req) => {
-//     // Para rotas autenticadas, usar user ID se disponível
-//     if (req.user?.id) {
-//       return `data:user:${req.user.id}`;
-//     }
-//     return req.ip || 
-//            req.headers['x-forwarded-for']?.split(',')[0] || 
-//            req.headers['x-real-ip'] || 
-//            req.connection.remoteAddress || 
-//            'unknown';
-//   },
-//   handler: (req, res) => {
-//     const retryAfter = Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000);
-//     res.status(429).json({
-//       error: 'Muitas requisições. Aguarde um momento antes de continuar.',
-//       retryAfter: `${retryAfter} segundos`
-//     });
-//   }
-// });
+const loginLimiter = ENABLE_RATE_LIMITING ? rateLimit({
+  windowMs: Number.parseInt(process.env.LOGIN_RATE_LIMIT_WINDOW_MINUTES || '15', 10) * 60 * 1000,
+  max: Number.parseInt(process.env.LOGIN_RATE_LIMIT_MAX || '5', 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const username = typeof req.body?.username === 'string' ? req.body.username.trim().toLowerCase() : 'unknown';
+    return `login:${req.ip}:${username}`;
+  },
+  handler: (req, res) => {
+    const retryAfter = Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000);
+    const username = typeof req.body?.username === 'string' ? req.body.username.trim().toLowerCase() : 'unknown';
+    console.warn(`[SECURITY] Rate limit login - ip=${req.ip} username=${username} hits=${req.rateLimit.totalHits}`);
+    res.status(429).json({
+      error: 'Muitas tentativas de login. Tente novamente mais tarde.',
+      retryAfter: `${Math.ceil(retryAfter / 60)} minutos`
+    });
+  }
+}) : noopLimiter;
+
+const dataLimiter = ENABLE_RATE_LIMITING ? rateLimit({
+  windowMs: Number.parseInt(process.env.DATA_RATE_LIMIT_WINDOW_SECONDS || '60', 10) * 1000,
+  max: Number.parseInt(process.env.DATA_RATE_LIMIT_MAX || '200', 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    if (req.user?.id) return `data:user:${req.user.id}`;
+    return `data:ip:${req.ip}`;
+  },
+  handler: (req, res) => {
+    const retryAfter = Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000);
+    res.status(429).json({ error: 'Muitas requisições. Aguarde um momento antes de continuar.', retryAfter: `${retryAfter}s` });
+  }
+}) : noopLimiter;
+
+// Webhook pode receber bursts; por isso limites mais altos (ajustável via env)
+const webhookLimiter = ENABLE_RATE_LIMITING ? rateLimit({
+  windowMs: Number.parseInt(process.env.WEBHOOK_RATE_LIMIT_WINDOW_SECONDS || '60', 10) * 1000,
+  max: Number.parseInt(process.env.WEBHOOK_RATE_LIMIT_MAX || '2000', 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `webhook:ip:${req.ip}`,
+  handler: (req, res) => {
+    res.status(429).json({ error: 'Webhook rate limit excedido. Tente novamente mais tarde.' });
+  }
+}) : noopLimiter;
 
 // Aplicar rate limiting geral em todas as rotas
-// app.use(generalLimiter);
-
-// Criar variáveis vazias para não quebrar as rotas (limiters desabilitados)
-const loginLimiter = (req, res, next) => next(); // Middleware vazio - rate limiting desabilitado
-const dataLimiter = (req, res, next) => next(); // Middleware vazio - rate limiting desabilitado
+app.use(generalLimiter);
 
 // Middleware de autenticação
 const authenticateToken = async (req, res, next) => {
@@ -208,8 +270,14 @@ const authenticateToken = async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_change_in_production');
-    const result = await pool.query('SELECT id, username, name, email, role FROM users WHERE id = $1', [decoded.userId]);
+    const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET, { algorithms: [JWT_ALGORITHM] });
+    const userId = decoded?.userId;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Token inválido' });
+    }
+
+    const result = await pool.query('SELECT id, username, name, email, role FROM users WHERE id = $1', [userId]);
     
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Usuário não encontrado' });
@@ -218,6 +286,9 @@ const authenticateToken = async (req, res, next) => {
     req.user = result.rows[0];
     next();
   } catch (error) {
+    if (error?.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Token expirado' });
+    }
     return res.status(403).json({ error: 'Token inválido' });
   }
 };
@@ -303,14 +374,178 @@ const parseLinkPreview = (html, targetUrl) => {
   };
 };
 
+class PreviewFetchError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+    this.name = 'PreviewFetchError';
+  }
+}
+
+const PREVIEW_MAX_REDIRECTS = Number.parseInt(process.env.PREVIEW_MAX_REDIRECTS || '4', 10);
+const isRedirectStatus = (status) => [301, 302, 303, 307, 308].includes(status);
+
+// Lê o body com limite real (evita baixar HTML gigante quando content-length não existe)
+const readResponseTextLimited = async (response, maxBytes) => {
+  try {
+    if (!response?.body || typeof response.body.getReader !== 'function') {
+      const t = await response.text();
+      return t.length > maxBytes ? t.slice(0, maxBytes) : t;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+
+    let received = 0;
+    const chunks = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+
+      received += value.byteLength || 0;
+      if (received > maxBytes) {
+        // Cancela para parar o download (best-effort)
+        try { await reader.cancel(); } catch {}
+        break;
+      }
+
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+
+    chunks.push(decoder.decode());
+    return chunks.join('');
+  } catch {
+    return '';
+  }
+};
+
+// Fetch SSRF-safe com validação de redirects (não pode redirecionar para IP privado)
+const fetchUrlForPreview = async (startUrl) => {
+  let currentUrl = startUrl;
+
+  for (let i = 0; i <= PREVIEW_MAX_REDIRECTS; i++) {
+    // Valida destino antes de conectar
+    let parsed;
+    try {
+      parsed = new URL(currentUrl);
+    } catch {
+      throw new PreviewFetchError('invalid_url', 'URL inválida');
+    }
+
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new PreviewFetchError('invalid_url', 'Protocolo não permitido');
+    }
+
+    const hostname = parsed.hostname;
+    if (!hostname || hostname.toLowerCase() === 'localhost') {
+      throw new PreviewFetchError('blocked_host', 'Host não permitido');
+    }
+
+    let resolvedIp = null;
+    try {
+      resolvedIp = await resolveHostToIp(hostname);
+    } catch {
+      throw new PreviewFetchError('resolve_failed', 'Host inválido ou não resolvido');
+    }
+
+    if (isPrivateIp(resolvedIp)) {
+      throw new PreviewFetchError('private_ip', 'URL não permitida (IP interno/privado)');
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), PREVIEW_TIMEOUT);
+
+    let response;
+    try {
+      response = await fetch(currentUrl, {
+        method: 'GET',
+        redirect: 'manual',
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'ZapFlow-LinkPreview/1.0',
+          'Accept': 'text/html,application/xhtml+xml'
+        }
+      });
+    } catch (err) {
+      throw new PreviewFetchError('fetch_failed', err?.message || 'Falha ao buscar URL');
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    // Se houver redirect, valida o próximo destino (evita SSRF via redirect)
+    if (isRedirectStatus(response.status)) {
+      const location = response.headers.get('location');
+      if (!location) {
+        return { response, finalUrl: currentUrl };
+      }
+
+      if (i === PREVIEW_MAX_REDIRECTS) {
+        throw new PreviewFetchError('redirect_limit', 'Muitos redirects');
+      }
+
+      const next = normalizeUrlForPreview(new URL(location, currentUrl).toString());
+      if (!next) {
+        throw new PreviewFetchError('invalid_redirect', 'Redirect inválido');
+      }
+
+      currentUrl = next;
+      continue;
+    }
+
+    return { response, finalUrl: currentUrl };
+  }
+
+  throw new PreviewFetchError('redirect_limit', 'Muitos redirects');
+};
+
+// ============================================================================
+// Validações simples de input (evita dados inesperados e abusos fáceis)
+// ============================================================================
+const MAX_DATA_TYPE_LEN = 64;
+const MAX_DATA_KEY_LEN = 256;
+
+const coerceFirstQueryValue = (value) => (Array.isArray(value) ? value[0] : value);
+
+const normalizeDataTypeParam = (value) => {
+  if (typeof value !== 'string') return null;
+  const v = value.trim();
+  if (!v || v.length > MAX_DATA_TYPE_LEN) return null;
+  if (!/^[a-zA-Z0-9_-]+$/.test(v)) return null;
+  return v;
+};
+
+const normalizeDataKeyParam = (value) => {
+  if (typeof value !== 'string') return null;
+  const v = value.trim();
+  if (!v || v.length > MAX_DATA_KEY_LEN) return null;
+  // Permite IDs comuns (chatId, messageId, etc) sem abrir demais
+  if (!/^[\w@.+:-]+$/.test(v)) return null;
+  return v;
+};
+
+const parsePositiveIntParam = (value) => {
+  const n = Number.parseInt(String(value), 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+};
+
 // Rotas de autenticação
 // Aplicar rate limiting restritivo na rota de login
 app.post('/api/auth/login', loginLimiter, async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const usernameRaw = req.body?.username;
+    const passwordRaw = req.body?.password;
+    const username = typeof usernameRaw === 'string' ? usernameRaw.trim() : '';
+    const password = typeof passwordRaw === 'string' ? passwordRaw : '';
 
     if (!username || !password) {
       return res.status(400).json({ error: 'Username e password são obrigatórios' });
+    }
+
+    if (username.length > 80 || password.length > 200) {
+      return res.status(400).json({ error: 'Credenciais inválidas' });
     }
 
     const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
@@ -328,8 +563,8 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
 
     const token = jwt.sign(
       { userId: user.id, username: user.username },
-      process.env.JWT_SECRET || 'fallback_secret_change_in_production',
-      { expiresIn: '7d' }
+      EFFECTIVE_JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN, algorithm: JWT_ALGORITHM }
     );
 
     res.json({
@@ -352,8 +587,17 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
 // Aplicar rate limiting nas rotas de dados (após autenticação)
 app.get('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res) => {
   try {
-    const { dataType } = req.params;
-    const { key } = req.query;
+    const safeDataType = normalizeDataTypeParam(req.params.dataType);
+    if (!safeDataType) {
+      return res.status(400).json({ error: 'dataType inválido' });
+    }
+
+    const rawKey = coerceFirstQueryValue(req.query.key);
+    const hasKey = rawKey !== undefined && rawKey !== null && String(rawKey).trim().length > 0;
+    const safeKey = hasKey ? normalizeDataKeyParam(String(rawKey)) : null;
+    if (hasKey && !safeKey) {
+      return res.status(400).json({ error: 'key inválido' });
+    }
 
     // ⚠️ IMPORTANTE (mídia/base64 via webhook):
     // `webhook_messages` é salvo pelo webhook sem contexto de usuário (user_id = NULL).
@@ -361,14 +605,14 @@ app.get('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res) 
     //   GET /api/data/webhook_messages?key=<messageId>
     // Portanto, para `webhook_messages` precisamos permitir leitura do registro global (user_id IS NULL)
     // mantendo autenticação (apenas usuários logados).
-    const isWebhookMessages = dataType === 'webhook_messages';
+    const isWebhookMessages = safeDataType === 'webhook_messages';
 
     let query;
     let params;
 
     if (isWebhookMessages) {
       // Evita vazar um dump inteiro de webhooks: exige key e retorna no máximo 1 registro
-      if (!key) {
+      if (!safeKey) {
         return res.status(400).json({ error: 'key é obrigatório para webhook_messages' });
       }
 
@@ -381,20 +625,20 @@ app.get('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res) 
         ORDER BY (user_id IS NULL) ASC, updated_at DESC
         LIMIT 1
       `;
-      params = [dataType, key, req.user.id];
+      params = [safeDataType, safeKey, req.user.id];
     } else {
       query = 'SELECT data_value, data_key FROM user_data WHERE user_id = $1 AND data_type = $2';
-      params = [req.user.id, dataType];
+      params = [req.user.id, safeDataType];
 
-      if (key) {
+      if (safeKey) {
         query += ' AND data_key = $3';
-        params.push(key);
+        params.push(safeKey);
       }
     }
 
     const result = await pool.query(query, params);
 
-    if (key && result.rows.length > 0) {
+    if (safeKey && result.rows.length > 0) {
       // Se há key, retorna o valor parseado
       try {
         const parsed = typeof result.rows[0].data_value === 'string' 
@@ -404,7 +648,7 @@ app.get('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res) 
       } catch (e) {
         res.json(result.rows[0].data_value);
       }
-    } else if (!key) {
+    } else if (!safeKey) {
       // Se não há key, retorna objeto com todos os valores parseados
       // IMPORTANTE: Para chats, usa o id do chat como chave se data_key for null/undefined
       const data = {};
@@ -416,14 +660,14 @@ app.get('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res) 
           
           // Para chats, se data_key for null/undefined, usa o id do chat como chave
           let dataKey = row.data_key;
-          if (!dataKey && dataType === 'chats' && parsedValue && parsedValue.id) {
+          if (!dataKey && safeDataType === 'chats' && parsedValue && parsedValue.id) {
             dataKey = parsedValue.id;
             console.log(`[GET /api/data/:dataType] Corrigindo data_key null/undefined para chat ${parsedValue.id}`);
           }
           
           // Se ainda não tem chave válida, ignora este registro
           if (!dataKey) {
-            console.warn(`[GET /api/data/:dataType] Ignorando registro sem data_key válido para ${dataType}`);
+            console.warn(`[GET /api/data/:dataType] Ignorando registro sem data_key válido para ${safeDataType}`);
             return;
           }
           
@@ -431,7 +675,7 @@ app.get('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res) 
         } catch (e) {
           // Se não conseguiu parsear, tenta usar data_key diretamente
           let dataKey = row.data_key;
-          if (!dataKey && dataType === 'chats') {
+          if (!dataKey && safeDataType === 'chats') {
             console.warn(`[GET /api/data/:dataType] Ignorando registro de chat sem data_key e sem JSON válido`);
             return;
           }
@@ -452,10 +696,17 @@ app.get('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res) 
 
 app.post('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res) => {
   try {
-    const { dataType } = req.params;
-    const { key, value } = req.body;
+    const safeDataType = normalizeDataTypeParam(req.params.dataType);
+    if (!safeDataType) {
+      return res.status(400).json({ error: 'dataType inválido' });
+    }
 
-    if (!key || value === undefined) {
+    const keyRaw = req.body?.key;
+    const keyStr = keyRaw !== undefined && keyRaw !== null ? String(keyRaw) : '';
+    const safeKey = keyStr ? normalizeDataKeyParam(keyStr) : null;
+    const value = req.body?.value;
+
+    if (!safeKey || value === undefined) {
       return res.status(400).json({ error: 'key e value são obrigatórios' });
     }
 
@@ -466,7 +717,7 @@ app.post('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (COALESCE(user_id, 0), data_type, data_key)
        DO UPDATE SET data_value = $4, updated_at = CURRENT_TIMESTAMP`,
-      [req.user.id, dataType, key, JSON.stringify(value)]
+      [req.user.id, safeDataType, safeKey, JSON.stringify(value)]
     );
 
     res.json({ success: true });
@@ -479,8 +730,18 @@ app.post('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res)
 
 app.put('/api/data/:dataType/:key', authenticateToken, dataLimiter, async (req, res) => {
   try {
-    const { dataType, key } = req.params;
-    const { value } = req.body;
+    const safeDataType = normalizeDataTypeParam(req.params.dataType);
+    const keyStr = req.params.key !== undefined && req.params.key !== null ? String(req.params.key) : '';
+    const safeKey = keyStr ? normalizeDataKeyParam(keyStr) : null;
+    const value = req.body?.value;
+
+    if (!safeDataType) {
+      return res.status(400).json({ error: 'dataType inválido' });
+    }
+
+    if (!safeKey) {
+      return res.status(400).json({ error: 'key inválido' });
+    }
 
     if (value === undefined) {
       return res.status(400).json({ error: 'value é obrigatório' });
@@ -490,7 +751,7 @@ app.put('/api/data/:dataType/:key', authenticateToken, dataLimiter, async (req, 
       `UPDATE user_data 
        SET data_value = $1, updated_at = CURRENT_TIMESTAMP
        WHERE user_id = $2 AND data_type = $3 AND data_key = $4`,
-      [JSON.stringify(value), req.user.id, dataType, key]
+      [JSON.stringify(value), req.user.id, safeDataType, safeKey]
     );
 
     res.json({ success: true });
@@ -502,11 +763,21 @@ app.put('/api/data/:dataType/:key', authenticateToken, dataLimiter, async (req, 
 
 app.delete('/api/data/:dataType/:key', authenticateToken, dataLimiter, async (req, res) => {
   try {
-    const { dataType, key } = req.params;
+    const safeDataType = normalizeDataTypeParam(req.params.dataType);
+    const keyStr = req.params.key !== undefined && req.params.key !== null ? String(req.params.key) : '';
+    const safeKey = keyStr ? normalizeDataKeyParam(keyStr) : null;
+
+    if (!safeDataType) {
+      return res.status(400).json({ error: 'dataType inválido' });
+    }
+
+    if (!safeKey) {
+      return res.status(400).json({ error: 'key inválido' });
+    }
 
     await pool.query(
       'DELETE FROM user_data WHERE user_id = $1 AND data_type = $2 AND data_key = $3',
-      [req.user.id, dataType, key]
+      [req.user.id, safeDataType, safeKey]
     );
 
     res.json({ success: true });
@@ -561,27 +832,25 @@ app.get('/api/link-preview', authenticateToken, dataLimiter, async (req, res) =>
       }
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), PREVIEW_TIMEOUT);
-
     let response;
+    let finalUrl = normalizedUrl;
+
     try {
-      response = await fetch(normalizedUrl, {
-        method: 'GET',
-        redirect: 'follow',
-        signal: controller.signal,
-        headers: {
-          'User-Agent': 'ZapFlow-LinkPreview/1.0',
-          'Accept': 'text/html,application/xhtml+xml'
-        }
-      });
+      const fetched = await fetchUrlForPreview(normalizedUrl);
+      response = fetched.response;
+      finalUrl = fetched.finalUrl || normalizedUrl;
     } catch (err) {
-      clearTimeout(timeoutId);
-      console.error('[link-preview] Erro ao buscar URL:', normalizedUrl, err?.message);
+      const code = err?.code;
+      const message = err?.message || 'Falha ao buscar URL';
+
+      // Erros de bloqueio/SSRF/redirect inválido viram 400 (input não permitido)
+      if (['private_ip', 'blocked_host', 'invalid_redirect', 'redirect_limit', 'invalid_url', 'resolve_failed'].includes(code)) {
+        return res.status(400).json({ error: message });
+      }
+
+      console.error('[link-preview] Erro ao buscar URL:', normalizedUrl, message);
       return res.status(502).json({ error: 'Falha ao buscar URL para preview' });
     }
-
-    clearTimeout(timeoutId);
 
     if (!response.ok) {
       return res.status(502).json({ error: `Falha ao obter preview (HTTP ${response.status})` });
@@ -596,17 +865,13 @@ app.get('/api/link-preview', authenticateToken, dataLimiter, async (req, res) =>
 
     let html = '';
     if (contentType.includes('text/html')) {
-      try {
-        html = await response.text();
-        if (html.length > PREVIEW_MAX_HTML) {
-          html = html.slice(0, PREVIEW_MAX_HTML);
-        }
-      } catch (err) {
-        console.warn('[link-preview] Não foi possível ler HTML completo, prosseguindo com preview parcial.');
+      html = await readResponseTextLimited(response, PREVIEW_MAX_HTML);
+      if (!html) {
+        console.warn('[link-preview] Não foi possível ler HTML, prosseguindo com preview parcial.');
       }
     }
 
-    const preview = parseLinkPreview(html, normalizedUrl);
+    const preview = parseLinkPreview(html, finalUrl);
 
     await pool.query(
       `INSERT INTO user_data (user_id, data_type, data_key, data_value)
@@ -908,6 +1173,11 @@ app.put('/api/departments/:id', authenticateToken, dataLimiter, async (req, res)
     const { id } = req.params;
     const { name, description, color } = req.body;
 
+    const departmentId = parsePositiveIntParam(id);
+    if (!departmentId) {
+      return res.status(400).json({ error: 'ID inválido' });
+    }
+
     const updateFields = [];
     const params = [];
     let paramIndex = 1;
@@ -930,7 +1200,7 @@ app.put('/api/departments/:id', authenticateToken, dataLimiter, async (req, res)
     }
 
     updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
-    params.push(parseInt(id));
+    params.push(departmentId);
     params.push(req.user.id);
 
     const result = await pool.query(
@@ -961,9 +1231,13 @@ app.put('/api/departments/:id', authenticateToken, dataLimiter, async (req, res)
 app.delete('/api/departments/:id', authenticateToken, dataLimiter, async (req, res) => {
   try {
     const { id } = req.params;
+    const departmentId = parsePositiveIntParam(id);
+    if (!departmentId) {
+      return res.status(400).json({ error: 'ID inválido' });
+    }
     const result = await pool.query(
       'DELETE FROM departments WHERE id = $1 AND user_id = $2 RETURNING id',
-      [parseInt(id), req.user.id]
+      [departmentId, req.user.id]
     );
 
     if (result.rows.length === 0) {
@@ -1042,6 +1316,11 @@ app.put('/api/contacts/:id', authenticateToken, dataLimiter, async (req, res) =>
     const { id } = req.params;
     const { name, phone, email, avatar, source } = req.body;
 
+    const contactId = parsePositiveIntParam(id);
+    if (!contactId) {
+      return res.status(400).json({ error: 'ID inválido' });
+    }
+
     const updateFields = [];
     const params = [];
     let paramIndex = 1;
@@ -1072,7 +1351,7 @@ app.put('/api/contacts/:id', authenticateToken, dataLimiter, async (req, res) =>
     }
 
     updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
-    params.push(parseInt(id));
+    params.push(contactId);
     params.push(req.user.id);
 
     const result = await pool.query(
@@ -1106,9 +1385,13 @@ app.put('/api/contacts/:id', authenticateToken, dataLimiter, async (req, res) =>
 app.delete('/api/contacts/:id', authenticateToken, dataLimiter, async (req, res) => {
   try {
     const { id } = req.params;
+    const contactId = parsePositiveIntParam(id);
+    if (!contactId) {
+      return res.status(400).json({ error: 'ID inválido' });
+    }
     const result = await pool.query(
       'DELETE FROM contacts WHERE id = $1 AND user_id = $2 RETURNING id',
-      [parseInt(id), req.user.id]
+      [contactId, req.user.id]
     );
 
     if (result.rows.length === 0) {
@@ -1176,6 +1459,11 @@ app.put('/api/quick-replies/:id', authenticateToken, dataLimiter, async (req, re
     const { id } = req.params;
     const { title, content } = req.body;
 
+    const quickReplyId = parsePositiveIntParam(id);
+    if (!quickReplyId) {
+      return res.status(400).json({ error: 'ID inválido' });
+    }
+
     const updateFields = [];
     const params = [];
     let paramIndex = 1;
@@ -1194,7 +1482,7 @@ app.put('/api/quick-replies/:id', authenticateToken, dataLimiter, async (req, re
     }
 
     updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
-    params.push(parseInt(id));
+    params.push(quickReplyId);
     params.push(req.user.id);
 
     const result = await pool.query(
@@ -1224,9 +1512,13 @@ app.put('/api/quick-replies/:id', authenticateToken, dataLimiter, async (req, re
 app.delete('/api/quick-replies/:id', authenticateToken, dataLimiter, async (req, res) => {
   try {
     const { id } = req.params;
+    const quickReplyId = parsePositiveIntParam(id);
+    if (!quickReplyId) {
+      return res.status(400).json({ error: 'ID inválido' });
+    }
     const result = await pool.query(
       'DELETE FROM quick_replies WHERE id = $1 AND user_id = $2 RETURNING id',
-      [parseInt(id), req.user.id]
+      [quickReplyId, req.user.id]
     );
 
     if (result.rows.length === 0) {
@@ -1300,6 +1592,11 @@ app.put('/api/workflows/:id', authenticateToken, dataLimiter, async (req, res) =
     const { id } = req.params;
     const { title, description, triggerKeywords, steps, targetDepartmentId } = req.body;
 
+    const workflowId = parsePositiveIntParam(id);
+    if (!workflowId) {
+      return res.status(400).json({ error: 'ID inválido' });
+    }
+
     const updateFields = [];
     const params = [];
     let paramIndex = 1;
@@ -1330,7 +1627,7 @@ app.put('/api/workflows/:id', authenticateToken, dataLimiter, async (req, res) =
     }
 
     updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
-    params.push(parseInt(id));
+    params.push(workflowId);
     params.push(req.user.id);
 
     const result = await pool.query(
@@ -1363,9 +1660,13 @@ app.put('/api/workflows/:id', authenticateToken, dataLimiter, async (req, res) =
 app.delete('/api/workflows/:id', authenticateToken, dataLimiter, async (req, res) => {
   try {
     const { id } = req.params;
+    const workflowId = parsePositiveIntParam(id);
+    if (!workflowId) {
+      return res.status(400).json({ error: 'ID inválido' });
+    }
     const result = await pool.query(
       'DELETE FROM workflows WHERE id = $1 AND user_id = $2 RETURNING id',
-      [parseInt(id), req.user.id]
+      [workflowId, req.user.id]
     );
 
     if (result.rows.length === 0) {
@@ -1384,8 +1685,12 @@ app.delete('/api/workflows/:id', authenticateToken, dataLimiter, async (req, res
 // ============================================================================
 app.post('/api/data/:dataType/batch', authenticateToken, dataLimiter, async (req, res) => {
   try {
-    const { dataType } = req.params;
-    const { data } = req.body; // { key1: value1, key2: value2, ... }
+    const safeDataType = normalizeDataTypeParam(req.params.dataType);
+    if (!safeDataType) {
+      return res.status(400).json({ error: 'dataType inválido' });
+    }
+
+    const data = req.body?.data; // { key1: value1, key2: value2, ... }
 
     if (!data || typeof data !== 'object') {
       return res.status(400).json({ error: 'data deve ser um objeto' });
@@ -1396,12 +1701,17 @@ app.post('/api/data/:dataType/batch', authenticateToken, dataLimiter, async (req
       await client.query('BEGIN');
 
       for (const [key, value] of Object.entries(data)) {
+        const keyStr = key !== undefined && key !== null ? String(key) : '';
+        const safeKey = keyStr ? normalizeDataKeyParam(keyStr) : null;
+        if (!safeKey) {
+          throw new Error(`Chave inválida no batch: ${keyStr}`);
+        }
         await client.query(
           `INSERT INTO user_data (user_id, data_type, data_key, data_value)
            VALUES ($1, $2, $3, $4)
            ON CONFLICT (COALESCE(user_id, 0), data_type, data_key)
            DO UPDATE SET data_value = $4, updated_at = CURRENT_TIMESTAMP`,
-          [req.user.id, dataType, key, JSON.stringify(value)]
+          [req.user.id, safeDataType, safeKey, JSON.stringify(value)]
         );
       }
 
@@ -1685,6 +1995,19 @@ const handleWebhookEvolution = async (req, res) => {
   try {
     const event = req.body;
     const eventType = event.event || event.type || req.params.eventName || 'unknown';
+
+    // Segurança opcional: se WEBHOOK_SECRET/EVOLUTION_WEBHOOK_SECRET estiver definido,
+    // exige header "X-Webhook-Secret" (para evitar spam/abuso externo).
+    // IMPORTANTE: mantemos resposta 200 mesmo quando inválido para evitar retries infinitos da Evolution.
+    const expectedSecret = process.env.EVOLUTION_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
+    if (expectedSecret) {
+      const provided = req.headers['x-webhook-secret'];
+      const providedValue = Array.isArray(provided) ? provided[0] : provided;
+      if (!providedValue || String(providedValue) !== String(expectedSecret)) {
+        console.warn('[WEBHOOK] ⚠️ Secret inválido/ausente. Ignorando payload.');
+        return res.status(200).json({ received: true, ignored: true, reason: 'invalid_secret' });
+      }
+    }
     
     // Log detalhado para debug
     const eventNameFromUrl = req.params.eventName ? ` (URL: ${req.params.eventName})` : '';
@@ -1861,11 +2184,11 @@ const handleWebhookEvolution = async (req, res) => {
 };
 
 // Rota base para webhook (sem nome de evento)
-app.post('/api/webhook/evolution', handleWebhookEvolution);
+app.post('/api/webhook/evolution', webhookLimiter, handleWebhookEvolution);
 
 // Rota com nome de evento (quando "Webhook by Events" está ON)
 // Aceita qualquer nome de evento: /api/webhook/evolution/messages.upsert, /api/webhook/evolution/contacts-update, etc.
-app.post('/api/webhook/evolution/:eventName', handleWebhookEvolution);
+app.post('/api/webhook/evolution/:eventName', webhookLimiter, handleWebhookEvolution);
 
 // Rota raiz
 app.get('/', (req, res) => {

@@ -181,13 +181,21 @@
 ---
 
 ### 10. Validação de segurança da aplicação
-**Status:** 🟢 Planejado  
+**Status:** ✅ Concluído  
 **Objetivo:** Hardening de autenticação, permissões e superfície de ataque.
 
-**Tarefas detalhadas (alto nível):**
-- Revisar CORS, JWT, rate limiting (reativar em produção), validações de input.
-- Revisar endpoints que retornam dados globais (ex.: `webhook_messages`).
-- Checklist de produção (segredos, HTTPS, headers, logs).
+**Implementação (resumo):**
+- Backend: **rate limiting reativado** (por padrão em produção) para **geral / login / dados / webhook** (`ENABLE_RATE_LIMITING` + `*_RATE_LIMIT_*`).
+- JWT: `JWT_SECRET` **obrigatório em produção** (sem fallback), algoritmo travado (`HS256`) e expiração configurável (`JWT_EXPIRES_IN`).
+- CORS: controle de rede privada via `CORS_ALLOW_PRIVATE_NETWORK` (default mais seguro em produção).
+- Headers: `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` e **HSTS condicional** (`ENABLE_HSTS`).
+- SSRF: `/api/link-preview` reforçado (redirects validados + leitura com limite real de bytes).
+- Inputs: validação de `dataType/key` nas rotas `/api/data` e validação de `id` numérico em rotas críticas.
+- Docs: `CHECKLIST_PRODUCAO.md` atualizado com os itens concluídos.
+
+**Critério de aceite (atingido):**
+- Em `NODE_ENV=production` sem `JWT_SECRET` o backend **não inicia**.
+- `/api/link-preview` não consegue acessar IP privado via redirect e não baixa HTML gigante quando `content-length` não existe.
 
 ---
 
