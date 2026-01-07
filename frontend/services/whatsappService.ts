@@ -2239,11 +2239,37 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
             return [];
         }
 
-        // Extrai o número do JID (remove @s.whatsapp.net)
-        const phoneNumber = chatId.split('@')[0];
+        const normalizedChatId = normalizeJid(chatId);
+        // Extrai o "número" do JID (pode ser DDI+DDD+num OU @lid). Usado apenas para comparação flexível.
+        const phoneNumber = normalizedChatId.split('@')[0];
+        const phoneDigits = phoneNumber.replace(/\D/g, '');
         
         const messages: Message[] = [];
         
+        // Helper: match flexível (chatId vs remoteJid/remoteJidAlt), tolera DDI e casos @lid.
+        const matchesChat = (candidateJid: any): boolean => {
+            if (typeof candidateJid !== 'string' || !candidateJid.trim()) return false;
+            const normalizedCandidate = normalizeJid(candidateJid);
+            if (!normalizedCandidate) return false;
+
+            if (normalizedCandidate === normalizedChatId) return true;
+
+            // Fallback: comparação por dígitos (últimos 8-11), útil quando um lado tem DDI e outro não.
+            const candidateDigits = normalizedCandidate.split('@')[0].replace(/\D/g, '');
+            if (!candidateDigits || !phoneDigits) return false;
+            if (candidateDigits === phoneDigits) return true;
+
+            if (candidateDigits.length >= 8 && phoneDigits.length >= 8) {
+                const last8 = candidateDigits.slice(-8) === phoneDigits.slice(-8);
+                const last9 = candidateDigits.length >= 9 && phoneDigits.length >= 9 && candidateDigits.slice(-9) === phoneDigits.slice(-9);
+                const last10 = candidateDigits.length >= 10 && phoneDigits.length >= 10 && candidateDigits.slice(-10) === phoneDigits.slice(-10);
+                const last11 = candidateDigits.length >= 11 && phoneDigits.length >= 11 && candidateDigits.slice(-11) === phoneDigits.slice(-11);
+                return last8 || last9 || last10 || last11;
+            }
+
+            return false;
+        };
+
         // Função para processar mensagens recursivamente
         const processMessages = (items: any[]) => {
             if (!Array.isArray(items)) {
@@ -2256,9 +2282,11 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                 
                 // Caso 1: Objeto de mensagem com key.remoteJid (formato padrão de mensagem)
                 if (item.key && item.key.remoteJid) {
-                    const normalizedJid = normalizeJid(item.key.remoteJid);
-                    // Aceita mensagens que correspondem ao JID completo ou contém o número
-                    if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
+                    const remoteJid = item.key.remoteJid;
+                    const remoteJidAlt = (item.key as any).remoteJidAlt;
+
+                    // Aceita mensagens que correspondem ao JID (ou ao ALT) com comparação flexível
+                    if (matchesChat(remoteJid) || matchesChat(remoteJidAlt)) {
                         // Log para debug de imagens sem URL
                         if (item.message?.imageMessage || item.imageMessage) {
                             const hasUrl = !!(item.message?.imageMessage?.url || item.imageMessage?.url);
@@ -2284,11 +2312,10 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                 // Caso 2: Objeto de chat do findChats (tem remoteJid direto e messages dentro)
                 if (item.remoteJid && typeof item.remoteJid === 'string') {
                     const normalizedJid = normalizeJid(item.remoteJid);
-                    const normalizedChatId = normalizeJid(chatId);
                     const itemIdNumber = normalizedJid.split('@')[0];
                     
                     // Verifica se é o chat correto
-                    const isMatchingChat = normalizedJid === normalizedChatId || 
+                    const isMatchingChat = matchesChat(item.remoteJid) || matchesChat((item as any).remoteJidAlt) ||
                                           normalizedJid.includes(phoneNumber) || 
                                           item.id === chatId ||
                                           (itemIdNumber === phoneNumber && phoneNumber.length >= 10);
@@ -2304,8 +2331,7 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                 
                 // Caso 3: Mensagem com remoteJid direto (sem key, mas tem estrutura de mensagem)
                 if (item.remoteJid && item.message) {
-                    const normalizedJid = normalizeJid(item.remoteJid);
-                    if (normalizedJid === chatId || normalizedJid.includes(phoneNumber)) {
+                    if (matchesChat(item.remoteJid) || matchesChat((item as any).remoteJidAlt)) {
                         const mapped = mapApiMessageToInternal(item);
                         if (mapped) {
                             messages.push(mapped);
@@ -2341,19 +2367,34 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         // NOTA: Removido include: ['messages'] de todos os endpoints para evitar erro 500
         // Versões afetadas: 2.3.4 e 2.3.6 (problema mais comum na 2.3.6)
         const endpoints = [
-            // Endpoint 1: findChats com remoteJid (sem include messages para evitar erro 500)
+            // ✅ Preferencial: fetchMessages retorna a lista real de mensagens (evita perder bursts).
+            // Em algumas versões pode retornar 404; por isso é best-effort.
+            {
+                url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
+                body: { where: { remoteJid: normalizedChatId }, limit: Math.max(50, limit) },
+                isFindChats: false
+            },
+            {
+                url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
+                body: { where: { remoteJid: phoneNumber }, limit: Math.max(50, limit) },
+                isFindChats: false
+            },
+            {
+                url: `${config.baseUrl}/message/fetchMessages/${instanceName}`,
+                body: { limit: Math.max(50, limit) },
+                isFindChats: false
+            },
+            // Fallbacks: findChats (pode trazer apenas "últimas N" em algumas versões/configs)
             {
                 url: `${config.baseUrl}/chat/findChats/${instanceName}`,
-                body: { where: { remoteJid: chatId }, limit: 1000 },
+                body: { where: { remoteJid: normalizedChatId }, limit: 1000 },
                 isFindChats: true
             },
-            // Endpoint 2: findChats com remoteJid sem @s.whatsapp.net
             {
                 url: `${config.baseUrl}/chat/findChats/${instanceName}`,
                 body: { where: { remoteJid: phoneNumber }, limit: 1000 },
                 isFindChats: true
             },
-            // Endpoint 3: findChats sem filtro (busca todos e filtra depois) - último recurso
             {
                 url: `${config.baseUrl}/chat/findChats/${instanceName}`,
                 body: { where: {}, limit: 1000 },
