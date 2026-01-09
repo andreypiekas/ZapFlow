@@ -3017,7 +3017,7 @@ const App: React.FC = () => {
                                                     logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Chat encontrado no banco - chatId=${chatKey}, status=${dbChat.status}, departmentId=${dbChat.departmentId}, departmentSelectionSent=${dbChat.departmentSelectionSent}, shouldSend=${shouldSend}`);
 
                                                     // Se for uma avaliação válida (1-5) dentro de 15 minutos após finalizar, NÃO reabre e NÃO envia setores.
-                                                    if (wasClosed && isValidRatingResponseWithinWindow(dbChat, mappedContentTrimmed)) {
+                                                    if (wasClosed && isValidRatingResponseWithinWindow(chatInState || dbChat, mappedContentTrimmed)) {
                                                         const rating = parseInt(mappedContentTrimmed, 10);
                                                         logger.debug(`[App] ⭐ [DEBUG] Socket.IO: Avaliação recebida (dentro de 15min) - chatId=${dbChat.id}, rating=${rating}`);
                                                         try {
