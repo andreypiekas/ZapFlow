@@ -1806,7 +1806,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         // Valida se tem número válido antes de enviar (>=10 dígitos, formatPhoneForApi adiciona DDI se necessário)
         const targetDigits = targetNumber.replace(/\D/g, '').length;
         if (targetNumber && targetDigits >= 10) {
-            sendRealMessage(apiConfig, targetNumber, "Por favor, avalie nosso atendimento de 1 a 5 estrelas.");
+            sendRealMessage(apiConfig, targetNumber, "Por favor, avalie nosso atendimento de 1 a 5 estrelas (Disponível por 15 minutos).");
         } else {
             console.warn('[NumberWarning] Não foi possível enviar pesquisa: número inválido');
         }

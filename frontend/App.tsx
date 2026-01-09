@@ -1076,7 +1076,29 @@ const App: React.FC = () => {
                             
                             // Se o chat está fechado no banco e recebeu nova mensagem do usuário, reabre IMEDIATAMENTE
                             if (dbChatStatus === 'closed' && hasNewUserMessage) {
-                                logger.debug(`[App] 🔄 [DEBUG] syncChats: Chat fechado ${realChat.id} recebeu nova mensagem do usuário, reabrindo IMEDIATAMENTE...`);
+                                const ratingCandidateChat = dbChat || existingChat;
+                                const ratingContent = (lastRealUserMsg?.content || '').trim();
+                                const isValidRating = isValidRatingResponseWithinWindow(ratingCandidateChat, ratingContent);
+
+                                // Se estiver dentro da janela de avaliação, trata "1" a "5" como avaliação e NÃO reabre / não envia setores.
+                                if (isValidRating) {
+                                    const rating = parseInt(ratingContent, 10);
+                                    logger.debug(`[App] ⭐ [DEBUG] syncChats: Avaliação recebida (dentro de 15min) - chatId=${realChat.id}, rating=${rating}`);
+                                    try {
+                                        handleUpdateChat({
+                                            ...existingChat,
+                                            status: 'closed',
+                                            rating,
+                                            awaitingRating: false,
+                                            // Mantém endedAt para auditoria/janela de avaliação
+                                            messages: apiMessages
+                                        });
+                                    } catch (err) {
+                                        logger.debug('[App] ❌ [DEBUG] syncChats: Erro ao processar avaliação:', err);
+                                    }
+                                    // Não reabre quando for avaliação válida
+                                } else {
+                                    logger.debug(`[App] 🔄 [DEBUG] syncChats: Chat fechado ${realChat.id} recebeu nova mensagem do usuário, reabrindo IMEDIATAMENTE...`);
                                 
                                 // Atualiza status para pending e limpa assignedTo/departmentId IMEDIATAMENTE
                                 // Usa IIFE async para executar imediatamente sem bloquear
@@ -1189,6 +1211,7 @@ const App: React.FC = () => {
                                         console.error('[App] ❌ Erro ao reabrir chat fechado no syncChats:', error);
                                     }
                                 })(); // IIFE async - executa imediatamente
+                                }
                             }
                             
                             if (lastMsg.sender === 'user') {
@@ -1719,17 +1742,18 @@ const App: React.FC = () => {
                                                 // Apenas processa avaliação se chat está fechado e aguardando
                                                 let updatedChat = { ...c };
                                                 
-                                                // Processa avaliação se chat está fechado e aguardando avaliação
-                                                if (c.status === 'closed' && newReceivedMessages.length > 0 && c.awaitingRating) {
+                                                // Processa avaliação se chat está fechado e aguardando avaliação (apenas dentro da janela de 15 minutos)
+                                                if (c.status === 'closed' && newReceivedMessages.length > 0 && c.awaitingRating && isRatingWindowOpen(c)) {
                                                     const lastNewMessage = newReceivedMessages[newReceivedMessages.length - 1];
                                                     const messageContent = lastNewMessage.content.trim();
-                                                    const isRatingResponse = /^[1-5]$/.test(messageContent);
+                                                    const isRatingResponse = isRatingResponseMessage(messageContent);
                                                     
                                                     if (isRatingResponse) {
                                                         // Cliente respondeu com avaliação - atualiza via handleUpdateChat para persistir no banco
                                                         const rating = parseInt(messageContent);
                                                         handleUpdateChat({
                                                             ...c,
+                                                            messages: uniqueMessages,
                                                             rating: rating,
                                                             awaitingRating: false,
                                                             status: 'closed' // Mantém fechado
@@ -2951,6 +2975,7 @@ const App: React.FC = () => {
                         // Departamentos para seleção (SEMPRE do DB, nunca INITIAL_DEPARTMENTS)
                         const selectionDepartmentsForSelection =
                           mapped.sender === 'user' ? await getDepartmentsForSelection() : [];
+                        const mappedContentTrimmed = (mapped?.content || '').trim();
 
                         // VERIFICAÇÃO CRÍTICA: Se é mensagem do usuário, verifica no banco se chat está fechado
                         // e envia mensagem de seleção IMEDIATAMENTE, mesmo se chat não estiver no estado
@@ -2990,6 +3015,23 @@ const App: React.FC = () => {
                                                     const shouldSend = !dbChat.departmentSelectionSent || wasClosed;
                                                     
                                                     logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Chat encontrado no banco - chatId=${chatKey}, status=${dbChat.status}, departmentId=${dbChat.departmentId}, departmentSelectionSent=${dbChat.departmentSelectionSent}, shouldSend=${shouldSend}`);
+
+                                                    // Se for uma avaliação válida (1-5) dentro de 15 minutos após finalizar, NÃO reabre e NÃO envia setores.
+                                                    if (wasClosed && isValidRatingResponseWithinWindow(dbChat, mappedContentTrimmed)) {
+                                                        const rating = parseInt(mappedContentTrimmed, 10);
+                                                        logger.debug(`[App] ⭐ [DEBUG] Socket.IO: Avaliação recebida (dentro de 15min) - chatId=${dbChat.id}, rating=${rating}`);
+                                                        try {
+                                                            handleUpdateChat({
+                                                                ...dbChat,
+                                                                status: 'closed',
+                                                                rating,
+                                                                awaitingRating: false
+                                                            });
+                                                        } catch (err) {
+                                                            logger.debug('[App] ❌ [DEBUG] Socket.IO: Erro ao processar avaliação (db):', err);
+                                                        }
+                                                        return;
+                                                    }
                                                     
                                                     if (wasClosed && hasNoDepartment && shouldSend && contactNumber.length >= 10) {
                                                         logger.debug(`[App] 🔄 [DEBUG] Socket.IO: Chat fechado no banco recebeu mensagem do usuário - Reabrindo IMEDIATAMENTE para ${remoteJid} (número: ${contactNumber})`);
@@ -3115,6 +3157,7 @@ const App: React.FC = () => {
                                             }
                                             
                                             const hasRecentPrompt = hasRecentDepartmentSelectionPrompt(chat.messages);
+                                            const isValidRating = isValidRatingResponseWithinWindow(chat, mappedContentTrimmed);
 
                                             // Condição ajustada: se chat estava fechado, reseta departmentSelectionSent na verificação
                                             const shouldSendSelection = isUserMessage && 
@@ -3122,7 +3165,8 @@ const App: React.FC = () => {
                                                 selectionDepartmentsForSelection.length > 0 &&
                                                 (chat.status === 'pending' || !chat.assignedTo || wasClosed) &&
                                                 (!chat.departmentSelectionSent || wasClosed) && // Permite reenvio se chat estava fechado
-                                                !hasRecentPrompt; // Evita duplicação quando o prompt já existe no histórico recente
+                                                !hasRecentPrompt && // Evita duplicação quando o prompt já existe no histórico recente
+                                                !isValidRating; // Se for avaliação válida, não envia setores
                                             
                                             if (shouldSendSelection) {
                                                 logger.debug(`[App] 📤 [DEBUG] Socket.IO: Chat sem departamento - Enviando mensagem de seleção IMEDIATAMENTE para ${chat.id} (status: ${chat.status}, wasClosed: ${wasClosed})`);
@@ -3154,7 +3198,7 @@ const App: React.FC = () => {
                                                 } else {
                                                     logger.debug(`[App] ⚠️ [DEBUG] Socket.IO: Não foi possível enviar mensagem de seleção - número de contato inválido para ${chat.id} (contactNumber: ${contactNumber})`);
                                                 }
-                                            } else if (isUserMessage && !chat.departmentId && selectionDepartmentsForSelection.length > 0 && hasRecentPrompt && !chat.departmentSelectionSent) {
+                                            } else if (isUserMessage && !chat.departmentId && selectionDepartmentsForSelection.length > 0 && hasRecentPrompt && !chat.departmentSelectionSent && !isValidRating) {
                                                 // Prompt já existe (provavelmente enviado por outro fluxo/sessão), mas flags ainda não.
                                                 // Sincroniza flags para que a resposta numérica seja processada corretamente.
                                                 try {
@@ -3486,16 +3530,17 @@ const App: React.FC = () => {
                                             // Apenas adiciona mensagens, não altera status
                                                 let updatedChat = { ...chat };
                                                 
-                                            // Processa avaliação se chat está fechado e aguardando avaliação
-                                            if (wasClosed && isUserMessage && chat.awaitingRating) {
+                                            // Processa avaliação se chat está fechado e aguardando avaliação (apenas dentro da janela de 15 minutos)
+                                            if (wasClosed && isUserMessage && chat.awaitingRating && isRatingWindowOpen(chat)) {
                                                     const messageContent = mapped.content.trim();
-                                                    const isRatingResponse = /^[1-5]$/.test(messageContent);
+                                                    const isRatingResponse = isRatingResponseMessage(messageContent);
                                                     
                                                 if (isRatingResponse) {
                                                     // Cliente respondeu com avaliação (1-5) - atualiza via handleUpdateChat para persistir no banco
                                                         const rating = parseInt(messageContent);
                                                     handleUpdateChat({
                                                             ...chat,
+                                                            messages: updatedMessages,
                                                             rating: rating,
                                                         awaitingRating: false,
                                                         status: 'closed' // Mantém fechado
@@ -3645,7 +3690,7 @@ const App: React.FC = () => {
                                             // EXCEÇÃO: Se está aguardando avaliação e a mensagem é uma avaliação (1-5), não reabre (já tratado acima)
                                             // Esta verificação deve ser executada SEMPRE que uma mensagem do usuário chegar em um chat fechado,
                                             // independentemente de a mensagem já existir ou não
-                                            if (wasClosed && isUserMessage && !(chat.awaitingRating && /^[1-5]$/.test(mapped.content?.trim() || ''))) {
+                                            if (wasClosed && isUserMessage && !isValidRatingResponseWithinWindow(chat, mappedContentTrimmed)) {
                                                 console.log(`[App] 🔄 Chat fechado ${chat.id} recebeu mensagem do cliente, reabrindo...`);
                                                 finalStatus = 'pending';
                                                 finalAssignedTo = undefined;
@@ -3730,7 +3775,7 @@ const App: React.FC = () => {
                                                 let finalDepartmentId = chat.departmentId;
                                                 
                                                 // Se chat estava fechado e recebeu mensagem do cliente, atualiza status para pending
-                                                if (wasClosed && isUserMessage && !(chat.awaitingRating && /^[1-5]$/.test(mapped.content?.trim() || ''))) {
+                                                if (wasClosed && isUserMessage && !isValidRatingResponseWithinWindow(chat, mappedContentTrimmed)) {
                                                     console.log(`[App] 🔄 Chat fechado ${chat.id} recebeu mensagem do cliente (mensagem já existe), reabrindo...`);
                                                     finalStatus = 'pending';
                                                     finalAssignedTo = undefined;
@@ -4127,6 +4172,35 @@ const App: React.FC = () => {
     }
   };
 
+  // Janela de avaliação (pós-finalização): 15 minutos.
+  // Dentro da janela, respostas "1" a "5" devem ser tratadas como avaliação e NÃO disparar seleção de setor.
+  const RATING_WINDOW_MS = 15 * 60 * 1000;
+
+  const getChatEndedAtMs = (chat?: Partial<Chat> | null): number => {
+    const raw: any = chat ? (chat as any).endedAt : undefined;
+    if (!raw) return 0;
+    const ms = raw instanceof Date ? raw.getTime() : new Date(raw).getTime();
+    return Number.isFinite(ms) ? ms : 0;
+  };
+
+  const isRatingResponseMessage = (content: string | undefined | null): boolean => {
+    return /^[1-5]$/.test((content || '').trim());
+  };
+
+  const isRatingWindowOpen = (chat?: Partial<Chat> | null): boolean => {
+    if (!chat || !(chat as any).awaitingRating) return false;
+    const endedAtMs = getChatEndedAtMs(chat);
+    if (!endedAtMs) return false;
+    return (Date.now() - endedAtMs) <= RATING_WINDOW_MS;
+  };
+
+  const isValidRatingResponseWithinWindow = (
+    chat: Partial<Chat> | null | undefined,
+    content: string | undefined | null
+  ): boolean => {
+    return !!chat && !!(chat as any).awaitingRating && isRatingResponseMessage(content) && isRatingWindowOpen(chat);
+  };
+
   useEffect(() => {
     if (currentUser && currentUser.role === UserRole.AGENT && currentView === 'dashboard') {
         setCurrentView('chat');
@@ -4361,6 +4435,11 @@ const App: React.FC = () => {
         const contactAvatarChanged = oldChat && oldChat.contactAvatar !== updatedChat.contactAvatar;
         const awaitingDepartmentSelectionChanged = oldChat && oldChat.awaitingDepartmentSelection !== updatedChat.awaitingDepartmentSelection;
         const departmentSelectionSentChanged = oldChat && oldChat.departmentSelectionSent !== updatedChat.departmentSelectionSent;
+        const awaitingRatingChanged = oldChat && oldChat.awaitingRating !== updatedChat.awaitingRating;
+        const ratingChanged = oldChat && oldChat.rating !== updatedChat.rating;
+        const oldEndedAtMs = oldChat ? getChatEndedAtMs(oldChat) : 0;
+        const newEndedAtMs = getChatEndedAtMs(updatedChat);
+        const endedAtChanged = oldEndedAtMs !== newEndedAtMs;
         
         // Verifica se as mensagens mudaram (novas mensagens foram adicionadas)
         const messagesChanged = oldChat && (
@@ -4377,14 +4456,18 @@ const App: React.FC = () => {
           contactAvatarChanged,
           awaitingDepartmentSelectionChanged,
           departmentSelectionSentChanged,
+          awaitingRatingChanged,
+          ratingChanged,
+          endedAtChanged,
           messagesChanged,
           oldMsgCount: oldChat?.messages.length,
           newMsgCount: updatedChat.messages.length,
-          willSave: !!(currentUser && (statusChanged || assignedToChanged || departmentIdChanged || contactNameChanged || contactAvatarChanged || awaitingDepartmentSelectionChanged || departmentSelectionSentChanged || messagesChanged))
+          willSave: !!(currentUser && (statusChanged || assignedToChanged || departmentIdChanged || contactNameChanged || contactAvatarChanged || awaitingDepartmentSelectionChanged || departmentSelectionSentChanged || awaitingRatingChanged || ratingChanged || endedAtChanged || messagesChanged))
         });
         
         // Se as mensagens mudaram, salva o chat completo (incluindo mensagens)
-        if (currentUser && messagesChanged) {
+        const fullChatChanged = messagesChanged || awaitingRatingChanged || ratingChanged || endedAtChanged;
+        if (currentUser && fullChatChanged) {
           try {
             logger.debug('[App] 🔍 [DEBUG] handleUpdateChat - Salvando chat completo com mensagens no banco:', {
               chatId: updatedChat.id,
