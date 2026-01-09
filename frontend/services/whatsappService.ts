@@ -2885,7 +2885,6 @@ export const DEFAULT_DEPARTMENT_SELECTION_CONFIRMATION_TEMPLATE =
 
 // Evita envio duplicado da mensagem de seleção (ex.: Socket.IO + polling disparando juntos).
 // Mantém janela curta para permitir reenvio legítimo (ex.: chat reaberto muito depois).
-const normalizePhoneKey = (phone: string): string => (phone || '').replace(/\D/g, '');
 const deptSelectionInFlightByPhone = new Map<string, Promise<boolean>>();
 const deptSelectionLastSentAtByPhone = new Map<string, number>();
 const DEPT_SELECTION_THROTTLE_MS = 15000;
@@ -2901,7 +2900,8 @@ export const sendDepartmentSelectionMessage = async (
         return false;
     }
 
-    const phoneKey = normalizePhoneKey(phone);
+    // Usa o mesmo normalizador do envio real (evita duplicação por formato com/sem 55)
+    const phoneKey = formatPhoneForApi(phone);
     if (!phoneKey) return false;
 
     const now = Date.now();
@@ -2918,7 +2918,7 @@ export const sendDepartmentSelectionMessage = async (
 
     const promise = (async () => {
         const message = generateDepartmentSelectionMessage(departments);
-        const ok = await sendRealMessage(config, phone, message);
+        const ok = await sendRealMessage(config, phoneKey, message);
         if (ok) {
             deptSelectionLastSentAtByPhone.set(phoneKey, Date.now());
         }
@@ -2972,6 +2972,11 @@ export const processDepartmentSelection = (
 ): string | null => {
     // Remove espaços e converte para número
     const trimmed = messageContent.trim();
+
+    // Só aceita número puro (evita parseInt em "1)" / "1 -" etc)
+    if (!/^\d+$/.test(trimmed)) {
+        return null;
+    }
     const number = parseInt(trimmed, 10);
     
     // Verifica se é um número válido e está no range

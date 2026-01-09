@@ -1900,7 +1900,11 @@ const App: React.FC = () => {
                                 return isNew && msg.sender === 'user';
                             });
                             
-                            const isAwaitingDeptSelection = !!finalAwaitingDepartmentSelection || !!finalDepartmentSelectionSent;
+                            const hasRecentPrompt = hasRecentDepartmentSelectionPrompt(mergedMessages);
+                            const isAwaitingDeptSelection =
+                              !!finalAwaitingDepartmentSelection ||
+                              !!finalDepartmentSelectionSent ||
+                              hasRecentPrompt;
                             
                             if (newUserMessages.length > 0 && finalDepartmentId === null && departments.length > 0 && isAwaitingDeptSelection) {
                                 const lastNewUserMessage = newUserMessages[newUserMessages.length - 1];
@@ -1992,8 +1996,8 @@ const App: React.FC = () => {
                                             );
                                         }
                                     }
-                                } else if (!finalDepartmentSelectionSent) {
-                                    // Primeira mensagem sem departamento: envia seleção
+                                } else if (!finalDepartmentSelectionSent && !hasRecentPrompt) {
+                                    // Primeira mensagem sem departamento: envia seleção (evita reenvio se o prompt já existe no histórico recente)
                                     sendDepartmentSelectionMessage(apiConfig, existingChat.contactNumber, departments)
                                         .then(sent => {
                                             if (sent) {
@@ -2004,8 +2008,19 @@ const App: React.FC = () => {
                                                 });
                                             }
                                         }).catch(err => console.error('[App] Erro ao enviar seleção de setores:', err));
+                                } else if (!finalDepartmentSelectionSent && hasRecentPrompt) {
+                                  // O prompt já existe (enviado por outro fluxo/sessão). Só sincroniza flags para evitar loops.
+                                  setTimeout(() => {
+                                    try {
+                                      handleUpdateChat({
+                                        ...existingChat,
+                                        departmentSelectionSent: true,
+                                        awaitingDepartmentSelection: true
+                                      });
+                                    } catch {}
+                                  }, 0);
                                 }
-                            } else if (newUserMessages.length > 0 && finalDepartmentId === null && departments.length > 0 && !finalDepartmentSelectionSent) {
+                            } else if (newUserMessages.length > 0 && finalDepartmentId === null && departments.length > 0 && !finalDepartmentSelectionSent && !hasRecentDepartmentSelectionPrompt(mergedMessages)) {
                                 // Ainda não enviou a mensagem de seleção (mesmo que o chat já esteja no banco): envia agora e marca flags.
                                 sendDepartmentSelectionMessage(apiConfig, existingChat.contactNumber, departments)
                                   .then(sent => {
@@ -3085,12 +3100,15 @@ const App: React.FC = () => {
                                                 // Não atualiza o chat ainda, apenas prepara para enviar a mensagem
                                             }
                                             
+                                            const hasRecentPrompt = hasRecentDepartmentSelectionPrompt(chat.messages);
+
                                             // Condição ajustada: se chat estava fechado, reseta departmentSelectionSent na verificação
                                             const shouldSendSelection = isUserMessage && 
                                                 !chat.departmentId && 
                                                 departments.length > 0 &&
                                                 (chat.status === 'pending' || !chat.assignedTo || wasClosed) &&
-                                                (!chat.departmentSelectionSent || wasClosed); // Permite reenvio se chat estava fechado
+                                                (!chat.departmentSelectionSent || wasClosed) && // Permite reenvio se chat estava fechado
+                                                !hasRecentPrompt; // Evita duplicação quando o prompt já existe no histórico recente
                                             
                                             if (shouldSendSelection) {
                                                 logger.debug(`[App] 📤 [DEBUG] Socket.IO: Chat sem departamento - Enviando mensagem de seleção IMEDIATAMENTE para ${chat.id} (status: ${chat.status}, wasClosed: ${wasClosed})`);
@@ -3122,6 +3140,16 @@ const App: React.FC = () => {
                                                 } else {
                                                     logger.debug(`[App] ⚠️ [DEBUG] Socket.IO: Não foi possível enviar mensagem de seleção - número de contato inválido para ${chat.id} (contactNumber: ${contactNumber})`);
                                                 }
+                                            } else if (isUserMessage && !chat.departmentId && departments.length > 0 && hasRecentPrompt && !chat.departmentSelectionSent) {
+                                                // Prompt já existe (provavelmente enviado por outro fluxo/sessão), mas flags ainda não.
+                                                // Sincroniza flags para que a resposta numérica seja processada corretamente.
+                                                try {
+                                                    handleUpdateChat({
+                                                        ...chat,
+                                                        departmentSelectionSent: true,
+                                                        awaitingDepartmentSelection: true
+                                                    });
+                                                } catch {}
                                             } else if (isUserMessage && !shouldSendSelection) {
                                                 logger.debug(`[App] ⚠️ [DEBUG] Socket.IO: Condição não satisfeita para envio - isUserMessage: ${isUserMessage}, departmentId: ${chat.departmentId}, departmentSelectionSent: ${chat.departmentSelectionSent}, departments.length: ${departments.length}, status: ${chat.status}, assignedTo: ${chat.assignedTo}, wasClosed: ${wasClosed}`);
                                             }
@@ -3472,7 +3500,7 @@ const App: React.FC = () => {
                                             
                                             // Processa seleção de setores apenas se não estiver no banco (novos chats)
                                             // Chats no banco já têm departmentId fixo e não devem ser alterados via Socket.IO
-                                            if (mapped.sender === 'user' && !updatedChat.departmentId && departments.length > 0 && (updatedChat.awaitingDepartmentSelection || updatedChat.departmentSelectionSent)) {
+                                            if (mapped.sender === 'user' && !updatedChat.departmentId && departments.length > 0 && (updatedChat.awaitingDepartmentSelection || updatedChat.departmentSelectionSent || hasRecentDepartmentSelectionPrompt(updatedMessages))) {
                                                     const messageContent = mapped.content.trim();
                                                         const selectedDeptId = processDepartmentSelection(messageContent, departments);
                                                         
@@ -3559,7 +3587,7 @@ const App: React.FC = () => {
                                                                     );
                                                                 }
                                                             }
-                                                } else if (updatedChat.messages.filter(m => m.sender === 'user').length === 1 && !updatedChat.departmentSelectionSent) {
+                                                } else if (updatedChat.messages.filter(m => m.sender === 'user').length === 1 && !updatedChat.departmentSelectionSent && !hasRecentDepartmentSelectionPrompt(updatedMessages)) {
                                                     // Primeira mensagem sem departamento: envia seleção
                                                     sendDepartmentSelectionMessage(apiConfig, updatedChat.contactNumber, departments)
                                                         .then(sent => {
@@ -3993,6 +4021,30 @@ const App: React.FC = () => {
     }
     // Retorna os últimos 9-11 dígitos (DDD + número)
     return cleaned.length > 11 ? cleaned.slice(-11) : cleaned;
+  };
+
+  // Detecta se a mensagem de seleção de departamento foi enviada recentemente no histórico do chat.
+  // Isso evita loops onde as flags ainda não persistiram, mas o prompt já existe (e o cliente já respondeu "1").
+  const hasRecentDepartmentSelectionPrompt = (messages: Message[] | undefined | null): boolean => {
+    if (!Array.isArray(messages) || messages.length === 0) return false;
+
+    const now = Date.now();
+    const cutoff = now - 5 * 60 * 1000; // 5 minutos
+
+    let checked = 0;
+    for (let i = messages.length - 1; i >= 0 && checked < 30; i--, checked++) {
+      const m: any = messages[i];
+      if (!m) continue;
+
+      const ts = m.timestamp ? new Date(m.timestamp as any).getTime() : 0;
+      if (ts && ts < cutoff) break;
+
+      const content = typeof m.content === 'string' ? m.content : '';
+      if (m.sender === 'system' && content.includes('department_selection_sent')) return true;
+      if (m.sender === 'agent' && content.includes('Favor selecionar o departamento')) return true;
+    }
+
+    return false;
   };
 
   useEffect(() => {
