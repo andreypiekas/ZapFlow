@@ -2187,14 +2187,26 @@ const App: React.FC = () => {
                                 if (sent) {
                                     // Log removido para produção - muito verboso
                                     // console.log(`[App] ✅ Mensagem de seleção de setores enviada para novo chat ${realChat.contactName}`);
-                                    // Atualiza o chat para marcar que a mensagem foi enviada
-                                    setChats(currentChats => {
-                                        return currentChats.map(c => 
-                                            c.id === realChat.id 
-                                                ? { ...c, departmentSelectionSent: true, awaitingDepartmentSelection: true }
-                                                : c
-                                        );
-                                    });
+                                    // Persistência mínima no banco (importante para o syncChats não reenviar em loop)
+                                    apiService.updateChatStatus(
+                                      realChat.id,
+                                      realChat.status || 'pending',
+                                      undefined,
+                                      null,
+                                      realChat.contactName,
+                                      realChat.contactAvatar,
+                                      true,
+                                      true
+                                    ).catch(err => logger.debug('[App] Erro ao persistir flags de seleção (novo chat):', err));
+
+                                    // Atualiza o chat no estado para marcar que a mensagem foi enviada
+                                    setChats(currentChats =>
+                                      currentChats.map(c =>
+                                        c.id === realChat.id
+                                          ? { ...c, departmentSelectionSent: true, awaitingDepartmentSelection: true }
+                                          : c
+                                      )
+                                    );
                                 } else {
                                     console.error(`[App] ❌ Falha ao enviar mensagem de seleção de setores para novo chat ${realChat.contactName}`);
                                 }
@@ -2991,19 +3003,11 @@ const App: React.FC = () => {
                                                         })();
                                                     }
                                                 } else {
-                                                    // Chat não existe no banco - é um chat novo, envia mensagem imediatamente
-                                                    if (contactNumber.length >= 10) {
-                                                        logger.debug(`[App] 📤 [DEBUG] Socket.IO: Chat novo detectado - Enviando mensagem de seleção IMEDIATAMENTE para ${remoteJid} (número: ${contactNumber})`);
-                                                        sendDepartmentSelectionMessage(apiConfig, contactNumber, departments)
-                                                            .then(sent => {
-                                                                if (sent) {
-                                                                    logger.debug(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção enviada IMEDIATAMENTE para chat novo ${remoteJid}`);
-                                                                }
-                                                            })
-                                                            .catch(err => {
-                                                                logger.debug(`[App] ❌ [DEBUG] Socket.IO: Erro ao enviar mensagem para chat novo:`, err);
-                                                            });
-                                                    }
+                                                    // Chat não existe no banco - é um chat novo.
+                                                    // IMPORTANTE: o envio da mensagem de seleção é tratado no bloco
+                                                    // "!chatExistsBefore && mapped.sender === 'user'" abaixo, para evitar duplicação
+                                                    // (esta rotina aqui roda antes da criação do chat no estado).
+                                                    logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Chat novo não encontrado no banco - criação/seleção serão processadas abaixo (remoteJid=${remoteJid})`);
                                                 }
                                             }
                                         }).catch(err => {
@@ -4217,12 +4221,14 @@ const App: React.FC = () => {
           newDepartmentId: updatedChat.departmentId
         });
         
-        // Verifica se status, assignedTo, departmentId, contactName ou contactAvatar mudaram - se sim, salva no banco
+        // Verifica se status, assignedTo, departmentId, contactName/contactAvatar ou flags de seleção mudaram - se sim, salva no banco
         const statusChanged = oldChat && oldChat.status !== updatedChat.status;
         const assignedToChanged = oldChat && oldChat.assignedTo !== updatedChat.assignedTo;
         const departmentIdChanged = oldChat && oldChat.departmentId !== updatedChat.departmentId;
         const contactNameChanged = oldChat && oldChat.contactName !== updatedChat.contactName;
         const contactAvatarChanged = oldChat && oldChat.contactAvatar !== updatedChat.contactAvatar;
+        const awaitingDepartmentSelectionChanged = oldChat && oldChat.awaitingDepartmentSelection !== updatedChat.awaitingDepartmentSelection;
+        const departmentSelectionSentChanged = oldChat && oldChat.departmentSelectionSent !== updatedChat.departmentSelectionSent;
         
         // Verifica se as mensagens mudaram (novas mensagens foram adicionadas)
         const messagesChanged = oldChat && (
@@ -4237,10 +4243,12 @@ const App: React.FC = () => {
           departmentIdChanged,
           contactNameChanged,
           contactAvatarChanged,
+          awaitingDepartmentSelectionChanged,
+          departmentSelectionSentChanged,
           messagesChanged,
           oldMsgCount: oldChat?.messages.length,
           newMsgCount: updatedChat.messages.length,
-          willSave: !!(currentUser && (statusChanged || assignedToChanged || departmentIdChanged || contactNameChanged || contactAvatarChanged || messagesChanged))
+          willSave: !!(currentUser && (statusChanged || assignedToChanged || departmentIdChanged || contactNameChanged || contactAvatarChanged || awaitingDepartmentSelectionChanged || departmentSelectionSentChanged || messagesChanged))
         });
         
         // Se as mensagens mudaram, salva o chat completo (incluindo mensagens)
@@ -4273,7 +4281,7 @@ const App: React.FC = () => {
         
         // Salva no banco se status, assignedTo, departmentId, contactName ou contactAvatar mudaram
         // (mas não se já salvou o chat completo acima para evitar duplicação)
-        if (currentUser && (statusChanged || assignedToChanged || departmentIdChanged || contactNameChanged || contactAvatarChanged) && !messagesChanged) {
+        if (currentUser && (statusChanged || assignedToChanged || departmentIdChanged || contactNameChanged || contactAvatarChanged || awaitingDepartmentSelectionChanged || departmentSelectionSentChanged) && !messagesChanged) {
           try {
             logger.debug('[App] 🔍 [DEBUG] handleUpdateChat - Salvando apenas status/metadados no banco:', {
               chatId: updatedChat.id,
@@ -4282,11 +4290,15 @@ const App: React.FC = () => {
               departmentId: updatedChat.departmentId,
               contactName: updatedChat.contactName,
               contactAvatar: updatedChat.contactAvatar,
+              awaitingDepartmentSelection: updatedChat.awaitingDepartmentSelection,
+              departmentSelectionSent: updatedChat.departmentSelectionSent,
               statusChanged,
               assignedToChanged,
               departmentIdChanged,
               contactNameChanged,
-              contactAvatarChanged
+              contactAvatarChanged,
+              awaitingDepartmentSelectionChanged,
+              departmentSelectionSentChanged
             });
             await apiService.updateChatStatus(
               updatedChat.id,
@@ -4294,13 +4306,15 @@ const App: React.FC = () => {
               updatedChat.assignedTo,
               updatedChat.departmentId || null,
               updatedChat.contactName,
-              updatedChat.contactAvatar
+              updatedChat.contactAvatar,
+              updatedChat.awaitingDepartmentSelection,
+              updatedChat.departmentSelectionSent
             );
             logger.debug(`[App] ✅ [DEBUG] Chat ${updatedChat.contactName} salvo no banco: status=${updatedChat.status}, assignedTo=${updatedChat.assignedTo}, contactName=${updatedChat.contactName}`);
           } catch (error) {
             logger.debug(`[App] ❌ [DEBUG] Erro ao salvar chat no banco:`, error);
           }
-        } else if (currentUser && (statusChanged || assignedToChanged || departmentIdChanged || contactNameChanged || contactAvatarChanged) && messagesChanged) {
+        } else if (currentUser && (statusChanged || assignedToChanged || departmentIdChanged || contactNameChanged || contactAvatarChanged || awaitingDepartmentSelectionChanged || departmentSelectionSentChanged) && messagesChanged) {
           // Se tanto mensagens quanto status/metadados mudaram, já salvou o chat completo acima
           // Mas ainda precisa atualizar status via updateChatStatus para garantir consistência
           try {
@@ -4310,7 +4324,9 @@ const App: React.FC = () => {
               updatedChat.assignedTo,
               updatedChat.departmentId || null,
               updatedChat.contactName,
-              updatedChat.contactAvatar
+              updatedChat.contactAvatar,
+              updatedChat.awaitingDepartmentSelection,
+              updatedChat.departmentSelectionSent
             );
           } catch (error) {
             logger.debug(`[App] ❌ [DEBUG] Erro ao atualizar status após salvar chat completo:`, error);
@@ -4471,6 +4487,22 @@ const App: React.FC = () => {
             return c;
         }));
     } else {
+        // Chat ainda não existe no estado local: adiciona e faz persistência mínima (flags/status/metadados)
+        if (currentUser) {
+          apiService.updateChatStatus(
+            updatedChat.id,
+            updatedChat.status,
+            updatedChat.assignedTo,
+            updatedChat.departmentId || null,
+            updatedChat.contactName,
+            updatedChat.contactAvatar,
+            updatedChat.awaitingDepartmentSelection,
+            updatedChat.departmentSelectionSent
+          ).catch(err => {
+            logger.debug('[App] ❌ [DEBUG] Erro ao persistir chat (novo no estado) via updateChatStatus:', err);
+          });
+        }
+
         // setState funcional para não sobrescrever chats quando há múltiplos updates concorrentes
         setChats(currentChats => [updatedChat, ...currentChats]);
     }

@@ -2883,6 +2883,13 @@ export const generateDepartmentSelectionMessage = (departments: Department[]): s
 export const DEFAULT_DEPARTMENT_SELECTION_CONFIRMATION_TEMPLATE =
     'Perfeito! Seu atendimento foi encaminhado para o setor {{department}}. Em instantes você será atendido.';
 
+// Evita envio duplicado da mensagem de seleção (ex.: Socket.IO + polling disparando juntos).
+// Mantém janela curta para permitir reenvio legítimo (ex.: chat reaberto muito depois).
+const normalizePhoneKey = (phone: string): string => (phone || '').replace(/\D/g, '');
+const deptSelectionInFlightByPhone = new Map<string, Promise<boolean>>();
+const deptSelectionLastSentAtByPhone = new Map<string, number>();
+const DEPT_SELECTION_THROTTLE_MS = 15000;
+
 // Envia mensagem de seleção de setores
 export const sendDepartmentSelectionMessage = async (
     config: ApiConfig,
@@ -2893,9 +2900,37 @@ export const sendDepartmentSelectionMessage = async (
         console.warn('[sendDepartmentSelectionMessage] Nenhum departamento disponível');
         return false;
     }
-    
-    const message = generateDepartmentSelectionMessage(departments);
-    return await sendRealMessage(config, phone, message);
+
+    const phoneKey = normalizePhoneKey(phone);
+    if (!phoneKey) return false;
+
+    const now = Date.now();
+    const lastSentAt = deptSelectionLastSentAtByPhone.get(phoneKey) || 0;
+    if (now - lastSentAt < DEPT_SELECTION_THROTTLE_MS) {
+        // Considera como "ok" para que o caller marque flags e não reenvie em loop.
+        return true;
+    }
+
+    const inFlight = deptSelectionInFlightByPhone.get(phoneKey);
+    if (inFlight) {
+        return await inFlight;
+    }
+
+    const promise = (async () => {
+        const message = generateDepartmentSelectionMessage(departments);
+        const ok = await sendRealMessage(config, phone, message);
+        if (ok) {
+            deptSelectionLastSentAtByPhone.set(phoneKey, Date.now());
+        }
+        return ok;
+    })();
+
+    deptSelectionInFlightByPhone.set(phoneKey, promise);
+    try {
+        return await promise;
+    } finally {
+        deptSelectionInFlightByPhone.delete(phoneKey);
+    }
 };
 
 // Renderiza mensagem de confirmação pós-seleção do setor (cliente)

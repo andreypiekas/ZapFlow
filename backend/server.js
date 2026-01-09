@@ -1936,7 +1936,15 @@ app.post('/api/data/:dataType/batch', authenticateToken, dataLimiter, async (req
 app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) => {
   try {
     const { chatId } = req.params;
-    const { status, assignedTo, departmentId, contactName, contactAvatar } = req.body;
+    const {
+      status,
+      assignedTo,
+      departmentId,
+      contactName,
+      contactAvatar,
+      awaitingDepartmentSelection,
+      departmentSelectionSent
+    } = req.body;
 
     // Decodifica o chatId (pode vir URL encoded)
     const decodedChatId = decodeURIComponent(chatId);
@@ -2018,10 +2026,17 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
     if (contactAvatar !== undefined && contactAvatar !== null) {
       chatData.contactAvatar = contactAvatar;
     }
+    if (awaitingDepartmentSelection !== undefined) {
+      chatData.awaitingDepartmentSelection = awaitingDepartmentSelection;
+    }
+    if (departmentSelectionSent !== undefined) {
+      chatData.departmentSelectionSent = departmentSelectionSent;
+    }
     if (status === 'closed') {
       chatData.endedAt = new Date().toISOString();
       // Ao finalizar atendimento, limpa o departamento para evitar auto-roteamento no próximo contato
       chatData.departmentId = null;
+      chatData.assignedTo = undefined;
       chatData.awaitingDepartmentSelection = false;
       chatData.departmentSelectionSent = false;
     } else if (status === 'open' && chatData.endedAt) {
