@@ -4247,6 +4247,12 @@ const App: React.FC = () => {
       if (ts && ts < cutoff) break;
 
       const content = typeof m.content === 'string' ? m.content : '';
+      // Marcador interno (UI): ao finalizar com pesquisa, adicionamos uma mensagem de sistema
+      // "Atendimento finalizado. Enviamos uma pesquisa de satisfação..."
+      // Isso existe mesmo que a mensagem real do WhatsApp ("Por favor, avalie...") ainda não tenha sincronizado.
+      if (m.sender === 'system' && /pesquisa de satisfação/i.test(content)) {
+        return true;
+      }
       if ((m.sender === 'agent' || m.sender === 'system') && /avalie nosso atendimento/i.test(content)) {
         return true;
       }
