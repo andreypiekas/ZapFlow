@@ -435,6 +435,20 @@ class ApiService {
     }
   }
 
+  // Lista TODOS os departamentos cadastrados (tenant/admin) para seleção do cliente.
+  // Não deve depender do fallback INITIAL_DEPARTMENTS no frontend.
+  async getAllDepartments(): Promise<{ success: boolean; data?: any[]; error?: string }> {
+    try {
+      const response = await this.request<any[]>('/api/departments/all');
+      return { success: true, data: response };
+    } catch (error: any) {
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao listar TODOS os departamentos:`, error);
+      }
+      return { success: false, error: error.message };
+    }
+  }
+
   async createDepartment(name: string, description?: string, color?: string): Promise<{ success: boolean; data?: any; error?: string }> {
     try {
       const response = await this.request<any>('/api/departments', {

@@ -1305,6 +1305,64 @@ app.put('/api/user/profile', authenticateToken, dataLimiter, async (req, res) =>
 // ENDPOINTS CRUD PARA DEPARTMENTS
 // ============================================================================
 
+// Listar TODOS os departamentos cadastrados (para seleção do cliente no WhatsApp)
+// Objetivo: a mensagem de seleção deve sempre usar a lista do DB (não defaults do frontend).
+// - ADMIN: retorna os departamentos do próprio admin (tenant).
+// - AGENT: tenta inferir o "tenant" a partir de um departamento já atribuído; se não houver,
+//          usa o primeiro ADMIN encontrado como fallback (instalação single-tenant).
+app.get('/api/departments/all', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    let ownerUserId = req.user.id;
+
+    if (req.user.role !== 'ADMIN') {
+      // 1) Tenta inferir pelo vínculo user_departments -> departments.user_id
+      const ownerResult = await pool.query(
+        `
+          SELECT d.user_id
+          FROM user_departments ud
+          JOIN departments d ON d.id = ud.department_id
+          WHERE ud.user_id = $1
+          ORDER BY d.user_id ASC
+          LIMIT 1
+        `,
+        [req.user.id]
+      );
+
+      if (ownerResult.rows.length > 0 && ownerResult.rows[0].user_id) {
+        ownerUserId = ownerResult.rows[0].user_id;
+      } else {
+        // 2) Fallback: primeiro ADMIN (single-tenant)
+        const adminResult = await pool.query(
+          `SELECT id FROM users WHERE role = 'ADMIN' ORDER BY id ASC LIMIT 1`
+        );
+        if (adminResult.rows.length > 0 && adminResult.rows[0].id) {
+          ownerUserId = adminResult.rows[0].id;
+        } else {
+          // Sem admin/tenant encontrado
+          return res.json([]);
+        }
+      }
+    }
+
+    const result = await pool.query(
+      'SELECT id, name, description, color FROM departments WHERE user_id = $1 ORDER BY name',
+      [ownerUserId]
+    );
+
+    res.json(
+      result.rows.map(row => ({
+        id: row.id.toString(),
+        name: row.name,
+        description: row.description || '',
+        color: row.color
+      }))
+    );
+  } catch (error) {
+    console.error('Erro ao listar TODOS os departamentos:', error);
+    res.status(500).json({ error: 'Erro ao listar departamentos' });
+  }
+});
+
 // Listar departamentos
 app.get('/api/departments', authenticateToken, dataLimiter, async (req, res) => {
   try {

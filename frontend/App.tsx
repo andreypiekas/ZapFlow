@@ -192,7 +192,8 @@ const loadDepartmentsFromStorage = (): Department[] => {
   } catch (e) {
     console.error('[App] Erro ao carregar departamentos do localStorage:', e);
   }
-  return INITIAL_DEPARTMENTS;
+  // Nunca usar departamentos "default" para produção (a seleção deve usar DB).
+  return [];
 };
 
 const loadQuickRepliesFromStorage = (): QuickReply[] => {
@@ -474,11 +475,12 @@ const App: React.FC = () => {
           storageService.load<Chat[]>('chats'),
         ]);
 
-        // Define valores iniciais (usa dados do storage ou valores padrão)
+        // Define valores iniciais
+        // IMPORTANTE: não usar INITIAL_DEPARTMENTS em produção (seleção no WhatsApp deve usar DB).
         if (departmentsData && departmentsData.length > 0) {
           setDepartments(departmentsData);
         } else {
-          setDepartments(INITIAL_DEPARTMENTS);
+          setDepartments([]);
         }
 
         if (quickRepliesData && quickRepliesData.length > 0) {
@@ -524,7 +526,7 @@ const App: React.FC = () => {
       } catch (error) {
         console.error('[App] Erro ao carregar dados iniciais:', error);
         // Em caso de erro, usa valores padrão
-        setDepartments(INITIAL_DEPARTMENTS);
+        setDepartments([]);
         setQuickReplies(INITIAL_QUICK_REPLIES);
         setWorkflows(INITIAL_WORKFLOWS);
         setUsers(INITIAL_USERS);
@@ -874,6 +876,15 @@ const App: React.FC = () => {
         isSyncing = true;
         try {
             logger.debug('[App] 🔍 [DEBUG] Iniciando syncChats...');
+        // Lista REAL de departamentos (DB) para seleção do cliente.
+        // Isso evita enviar lista do INITIAL_DEPARTMENTS em race de startup.
+        let selectionDepartments: Department[] = [];
+        try {
+            selectionDepartments = await getDepartmentsForSelection();
+        } catch (err) {
+            selectionDepartments = [];
+            logger.debug('[App] Erro ao carregar departamentos para seleção (syncChats):', err);
+        }
         // PASSO 1: Carrega chats do banco PRIMEIRO para ter status fixo
         let dbChatsMap = new Map<string, Chat>();
         try {
@@ -1079,9 +1090,8 @@ const App: React.FC = () => {
                                         // pois o departamento foi desatribuído ao fechar o chat
                                         const chatHasDepartment = dbChat?.departmentId || existingChat?.departmentId;
                                         
-                                        // Carrega departamentos diretamente da API para garantir que estão disponíveis
-                                        const departmentsResult = await apiService.getDepartments();
-                                        const availableDepartments = departmentsResult.success && departmentsResult.data ? departmentsResult.data : departments;
+                                        // Carrega TODOS os departamentos do DB para seleção (nunca usar INITIAL_DEPARTMENTS)
+                                        const availableDepartments = await getDepartmentsForSelection();
                                         
                                         logger.debug(`[App] 🔍 [DEBUG] syncChats: Verificando envio de mensagem de seleção - chatHasDepartment: ${chatHasDepartment}, departments.length: ${availableDepartments.length}, realChat.id: ${realChat.id}`);
                                         
@@ -1906,10 +1916,10 @@ const App: React.FC = () => {
                               !!finalDepartmentSelectionSent ||
                               hasRecentPrompt;
                             
-                            if (newUserMessages.length > 0 && finalDepartmentId === null && departments.length > 0 && isAwaitingDeptSelection) {
+                            if (newUserMessages.length > 0 && finalDepartmentId === null && selectionDepartments.length > 0 && isAwaitingDeptSelection) {
                                 const lastNewUserMessage = newUserMessages[newUserMessages.length - 1];
                                 const messageContent = lastNewUserMessage.content.trim();
-                                const selectedDeptId = processDepartmentSelection(messageContent, departments);
+                                const selectedDeptId = processDepartmentSelection(messageContent, selectionDepartments);
                                 
                                 if (selectedDeptId) {
                                     finalDepartmentId = selectedDeptId;
@@ -1926,7 +1936,7 @@ const App: React.FC = () => {
                                         mergedMessages.splice(messageIndex, 1);
                                     }
                                     
-                                    const departmentName = departments.find(d => d.id === selectedDeptId)?.name || 'Departamento';
+                                    const departmentName = selectionDepartments.find(d => d.id === selectedDeptId)?.name || 'Departamento';
 
                                     // Envia confirmação ao cliente (texto customizável via /api/config)
                                     try {
@@ -1998,7 +2008,7 @@ const App: React.FC = () => {
                                     }
                                 } else if (!finalDepartmentSelectionSent && !hasRecentPrompt) {
                                     // Primeira mensagem sem departamento: envia seleção (evita reenvio se o prompt já existe no histórico recente)
-                                    sendDepartmentSelectionMessage(apiConfig, existingChat.contactNumber, departments)
+                                    sendDepartmentSelectionMessage(apiConfig, existingChat.contactNumber, selectionDepartments)
                                         .then(sent => {
                                             if (sent) {
                                                 handleUpdateChat({
@@ -2020,9 +2030,9 @@ const App: React.FC = () => {
                                     } catch {}
                                   }, 0);
                                 }
-                            } else if (newUserMessages.length > 0 && finalDepartmentId === null && departments.length > 0 && !finalDepartmentSelectionSent && !hasRecentDepartmentSelectionPrompt(mergedMessages)) {
+                            } else if (newUserMessages.length > 0 && finalDepartmentId === null && selectionDepartments.length > 0 && !finalDepartmentSelectionSent && !hasRecentDepartmentSelectionPrompt(mergedMessages)) {
                                 // Ainda não enviou a mensagem de seleção (mesmo que o chat já esteja no banco): envia agora e marca flags.
-                                sendDepartmentSelectionMessage(apiConfig, existingChat.contactNumber, departments)
+                                sendDepartmentSelectionMessage(apiConfig, existingChat.contactNumber, selectionDepartments)
                                   .then(sent => {
                                     if (sent) {
                                       handleUpdateChat({
@@ -2190,14 +2200,14 @@ const App: React.FC = () => {
                         const needsDepartmentSelection = hasUserMessages && 
                             !realChat.departmentId && 
                             !realChat.departmentSelectionSent &&
-                            departments.length > 0;
+                            selectionDepartments.length > 0;
                         
                         if (needsDepartmentSelection) {
                             // Envia mensagem de seleção de setores de forma assíncrona
                             sendDepartmentSelectionMessage(
                                 apiConfig,
                                 realChat.contactNumber,
-                                departments
+                                selectionDepartments
                             ).then(sent => {
                                 if (sent) {
                                     // Log removido para produção - muito verboso
@@ -2938,11 +2948,15 @@ const App: React.FC = () => {
                             return currentChats;
                         });
                         
+                        // Departamentos para seleção (SEMPRE do DB, nunca INITIAL_DEPARTMENTS)
+                        const selectionDepartmentsForSelection =
+                          mapped.sender === 'user' ? await getDepartmentsForSelection() : [];
+
                         // VERIFICAÇÃO CRÍTICA: Se é mensagem do usuário, verifica no banco se chat está fechado
                         // e envia mensagem de seleção IMEDIATAMENTE, mesmo se chat não estiver no estado
-                        logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Verificando mensagem - sender=${mapped?.sender}, remoteJid=${remoteJid}, departments.length=${departments.length}`);
+                        logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Verificando mensagem - sender=${mapped?.sender}, remoteJid=${remoteJid}, selectionDepartments.length=${selectionDepartmentsForSelection.length}`);
                         
-                        if (mapped.sender === 'user' && departments.length > 0) {
+                        if (mapped.sender === 'user' && selectionDepartmentsForSelection.length > 0) {
                                     const contactNumber = remoteJid.split('@')[0]?.replace(/\D/g, '') || '';
                                     
                                     // Verifica se chat existe no estado
@@ -2987,8 +3001,8 @@ const App: React.FC = () => {
                                                                 await apiService.updateChatStatus(dbChat.id, 'pending', undefined, null);
                                                                 logger.debug(`[App] ✅ [DEBUG] Socket.IO: Chat ${dbChat.id} reaberto e salvo no banco IMEDIATAMENTE (verificação do banco)`);
                                                                 
-                                                                // Depois de salvar, envia mensagem de seleção de departamento
-                                                                const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, departments);
+                                                                // Depois de salvar, envia mensagem de seleção de departamento (usa lista do DB)
+                                                                const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, selectionDepartmentsForSelection);
                                                                 if (sent) {
                                                                     logger.debug(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção enviada IMEDIATAMENTE do banco para ${remoteJid}`);
                                                                     // Atualiza chat com departmentSelectionSent
@@ -3090,7 +3104,7 @@ const App: React.FC = () => {
                                             
                                             // Debug: log detalhado para entender por que a condição não está sendo satisfeita
                                             if (isUserMessage) {
-                                                logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Verificando envio de mensagem de seleção - chatId: ${chat.id}, isUserMessage: ${isUserMessage}, departmentId: ${chat.departmentId}, departmentSelectionSent: ${chat.departmentSelectionSent}, departments.length: ${departments.length}, status: ${chat.status}, assignedTo: ${chat.assignedTo}, wasClosed: ${wasClosed}`);
+                                                logger.debug(`[App] 🔍 [DEBUG] Socket.IO: Verificando envio de mensagem de seleção - chatId: ${chat.id}, isUserMessage: ${isUserMessage}, departmentId: ${chat.departmentId}, departmentSelectionSent: ${chat.departmentSelectionSent}, selectionDepartments.length: ${selectionDepartmentsForSelection.length}, status: ${chat.status}, assignedTo: ${chat.assignedTo}, wasClosed: ${wasClosed}`);
                                             }
                                             
                                             // Se chat estava fechado e recebeu mensagem do usuário, RESETA departmentSelectionSent para permitir reenvio
@@ -3105,7 +3119,7 @@ const App: React.FC = () => {
                                             // Condição ajustada: se chat estava fechado, reseta departmentSelectionSent na verificação
                                             const shouldSendSelection = isUserMessage && 
                                                 !chat.departmentId && 
-                                                departments.length > 0 &&
+                                                selectionDepartmentsForSelection.length > 0 &&
                                                 (chat.status === 'pending' || !chat.assignedTo || wasClosed) &&
                                                 (!chat.departmentSelectionSent || wasClosed) && // Permite reenvio se chat estava fechado
                                                 !hasRecentPrompt; // Evita duplicação quando o prompt já existe no histórico recente
@@ -3116,7 +3130,7 @@ const App: React.FC = () => {
                                                 
                                                 if (contactNumber && contactNumber.length >= 10) {
                                                     // Envia imediatamente, sem esperar processar a mensagem
-                                                    sendDepartmentSelectionMessage(apiConfig, contactNumber, departments)
+                                                    sendDepartmentSelectionMessage(apiConfig, contactNumber, selectionDepartmentsForSelection)
                                                         .then(sent => {
                                                             if (sent) {
                                                                 logger.debug(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada IMEDIATAMENTE para ${chat.id}`);
@@ -3140,7 +3154,7 @@ const App: React.FC = () => {
                                                 } else {
                                                     logger.debug(`[App] ⚠️ [DEBUG] Socket.IO: Não foi possível enviar mensagem de seleção - número de contato inválido para ${chat.id} (contactNumber: ${contactNumber})`);
                                                 }
-                                            } else if (isUserMessage && !chat.departmentId && departments.length > 0 && hasRecentPrompt && !chat.departmentSelectionSent) {
+                                            } else if (isUserMessage && !chat.departmentId && selectionDepartmentsForSelection.length > 0 && hasRecentPrompt && !chat.departmentSelectionSent) {
                                                 // Prompt já existe (provavelmente enviado por outro fluxo/sessão), mas flags ainda não.
                                                 // Sincroniza flags para que a resposta numérica seja processada corretamente.
                                                 try {
@@ -3500,9 +3514,9 @@ const App: React.FC = () => {
                                             
                                             // Processa seleção de setores apenas se não estiver no banco (novos chats)
                                             // Chats no banco já têm departmentId fixo e não devem ser alterados via Socket.IO
-                                            if (mapped.sender === 'user' && !updatedChat.departmentId && departments.length > 0 && (updatedChat.awaitingDepartmentSelection || updatedChat.departmentSelectionSent || hasRecentDepartmentSelectionPrompt(updatedMessages))) {
+                                            if (mapped.sender === 'user' && !updatedChat.departmentId && selectionDepartmentsForSelection.length > 0 && (updatedChat.awaitingDepartmentSelection || updatedChat.departmentSelectionSent || hasRecentDepartmentSelectionPrompt(updatedMessages))) {
                                                     const messageContent = mapped.content.trim();
-                                                        const selectedDeptId = processDepartmentSelection(messageContent, departments);
+                                                        const selectedDeptId = processDepartmentSelection(messageContent, selectionDepartmentsForSelection);
                                                         
                                                         if (selectedDeptId) {
                                                     // Usuário selecionou setor - encontra usuário disponível e atribui
@@ -3513,7 +3527,7 @@ const App: React.FC = () => {
                                                             const assignedUser = findAvailableUserForDepartment(selectedDeptId, users, chats);
                                                             
                                                             // Adiciona mensagem de sistema
-                                                            const departmentName = departments.find(d => d.id === selectedDeptId)?.name || 'Departamento';
+                                                            const departmentName = selectionDepartmentsForSelection.find(d => d.id === selectedDeptId)?.name || 'Departamento';
 
                                                             // Envia confirmação ao cliente (texto customizável via /api/config)
                                                             try {
@@ -3589,7 +3603,7 @@ const App: React.FC = () => {
                                                             }
                                                 } else if (updatedChat.messages.filter(m => m.sender === 'user').length === 1 && !updatedChat.departmentSelectionSent && !hasRecentDepartmentSelectionPrompt(updatedMessages)) {
                                                     // Primeira mensagem sem departamento: envia seleção
-                                                    sendDepartmentSelectionMessage(apiConfig, updatedChat.contactNumber, departments)
+                                                    sendDepartmentSelectionMessage(apiConfig, updatedChat.contactNumber, selectionDepartmentsForSelection)
                                                         .then(sent => {
                                                                     if (sent) {
                                                                         handleUpdateChat({
@@ -3649,13 +3663,13 @@ const App: React.FC = () => {
                                                         // Verifica se já foi enviada pela lógica anterior para evitar duplicação
                                                         const contactNumber = updatedChat.contactNumber || (chat.id ? chat.id.split('@')[0] : null);
                                                         const needsDepartmentSelection = contactNumber && contactNumber.length >= 10 && 
-                                                                                        departments.length > 0 && 
+                                                                                        selectionDepartmentsForSelection.length > 0 && 
                                                                                         !updatedChat.departmentId &&
                                                                                         !updatedChat.departmentSelectionSent;
                                                         
                                                         if (needsDepartmentSelection) {
                                                             logger.debug(`[App] 📤 [DEBUG] Socket.IO: Chat reaberto - Enviando mensagem de seleção de departamento para ${chat.id} (número: ${contactNumber})`);
-                                                            const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, departments);
+                                                            const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, selectionDepartmentsForSelection);
                                                             if (sent) {
                                                                 logger.debug(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada para ${chat.id}`);
                                                                 // Atualiza chat com departmentSelectionSent
@@ -3734,13 +3748,13 @@ const App: React.FC = () => {
                                                             // Verifica se já foi enviada pela lógica anterior para evitar duplicação
                                                             const contactNumber = chat.contactNumber || (chat.id ? chat.id.split('@')[0] : null);
                                                             const needsDepartmentSelection = contactNumber && contactNumber.length >= 10 && 
-                                                                                            departments.length > 0 && 
+                                                                                            selectionDepartmentsForSelection.length > 0 && 
                                                                                             !chat.departmentId &&
                                                                                             !chat.departmentSelectionSent;
                                                             
                                                             if (needsDepartmentSelection) {
                                                                 logger.debug(`[App] 📤 [DEBUG] Socket.IO: Chat reaberto (mensagem já existia) - Enviando mensagem de seleção de departamento para ${chat.id} (número: ${contactNumber})`);
-                                                                const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, departments);
+                                                                const sent = await sendDepartmentSelectionMessage(apiConfig, contactNumber, selectionDepartmentsForSelection);
                                                                 if (sent) {
                                                                     logger.debug(`[App] ✅ [DEBUG] Socket.IO: Mensagem de seleção de departamento enviada para ${chat.id} (mensagem já existia)`);
                                                                     // Atualiza chat com departmentSelectionSent
@@ -3862,9 +3876,9 @@ const App: React.FC = () => {
                             });
                             
                             // Envia mensagem de seleção de departamento se houver departamentos configurados
-                            if (departments.length > 0) {
+                            if (selectionDepartmentsForSelection.length > 0) {
                                 logger.debug(`[App] 📤 [DEBUG] Socket.IO: Chat novo sem departamento - Enviando mensagem de seleção de departamento para ${remoteJid} (número: ${contactNumber})`);
-                                sendDepartmentSelectionMessage(apiConfig, contactNumber, departments)
+                                sendDepartmentSelectionMessage(apiConfig, contactNumber, selectionDepartmentsForSelection)
                                     .then(sent => {
                                         if (sent) {
                                             // Adiciona mensagem de sistema
@@ -4045,6 +4059,72 @@ const App: React.FC = () => {
     }
 
     return false;
+  };
+
+  // Carrega (e cacheia) a lista REAL de departamentos do DB para usar na seleção do cliente (WhatsApp).
+  // Nunca deve depender de INITIAL_DEPARTMENTS, pois isso gera listas diferentes do cadastrado.
+  const selectionDepartmentsCacheRef = useRef<{ fetchedAt: number; departments: Department[] } | null>(null);
+  const selectionDepartmentsInFlightRef = useRef<Promise<Department[]> | null>(null);
+  const SELECTION_DEPARTMENTS_CACHE_MS = 30_000;
+
+  const isProbablyInitialDepartments = (deps: any[]): boolean => {
+    if (!Array.isArray(deps) || deps.length === 0) return false;
+    // ids "dept_1" etc são do mock/local
+    return deps.every(d => d && typeof d.id === 'string' && d.id.startsWith('dept_'));
+  };
+
+  const getDepartmentsForSelection = async (): Promise<Department[]> => {
+    // Em demo, mantém comportamento antigo
+    if (apiConfig.isDemo) {
+      return (Array.isArray(departments) && departments.length > 0) ? departments : INITIAL_DEPARTMENTS;
+    }
+
+    const now = Date.now();
+    const cached = selectionDepartmentsCacheRef.current;
+    if (cached && cached.departments.length > 0 && (now - cached.fetchedAt) < SELECTION_DEPARTMENTS_CACHE_MS) {
+      return cached.departments;
+    }
+
+    if (selectionDepartmentsInFlightRef.current) {
+      return await selectionDepartmentsInFlightRef.current;
+    }
+
+    const p = (async () => {
+      try {
+        const result = await apiService.getAllDepartments();
+        const list = (result.success && Array.isArray(result.data)) ? (result.data as any[]) : [];
+        const normalized: Department[] = list
+          .filter(Boolean)
+          .map((d: any) => ({
+            id: d.id?.toString?.() ?? String(d.id),
+            name: d.name || '',
+            description: d.description || '',
+            color: d.color || 'bg-indigo-500'
+          }))
+          .filter(d => d.id && d.name);
+
+        if (normalized.length > 0) {
+          selectionDepartmentsCacheRef.current = { fetchedAt: Date.now(), departments: normalized };
+          return normalized;
+        }
+      } catch (err) {
+        logger.debug('[App] Erro ao buscar TODOS os departamentos para seleção:', err);
+      }
+
+      // Fallback: usa departments do estado apenas se parecerem reais (não mock)
+      const fallback = Array.isArray(departments) ? departments : [];
+      if (fallback.length > 0 && !isProbablyInitialDepartments(fallback)) {
+        return fallback;
+      }
+      return [];
+    })();
+
+    selectionDepartmentsInFlightRef.current = p;
+    try {
+      return await p;
+    } finally {
+      selectionDepartmentsInFlightRef.current = null;
+    }
   };
 
   useEffect(() => {
