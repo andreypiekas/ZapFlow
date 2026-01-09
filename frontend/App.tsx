@@ -1076,7 +1076,12 @@ const App: React.FC = () => {
                             
                             // Se o chat está fechado no banco e recebeu nova mensagem do usuário, reabre IMEDIATAMENTE
                             if (dbChatStatus === 'closed' && hasNewUserMessage) {
-                                const ratingCandidateChat = dbChat || existingChat;
+                                // IMPORTANTE: após finalizar o atendimento, o estado local costuma ser mais recente que o DB
+                                // (persistência pode levar alguns ms). Portanto, para avaliar 1-5, preferimos o estado local.
+                                const ratingCandidateChat: any = {
+                                    ...(dbChat || {}),
+                                    ...(existingChat || {})
+                                };
                                 const ratingContent = (lastRealUserMsg?.content || '').trim();
                                 const isValidRating = isValidRatingResponseWithinWindow(ratingCandidateChat, ratingContent);
 
@@ -1912,11 +1917,11 @@ const App: React.FC = () => {
 
                         // Avaliação (pesquisa) - pode depender de flags ainda não persistidas.
                         let finalRating: number | undefined =
-                          (dbChat as any)?.rating !== undefined ? (dbChat as any).rating : (existingChat as any).rating;
+                          (existingChat as any)?.rating !== undefined ? (existingChat as any).rating : (dbChat as any)?.rating;
                         let finalAwaitingRating: boolean | undefined =
-                          (dbChat as any)?.awaitingRating !== undefined ? (dbChat as any).awaitingRating : (existingChat as any).awaitingRating;
+                          (existingChat as any)?.awaitingRating !== undefined ? (existingChat as any).awaitingRating : (dbChat as any)?.awaitingRating;
                         let finalEndedAt: any =
-                          (dbChat as any)?.endedAt !== undefined ? (dbChat as any).endedAt : (existingChat as any).endedAt;
+                          (existingChat as any)?.endedAt !== undefined ? (existingChat as any).endedAt : (dbChat as any)?.endedAt;
                         
                         // Detecta se há novas mensagens reais (não apenas reordenação)
                         const hasNewMessagesAfterMerge = mergedMessages.length > existingChat.messages.length;
