@@ -1742,15 +1742,15 @@ const App: React.FC = () => {
                                                 // Apenas processa avaliação se chat está fechado e aguardando
                                                 let updatedChat = { ...c };
                                                 
-                                                // Processa avaliação se chat está fechado e aguardando avaliação (apenas dentro da janela de 15 minutos)
-                                                if (c.status === 'closed' && newReceivedMessages.length > 0 && c.awaitingRating && isRatingWindowOpen(c)) {
+                                                // Processa avaliação se chat está fechado e recebeu nova mensagem do usuário
+                                                // (1-5 conta como avaliação apenas dentro da janela de 15 minutos após a pesquisa)
+                                                if (c.status === 'closed' && newReceivedMessages.length > 0) {
                                                     const lastNewMessage = newReceivedMessages[newReceivedMessages.length - 1];
                                                     const messageContent = lastNewMessage.content.trim();
-                                                    const isRatingResponse = isRatingResponseMessage(messageContent);
                                                     
-                                                    if (isRatingResponse) {
+                                                    if (isValidRatingResponseWithinWindow(c, messageContent)) {
                                                         // Cliente respondeu com avaliação - atualiza via handleUpdateChat para persistir no banco
-                                                        const rating = parseInt(messageContent);
+                                                        const rating = parseInt(messageContent, 10);
                                                         handleUpdateChat({
                                                             ...c,
                                                             messages: uniqueMessages,
@@ -1909,6 +1909,14 @@ const App: React.FC = () => {
                         finalDepartmentSelectionSent = dbChat?.departmentSelectionSent !== undefined
                           ? dbChat.departmentSelectionSent
                           : (existingChat.departmentSelectionSent || false);
+
+                        // Avaliação (pesquisa) - pode depender de flags ainda não persistidas.
+                        let finalRating: number | undefined =
+                          (dbChat as any)?.rating !== undefined ? (dbChat as any).rating : (existingChat as any).rating;
+                        let finalAwaitingRating: boolean | undefined =
+                          (dbChat as any)?.awaitingRating !== undefined ? (dbChat as any).awaitingRating : (existingChat as any).awaitingRating;
+                        let finalEndedAt: any =
+                          (dbChat as any)?.endedAt !== undefined ? (dbChat as any).endedAt : (existingChat as any).endedAt;
                         
                         // Detecta se há novas mensagens reais (não apenas reordenação)
                         const hasNewMessagesAfterMerge = mergedMessages.length > existingChat.messages.length;
@@ -1933,6 +1941,46 @@ const App: React.FC = () => {
                                 );
                                 return isNew && msg.sender === 'user';
                             });
+
+                            // Avaliação (1-5) dentro da janela de 15 minutos após enviar a pesquisa:
+                            // - Não deve disparar seleção de setor
+                            // - Deve registrar rating e limpar awaitingRating
+                            const lastNewUserMessage = newUserMessages.length > 0 ? newUserMessages[newUserMessages.length - 1] : null;
+                            const lastNewUserContent = lastNewUserMessage ? String(lastNewUserMessage.content || '').trim() : '';
+                            const ratingCandidateChat: any = {
+                              ...(existingChat || {}),
+                              ...(dbChat || {}),
+                              awaitingRating: finalAwaitingRating,
+                              rating: finalRating,
+                              endedAt: finalEndedAt,
+                              messages: mergedMessages
+                            };
+                            const isValidRating =
+                              !!lastNewUserMessage &&
+                              finalStatus === 'closed' &&
+                              isValidRatingResponseWithinWindow(ratingCandidateChat, lastNewUserContent);
+
+                            if (isValidRating) {
+                              const rating = parseInt(lastNewUserContent, 10);
+                              finalRating = rating;
+                              finalAwaitingRating = false;
+
+                              // Persistência mínima (best-effort) para evitar que outros fluxos reenviem setores
+                              setTimeout(() => {
+                                try {
+                                  handleUpdateChat({
+                                    ...existingChat,
+                                    status: 'closed',
+                                    rating,
+                                    awaitingRating: false,
+                                    endedAt: existingChat.endedAt || finalEndedAt,
+                                    messages: mergedMessages
+                                  });
+                                } catch (err) {
+                                  logger.debug('[App] Erro ao persistir avaliação via syncChats:', err);
+                                }
+                              }, 0);
+                            }
                             
                             const hasRecentPrompt = hasRecentDepartmentSelectionPrompt(mergedMessages);
                             const isAwaitingDeptSelection =
@@ -1940,7 +1988,7 @@ const App: React.FC = () => {
                               !!finalDepartmentSelectionSent ||
                               hasRecentPrompt;
                             
-                            if (newUserMessages.length > 0 && finalDepartmentId === null && selectionDepartments.length > 0 && isAwaitingDeptSelection) {
+                            if (!isValidRating && newUserMessages.length > 0 && finalDepartmentId === null && selectionDepartments.length > 0 && isAwaitingDeptSelection) {
                                 const lastNewUserMessage = newUserMessages[newUserMessages.length - 1];
                                 const messageContent = lastNewUserMessage.content.trim();
                                 const selectedDeptId = processDepartmentSelection(messageContent, selectionDepartments);
@@ -2030,7 +2078,7 @@ const App: React.FC = () => {
                                             );
                                         }
                                     }
-                                } else if (!finalDepartmentSelectionSent && !hasRecentPrompt) {
+                                } else if (!finalDepartmentSelectionSent && !hasRecentPrompt && !isValidRating) {
                                     // Primeira mensagem sem departamento: envia seleção (evita reenvio se o prompt já existe no histórico recente)
                                     sendDepartmentSelectionMessage(apiConfig, existingChat.contactNumber, selectionDepartments)
                                         .then(sent => {
@@ -2054,7 +2102,7 @@ const App: React.FC = () => {
                                     } catch {}
                                   }, 0);
                                 }
-                            } else if (newUserMessages.length > 0 && finalDepartmentId === null && selectionDepartments.length > 0 && !finalDepartmentSelectionSent && !hasRecentDepartmentSelectionPrompt(mergedMessages)) {
+                            } else if (!isValidRating && newUserMessages.length > 0 && finalDepartmentId === null && selectionDepartments.length > 0 && !finalDepartmentSelectionSent && !hasRecentDepartmentSelectionPrompt(mergedMessages)) {
                                 // Ainda não enviou a mensagem de seleção (mesmo que o chat já esteja no banco): envia agora e marca flags.
                                 sendDepartmentSelectionMessage(apiConfig, existingChat.contactNumber, selectionDepartments)
                                   .then(sent => {
@@ -2185,14 +2233,14 @@ const App: React.FC = () => {
                             assignedTo: finalAssignedTo, // Sempre do banco se existir
                             tags: dbChat?.tags || existingChat.tags,
                             status: finalStatus, // Status final com prioridade ABSOLUTA do banco
-                            rating: dbChat?.rating || existingChat.rating,
+                            rating: finalRating,
                             // unreadCount: soma das novas mensagens do usuário desde o último snapshot local
                             unreadCount: computedUnreadCount,
-                            awaitingRating: dbChat?.awaitingRating !== undefined ? dbChat.awaitingRating : existingChat.awaitingRating,
+                            awaitingRating: finalAwaitingRating,
                             awaitingDepartmentSelection: finalAwaitingDepartmentSelection,
                             departmentSelectionSent: finalDepartmentSelectionSent,
                             activeWorkflow: dbChat?.activeWorkflow || existingChat.activeWorkflow,
-                            endedAt: dbChat?.endedAt || existingChat.endedAt,
+                            endedAt: finalEndedAt,
                             lastMessage: mergedMessages.length > 0 ? 
                                 (mergedMessages[mergedMessages.length - 1].type === 'text' ? 
                                     mergedMessages[mergedMessages.length - 1].content : 
@@ -3530,14 +3578,11 @@ const App: React.FC = () => {
                                             // Apenas adiciona mensagens, não altera status
                                                 let updatedChat = { ...chat };
                                                 
-                                            // Processa avaliação se chat está fechado e aguardando avaliação (apenas dentro da janela de 15 minutos)
-                                            if (wasClosed && isUserMessage && chat.awaitingRating && isRatingWindowOpen(chat)) {
-                                                    const messageContent = mapped.content.trim();
-                                                    const isRatingResponse = isRatingResponseMessage(messageContent);
-                                                    
-                                                if (isRatingResponse) {
+                                            // Processa avaliação se chat está fechado (1-5 conta como avaliação apenas dentro da janela de 15 minutos)
+                                            if (wasClosed && isUserMessage && isValidRatingResponseWithinWindow(chat, mappedContentTrimmed)) {
+                                                    const messageContent = mappedContentTrimmed;
                                                     // Cliente respondeu com avaliação (1-5) - atualiza via handleUpdateChat para persistir no banco
-                                                        const rating = parseInt(messageContent);
+                                                        const rating = parseInt(messageContent, 10);
                                                     handleUpdateChat({
                                                             ...chat,
                                                             messages: updatedMessages,
@@ -3553,8 +3598,6 @@ const App: React.FC = () => {
                                                         lastMessageTime: mapped.timestamp,
                                                         unreadCount: mapped.sender === 'user' ? (chat.unreadCount || 0) + 1 : chat.unreadCount
                                                     };
-                                                }
-                                                // Se não é avaliação, continua para reabertura (lógica abaixo)
                                             }
                                             
                                             // Processa seleção de setores apenas se não estiver no banco (novos chats)
@@ -4187,8 +4230,32 @@ const App: React.FC = () => {
     return /^[1-5]$/.test((content || '').trim());
   };
 
+  // Detecta se a pesquisa de satisfação foi enviada recentemente no histórico do chat (últimos 15 minutos).
+  // Serve como fallback caso flags (awaitingRating/endedAt) ainda não tenham persistido.
+  const hasRecentRatingPrompt = (messages: Message[] | undefined | null): boolean => {
+    if (!Array.isArray(messages) || messages.length === 0) return false;
+
+    const now = Date.now();
+    const cutoff = now - RATING_WINDOW_MS;
+
+    let checked = 0;
+    for (let i = messages.length - 1; i >= 0 && checked < 40; i--, checked++) {
+      const m: any = messages[i];
+      if (!m) continue;
+
+      const ts = m.timestamp ? new Date(m.timestamp as any).getTime() : 0;
+      if (ts && ts < cutoff) break;
+
+      const content = typeof m.content === 'string' ? m.content : '';
+      if ((m.sender === 'agent' || m.sender === 'system') && /avalie nosso atendimento/i.test(content)) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
   const isRatingWindowOpen = (chat?: Partial<Chat> | null): boolean => {
-    if (!chat || !(chat as any).awaitingRating) return false;
     const endedAtMs = getChatEndedAtMs(chat);
     if (!endedAtMs) return false;
     return (Date.now() - endedAtMs) <= RATING_WINDOW_MS;
@@ -4198,7 +4265,18 @@ const App: React.FC = () => {
     chat: Partial<Chat> | null | undefined,
     content: string | undefined | null
   ): boolean => {
-    return !!chat && !!(chat as any).awaitingRating && isRatingResponseMessage(content) && isRatingWindowOpen(chat);
+    if (!chat) return false;
+    if (!isRatingResponseMessage(content)) return false;
+
+    // Se já existe uma avaliação registrada, não processa novamente
+    const existingRating: any = (chat as any).rating;
+    if (existingRating !== undefined && existingRating !== null) return false;
+
+    // Contexto de pesquisa válido: flag + endedAt dentro da janela, OU prompt recente no histórico
+    const awaiting = !!(chat as any).awaitingRating;
+    const withinEndedAtWindow = isRatingWindowOpen(chat);
+    const hasPrompt = hasRecentRatingPrompt((chat as any).messages);
+    return (awaiting && withinEndedAtWindow) || hasPrompt;
   };
 
   useEffect(() => {
