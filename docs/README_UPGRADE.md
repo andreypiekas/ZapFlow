@@ -1,8 +1,8 @@
-# 🔄 Guia de Upgrade - Evolution API
+# 🔄 Guia de Upgrade - Evolution API + Zentria (após `git pull`)
 
 ## Uso Rápido
 
-### No Ubuntu 22.04 (ou similar):
+### Evolution API (Docker) - Ubuntu 22.04 (ou similar):
 
 ```bash
 # 1. Dar permissão de execução
@@ -10,6 +10,52 @@ chmod +x scripts/upgrade_evolution.sh
 
 # 2. Executar o script
 ./scripts/upgrade_evolution.sh
+```
+
+---
+
+## Upgrade do Zentria (este repositório) após `git pull`
+
+### É pelo `backend/scripts/migrate.js`?
+
+**Sim**: ele é a **migração principal** do banco do Zentria (PostgreSQL do *backend API*), e é o passo padrão após `git pull` quando houver mudanças de schema/dados.
+
+### Fluxo recomendado (produção)
+
+1) **Atualize o código**
+
+```bash
+git pull
+```
+
+2) **Atualize dependências**
+
+```bash
+npm install
+```
+
+3) **Rode a migração principal do backend**
+
+```bash
+npm --prefix backend run migrate
+```
+
+4) **(Se aplicável) Migrações adicionais**
+
+```bash
+# Só se você veio de versões antigas onde apiConfig era por usuário
+node backend/scripts/migrate-config-to-global.js
+```
+
+5) **Reinicie o backend/frontend conforme seu deploy**
+
+### Importante (admin / senha)
+
+- O `migrate.js` **só cria** o admin `admin@piekas.com` se ele não existir.
+- Para **forçar reset de senha** (ex.: ambiente novo), use:
+
+```bash
+RESET_ADMIN_PASSWORD=true SEED_ADMIN_PASSWORD="SUA_SENHA" npm --prefix backend run migrate
 ```
 
 ## O que o script faz

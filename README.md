@@ -95,6 +95,9 @@ Este é o guia mais completo e atualizado, incluindo:
 - **[install/deploy_hostgator.txt](./install/deploy_hostgator.txt)** - Deploy específico para HostGator
 - **[docs/HTTPS_POR_IP_AUTOCONFIG.md](./docs/HTTPS_POR_IP_AUTOCONFIG.md)** - HTTPS mesmo acessando por IP (sem domínio) + autoconfig
 
+### 🔄 Upgrade (pós `git pull`)
+- **[docs/README_UPGRADE.md](./docs/README_UPGRADE.md)** - Upgrade da Evolution API + passos de migração do backend (PostgreSQL)
+
 **Segurança:**
 - **[install/security_hostgator.txt](./install/security_hostgator.txt)** - Segurança avançada
 

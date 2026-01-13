@@ -16,23 +16,35 @@ async function createAdmin() {
     console.log('✅ Conectado ao PostgreSQL');
 
     const adminUsername = 'admin@piekas.com';
-    const adminPassword = '123';
+    const seededAdminPassword = process.env.SEED_ADMIN_PASSWORD || '123';
+    const shouldResetAdminPassword =
+      String(process.env.RESET_ADMIN_PASSWORD || '').toLowerCase() === 'true' ||
+      String(process.env.RESET_ADMIN_PASSWORD || '') === '1';
     
     // Verificar se usuário já existe
     const adminExists = await client.query('SELECT id, username FROM users WHERE username = $1', [adminUsername]);
     
     if (adminExists.rows.length > 0) {
       console.log(`⚠️  Usuário ${adminUsername} já existe.`);
-      // Atualizar senha, nome e garantir que o role seja 'ADMIN'
-      const hashedPassword = await bcrypt.hash(adminPassword, 10);
-      await client.query(
-        `UPDATE users SET password_hash = $1, role = $2, name = $4, updated_at = CURRENT_TIMESTAMP WHERE username = $3`,
-        [hashedPassword, 'ADMIN', adminUsername, 'Andrey']
-      );
-      console.log(`✅ Senha, nome e role do usuário ${adminUsername} atualizados (name: Andrey, role: ADMIN)`);
+      // Por padrão, NÃO alteramos senha (evita efeitos colaterais em upgrades).
+      // Para forçar reset: RESET_ADMIN_PASSWORD=true e (opcionalmente) SEED_ADMIN_PASSWORD.
+      if (shouldResetAdminPassword) {
+        const hashedPassword = await bcrypt.hash(seededAdminPassword, 10);
+        await client.query(
+          `UPDATE users SET password_hash = $1, role = $2, name = $4, updated_at = CURRENT_TIMESTAMP WHERE username = $3`,
+          [hashedPassword, 'ADMIN', adminUsername, 'Andrey']
+        );
+        console.log(`✅ Admin atualizado (name: Andrey, role: ADMIN) e senha resetada via RESET_ADMIN_PASSWORD`);
+      } else {
+        await client.query(
+          `UPDATE users SET role = $1, name = $3, updated_at = CURRENT_TIMESTAMP WHERE username = $2`,
+          ['ADMIN', adminUsername, 'Andrey']
+        );
+        console.log(`✅ Admin existente: role/nome garantidos (senha não alterada)`);
+      }
     } else {
       // Criar novo usuário
-      const hashedPassword = await bcrypt.hash(adminPassword, 10);
+      const hashedPassword = await bcrypt.hash(seededAdminPassword, 10);
       await client.query(
         `INSERT INTO users (username, password_hash, name, email, role) 
          VALUES ($1, $2, $3, $4, $5)`,
@@ -42,7 +54,7 @@ async function createAdmin() {
     }
     
     console.log(`   Username: ${adminUsername}`);
-    console.log(`   Password: ${adminPassword}`);
+    console.log(`   Password: ${seededAdminPassword}`);
     console.log(`   Name: Andrey`);
     console.log(`   Role: ADMIN`);
     

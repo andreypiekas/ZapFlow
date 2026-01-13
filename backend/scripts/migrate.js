@@ -187,6 +187,19 @@ async function migrate() {
       )
     `);
 
+    // Garantir colunas/índices em instalações antigas (quando a tabela já existe)
+    await client.query(`
+      ALTER TABLE tags
+      ADD COLUMN IF NOT EXISTS color VARCHAR(100)
+    `);
+    await client.query(`
+      ALTER TABLE tags
+      ALTER COLUMN color SET DEFAULT 'bg-blue-100 text-blue-700'
+    `);
+    await client.query(`
+      UPDATE tags SET color = 'bg-blue-100 text-blue-700' WHERE color IS NULL
+    `);
+
     // Criar tabela de stickers (biblioteca global por usuário/admin)
     // - sha256: permite deduplicar quando temos base64/dataUrl
     // - data_url: conteúdo embutido (data:mime;base64,...), ideal para exibir no frontend sem depender de URLs externas
@@ -205,6 +218,36 @@ async function migrate() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id, sha256)
       )
+    `);
+
+    // Garantir colunas/índices em instalações antigas (quando a tabela já existe)
+    await client.query(`
+      ALTER TABLE stickers
+      ADD COLUMN IF NOT EXISTS sha256 VARCHAR(64),
+      ADD COLUMN IF NOT EXISTS mime_type VARCHAR(100),
+      ADD COLUMN IF NOT EXISTS data_url TEXT,
+      ADD COLUMN IF NOT EXISTS media_url TEXT,
+      ADD COLUMN IF NOT EXISTS first_message_id VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS first_remote_jid VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    `);
+    await client.query(`
+      ALTER TABLE stickers
+      ALTER COLUMN mime_type SET DEFAULT 'image/webp'
+    `);
+
+    // Garante o ON CONFLICT (user_id, sha256) para inserts de stickers no webhook
+    // (em instalações antigas pode não existir a constraint/índice único).
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'stickers_user_id_sha256_unique_idx'
+        ) THEN
+          EXECUTE 'CREATE UNIQUE INDEX stickers_user_id_sha256_unique_idx ON stickers (user_id, sha256)';
+        END IF;
+      END $$;
     `);
 
     // Índice auxiliar quando sha256 estiver NULL (não garante unicidade, mas melhora listagem)
@@ -226,26 +269,42 @@ async function migrate() {
     `);
 
     // Criar usuário admin padrão se não existir (seed inicial do primeiro acesso)
+    // IMPORTANTE (produção): não resetamos senha automaticamente em upgrades.
+    // Para forçar reset: defina RESET_ADMIN_PASSWORD=true e (opcionalmente) SEED_ADMIN_PASSWORD.
     const bcrypt = await import('bcryptjs');
     const adminUsername = 'admin@piekas.com';
+    const seededAdminPassword = process.env.SEED_ADMIN_PASSWORD || '123';
+    const shouldResetAdminPassword =
+      String(process.env.RESET_ADMIN_PASSWORD || '').toLowerCase() === 'true' ||
+      String(process.env.RESET_ADMIN_PASSWORD || '') === '1';
     const adminExists = await client.query('SELECT id FROM users WHERE username = $1', [adminUsername]);
     
     if (adminExists.rows.length === 0) {
-      const hashedPassword = await bcrypt.default.hash('123', 10);
+      const hashedPassword = await bcrypt.default.hash(seededAdminPassword, 10);
       await client.query(
         `INSERT INTO users (username, password_hash, name, email, role) 
          VALUES ($1, $2, $3, $4, $5)`,
         [adminUsername, hashedPassword, 'Administrador', adminUsername, 'ADMIN']
       );
-      console.log(`✅ Usuário admin criado (username: ${adminUsername}, password: 123, role: ADMIN)`);
+      console.log(`✅ Usuário admin criado (username: ${adminUsername}, role: ADMIN)`);
+      console.log(`   🔐 Senha inicial: ${seededAdminPassword}`);
     } else {
-      // Se o admin já existe, atualizar senha e garantir que o role seja 'ADMIN'
-      const hashedPassword = await bcrypt.default.hash('123', 10);
-      await client.query(
-        `UPDATE users SET password_hash = $1, role = $2, updated_at = CURRENT_TIMESTAMP WHERE username = $3`,
-        [hashedPassword, 'ADMIN', adminUsername]
-      );
-      console.log(`✅ Senha e role do usuário admin atualizados (username: ${adminUsername}, password: 123, role: ADMIN)`);
+      // Se o admin já existe: por padrão, NÃO alteramos senha (evita efeitos colaterais em upgrades).
+      // Garantimos role=ADMIN e só resetamos senha se for explicitamente solicitado.
+      if (shouldResetAdminPassword) {
+        const hashedPassword = await bcrypt.default.hash(seededAdminPassword, 10);
+        await client.query(
+          `UPDATE users SET password_hash = $1, role = $2, updated_at = CURRENT_TIMESTAMP WHERE username = $3`,
+          [hashedPassword, 'ADMIN', adminUsername]
+        );
+        console.log(`✅ Admin atualizado (role=ADMIN) e senha resetada via RESET_ADMIN_PASSWORD`);
+      } else {
+        await client.query(
+          `UPDATE users SET role = $1, updated_at = CURRENT_TIMESTAMP WHERE username = $2`,
+          ['ADMIN', adminUsername]
+        );
+        console.log(`✅ Admin existente: role garantido como ADMIN (senha não alterada)`);
+      }
     }
 
     // Busca ID do admin para seeds dependentes
