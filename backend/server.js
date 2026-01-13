@@ -2564,6 +2564,137 @@ app.delete('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res
 });
 
 // ============================================================================
+// Evolution API Proxy (server-side) — evita Mixed Content quando frontend está em HTTPS
+// ============================================================================
+// Retorna um mapa remoteJid(@g.us) -> subject/name dos grupos (best-effort).
+// IMPORTANTE: usa a config global (/api/config) armazenada no banco, então o browser
+// nunca precisa chamar a Evolution por HTTP diretamente.
+app.get('/api/evolution/groups/subjects', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    // Carrega ApiConfig global (user_id NULL/0)
+    let configRes = await pool.query(
+      `SELECT data_value FROM user_data WHERE user_id IS NULL AND data_type = 'config' AND data_key = 'apiConfig' LIMIT 1`
+    );
+    if (configRes.rows.length === 0) {
+      configRes = await pool.query(
+        `SELECT data_value FROM user_data WHERE user_id = 0 AND data_type = 'config' AND data_key = 'apiConfig' LIMIT 1`
+      );
+    }
+
+    if (configRes.rows.length === 0) {
+      return res.status(400).json({ success: false, error: 'Config global (apiConfig) não encontrada' });
+    }
+
+    const apiConfig = typeof configRes.rows[0].data_value === 'string'
+      ? JSON.parse(configRes.rows[0].data_value)
+      : configRes.rows[0].data_value;
+
+    const baseUrl = String(apiConfig?.baseUrl || '').trim().replace(/\/+$/, '');
+    const authKey = String(apiConfig?.authenticationApiKey || apiConfig?.apiKey || '').trim();
+    const instanceName = String(req.query?.instanceName || apiConfig?.instanceName || '').trim();
+
+    if (!baseUrl || !authKey || !instanceName) {
+      return res.status(400).json({
+        success: false,
+        error: 'Evolution não configurada (baseUrl/authKey/instanceName)'
+      });
+    }
+
+    // Usa fetch nativo (Node 18+) ou node-fetch fallback
+    let fetchFunction;
+    try {
+      fetchFunction = globalThis.fetch || fetch;
+      if (!fetchFunction) {
+        const nodeFetch = await import('node-fetch');
+        fetchFunction = nodeFetch.default;
+      }
+    } catch {
+      fetchFunction = null;
+    }
+
+    if (!fetchFunction) {
+      return res.status(500).json({ success: false, error: 'Fetch não disponível no servidor' });
+    }
+
+    const headers = { 'apikey': authKey };
+
+    const candidates = [
+      { method: 'GET', path: `/group/findGroups/${instanceName}` },
+      { method: 'POST', path: `/group/findGroups/${instanceName}`, body: {} },
+      { method: 'GET', path: `/group/fetchAllGroups/${instanceName}` },
+      { method: 'GET', path: `/group/list/${instanceName}` },
+      { method: 'GET', path: `/group/groups/${instanceName}` }
+    ];
+
+    const extractGroups = (data) => {
+      if (!data) return [];
+      if (Array.isArray(data)) return data;
+      const cands = [
+        data.groups,
+        data.data,
+        data.response,
+        data?.response?.groups,
+        data?.response?.data,
+        data.result,
+        data?.result?.groups
+      ];
+      for (const c of cands) {
+        if (Array.isArray(c)) return c;
+      }
+      if (data && typeof data === 'object') {
+        const values = Object.values(data);
+        if (values.length && values.every(v => v && typeof v === 'object')) return values;
+      }
+      return [];
+    };
+
+    const normalizeJid = (jid) => String(jid || '').trim().replace(/\s+/g, '').toLowerCase();
+
+    const subjects = {};
+    for (const c of candidates) {
+      try {
+        const url = `${baseUrl}${c.path}`;
+        const r = await fetchFunction(url, {
+          method: c.method,
+          headers: { ...headers, ...(c.method === 'POST' ? { 'Content-Type': 'application/json' } : {}) },
+          body: c.method === 'POST' ? JSON.stringify(c.body || {}) : undefined
+        });
+
+        if (r.status === 404) continue;
+        if (!r.ok) continue;
+
+        const json = await r.json().catch(() => null);
+        const groups = extractGroups(json);
+
+        for (const g of groups) {
+          const jidRaw = g?.remoteJid || g?.jid || g?.id || g?.groupJid;
+          const jid = normalizeJid(jidRaw);
+          if (!jid || !jid.includes('@g.us')) continue;
+          const title = String(
+            g?.subject || g?.name || g?.groupSubject || g?.groupName || g?.title || g?.topic || ''
+          ).trim();
+          if (!title) continue;
+          subjects[jid] = title;
+        }
+
+        // Se conseguimos qualquer coisa, retorna já
+        if (Object.keys(subjects).length > 0) {
+          return res.json({ success: true, subjects, source: c.path });
+        }
+      } catch {
+        // tenta próximo candidato
+      }
+    }
+
+    // Se nenhum endpoint funcionou, devolve vazio (best-effort) — frontend mantém fallback.
+    return res.json({ success: true, subjects: {}, source: 'none' });
+  } catch (error) {
+    console.error('[GET /api/evolution/groups/subjects] Erro:', error);
+    res.status(500).json({ success: false, error: 'Erro ao buscar subjects de grupos' });
+  }
+});
+
+// ============================================================================
 // WEBHOOK ENDPOINT - Evolution API Events
 // ============================================================================
 // Recebe eventos da Evolution API quando webhook está habilitado

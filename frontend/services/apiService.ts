@@ -788,6 +788,23 @@ class ApiService {
     }
   }
 
+  // ============================================================================
+  // EVOLUTION (Proxy via Backend) — evita Mixed Content no browser
+  // ============================================================================
+  async fetchEvolutionGroupSubjects(instanceName?: string): Promise<{ subjects: Record<string, string>; source?: string }> {
+    const qs = instanceName ? `?instanceName=${encodeURIComponent(instanceName)}` : '';
+    const response = await this.request<{ success: boolean; subjects?: Record<string, string>; source?: string; error?: string }>(
+      `/api/evolution/groups/subjects${qs}`,
+      { method: 'GET' }
+    );
+
+    if (!response?.success) {
+      throw new Error(response?.error || 'Falha ao buscar subjects de grupos');
+    }
+
+    return { subjects: response.subjects || {}, source: response.source };
+  }
+
   // Health check
   async healthCheck(): Promise<boolean> {
     try {

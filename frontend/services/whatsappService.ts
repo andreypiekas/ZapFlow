@@ -58,6 +58,25 @@ const fetchGroupSubjectsMap = async (config: ApiConfig, instanceName: string): P
         return cached.map;
     }
 
+    // Preferência: chama o backend (HTTPS) para evitar Mixed Content e depender de proxy do Nginx.
+    // Fallback: tenta chamar a Evolution direto (com apikey) para compatibilidade.
+    try {
+        const { apiService } = await import('./apiService');
+        const resp = await apiService.fetchEvolutionGroupSubjects(instanceName);
+        const map = new Map<string, string>();
+        for (const [jid, subject] of Object.entries(resp.subjects || {})) {
+            const key = normalizeJid(jid);
+            if (!key.includes('@g.us')) continue;
+            const title = String(subject || '').trim();
+            if (!title) continue;
+            map.set(key, title);
+        }
+        groupSubjectsCacheByKey.set(cacheKey, { fetchedAt: now, map });
+        return map;
+    } catch {
+        // segue para fallback direto na Evolution
+    }
+
     if (unsupportedEvolutionEndpointsByBaseUrl.fetchGroups.has(baseUrlKey)) {
         return new Map<string, string>();
     }
