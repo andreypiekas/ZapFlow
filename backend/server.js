@@ -3034,6 +3034,119 @@ const handleWebhookEvolution = async (req, res) => {
 
       return res.status(200).json({ received: true, processed: upserted, event: eventType });
     }
+
+    // ============================================================================
+    // Groups Update/Upsert (nome/subject do grupo)
+    // - Objetivo: atualizar contactName do grupo quando a Evolution informar subject real
+    // - Persistência: user_data (tenant/owner do ADMIN) em data_type='chats', data_key=remoteJid(@g.us)
+    // ============================================================================
+    const isGroupsUpdateEvent =
+      eventTypeKey === 'groups.update' ||
+      eventTypeKey.includes('groups.update') ||
+      eventTypeKey === 'groups.upsert' ||
+      eventTypeKey.includes('groups.upsert');
+
+    if (isGroupsUpdateEvent) {
+      const items = Array.isArray(event.data)
+        ? event.data
+        : (event.data ? [event.data] : []);
+
+      const adminRes = await pool.query(`SELECT id FROM users WHERE role = 'ADMIN' ORDER BY id ASC LIMIT 1`);
+      const ownerUserId = adminRes.rows?.[0]?.id || null;
+
+      let updated = 0;
+
+      if (!ownerUserId) {
+        return res.status(200).json({ received: true, processed: 0, ignored: true, reason: 'no_admin_owner' });
+      }
+
+      const normalizeJid = (jid) => String(jid || '').trim().replace(/\s+/g, '');
+      const pickTitle = (it) => String(
+        it?.subject ||
+        it?.name ||
+        it?.groupSubject ||
+        it?.groupName ||
+        it?.title ||
+        it?.topic ||
+        ''
+      ).trim();
+
+      const isPlaceholderGroupName = (name) => {
+        const n = String(name || '').trim();
+        if (!n) return true;
+        if (/^\d+$/.test(n)) return true;
+        return n.toLowerCase().startsWith('grupo ') || n.toLowerCase().startsWith('group ');
+      };
+
+      for (const item of items) {
+        const rawJid = item?.remoteJid || item?.jid || item?.id || item?.groupJid || item?.groupId || '';
+        const remoteJid = normalizeJid(rawJid);
+        if (!remoteJid) continue;
+
+        // Algumas versões podem enviar só o ID numérico; tenta garantir sufixo de grupo
+        const groupJid = remoteJid.includes('@') ? remoteJid : `${remoteJid}@g.us`;
+        if (!groupJid.includes('@g.us')) continue;
+
+        const title = pickTitle(item);
+        if (!title) continue;
+
+        try {
+          const existing = await pool.query(
+            `SELECT data_value FROM user_data
+             WHERE user_id = $1 AND data_type = 'chats' AND data_key = $2
+             LIMIT 1`,
+            [ownerUserId, groupJid]
+          );
+
+          let chatData = null;
+          if (existing.rows.length > 0) {
+            try {
+              chatData = typeof existing.rows[0].data_value === 'string'
+                ? JSON.parse(existing.rows[0].data_value)
+                : existing.rows[0].data_value;
+            } catch {
+              chatData = null;
+            }
+          }
+
+          const nowIso = new Date().toISOString();
+          const prevName = chatData?.contactName;
+
+          const next = {
+            ...(chatData && typeof chatData === 'object' ? chatData : {}),
+            id: groupJid,
+            contactName: title,
+            contactNumber: chatData?.contactNumber || '',
+            status: chatData?.status || 'open',
+            lastMessage: chatData?.lastMessage || '',
+            lastMessageTime: chatData?.lastMessageTime || nowIso,
+            messages: Array.isArray(chatData?.messages) ? chatData.messages : [],
+            departmentId: chatData?.departmentId ?? null,
+            assignedTo: chatData?.assignedTo,
+            awaitingDepartmentSelection: chatData?.awaitingDepartmentSelection ?? false,
+            departmentSelectionSent: chatData?.departmentSelectionSent ?? false,
+            updatedAt: nowIso
+          };
+
+          // Só escreve se mudou (reduz churn)
+          const shouldWrite = !prevName || prevName !== title || isPlaceholderGroupName(prevName);
+          if (shouldWrite) {
+            await pool.query(
+              `INSERT INTO user_data (user_id, data_type, data_key, data_value)
+               VALUES ($1, 'chats', $2, $3)
+               ON CONFLICT (COALESCE(user_id, 0), data_type, data_key)
+               DO UPDATE SET data_value = $3, updated_at = CURRENT_TIMESTAMP`,
+              [ownerUserId, groupJid, JSON.stringify(next)]
+            );
+            updated++;
+          }
+        } catch (e) {
+          console.error('[WEBHOOK] Erro ao atualizar chat (groups.update):', e);
+        }
+      }
+
+      return res.status(200).json({ received: true, processed: updated, event: eventType });
+    }
     
     // Para outros eventos, apenas confirma recebimento
     res.status(200).json({ received: true, event: eventType });
