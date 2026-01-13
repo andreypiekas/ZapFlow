@@ -218,8 +218,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const [listWidth, setListWidth] = useState(380); // Default width in pixels
   const [isResizing, setIsResizing] = useState(false);
 
-  // Tabs: 'todo' (Inbox/User replied), 'waiting' (Agent replied), 'closed'
-  const [activeTab, setActiveTab] = useState<'todo' | 'waiting' | 'closed'>('todo');
+  // Tabs: 'todo' (A Fazer), 'waiting' (Aguardando triagem), 'groups' (somente grupos), 'closed'
+  const [activeTab, setActiveTab] = useState<'todo' | 'waiting' | 'groups' | 'closed'>('todo');
   
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [showWorkflowsMenu, setShowWorkflowsMenu] = useState(false);
@@ -852,6 +852,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     .filter(chat => {
         // Garante que o chat existe e é válido
         if (!chat || !chat.id) return false;
+
+        const isGroupChat = String(chat.id).includes('@g.us');
         // 1. Common Search Filter (Applied to all tabs)
         const matchesSearch = (chat.contactName || '').toLowerCase().includes(filterText.toLowerCase()) ||
                               (chat.contactNumber || '').includes(filterText) ||
@@ -873,7 +875,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         // Chats atribuídos ao usuário atual ou com departamento atribuído
         const isAssigned = chat.assignedTo === currentUser.id || (chat.departmentId !== null && chat.departmentId !== undefined);
 
-        // Aba "Finalizados": apenas chats com status 'closed'
+        // Aba "Grupos": mostra somente grupos (separado do fluxo normal)
+        if (activeTab === 'groups') {
+            return isGroupChat;
+        }
+
+        // Nas demais abas, grupos não aparecem
+        if (isGroupChat) {
+            return false;
+        }
+
+        // Aba "Finalizados": apenas chats com status 'closed' (não-grupos)
         if (activeTab === 'closed') {
             return isClosed;
         }
@@ -3116,6 +3128,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         <Clock size={12} /> Aguardando
                     </button>
                     <button 
+                        onClick={() => setActiveTab('groups')}
+                        className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all flex justify-center items-center gap-1 ${activeTab === 'groups' ? 'bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] shadow-lg shadow-[#00C3FF]/20 font-semibold' : 'text-slate-400 hover:text-[#00E0D1]'}`}
+                    >
+                        Grupos
+                    </button>
+                    <button 
                         onClick={() => setActiveTab('closed')}
                         className={`flex-1 text-xs font-medium py-1.5 rounded-md transition-all flex justify-center items-center gap-1 ${activeTab === 'closed' ? 'bg-gradient-to-r from-[#00C3FF] to-[#00E0D1] text-[#0D0F13] shadow-lg shadow-[#00C3FF]/20 font-semibold' : 'text-slate-400 hover:text-[#00E0D1]'}`}
                     >
@@ -3149,6 +3167,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                 <CheckCircle size={32} className="opacity-20"/>
                 {activeTab === 'todo' && "Tudo limpo! Você não tem conversas pendentes."}
                 {activeTab === 'waiting' && "Nenhuma conversa aguardando resposta do cliente."}
+                {activeTab === 'groups' && "Nenhum grupo encontrado."}
                 {activeTab === 'closed' && "Nenhuma conversa finalizada encontrada."}
              </div>
           ) : (
