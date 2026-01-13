@@ -2670,6 +2670,12 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
         
         for (let i = 0; i < endpoints.length; i++) {
             const endpoint = endpoints[i];
+
+            // Se já detectamos que fetchMessages não existe nesse baseUrl, não tente novamente
+            // (evita spam de 404 em cada chat/mensagem).
+            if (endpoint.kind === 'fetchMessages' && unsupportedEvolutionEndpointsByBaseUrl.fetchMessages.has(baseUrlKey)) {
+                continue;
+            }
             try {
                 const res = await fetch(endpoint.url, {
                     method: endpoint.body ? 'POST' : 'GET',
@@ -2794,6 +2800,8 @@ export const fetchChatMessages = async (config: ApiConfig, chatId: string, limit
                     // Cacheia endpoints inexistentes/instáveis para evitar spam e reduzir custo.
                     if (res.status === 404 && endpoint.kind === 'fetchMessages') {
                         unsupportedEvolutionEndpointsByBaseUrl.fetchMessages.add(baseUrlKey);
+                        // Não adianta continuar tentando outros endpoints fetchMessages neste ciclo.
+                        continue;
                     }
                     if ((res.status === 500 || res.status === 404) && endpoint.kind === 'findChatsInclude') {
                         // Algumas versões/datasets retornam 500 quando include=['messages'] está presente
