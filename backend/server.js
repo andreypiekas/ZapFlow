@@ -1030,6 +1030,21 @@ app.delete('/api/stickers/:id', authenticateToken, dataLimiter, async (req, res)
 // ============================================================================
 app.get('/api/chatbot-config', authenticateToken, dataLimiter, async (req, res) => {
   try {
+    const defaultChatbotConfig = {
+      isEnabled: false,
+      awayMessage: "Olá! No momento estamos fechados. Nosso horário de atendimento é de Segunda a Sexta das 09:00 às 18:00.",
+      greetingMessage: "Olá! Bem-vindo ao nosso atendimento.",
+      businessHours: [
+        { dayOfWeek: 0, isOpen: false, openTime: '09:00', closeTime: '18:00' },
+        { dayOfWeek: 1, isOpen: true, openTime: '09:00', closeTime: '18:00' },
+        { dayOfWeek: 2, isOpen: true, openTime: '09:00', closeTime: '18:00' },
+        { dayOfWeek: 3, isOpen: true, openTime: '09:00', closeTime: '18:00' },
+        { dayOfWeek: 4, isOpen: true, openTime: '09:00', closeTime: '18:00' },
+        { dayOfWeek: 5, isOpen: true, openTime: '09:00', closeTime: '18:00' },
+        { dayOfWeek: 6, isOpen: false, openTime: '09:00', closeTime: '12:00' }
+      ]
+    };
+
     let result = await pool.query(
       `SELECT data_value FROM user_data
        WHERE user_id IS NULL AND data_type = 'config' AND data_key = 'chatbotConfig'`
@@ -1042,7 +1057,17 @@ app.get('/api/chatbot-config', authenticateToken, dataLimiter, async (req, res) 
       );
     }
 
-    if (result.rows.length === 0) return res.json(null);
+    if (result.rows.length === 0) {
+      // Auto-seed para instalações antigas onde migrate não rodou ainda
+      await pool.query(
+        `INSERT INTO user_data (user_id, data_type, data_key, data_value)
+         VALUES (NULL, 'config', 'chatbotConfig', $1)
+         ON CONFLICT (COALESCE(user_id, 0), data_type, data_key)
+         DO NOTHING`,
+        [JSON.stringify(defaultChatbotConfig)]
+      );
+      return res.json(defaultChatbotConfig);
+    }
 
     const parsed = typeof result.rows[0].data_value === 'string'
       ? JSON.parse(result.rows[0].data_value)

@@ -123,6 +123,17 @@ class StorageService {
     // Se API está disponível, tenta usar
     if (this.useAPI && this.apiAvailable) {
       try {
+        // chatbotConfig é global e tem endpoint próprio (não fica em /api/data)
+        if (dataType === 'chatbotConfig') {
+          const resp = await apiService.loadChatbotConfig();
+          if (resp.success) {
+            this.consecutiveFailures = 0;
+            return (resp.data as T) ?? null;
+          }
+          // Se falhou, cai para fallback abaixo
+          throw new Error(resp.error || 'Falha ao carregar chatbotConfig');
+        }
+
         const data = await apiService.getData<T>(dataType, key || 'default');
         if (data !== null) {
           this.consecutiveFailures = 0;
@@ -246,6 +257,16 @@ class StorageService {
     // Se API está disponível, tenta salvar
     if (this.useAPI && this.apiAvailable) {
       try {
+        // chatbotConfig é global e tem endpoint próprio (não fica em /api/data)
+        if (dataType === 'chatbotConfig') {
+          const resp = await apiService.saveChatbotConfig(value);
+          if (resp.success) {
+            this.consecutiveFailures = 0;
+            return true;
+          }
+          throw new Error(resp.error || 'Falha ao salvar chatbotConfig');
+        }
+
         const success = await apiService.saveData(dataType, storageKey, value);
         if (success) {
           this.consecutiveFailures = 0;
