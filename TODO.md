@@ -256,6 +256,10 @@
 **Critério de aceite:**
 - Abrir `https://<IP>` e usar login + chats + mídias + WebSocket sem falhas.
 
+**Observações (validação em ambiente):**
+- Se aparecer **Mixed Content** no browser, normalmente é porque o Nginx **não está proxyando** a Evolution (HTTP) via HTTPS nas rotas `/message/`, `/chat/`, `/instance/`, `/group/` e `/socket.io/`.
+- Se aparecer **404** em `POST /message/fetchMessages/<instance>` no host HTTPS, significa que o proxy dessas rotas **não está aplicado**. O frontend já tem mitigação para **não spammar** o console após detectar 404, mas o ideal é ajustar o proxy.
+
 ---
 
 ## 🧹 Organização / Branding
@@ -421,3 +425,78 @@ Manter os arquivos de instucao e manuais, documentos
 **Critérios de aceite:**
 - Finalizar chat → `departmentId` é limpo (não roteia automaticamente no próximo contato).
 - Próximo contato do cliente → seleção de setor é solicitada novamente.
+
+---
+
+## ✅ Ajustes validados (12/01 e 13/01/2026)
+
+### 22. Upgrade/DB Migrations (seguro em produção) + documentação de upgrade
+**Status:** ✅ Concluído  
+**Prioridade:** Alta  
+**Commits:** `669d956`, `12b3202`  
+**Resumo:**
+- Migração principal (`backend/scripts/migrate.js`) ficou **idempotente** e segura: não reseta senha do admin em upgrades por padrão.
+- Controle explícito por env: `RESET_ADMIN_PASSWORD=true` e (opcional) `SEED_ADMIN_PASSWORD`.
+- Ajustes de schema/upgrade para **tags** e **stickers** (colunas/índices).
+- Docs: guia de upgrade pós-`git pull` em `docs/README_UPGRADE.md` + link no `README.md`.
+
+**Critério de aceite:**
+- Rodar `npm --prefix backend run migrate` múltiplas vezes sem efeitos colaterais (exceto quando `RESET_ADMIN_PASSWORD=true`).
+
+---
+
+### 23. Chats compartilhados por tenant + Admin com acesso total
+**Status:** ✅ Concluído  
+**Prioridade:** Alta  
+**Commits:** `5adb10e`, `aa34ca2`  
+**Resumo:**
+- Chats persistidos/consultados como dados do **tenant** (owner ADMIN) para que agentes/admin vejam o mesmo histórico.
+- Admin pode **interagir/transferir/finalizar** qualquer chat, mesmo se estiver atribuído a outro agente.
+
+**Critério de aceite:**
+- AGENT vê chats do(s) departamento(s) corretos; ADMIN consegue atuar em todos sem bloqueio “já atribuído”.
+
+---
+
+### 24. Chatbot config em banco + seed automático
+**Status:** ✅ Concluído  
+**Prioridade:** Alta  
+**Commit:** `d9e1dd8`  
+**Resumo:**
+- Persistência via endpoints dedicados: `GET/PUT /api/chatbot-config`.
+- Auto-seed: se não existir config, backend cria um padrão e retorna (sem sobrescrever se já existir).
+
+**Critério de aceite:**
+- Configurar chatbot na UI → recarregar página → configuração permanece (DB).
+
+---
+
+### 25. Abas de grupos + regras de comportamento (nunca automatizar em grupos)
+**Status:** ✅ Concluído  
+**Prioridade:** Alta  
+**Commits:** `265ac14`, `7c51e80`, `02fac1f`, `e9b6f1d`, `8eee773`, `55b2ee8`, `9f9e682`, `f72f63f`, `687f7e9`, `2c2ff21`  
+**Resumo:**
+- UI: nova aba **Grupos** e grupos isolados do fluxo “A Fazer/Aguardando/Finalizados”.
+- Webhook: `chats.update` cria stub no banco para grupos aparecerem mesmo sem mensagens.
+- Mensagens automáticas (**seleção de departamento/chatbot**) bloqueadas para `@g.us` em todos os pontos críticos.
+- Envio para grupos: suporta destino `@g.us` (JID), sem validação numérica.
+- Nome de grupo: prioriza `subject/name` (não `pushName` do participante); backfill para grupos antigos em `chats.update` e suporte a `groups.update/upsert` (quando existir).
+- Backend proxy (best-effort): endpoint `GET /api/evolution/groups/subjects` para buscar subject server-side quando necessário.
+
+**Critério de aceite:**
+- Grupo aparece na aba **Grupos**.
+- Grupo **nunca** recebe mensagem automática de setor/chatbot.
+- É possível enviar mensagem manualmente ao grupo.
+- Nome do grupo é atualizado automaticamente quando o subject é obtido (webhook/proxy/backfill).
+
+---
+
+### 26. Redução de ruído no console (404 repetidos)
+**Status:** ✅ Concluído  
+**Prioridade:** Média  
+**Commit:** `9bfe90f`  
+**Resumo:**
+- Ao detectar `404` em `/message/fetchMessages/<instance>`, o frontend marca o endpoint como não suportado e **para de tentar** na mesma sessão (reduz spam no F12).
+
+**Critério de aceite:**
+- Em ambiente sem proxy `/message/*`, o console não fica repetindo 404 para cada chat.
