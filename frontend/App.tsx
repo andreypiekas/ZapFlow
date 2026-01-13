@@ -279,6 +279,11 @@ interface Notification {
   type: 'info' | 'warning' | 'success' | 'error';
 }
 
+const isGroupChatId = (chatId: string | undefined | null): boolean => {
+  if (!chatId) return false;
+  return String(chatId).includes('@g.us');
+};
+
 // Função auxiliar para encontrar o operador específico do departamento
 // Retorna o primeiro usuário atribuído ao departamento (não round-robin)
 const findAvailableUserForDepartment = (
@@ -1155,8 +1160,10 @@ const App: React.FC = () => {
                                         
                                         logger.debug(`[App] 🔍 [DEBUG] syncChats: Verificando envio de mensagem de seleção - chatHasDepartment: ${chatHasDepartment}, departments.length: ${availableDepartments.length}, realChat.id: ${realChat.id}`);
                                         
+                                        const isGroup = isGroupChatId(realChat.id);
                                         // Se não tem departamento (foi desatribuído ao fechar), SEMPRE envia mensagem de seleção
-                                        if (!chatHasDepartment && availableDepartments.length > 0) {
+                                        // (NUNCA para grupos)
+                                        if (!isGroup && !chatHasDepartment && availableDepartments.length > 0) {
                                             // Envia mensagem de seleção de departamento
                                             // Tenta obter número de várias fontes
                                             const contactNumber = realChat.contactNumber || 
@@ -1206,7 +1213,7 @@ const App: React.FC = () => {
                                             }
                                         }
                                         
-                                        if (chatHasDepartment) {
+                                        if (!isGroup && chatHasDepartment) {
                                             // Se já tem departamento, pode enviar mensagem de saudação se configurado
                                             const chatbotCfg = chatbotConfig;
                                             if (chatbotCfg && chatbotCfg.isEnabled && chatbotCfg.greetingMessage) {
@@ -2306,13 +2313,14 @@ const App: React.FC = () => {
                     
                     if (realChat && !existingChat) {
                         // Novo chat encontrado - verifica se precisa enviar mensagem de seleção de setores
+                        const isGroup = isGroupChatId(realChat.id);
                         const hasUserMessages = realChat.messages.some(m => m.sender === 'user');
                         const needsDepartmentSelection = hasUserMessages && 
                             !realChat.departmentId && 
                             !realChat.departmentSelectionSent &&
                             selectionDepartments.length > 0;
                         
-                        if (needsDepartmentSelection) {
+                        if (!isGroup && needsDepartmentSelection) {
                             // Envia mensagem de seleção de setores de forma assíncrona
                             sendDepartmentSelectionMessage(
                                 apiConfig,
@@ -2348,7 +2356,7 @@ const App: React.FC = () => {
                             }).catch(err => {
                                 console.error(`[App] ❌ Erro ao enviar mensagem de seleção de setores para novo chat:`, err);
                             });
-                        } else if (hasUserMessages && !realChat.departmentId) {
+                        } else if (!isGroup && hasUserMessages && !realChat.departmentId) {
                             // Se não precisa de seleção de setores mas é novo chat sem departamento, processa chatbot
                             processChatbotMessages(apiConfig, chatbotConfig, realChat).then(result => {
                                 if (result.sent && result.type) {
@@ -4001,8 +4009,9 @@ const App: React.FC = () => {
                                 return [newChat, ...currentChats];
                             });
                             
-                            // Envia mensagem de seleção de departamento se houver departamentos configurados
-                            if (selectionDepartmentsForSelection.length > 0) {
+                            const isGroup = isGroupChatId(remoteJid);
+                            // Envia mensagem de seleção de departamento se houver departamentos configurados (NUNCA para grupos)
+                            if (!isGroup && selectionDepartmentsForSelection.length > 0) {
                                 logger.debug(`[App] 📤 [DEBUG] Socket.IO: Chat novo sem departamento - Enviando mensagem de seleção de departamento para ${remoteJid} (número: ${contactNumber})`);
                                 sendDepartmentSelectionMessage(apiConfig, contactNumber, selectionDepartmentsForSelection)
                                     .then(sent => {
