@@ -2569,125 +2569,152 @@ app.delete('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res
 // Retorna um mapa remoteJid(@g.us) -> subject/name dos grupos (best-effort).
 // IMPORTANTE: usa a config global (/api/config) armazenada no banco, então o browser
 // nunca precisa chamar a Evolution por HTTP diretamente.
-app.get('/api/evolution/groups/subjects', authenticateToken, dataLimiter, async (req, res) => {
-  try {
-    // Carrega ApiConfig global (user_id NULL/0)
-    let configRes = await pool.query(
-      `SELECT data_value FROM user_data WHERE user_id IS NULL AND data_type = 'config' AND data_key = 'apiConfig' LIMIT 1`
+const EVOLUTION_GROUP_SUBJECTS_TTL_MS = 5 * 60 * 1000; // 5 min
+const evolutionGroupSubjectsCache = new Map(); // key -> { fetchedAt, subjects, source }
+
+const normalizeEvolutionJidKey = (jid) => String(jid || '').trim().replace(/\s+/g, '').toLowerCase();
+
+const extractGroupsFromEvolutionResponse = (data) => {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  const cands = [
+    data.groups,
+    data.data,
+    data.response,
+    data?.response?.groups,
+    data?.response?.data,
+    data.result,
+    data?.result?.groups
+  ];
+  for (const c of cands) {
+    if (Array.isArray(c)) return c;
+  }
+  if (data && typeof data === 'object') {
+    const values = Object.values(data);
+    if (values.length && values.every(v => v && typeof v === 'object')) return values;
+  }
+  return [];
+};
+
+const pickGroupTitleFromItem = (g) => String(
+  g?.subject || g?.name || g?.groupSubject || g?.groupName || g?.title || g?.topic || ''
+).trim();
+
+const isPlaceholderGroupName = (name) => {
+  const n = String(name || '').trim();
+  if (!n) return true;
+  if (/^\d+$/.test(n)) return true;
+  return n.toLowerCase().startsWith('grupo ') || n.toLowerCase().startsWith('group ');
+};
+
+const loadGlobalApiConfigFromDb = async () => {
+  let configRes = await pool.query(
+    `SELECT data_value FROM user_data WHERE user_id IS NULL AND data_type = 'config' AND data_key = 'apiConfig' LIMIT 1`
+  );
+  if (configRes.rows.length === 0) {
+    configRes = await pool.query(
+      `SELECT data_value FROM user_data WHERE user_id = 0 AND data_type = 'config' AND data_key = 'apiConfig' LIMIT 1`
     );
-    if (configRes.rows.length === 0) {
-      configRes = await pool.query(
-        `SELECT data_value FROM user_data WHERE user_id = 0 AND data_type = 'config' AND data_key = 'apiConfig' LIMIT 1`
-      );
-    }
-
-    if (configRes.rows.length === 0) {
-      return res.status(400).json({ success: false, error: 'Config global (apiConfig) não encontrada' });
-    }
-
-    const apiConfig = typeof configRes.rows[0].data_value === 'string'
+  }
+  if (configRes.rows.length === 0) return null;
+  try {
+    return typeof configRes.rows[0].data_value === 'string'
       ? JSON.parse(configRes.rows[0].data_value)
       : configRes.rows[0].data_value;
+  } catch {
+    return null;
+  }
+};
 
-    const baseUrl = String(apiConfig?.baseUrl || '').trim().replace(/\/+$/, '');
-    const authKey = String(apiConfig?.authenticationApiKey || apiConfig?.apiKey || '').trim();
-    const instanceName = String(req.query?.instanceName || apiConfig?.instanceName || '').trim();
-
-    if (!baseUrl || !authKey || !instanceName) {
-      return res.status(400).json({
-        success: false,
-        error: 'Evolution não configurada (baseUrl/authKey/instanceName)'
-      });
+const getFetchFunction = async () => {
+  try {
+    let fetchFunction = globalThis.fetch || fetch;
+    if (!fetchFunction) {
+      const nodeFetch = await import('node-fetch');
+      fetchFunction = nodeFetch.default;
     }
+    return fetchFunction;
+  } catch {
+    return null;
+  }
+};
 
-    // Usa fetch nativo (Node 18+) ou node-fetch fallback
-    let fetchFunction;
+const fetchEvolutionGroupSubjectsBestEffort = async ({ baseUrl, authKey, instanceName }) => {
+  const fetchFunction = await getFetchFunction();
+  if (!fetchFunction) return { subjects: {}, source: 'no_fetch' };
+
+  const headers = { 'apikey': authKey };
+  const candidates = [
+    { method: 'GET', path: `/group/findGroups/${instanceName}` },
+    { method: 'POST', path: `/group/findGroups/${instanceName}`, body: {} },
+    { method: 'GET', path: `/group/fetchAllGroups/${instanceName}` },
+    { method: 'GET', path: `/group/list/${instanceName}` },
+    { method: 'GET', path: `/group/groups/${instanceName}` }
+  ];
+
+  const subjects = {};
+  for (const c of candidates) {
     try {
-      fetchFunction = globalThis.fetch || fetch;
-      if (!fetchFunction) {
-        const nodeFetch = await import('node-fetch');
-        fetchFunction = nodeFetch.default;
+      const url = `${baseUrl}${c.path}`;
+      const r = await fetchFunction(url, {
+        method: c.method,
+        headers: { ...headers, ...(c.method === 'POST' ? { 'Content-Type': 'application/json' } : {}) },
+        body: c.method === 'POST' ? JSON.stringify(c.body || {}) : undefined
+      });
+
+      if (r.status === 404) continue;
+      if (!r.ok) continue;
+
+      const json = await r.json().catch(() => null);
+      const groups = extractGroupsFromEvolutionResponse(json);
+
+      for (const g of groups) {
+        const jidRaw = g?.remoteJid || g?.jid || g?.id || g?.groupJid;
+        const jid = normalizeEvolutionJidKey(jidRaw);
+        if (!jid || !jid.includes('@g.us')) continue;
+        const title = pickGroupTitleFromItem(g);
+        if (!title) continue;
+        subjects[jid] = title;
+      }
+
+      if (Object.keys(subjects).length > 0) {
+        return { subjects, source: c.path };
       }
     } catch {
-      fetchFunction = null;
+      // tenta próximo
     }
+  }
 
-    if (!fetchFunction) {
-      return res.status(500).json({ success: false, error: 'Fetch não disponível no servidor' });
-    }
+  return { subjects: {}, source: 'none' };
+};
 
-    const headers = { 'apikey': authKey };
+const getEvolutionGroupSubjectsCached = async (instanceName) => {
+  const cfg = await loadGlobalApiConfigFromDb();
+  if (!cfg) return { subjects: {}, source: 'no_config' };
 
-    const candidates = [
-      { method: 'GET', path: `/group/findGroups/${instanceName}` },
-      { method: 'POST', path: `/group/findGroups/${instanceName}`, body: {} },
-      { method: 'GET', path: `/group/fetchAllGroups/${instanceName}` },
-      { method: 'GET', path: `/group/list/${instanceName}` },
-      { method: 'GET', path: `/group/groups/${instanceName}` }
-    ];
+  const baseUrl = String(cfg?.baseUrl || '').trim().replace(/\/+$/, '');
+  const authKey = String(cfg?.authenticationApiKey || cfg?.apiKey || '').trim();
+  const inst = String(instanceName || cfg?.instanceName || '').trim();
 
-    const extractGroups = (data) => {
-      if (!data) return [];
-      if (Array.isArray(data)) return data;
-      const cands = [
-        data.groups,
-        data.data,
-        data.response,
-        data?.response?.groups,
-        data?.response?.data,
-        data.result,
-        data?.result?.groups
-      ];
-      for (const c of cands) {
-        if (Array.isArray(c)) return c;
-      }
-      if (data && typeof data === 'object') {
-        const values = Object.values(data);
-        if (values.length && values.every(v => v && typeof v === 'object')) return values;
-      }
-      return [];
-    };
+  if (!baseUrl || !authKey || !inst) return { subjects: {}, source: 'missing_fields' };
 
-    const normalizeJid = (jid) => String(jid || '').trim().replace(/\s+/g, '').toLowerCase();
+  const cacheKey = `${baseUrl}::${authKey.slice(0, 8)}::${inst}`;
+  const cached = evolutionGroupSubjectsCache.get(cacheKey);
+  const now = Date.now();
+  if (cached && (now - cached.fetchedAt) < EVOLUTION_GROUP_SUBJECTS_TTL_MS) {
+    return { subjects: cached.subjects || {}, source: cached.source || 'cache' };
+  }
 
-    const subjects = {};
-    for (const c of candidates) {
-      try {
-        const url = `${baseUrl}${c.path}`;
-        const r = await fetchFunction(url, {
-          method: c.method,
-          headers: { ...headers, ...(c.method === 'POST' ? { 'Content-Type': 'application/json' } : {}) },
-          body: c.method === 'POST' ? JSON.stringify(c.body || {}) : undefined
-        });
+  const fetched = await fetchEvolutionGroupSubjectsBestEffort({ baseUrl, authKey, instanceName: inst });
+  evolutionGroupSubjectsCache.set(cacheKey, { fetchedAt: now, subjects: fetched.subjects || {}, source: fetched.source });
+  return fetched;
+};
 
-        if (r.status === 404) continue;
-        if (!r.ok) continue;
-
-        const json = await r.json().catch(() => null);
-        const groups = extractGroups(json);
-
-        for (const g of groups) {
-          const jidRaw = g?.remoteJid || g?.jid || g?.id || g?.groupJid;
-          const jid = normalizeJid(jidRaw);
-          if (!jid || !jid.includes('@g.us')) continue;
-          const title = String(
-            g?.subject || g?.name || g?.groupSubject || g?.groupName || g?.title || g?.topic || ''
-          ).trim();
-          if (!title) continue;
-          subjects[jid] = title;
-        }
-
-        // Se conseguimos qualquer coisa, retorna já
-        if (Object.keys(subjects).length > 0) {
-          return res.json({ success: true, subjects, source: c.path });
-        }
-      } catch {
-        // tenta próximo candidato
-      }
-    }
-
-    // Se nenhum endpoint funcionou, devolve vazio (best-effort) — frontend mantém fallback.
-    return res.json({ success: true, subjects: {}, source: 'none' });
+app.get('/api/evolution/groups/subjects', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const instanceName = String(req.query?.instanceName || '').trim() || undefined;
+    const fetched = await getEvolutionGroupSubjectsCached(instanceName);
+    return res.json({ success: true, subjects: fetched.subjects || {}, source: fetched.source || 'none' });
   } catch (error) {
     console.error('[GET /api/evolution/groups/subjects] Erro:', error);
     res.status(500).json({ success: false, error: 'Erro ao buscar subjects de grupos' });
@@ -2960,6 +2987,8 @@ const handleWebhookEvolution = async (req, res) => {
         ? event.data
         : (event.data ? [event.data] : []);
 
+      const instanceNameFromEvent = String(event.instance || event.instanceName || '').trim() || undefined;
+
       // Usa o primeiro ADMIN como owner do tenant (single-tenant)
       const adminRes = await pool.query(`SELECT id FROM users WHERE role = 'ADMIN' ORDER BY id ASC LIMIT 1`);
       const ownerUserId = adminRes.rows?.[0]?.id || null;
@@ -2997,13 +3026,36 @@ const handleWebhookEvolution = async (req, res) => {
           const nowIso = new Date().toISOString();
           const isGroup = remoteJid.includes('@g.us');
 
+          // Se for grupo e o nome atual for placeholder, tenta obter o subject real via Evolution (server-side, com cache).
+          let resolvedGroupName = null;
+          if (isGroup) {
+            const currentName = (chatData?.contactName && String(chatData.contactName).trim()) ? String(chatData.contactName).trim() : '';
+            const payloadName = String(item?.name || item?.subject || item?.groupSubject || item?.groupName || '').trim();
+
+            if (payloadName) {
+              resolvedGroupName = payloadName;
+            } else if (!currentName || isPlaceholderGroupName(currentName)) {
+              try {
+                const fetched = await getEvolutionGroupSubjectsCached(instanceNameFromEvent);
+                const key = normalizeEvolutionJidKey(remoteJid);
+                const subj = fetched?.subjects?.[key];
+                if (subj && String(subj).trim()) {
+                  resolvedGroupName = String(subj).trim();
+                }
+              } catch {
+                // ignore (best-effort)
+              }
+            }
+          }
+
           const next = {
             ...(chatData && typeof chatData === 'object' ? chatData : {}),
             id: remoteJid,
             // Se não houver nome, dá um fallback visível. Para grupos, pelo menos exibe "Grupo" + sufixo.
             contactName:
-              (chatData?.contactName && String(chatData.contactName).trim()) ? chatData.contactName :
-              (isGroup ? `Grupo ${remoteJid.split('@')[0]}` : remoteJid.split('@')[0]),
+              resolvedGroupName ||
+              ((chatData?.contactName && String(chatData.contactName).trim()) ? chatData.contactName :
+                (isGroup ? `Grupo ${remoteJid.split('@')[0]}` : remoteJid.split('@')[0])),
             // Para grupos não há "número" útil; manter vazio evita validações de envio.
             contactNumber: isGroup ? (chatData?.contactNumber || '') : (chatData?.contactNumber || remoteJid.split('@')[0]),
             // Mantém status atual; se não existir, assume open para aparecer em listas.

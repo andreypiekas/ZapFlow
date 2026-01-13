@@ -3064,13 +3064,27 @@ export const sendDepartmentSelectionMessage = async (
     phone: string,
     departments: Department[]
 ): Promise<boolean> => {
+    const raw = String(phone || '').trim();
+
+    // Segurança: NUNCA enviar seleção automática para grupos.
+    // Alguns fluxos passam o ID numérico do grupo (sem "@g.us"), então também bloqueamos números longos.
+    if (raw.includes('@g.us')) {
+        console.warn('[sendDepartmentSelectionMessage] Ignorando envio para grupo:', raw);
+        return false;
+    }
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length > 14) {
+        console.warn('[sendDepartmentSelectionMessage] Ignorando envio para destino não-numérico (provável grupo/lista):', raw);
+        return false;
+    }
+
     if (departments.length === 0) {
         console.warn('[sendDepartmentSelectionMessage] Nenhum departamento disponível');
         return false;
     }
 
     // Usa o mesmo normalizador do envio real (evita duplicação por formato com/sem 55)
-    const phoneKey = formatPhoneForApi(phone);
+    const phoneKey = formatPhoneForApi(raw);
     if (!phoneKey) return false;
 
     const now = Date.now();
