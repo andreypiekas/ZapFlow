@@ -4004,14 +4004,17 @@ const App: React.FC = () => {
                         
                         // Extrai número do JID
                         const contactNumber = remoteJid.split('@')[0]?.replace(/\D/g, '') || '';
+                        const isGroup = String(remoteJid).includes('@g.us');
                         
-                        if (contactNumber.length >= 10) {
+                        if (isGroup || contactNumber.length >= 10) {
                             // Cria novo chat
+                            const displayName = isGroup ? `Grupo ${remoteJid.split('@')[0]}` : (messageData?.pushName || messageData?.key?.pushName || contactNumber);
+                            const contactNumberForChat = isGroup ? remoteJid : contactNumber;
                             const newChat: Chat = {
                                 id: remoteJid,
-                                contactName: messageData?.pushName || messageData?.key?.pushName || contactNumber,
-                                contactNumber: contactNumber,
-                                contactAvatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(messageData?.pushName || messageData?.key?.pushName || contactNumber)}`,
+                                contactName: displayName,
+                                contactNumber: contactNumberForChat,
+                                contactAvatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}`,
                                 departmentId: null,
                                 unreadCount: 1,
                                 lastMessage: mapped.type === 'text' ? mapped.content : `📷 ${mapped.type}`,

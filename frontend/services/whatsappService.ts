@@ -2008,7 +2008,20 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
                 .sort((a: any, b: any) => a.timestamp.getTime() - b.timestamp.getTime());
 
             const lastMsg = messages.length > 0 ? messages[messages.length - 1] : null;
-            const name = item.raw.pushName || item.raw.name || (validNumber || item.id.split('@')[0]);
+            const isGroup = item.id.includes('@g.us');
+            // IMPORTANTE:
+            // - Para grupos, `pushName` costuma ser o nome do participante/remetente e NÃO o nome do grupo.
+            //   Então priorizamos `raw.name/subject` para manter o nome real do grupo.
+            // - Para contatos, `pushName` é útil quando o contato não está salvo.
+            const groupTitle =
+              item.raw?.name ||
+              item.raw?.subject ||
+              item.raw?.groupSubject ||
+              item.raw?.groupName ||
+              '';
+            const name = isGroup
+              ? (groupTitle || item.id.split('@')[0])
+              : (item.raw.pushName || item.raw.name || (validNumber || item.id.split('@')[0]));
             
             // Define ID e contactNumber: SEMPRE usa número válido se encontrou
             let chatId: string;
