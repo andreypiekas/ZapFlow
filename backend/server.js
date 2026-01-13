@@ -2578,6 +2578,8 @@ const handleWebhookEvolution = async (req, res) => {
   try {
     const event = req.body;
     const eventType = event.event || event.type || req.params.eventName || 'unknown';
+    const eventTypeNormalized = String(eventType || '').trim();
+    const eventTypeKey = eventTypeNormalized.toLowerCase().replace(/-/g, '.');
 
     // Segurança opcional: se WEBHOOK_SECRET/EVOLUTION_WEBHOOK_SECRET estiver definido,
     // exige header "X-Webhook-Secret" (para evitar spam/abuso externo).
@@ -2613,8 +2615,8 @@ const handleWebhookEvolution = async (req, res) => {
     // - eventType: 'messages.upsert', 'MESSAGES_UPSERT', etc.
     // - event.event: 'messages.upsert'
     // - Estrutura: event.data?.messages ou event.messages ou event.data
-    const isMessagesEvent = eventType?.toLowerCase().includes('messages.upsert') || 
-                           eventType?.toUpperCase().includes('MESSAGES_UPSERT') ||
+    const isMessagesEvent = eventTypeKey.includes('messages.upsert') ||
+                           eventTypeNormalized?.toUpperCase().includes('MESSAGES_UPSERT') ||
                            event.event?.toLowerCase() === 'messages.upsert' ||
                            event.event?.toUpperCase() === 'MESSAGES_UPSERT';
     
@@ -2814,6 +2816,92 @@ const handleWebhookEvolution = async (req, res) => {
         processed,
         event: eventType 
       });
+    }
+
+    // ============================================================================
+    // Chats Update (ex.: criação de grupos / mudanças de chat sem mensagem)
+    // - Objetivo: garantir que chats de grupo (@g.us) apareçam na UI mesmo sem mensagens
+    // - Persistência: user_data (tenant/owner do ADMIN) em data_type='chats', data_key=remoteJid
+    // ============================================================================
+    const isChatsUpdateEvent = eventTypeKey === 'chats.update' || eventTypeKey.includes('chats.update');
+    if (isChatsUpdateEvent) {
+      const items = Array.isArray(event.data)
+        ? event.data
+        : (event.data ? [event.data] : []);
+
+      // Usa o primeiro ADMIN como owner do tenant (single-tenant)
+      const adminRes = await pool.query(`SELECT id FROM users WHERE role = 'ADMIN' ORDER BY id ASC LIMIT 1`);
+      const ownerUserId = adminRes.rows?.[0]?.id || null;
+
+      let upserted = 0;
+
+      if (!ownerUserId) {
+        return res.status(200).json({ received: true, processed: 0, ignored: true, reason: 'no_admin_owner' });
+      }
+
+      for (const item of items) {
+        const remoteJid = item?.remoteJid ? String(item.remoteJid) : '';
+        if (!remoteJid) continue;
+
+        // Cria/atualiza um "stub" de chat (principalmente útil para grupos sem mensagens)
+        try {
+          const existing = await pool.query(
+            `SELECT data_value FROM user_data
+             WHERE user_id = $1 AND data_type = 'chats' AND data_key = $2
+             LIMIT 1`,
+            [ownerUserId, remoteJid]
+          );
+
+          let chatData = null;
+          if (existing.rows.length > 0) {
+            try {
+              chatData = typeof existing.rows[0].data_value === 'string'
+                ? JSON.parse(existing.rows[0].data_value)
+                : existing.rows[0].data_value;
+            } catch {
+              chatData = null;
+            }
+          }
+
+          const nowIso = new Date().toISOString();
+          const isGroup = remoteJid.includes('@g.us');
+
+          const next = {
+            ...(chatData && typeof chatData === 'object' ? chatData : {}),
+            id: remoteJid,
+            // Se não houver nome, dá um fallback visível. Para grupos, pelo menos exibe "Grupo" + sufixo.
+            contactName:
+              (chatData?.contactName && String(chatData.contactName).trim()) ? chatData.contactName :
+              (isGroup ? `Grupo ${remoteJid.split('@')[0]}` : remoteJid.split('@')[0]),
+            // Para grupos não há "número" útil; manter vazio evita validações de envio.
+            contactNumber: isGroup ? (chatData?.contactNumber || '') : (chatData?.contactNumber || remoteJid.split('@')[0]),
+            // Mantém status atual; se não existir, assume open para aparecer em listas.
+            status: chatData?.status || 'open',
+            lastMessage: chatData?.lastMessage || '',
+            lastMessageTime: chatData?.lastMessageTime || nowIso,
+            messages: Array.isArray(chatData?.messages) ? chatData.messages : [],
+            // Preserve fields used by routing/assignment if already present
+            departmentId: chatData?.departmentId ?? null,
+            assignedTo: chatData?.assignedTo,
+            awaitingDepartmentSelection: chatData?.awaitingDepartmentSelection ?? false,
+            departmentSelectionSent: chatData?.departmentSelectionSent ?? false,
+            updatedAt: nowIso
+          };
+
+          await pool.query(
+            `INSERT INTO user_data (user_id, data_type, data_key, data_value)
+             VALUES ($1, 'chats', $2, $3)
+             ON CONFLICT (COALESCE(user_id, 0), data_type, data_key)
+             DO UPDATE SET data_value = $3, updated_at = CURRENT_TIMESTAMP`,
+            [ownerUserId, remoteJid, JSON.stringify(next)]
+          );
+          upserted++;
+        } catch (e) {
+          console.error('[WEBHOOK] Erro ao upsert chat (chats.update):', e);
+        }
+      }
+
+      return res.status(200).json({ received: true, processed: upserted, event: eventType });
     }
     
     // Para outros eventos, apenas confirma recebimento
