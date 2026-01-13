@@ -607,6 +607,45 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
   }
 });
 
+// ============================================================================
+// Tenant/Owner resolution (single-tenant by default)
+// - Algumas entidades são compartilhadas entre usuários (ex.: chats)
+// - Estratégia:
+//   - ADMIN: owner = ele mesmo
+//   - AGENT: tenta inferir owner via departments.user_id (user_departments -> departments)
+//            fallback: primeiro ADMIN (single-tenant)
+// ============================================================================
+const resolveAdminOwnerId = async () => {
+  const adminRes = await pool.query(`SELECT id FROM users WHERE role = 'ADMIN' ORDER BY id ASC LIMIT 1`);
+  return adminRes.rows?.[0]?.id || null;
+};
+
+const resolveTenantOwnerId = async (req) => {
+  if (req.user?.role === 'ADMIN') return req.user.id;
+
+  // 1) Inferir pelo vínculo user_departments -> departments.user_id
+  try {
+    const ownerResult = await pool.query(
+      `
+        SELECT d.user_id
+        FROM user_departments ud
+        JOIN departments d ON d.id = ud.department_id
+        WHERE ud.user_id = $1
+        ORDER BY d.user_id ASC
+        LIMIT 1
+      `,
+      [req.user.id]
+    );
+    if (ownerResult.rows.length > 0 && ownerResult.rows[0].user_id) {
+      return ownerResult.rows[0].user_id;
+    }
+  } catch {}
+
+  // 2) Fallback: primeiro ADMIN (instalação single-tenant)
+  const adminId = await resolveAdminOwnerId();
+  return adminId || req.user.id;
+};
+
 // Rotas de dados do usuário
 // Aplicar rate limiting nas rotas de dados (após autenticação)
 app.get('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res) => {
@@ -630,6 +669,8 @@ app.get('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res) 
     // Portanto, para `webhook_messages` precisamos permitir leitura do registro global (user_id IS NULL)
     // mantendo autenticação (apenas usuários logados).
     const isWebhookMessages = safeDataType === 'webhook_messages';
+    const isSharedTenantData = safeDataType === 'chats';
+    const effectiveUserId = isSharedTenantData ? await resolveTenantOwnerId(req) : req.user.id;
 
     let query;
     let params;
@@ -652,7 +693,7 @@ app.get('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res) 
       params = [safeDataType, safeKey, req.user.id];
     } else {
       query = 'SELECT data_value, data_key FROM user_data WHERE user_id = $1 AND data_type = $2';
-      params = [req.user.id, safeDataType];
+      params = [effectiveUserId, safeDataType];
 
       if (safeKey) {
         query += ' AND data_key = $3';
@@ -734,6 +775,9 @@ app.post('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res)
       return res.status(400).json({ error: 'key e value são obrigatórios' });
     }
 
+    const isSharedTenantData = safeDataType === 'chats';
+    const effectiveUserId = isSharedTenantData ? await resolveTenantOwnerId(req) : req.user.id;
+
     // Usa a expressão do índice funcional no ON CONFLICT
     // O índice é: (COALESCE(user_id, 0), data_type, data_key)
     await pool.query(
@@ -741,7 +785,7 @@ app.post('/api/data/:dataType', authenticateToken, dataLimiter, async (req, res)
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (COALESCE(user_id, 0), data_type, data_key)
        DO UPDATE SET data_value = $4, updated_at = CURRENT_TIMESTAMP`,
-      [req.user.id, safeDataType, safeKey, JSON.stringify(value)]
+      [effectiveUserId, safeDataType, safeKey, JSON.stringify(value)]
     );
 
     res.json({ success: true });
@@ -771,11 +815,14 @@ app.put('/api/data/:dataType/:key', authenticateToken, dataLimiter, async (req, 
       return res.status(400).json({ error: 'value é obrigatório' });
     }
 
+    const isSharedTenantData = safeDataType === 'chats';
+    const effectiveUserId = isSharedTenantData ? await resolveTenantOwnerId(req) : req.user.id;
+
     await pool.query(
       `UPDATE user_data 
        SET data_value = $1, updated_at = CURRENT_TIMESTAMP
        WHERE user_id = $2 AND data_type = $3 AND data_key = $4`,
-      [JSON.stringify(value), req.user.id, safeDataType, safeKey]
+      [JSON.stringify(value), effectiveUserId, safeDataType, safeKey]
     );
 
     res.json({ success: true });
@@ -799,9 +846,12 @@ app.delete('/api/data/:dataType/:key', authenticateToken, dataLimiter, async (re
       return res.status(400).json({ error: 'key inválido' });
     }
 
+    const isSharedTenantData = safeDataType === 'chats';
+    const effectiveUserId = isSharedTenantData ? await resolveTenantOwnerId(req) : req.user.id;
+
     await pool.query(
       'DELETE FROM user_data WHERE user_id = $1 AND data_type = $2 AND data_key = $3',
-      [req.user.id, safeDataType, safeKey]
+      [effectiveUserId, safeDataType, safeKey]
     );
 
     res.json({ success: true });
@@ -818,10 +868,6 @@ app.delete('/api/data/:dataType/:key', authenticateToken, dataLimiter, async (re
 //   - ADMIN: gerencia e é o "owner" das tags
 //   - AGENT: lê tags do primeiro ADMIN (para compartilhar configuração)
 // ============================================================================
-const resolveAdminOwnerId = async () => {
-  const adminRes = await pool.query(`SELECT id FROM users WHERE role = 'ADMIN' ORDER BY id ASC LIMIT 1`);
-  return adminRes.rows?.[0]?.id || null;
-};
 
 const resolveTagsOwnerId = async (req) => {
   if (req.user?.role === 'ADMIN') return req.user.id;
@@ -2174,6 +2220,9 @@ app.post('/api/data/:dataType/batch', authenticateToken, dataLimiter, async (req
       return res.status(400).json({ error: 'dataType inválido' });
     }
 
+    const isSharedTenantData = safeDataType === 'chats';
+    const effectiveUserId = isSharedTenantData ? await resolveTenantOwnerId(req) : req.user.id;
+
     const data = req.body?.data; // { key1: value1, key2: value2, ... }
 
     if (!data || typeof data !== 'object') {
@@ -2195,7 +2244,7 @@ app.post('/api/data/:dataType/batch', authenticateToken, dataLimiter, async (req
            VALUES ($1, $2, $3, $4)
            ON CONFLICT (COALESCE(user_id, 0), data_type, data_key)
            DO UPDATE SET data_value = $4, updated_at = CURRENT_TIMESTAMP`,
-          [req.user.id, safeDataType, safeKey, JSON.stringify(value)]
+          [effectiveUserId, safeDataType, safeKey, JSON.stringify(value)]
         );
       }
 
@@ -2231,15 +2280,18 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
 
     // Decodifica o chatId (pode vir URL encoded)
     const decodedChatId = decodeURIComponent(chatId);
+
+    // Chats são dados compartilhados do tenant (owner = admin/tenant)
+    const ownerUserId = await resolveTenantOwnerId(req);
     
-    console.log(`[PUT /api/chats/:chatId] Atualizando chat: ${decodedChatId}, user_id: ${req.user.id}, status: ${status}, assignedTo: ${assignedTo}, departmentId: ${departmentId}`);
+    console.log(`[PUT /api/chats/:chatId] Atualizando chat: ${decodedChatId}, owner_user_id: ${ownerUserId}, actor_user_id: ${req.user.id}, status: ${status}, assignedTo: ${assignedTo}, departmentId: ${departmentId}`);
 
     // Se o chat não existe, cria um novo registro com apenas os campos fornecidos
     // Isso permite atualizar chats que ainda não foram salvos no banco
     let chatResult = await pool.query(
       `SELECT data_value FROM user_data 
        WHERE user_id = $1 AND data_type = 'chats' AND data_key = $2`,
-      [req.user.id, decodedChatId]
+      [ownerUserId, decodedChatId]
     );
 
     let chatData = null;
@@ -2261,7 +2313,7 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
       chatResult = await pool.query(
         `SELECT data_value FROM user_data 
          WHERE user_id = $1 AND data_type = 'chats' AND data_key = 'default'`,
-        [req.user.id]
+        [ownerUserId]
       );
 
       if (chatResult.rows.length > 0) {
@@ -2339,7 +2391,7 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
        VALUES ($1, $2, $3, $4)
        ON CONFLICT (COALESCE(user_id, 0), data_type, data_key)
        DO UPDATE SET data_value = $4, updated_at = CURRENT_TIMESTAMP`,
-      [req.user.id, 'chats', decodedChatId, JSON.stringify(chatData)]
+      [ownerUserId, 'chats', decodedChatId, JSON.stringify(chatData)]
     );
 
     console.log(`[PUT /api/chats/:chatId] Chat atualizado com sucesso: chatId=${decodedChatId}, status=${chatData.status}, assignedTo=${chatData.assignedTo}`);
@@ -2360,12 +2412,15 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
 app.delete('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) => {
   try {
     // Verifica se o usuário é admin
-    if (req.user.role !== 'admin') {
+    if (req.user.role !== 'ADMIN') {
       return res.status(403).json({ error: 'Apenas administradores podem deletar chats' });
     }
 
     const { chatId } = req.params;
     const decodedChatId = decodeURIComponent(chatId);
+
+    // Chats/config são do tenant (owner = admin/tenant)
+    const ownerUserId = await resolveTenantOwnerId(req);
 
     console.log(`[DELETE /api/chats/:chatId] Deletando chat: ${decodedChatId} (usuário: ${req.user.username})`);
 
@@ -2373,7 +2428,7 @@ app.delete('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res
     const chatResult = await pool.query(
       `SELECT data_value FROM user_data 
        WHERE user_id = $1 AND data_type = 'chats' AND data_key = $2`,
-      [req.user.id, decodedChatId]
+      [ownerUserId, decodedChatId]
     );
 
     let chatData = null;
@@ -2389,7 +2444,7 @@ app.delete('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res
     const configResult = await pool.query(
       `SELECT data_value FROM user_data 
        WHERE user_id = $1 AND data_type = 'config' AND data_key = 'default'`,
-      [req.user.id]
+      [ownerUserId]
     );
 
     let apiConfig = null;
@@ -2456,7 +2511,7 @@ app.delete('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res
     const deleteResult = await pool.query(
       `DELETE FROM user_data 
        WHERE user_id = $1 AND data_type = 'chats' AND data_key = $2`,
-      [req.user.id, decodedChatId]
+      [ownerUserId, decodedChatId]
     );
 
     if (deleteResult.rowCount > 0) {

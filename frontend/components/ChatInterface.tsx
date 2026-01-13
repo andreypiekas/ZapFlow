@@ -478,6 +478,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   };
 
   // Derived States for Assignment
+  const isAdmin = currentUser?.role === 'ADMIN';
   const isAssigned = !!selectedChat?.assignedTo;
   const isAssignedToMe = selectedChat?.assignedTo === currentUser.id;
 
@@ -3625,7 +3626,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
             {/* Input Area or Assume Button */}
             {selectedChat.status !== 'closed' ? (
                 <>
-                {isAssigned && !isAssignedToMe ? (
+                {isAssigned && !isAssignedToMe && !isAdmin ? (
                      <div className="p-4 bg-[#0D0F13] text-center border-t border-[#111316]">
                         <p className="text-slate-300 text-sm flex items-center justify-center gap-2">
                             <Lock size={16} strokeWidth={2} /> 
@@ -3633,7 +3634,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         </p>
                         <p className="text-xs text-slate-500 mt-1">Modo apenas visualização.</p>
                      </div>
-                ) : !isAssigned ? (
+                ) : (!isAssigned && !isAdmin) ? (
                     <div className="p-4 bg-[#0D0F13] border-t border-[#111316] flex flex-col items-center justify-center gap-3">
                         <p className="text-slate-300 font-medium">Este chat ainda não possui um responsável.</p>
                         <button 
