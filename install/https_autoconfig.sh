@@ -10,6 +10,7 @@
 #   - /instance/   -> Evolution API 8080
 #   - /message/    -> Evolution API 8080
 #   - /chat/       -> Evolution API 8080
+#   - /group/      -> Evolution API 8080
 #   - /socket.io/  -> Evolution WebSocket (wss) 8080
 #
 # Requisitos: Ubuntu/Debian + sudo
@@ -73,6 +74,24 @@ set_env_value() {
   local value="$3"
 
   [ -f "$file" ] || return 0
+
+  if grep -qE "^${key}=" "$file"; then
+    sudo sed -i "s|^${key}=.*|${key}=${value}|g" "$file"
+  else
+    echo "${key}=${value}" | sudo tee -a "$file" >/dev/null
+  fi
+}
+
+set_dotenv_value() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+
+  # Cria .env se não existir (Docker Compose lê automaticamente)
+  if [ ! -f "$file" ]; then
+    sudo touch "$file"
+    sudo chmod 600 "$file" || true
+  fi
 
   if grep -qE "^${key}=" "$file"; then
     sudo sed -i "s|^${key}=.*|${key}=${value}|g" "$file"
@@ -204,7 +223,7 @@ server {
   }
 
   # Evolution REST endpoints usados pelo frontend
-  location ~ ^/(instance|message|chat)/ {
+  location ~ ^/(instance|message|chat|group)/ {
     proxy_pass http://127.0.0.1:${EVOLUTION_PORT};
     proxy_http_version 1.1;
     proxy_set_header Upgrade \$http_upgrade;
@@ -256,6 +275,14 @@ if [ -f "$BACKEND_ENV" ]; then
 else
   warning "backend/.env não encontrado. Se estiver usando proxy, adicione: TRUST_PROXY=1 e ENABLE_HSTS=true"
 fi
+
+info "Ajustando variáveis do Docker Compose (.env na raiz) para eliminar Mixed Content..."
+ROOT_ENV="${PROJECT_ROOT}/.env"
+# SERVER_IP ajuda scripts/compose e também é usado como fallback em docker-compose.yml
+set_dotenv_value "$ROOT_ENV" "SERVER_IP" "${SERVER_IP}"
+# Evolution deve anunciar URLs HTTPS (para mediaUrl/server_url e afins)
+set_dotenv_value "$ROOT_ENV" "EVOLUTION_SERVER_URL" "https://${SERVER_IP}"
+success ".env atualizado: SERVER_IP=${SERVER_IP}, EVOLUTION_SERVER_URL=https://${SERVER_IP}"
 
 echo ""
 echo -e "${GREEN}========================================${NC}"

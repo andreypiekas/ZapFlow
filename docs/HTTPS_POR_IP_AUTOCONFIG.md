@@ -31,7 +31,7 @@ O script:
   - `80 -> 443` (redirect)
   - `/` → frontend (porta 5173)
   - `/api/` → backend Node/Express (porta 3001)
-  - `/instance/`, `/message/`, `/chat/`, `/socket.io/` → Evolution (porta 8080)
+  - `/instance/`, `/message/`, `/chat/`, `/group/`, `/socket.io/` → Evolution (porta 8080)
 
 ### Pré‑requisito operacional
 
@@ -51,6 +51,19 @@ Depois de habilitar HTTPS por IP:
 - **Token da Instância**: conforme sua instância
 
 > Dica: não use porta nem `/api`. O Nginx faz o roteamento.
+
+### (Recomendado) Ajuste para eliminar Mixed Content de mídia
+
+Além do proxy, a Evolution precisa **anunciar** URLs HTTPS (senão ela pode devolver `mediaUrl` como `http://<IP>:8080/...`).
+
+- No `docker-compose.yml`, a variável já existe:
+  - `SERVER_URL=${EVOLUTION_SERVER_URL:-http://${SERVER_IP:-localhost}:8080}`
+- O `install/https_autoconfig.sh` agora grava automaticamente no `.env` da raiz:
+  - `EVOLUTION_SERVER_URL=https://<IP>`
+  - `SERVER_IP=<IP>`
+
+Depois disso, reinicie a Evolution:
+- `docker compose down && docker compose up -d`
 
 ---
 
