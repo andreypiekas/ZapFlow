@@ -481,6 +481,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   const isAdmin = currentUser?.role === 'ADMIN';
   const isAssigned = !!selectedChat?.assignedTo;
   const isAssignedToMe = selectedChat?.assignedTo === currentUser.id;
+  const canManageChat = isAssignedToMe || isAdmin;
 
   useEffect(() => {
     linkPreviewStateRef.current = linkPreviews;
@@ -3261,7 +3262,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {isDragging && selectedChat && isAssignedToMe && (
+        {isDragging && selectedChat && canManageChat && (
           <div className="absolute inset-0 z-50 bg-emerald-600/10 backdrop-blur-sm border-4 border-emerald-500 border-dashed m-4 rounded-xl flex items-center justify-center">
              <div className="bg-white p-8 rounded-full shadow-xl animate-bounce">
                 <FileIcon size={48} className="text-emerald-600" />
@@ -3372,7 +3373,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                             )}
                         </div>
 
-                        {(selectedChat.status === 'open' || selectedChat.status === 'pending') && isAssignedToMe && (
+                        {(selectedChat.status === 'open' || selectedChat.status === 'pending') && canManageChat && (
                             <>
                                 <button 
                                     onClick={() => setIsFinishingModalOpen(true)}
@@ -3648,7 +3649,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                     <div className="bg-[#0D0F13] border-t border-[#111316] p-2 md:p-3 relative z-20">
                     
                         {/* Greeting Shortcut - Shows if assigned to me, no text yet, and greeting hasn't been sent */}
-                        {isAssignedToMe && !inputText && !hasGreetingBeenSent() && (
+                        {canManageChat && !inputText && !hasGreetingBeenSent() && (
                             <div className="absolute bottom-full left-0 w-full flex justify-center pb-2 pointer-events-none">
                                 <button 
                                     onClick={handleInsertGreeting}
