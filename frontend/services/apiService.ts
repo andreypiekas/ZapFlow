@@ -670,6 +670,124 @@ class ApiService {
     }
   }
 
+  // ============================================================================
+  // TAGS
+  // ============================================================================
+  async getTags(): Promise<{ success: boolean; data?: any[]; error?: string }> {
+    try {
+      const response = await this.request<any[]>('/api/tags');
+      return { success: true, data: response };
+    } catch (error: any) {
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao listar tags:`, error);
+      }
+      return { success: false, error: error.message };
+    }
+  }
+
+  async createTag(name: string, color: string): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      const response = await this.request<any>('/api/tags', {
+        method: 'POST',
+        body: JSON.stringify({ name, color }),
+      });
+      return { success: true, data: response };
+    } catch (error: any) {
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao criar tag:`, error);
+      }
+      return { success: false, error: error.message };
+    }
+  }
+
+  async updateTag(id: string | number, name?: string, color?: string): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      const response = await this.request<any>(`/api/tags/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name, color }),
+      });
+      return { success: true, data: response };
+    } catch (error: any) {
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao atualizar tag:`, error);
+      }
+      return { success: false, error: error.message };
+    }
+  }
+
+  async deleteTag(id: string | number): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.request<{ success: boolean }>(`/api/tags/${id}`, {
+        method: 'DELETE',
+      });
+      return { success: true };
+    } catch (error: any) {
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao deletar tag:`, error);
+      }
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ============================================================================
+  // STICKERS
+  // ============================================================================
+  async getStickers(limit: number = 200): Promise<{ success: boolean; data?: any[]; error?: string }> {
+    try {
+      const response = await this.request<any[]>(`/api/stickers?limit=${encodeURIComponent(String(limit))}`);
+      return { success: true, data: response };
+    } catch (error: any) {
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao listar stickers:`, error);
+      }
+      return { success: false, error: error.message };
+    }
+  }
+
+  async deleteSticker(id: string | number): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.request<{ success: boolean }>(`/api/stickers/${id}`, {
+        method: 'DELETE',
+      });
+      return { success: true };
+    } catch (error: any) {
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao deletar sticker:`, error);
+      }
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ============================================================================
+  // CHATBOT CONFIG (DB)
+  // ============================================================================
+  async loadChatbotConfig(): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      const response = await this.request<any>('/api/chatbot-config', { method: 'GET' });
+      return { success: true, data: response };
+    } catch (error: any) {
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao carregar chatbot config:`, error);
+      }
+      return { success: false, error: error.message };
+    }
+  }
+
+  async saveChatbotConfig(config: any): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.request<{ success: boolean }>('/api/chatbot-config', {
+        method: 'PUT',
+        body: JSON.stringify(config),
+      });
+      return { success: true };
+    } catch (error: any) {
+      if (!this.isConnectionError(error)) {
+        console.error(`[ApiService] Erro ao salvar chatbot config:`, error);
+      }
+      return { success: false, error: error.message };
+    }
+  }
+
   // Health check
   async healthCheck(): Promise<boolean> {
     try {

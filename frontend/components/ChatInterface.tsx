@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Send, MoreVertical, Paperclip, Search, MessageSquare, Bot, ArrowRightLeft, Check, CheckCheck, Mic, X, File as FileIcon, Image as ImageIcon, Play, Pause, Square, Trash2, ArrowLeft, Zap, CheckCircle, ThumbsUp, Edit3, Save, ListChecks, ArrowRight, ChevronDown, ChevronUp, UserPlus, Lock, RefreshCw, Smile, Tag, Plus, Clock, User as UserIcon, AlertTriangle, Eye } from 'lucide-react';
-import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow, Contact } from '../types';
+import { Chat, Department, Message, MessageStatus, User, ApiConfig, MessageType, QuickReply, Workflow, ActiveWorkflow, Contact, Tag as TagType, Sticker as StickerType } from '../types';
 import { generateSmartReply } from '../services/geminiService';
 import { sendRealMessage, sendRealMessageWithId, sendRealMediaMessageWithId, blobToBase64, sendRealContact, sendDepartmentSelectionMessage, fetchMediaUrlByMessageId } from '../services/whatsappService';
 import { deleteChat as deleteChatApi, loadUserData, fetchLinkPreview, LinkPreview } from '../services/apiService';
-import { AVAILABLE_TAGS, EMOJIS, STICKERS } from '../constants';
+import { EMOJIS } from '../constants';
 
 interface ChatInterfaceProps {
   chats: Chat[];
@@ -16,11 +16,13 @@ interface ChatInterfaceProps {
   quickReplies?: QuickReply[];
   workflows?: Workflow[];
   contacts?: Contact[];
+  tags?: TagType[];
+  stickers?: StickerType[];
   forceSelectChatId?: string | null; // Força a seleção de um chat específico
   isViewActive?: boolean; // Indica se a view de chats está ativa
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, currentUser, onUpdateChat, onAddContact, apiConfig, quickReplies = [], workflows = [], contacts = [], forceSelectChatId, isViewActive = true }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, currentUser, onUpdateChat, onAddContact, apiConfig, quickReplies = [], workflows = [], contacts = [], tags = [], stickers = [], forceSelectChatId, isViewActive = true }) => {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   
   // Ref para rastrear o último forceSelectChatId processado
@@ -1639,7 +1641,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         mediaUrl: url
       };
 
-      updateChatWithNewMessage(newMessage);
+      const chatSnapshotAfterLocalAdd = updateChatWithNewMessage(newMessage);
       
       const targetNumber = getValidPhoneNumber(selectedChat);
       
@@ -1651,11 +1653,51 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
           return;
       }
 
-      // In real API, download blob and send
-      await sendRealMessage(apiConfig, targetNumber, "[Sticker Enviado]"); 
-      
-      setIsSending(false);
-      setShowEmojiPicker(false);
+      try {
+          const blob = await blobFromUrl(url);
+          if (!blob) {
+              throw new Error('Não foi possível obter o sticker (URL/base64 inválido ou bloqueado por CORS).');
+          }
+
+          // Envia como imagem (webp) pela Evolution API
+          const result = await sendRealMediaMessageWithId(apiConfig, targetNumber, blob, '', 'image', 'sticker.webp');
+          const success = !!result.success;
+
+          // Se retornou messageId, unifica com o ID real do WhatsApp para evitar duplicação em merges
+          if (success && result.messageId && chatSnapshotAfterLocalAdd) {
+              const patchedChat: Chat = {
+                  ...chatSnapshotAfterLocalAdd,
+                  messages: chatSnapshotAfterLocalAdd.messages.map(m => {
+                      const shouldPatch =
+                        m.id === newMessage.id ||
+                        m.id === result.messageId ||
+                        m.whatsappMessageId === result.messageId;
+                      if (shouldPatch) {
+                          return {
+                              ...m,
+                              id: result.messageId,
+                              whatsappMessageId: result.messageId,
+                              rawMessage: (result.raw ?? m.rawMessage)
+                          };
+                      }
+                      return m;
+                  })
+              };
+              onUpdateChat(patchedChat);
+          }
+
+          finalizeMessageStatus(newMessage, success);
+          if (!success) {
+              alert('Erro ao enviar sticker. Verifique a conexão e tente novamente.');
+          }
+      } catch (error: any) {
+          console.error('[handleSendSticker] Erro ao enviar sticker:', error);
+          finalizeMessageStatus(newMessage, false);
+          alert(error?.message || 'Erro ao enviar sticker. Verifique a conexão e tente novamente.');
+      } finally {
+          setIsSending(false);
+          setShowEmojiPicker(false);
+      }
   };
 
   const updateChatWithNewMessage = (msg: Message): Chat | undefined => {
@@ -3164,7 +3206,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                   <div className="flex gap-1 mt-1">
                     {(chat.tags && Array.isArray(chat.tags) ? chat.tags : []).map(tag => {
                           if (!tag || typeof tag !== 'string') return null;
-                          const tagDef = AVAILABLE_TAGS.find(t => t.name === tag);
+                          const tagDef = (tags && Array.isArray(tags)) ? tags.find(t => t && t.name === tag) : undefined;
                           return (
                             <span key={tag} className={`text-[10px] px-1.5 py-0.5 rounded-full border ${tagDef ? tagDef.color : 'bg-slate-500/20 text-slate-300 border-slate-500/30'}`}>
                               {tag}
@@ -3315,9 +3357,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                             {showTagMenu && (
                                 <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-1 z-50 animate-in fade-in zoom-in-95 origin-top-right text-slate-700">
                                     <div className="px-3 py-2 text-xs font-bold text-slate-500 border-b border-slate-100 mb-1">ADICIONAR TAG</div>
-                                    {(AVAILABLE_TAGS && Array.isArray(AVAILABLE_TAGS) ? AVAILABLE_TAGS : []).map(tag => (
+                                    {(tags && Array.isArray(tags) ? tags : []).map(tag => (
                                         <button 
-                                            key={tag.name}
+                                            key={tag.id || tag.name}
                                             onClick={() => handleAddTag(tag.name)}
                                             className="w-full text-left px-4 py-2 hover:bg-slate-50 text-sm flex items-center gap-2"
                                         >
@@ -3377,7 +3419,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                         <div className="flex gap-1 overflow-x-auto scrollbar-hide">
                             {(selectedChat.tags && Array.isArray(selectedChat.tags) ? selectedChat.tags : []).map(tag => {
                                 if (!tag || typeof tag !== 'string') return null;
-                                const tagDef = (AVAILABLE_TAGS && Array.isArray(AVAILABLE_TAGS)) ? AVAILABLE_TAGS.find(t => t && t.name === tag) : undefined;
+                                const tagDef = (tags && Array.isArray(tags)) ? tags.find(t => t && t.name === tag) : undefined;
                                 return (
                                     <span key={tag} className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 ${tagDef ? tagDef.color : 'bg-slate-200'}`}>
                                         {tag}
@@ -3683,16 +3725,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
                                     <div>
                                         <p className="text-[10px] font-bold text-slate-400 mb-1">FIGURINHAS (STICKERS)</p>
                                         <div className="grid grid-cols-4 gap-2">
-                                            {STICKERS.map((sticker, idx) => (
-                                                <img 
-                                                    key={idx} 
-                                                    src={sticker} 
-                                                    alt="Sticker" 
+                                            {(stickers && Array.isArray(stickers) ? stickers : [])
+                                              .map((s, idx) => {
+                                                const src = (s as any)?.dataUrl || (s as any)?.mediaUrl;
+                                                if (!src || typeof src !== 'string') return null;
+                                                return (
+                                                  <img
+                                                    key={(s as any)?.id || idx}
+                                                    src={src}
+                                                    alt="Sticker"
                                                     className="w-full h-auto cursor-pointer hover:opacity-80 rounded"
-                                                    onClick={() => handleSendSticker(sticker)}
-                                                />
-                                            ))}
+                                                    onClick={() => handleSendSticker(src)}
+                                                  />
+                                                );
+                                              })}
                                         </div>
+                                        {(stickers && Array.isArray(stickers) ? stickers : []).length === 0 && (
+                                          <p className="text-[10px] text-slate-400 mt-2">Nenhum sticker salvo ainda.</p>
+                                        )}
                                     </div>
                                 </div>
                             </div>

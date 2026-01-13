@@ -78,6 +78,15 @@ export interface Tag {
   color: string;
 }
 
+export interface Sticker {
+  id: string;
+  sha256?: string;
+  mimeType: string;
+  dataUrl?: string | null;
+  mediaUrl?: string | null;
+  createdAt?: Date | string;
+}
+
 export interface BusinessHours {
   dayOfWeek: number; // 0 = Domingo, 1 = Segunda...
   isOpen: boolean;
@@ -154,4 +163,4 @@ export interface ApiConfig {
   departmentSelectionConfirmationTemplate?: string; // Template da mensagem automática após seleção do setor (use {{department}})
 }
 
-export type ViewState = 'dashboard' | 'chat' | 'connections' | 'departments' | 'settings' | 'users' | 'reports' | 'workflows' | 'contacts' | 'chatbot' | 'holidays';
+export type ViewState = 'dashboard' | 'chat' | 'connections' | 'departments' | 'settings' | 'users' | 'reports' | 'workflows' | 'contacts' | 'chatbot' | 'holidays' | 'tags' | 'stickers';

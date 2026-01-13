@@ -8,6 +8,7 @@ import rateLimit from 'express-rate-limit';
 import dns from 'dns';
 import net from 'net';
 import os from 'os';
+import crypto from 'crypto';
 import { ensureEvolutionWebhookConfigured } from './services/evolutionWebhookService.js';
 import {
   ensureTelegramReportSchedulerConfigured,
@@ -810,6 +811,230 @@ app.delete('/api/data/:dataType/:key', authenticateToken, dataLimiter, async (re
   }
 });
 
+// ============================================================================
+// TAGS (configuráveis via UI; usados em chats)
+// - Fonte de verdade: tabela `tags`
+// - Estratégia de multi-usuário:
+//   - ADMIN: gerencia e é o "owner" das tags
+//   - AGENT: lê tags do primeiro ADMIN (para compartilhar configuração)
+// ============================================================================
+const resolveAdminOwnerId = async () => {
+  const adminRes = await pool.query(`SELECT id FROM users WHERE role = 'ADMIN' ORDER BY id ASC LIMIT 1`);
+  return adminRes.rows?.[0]?.id || null;
+};
+
+const resolveTagsOwnerId = async (req) => {
+  if (req.user?.role === 'ADMIN') return req.user.id;
+  const adminId = await resolveAdminOwnerId();
+  return adminId || req.user.id;
+};
+
+app.get('/api/tags', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const ownerId = await resolveTagsOwnerId(req);
+    const result = await pool.query(
+      `SELECT id::text AS id, name, color
+       FROM tags
+       WHERE user_id = $1
+       ORDER BY name ASC`,
+      [ownerId]
+    );
+    res.json(result.rows || []);
+  } catch (error) {
+    console.error('[GET /api/tags] Erro:', error);
+    res.status(500).json({ error: 'Erro ao buscar tags' });
+  }
+});
+
+app.post('/api/tags', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Apenas administradores podem criar tags' });
+    }
+
+    const name = String(req.body?.name || '').trim();
+    const color = String(req.body?.color || '').trim() || 'bg-blue-100 text-blue-700';
+
+    if (!name) return res.status(400).json({ error: 'name é obrigatório' });
+
+    const result = await pool.query(
+      `INSERT INTO tags (user_id, name, color)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, name) DO UPDATE SET color = EXCLUDED.color, updated_at = CURRENT_TIMESTAMP
+       RETURNING id::text AS id, name, color`,
+      [req.user.id, name, color]
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('[POST /api/tags] Erro:', error);
+    res.status(500).json({ error: 'Erro ao criar tag' });
+  }
+});
+
+app.put('/api/tags/:id', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Apenas administradores podem editar tags' });
+    }
+
+    const id = String(req.params.id || '').trim();
+    const name = req.body?.name !== undefined ? String(req.body.name).trim() : undefined;
+    const color = req.body?.color !== undefined ? String(req.body.color).trim() : undefined;
+
+    if (!id) return res.status(400).json({ error: 'id inválido' });
+
+    const existing = await pool.query(`SELECT id FROM tags WHERE id = $1 AND user_id = $2`, [id, req.user.id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Tag não encontrada' });
+
+    const nextName = name ?? undefined;
+    const nextColor = color ?? undefined;
+
+    const result = await pool.query(
+      `UPDATE tags
+       SET name = COALESCE($1, name),
+           color = COALESCE($2, color),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3 AND user_id = $4
+       RETURNING id::text AS id, name, color`,
+      [nextName, nextColor, id, req.user.id]
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('[PUT /api/tags/:id] Erro:', error);
+    res.status(500).json({ error: 'Erro ao atualizar tag' });
+  }
+});
+
+app.delete('/api/tags/:id', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Apenas administradores podem deletar tags' });
+    }
+
+    const id = String(req.params.id || '').trim();
+    if (!id) return res.status(400).json({ error: 'id inválido' });
+
+    const del = await pool.query(`DELETE FROM tags WHERE id = $1 AND user_id = $2`, [id, req.user.id]);
+    res.json({ success: true, deleted: del.rowCount || 0 });
+  } catch (error) {
+    console.error('[DELETE /api/tags/:id] Erro:', error);
+    res.status(500).json({ error: 'Erro ao deletar tag' });
+  }
+});
+
+// ============================================================================
+// STICKERS (biblioteca salva automaticamente via webhook)
+// - Fonte de verdade: tabela `stickers` (dedupe por sha256 quando disponível)
+// ============================================================================
+const resolveStickersOwnerId = async (req) => {
+  if (req.user?.role === 'ADMIN') return req.user.id;
+  const adminId = await resolveAdminOwnerId();
+  return adminId || req.user.id;
+};
+
+app.get('/api/stickers', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    const ownerId = await resolveStickersOwnerId(req);
+    const limit = Math.min(Math.max(Number.parseInt(String(req.query.limit || '200'), 10) || 200, 1), 1000);
+
+    const result = await pool.query(
+      `SELECT id::text AS id,
+              sha256,
+              mime_type AS "mimeType",
+              data_url AS "dataUrl",
+              media_url AS "mediaUrl",
+              created_at AS "createdAt"
+       FROM stickers
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [ownerId, limit]
+    );
+
+    res.json(result.rows || []);
+  } catch (error) {
+    console.error('[GET /api/stickers] Erro:', error);
+    res.status(500).json({ error: 'Erro ao buscar stickers' });
+  }
+});
+
+app.delete('/api/stickers/:id', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Apenas administradores podem deletar stickers' });
+    }
+
+    const id = String(req.params.id || '').trim();
+    if (!id) return res.status(400).json({ error: 'id inválido' });
+
+    const del = await pool.query(`DELETE FROM stickers WHERE id = $1 AND user_id = $2`, [id, req.user.id]);
+    res.json({ success: true, deleted: del.rowCount || 0 });
+  } catch (error) {
+    console.error('[DELETE /api/stickers/:id] Erro:', error);
+    res.status(500).json({ error: 'Erro ao deletar sticker' });
+  }
+});
+
+// ============================================================================
+// CHATBOT CONFIG (persistida no banco via user_data global)
+// - GET: qualquer usuário autenticado (config global)
+// - PUT: somente ADMIN
+// ============================================================================
+app.get('/api/chatbot-config', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    let result = await pool.query(
+      `SELECT data_value FROM user_data
+       WHERE user_id IS NULL AND data_type = 'config' AND data_key = 'chatbotConfig'`
+    );
+
+    if (result.rows.length === 0) {
+      result = await pool.query(
+        `SELECT data_value FROM user_data
+         WHERE user_id = 0 AND data_type = 'config' AND data_key = 'chatbotConfig'`
+      );
+    }
+
+    if (result.rows.length === 0) return res.json(null);
+
+    const parsed = typeof result.rows[0].data_value === 'string'
+      ? JSON.parse(result.rows[0].data_value)
+      : result.rows[0].data_value;
+
+    res.json(parsed);
+  } catch (error) {
+    console.error('[GET /api/chatbot-config] Erro:', error);
+    res.status(500).json({ error: 'Erro ao carregar configuração do chatbot' });
+  }
+});
+
+app.put('/api/chatbot-config', authenticateToken, dataLimiter, async (req, res) => {
+  try {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Apenas administradores podem salvar configurações do chatbot' });
+    }
+
+    const value = req.body;
+    if (!value || typeof value !== 'object') {
+      return res.status(400).json({ error: 'Payload inválido' });
+    }
+
+    await pool.query(
+      `INSERT INTO user_data (user_id, data_type, data_key, data_value)
+       VALUES (NULL, 'config', 'chatbotConfig', $1)
+       ON CONFLICT (COALESCE(user_id, 0), data_type, data_key)
+       DO UPDATE SET data_value = $1, updated_at = CURRENT_TIMESTAMP`,
+      [JSON.stringify(value)]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[PUT /api/chatbot-config] Erro:', error);
+    res.status(500).json({ error: 'Erro ao salvar configuração do chatbot' });
+  }
+});
+
 // Link Preview SSRF-safe com cache global em user_data (user_id NULL, data_type = 'link_previews')
 app.get('/api/link-preview', authenticateToken, dataLimiter, async (req, res) => {
   try {
@@ -1021,7 +1246,7 @@ app.post('/api/users', authenticateToken, dataLimiter, async (req, res) => {
          VALUES ($1, $2, $3, $4, $5, $6) 
          RETURNING id, username, name, email, role, department_id`,
         [username, hashedPassword, name, email || username, role || 'AGENT', primaryDept]
-      );
+    );
 
       const newUserId = result.rows[0].id;
 
@@ -1037,8 +1262,8 @@ app.post('/api/users', authenticateToken, dataLimiter, async (req, res) => {
 
       await client.query('COMMIT');
 
-      res.status(201).json({
-        success: true,
+    res.status(201).json({
+      success: true,
         user: {
           id: result.rows[0].id,
           username: result.rows[0].username,
@@ -1198,14 +1423,14 @@ app.put('/api/users/:id', authenticateToken, dataLimiter, async (req, res) => {
       await client.query('BEGIN');
 
       const result = await client.query(
-        `UPDATE users SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING id, username, name, email, role, department_id`,
-        params
-      );
+      `UPDATE users SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING id, username, name, email, role, department_id`,
+      params
+    );
 
-      if (result.rows.length === 0) {
+    if (result.rows.length === 0) {
         await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'Usuário não encontrado' });
-      }
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
 
       let finalDeptIds = [];
       if (normalizedDeptIds !== null) {
@@ -1232,18 +1457,18 @@ app.put('/api/users/:id', authenticateToken, dataLimiter, async (req, res) => {
 
       await client.query('COMMIT');
 
-      res.json({
-        success: true,
-        user: {
-          id: result.rows[0].id,
-          username: result.rows[0].username,
-          name: result.rows[0].name,
-          email: result.rows[0].email,
-          role: result.rows[0].role,
+    res.json({ 
+      success: true, 
+      user: {
+        id: result.rows[0].id,
+        username: result.rows[0].username,
+        name: result.rows[0].name,
+        email: result.rows[0].email,
+        role: result.rows[0].role,
           departmentId: result.rows[0].department_id || undefined,
           departmentIds: finalDeptIds
-        }
-      });
+      }
+    });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
@@ -1370,8 +1595,8 @@ app.get('/api/departments', authenticateToken, dataLimiter, async (req, res) => 
     // Para ADMIN: mantém comportamento atual (departamentos do próprio admin).
     const result = req.user.role === 'ADMIN'
       ? await pool.query(
-          'SELECT id, name, description, color FROM departments WHERE user_id = $1 ORDER BY name',
-          [req.user.id]
+      'SELECT id, name, description, color FROM departments WHERE user_id = $1 ORDER BY name',
+      [req.user.id]
         )
       : await pool.query(
           `
@@ -1383,7 +1608,7 @@ app.get('/api/departments', authenticateToken, dataLimiter, async (req, res) => 
             ORDER BY d.name
           `,
           [req.user.id]
-        );
+    );
     res.json(result.rows.map(row => ({
       id: row.id.toString(),
       name: row.name,
@@ -2345,16 +2570,17 @@ const handleWebhookEvolution = async (req, res) => {
           const videoMsg = messageObj.videoMessage || messageObj.message?.videoMessage;
           const audioMsg = messageObj.audioMessage || messageObj.message?.audioMessage;
           const documentMsg = messageObj.documentMessage || messageObj.message?.documentMessage;
+          const stickerMsg = messageObj.stickerMessage || messageObj.message?.stickerMessage;
           
           // Log para debug de mídia
-          if (imageMsg || videoMsg || audioMsg || documentMsg) {
-            console.log(`[WEBHOOK] Mensagem de mídia encontrada - messageId: ${messageId}, imageMsg: ${imageMsg ? 'sim' : 'não'}, base64: ${imageMsg?.base64 ? 'presente' : 'ausente'}`);
+          if (imageMsg || videoMsg || audioMsg || documentMsg || stickerMsg) {
+            console.log(`[WEBHOOK] Mensagem de mídia encontrada - messageId: ${messageId}, imageMsg: ${imageMsg ? 'sim' : 'não'}, stickerMsg: ${stickerMsg ? 'sim' : 'não'}, base64: ${imageMsg?.base64 || stickerMsg?.base64 ? 'presente' : 'ausente'}`);
           }
           
           // Se for mensagem de mídia, tenta extrair base64 (quando Webhook Base64 está habilitado)
           // IMPORTANTE: algumas versões/formatos podem enviar base64 fora do imageMessage.base64
           // (ex.: no nível superior do payload). Então fazemos extração mais robusta.
-          if (imageMsg || videoMsg || audioMsg || documentMsg) {
+          if (imageMsg || videoMsg || audioMsg || documentMsg || stickerMsg) {
             const isNonEmptyString = (v) => typeof v === 'string' && v.trim().length > 0;
             const isDataUrl = (v) => isNonEmptyString(v) && v.trim().startsWith('data:') && v.includes('base64,');
 
@@ -2364,6 +2590,7 @@ const handleWebhookEvolution = async (req, res) => {
               videoMsg?.base64 ||
               audioMsg?.base64 ||
               documentMsg?.base64 ||
+              stickerMsg?.base64 ||
               // Alguns payloads colocam base64 no topo
               messageObj?.base64 ||
               messageData?.base64 ||
@@ -2373,15 +2600,18 @@ const handleWebhookEvolution = async (req, res) => {
               messageData?.data?.message?.videoMessage?.base64 ||
               messageData?.data?.message?.audioMessage?.base64 ||
               messageData?.data?.message?.documentMessage?.base64 ||
+              messageData?.data?.message?.stickerMessage?.base64 ||
               messageData?.data?.imageMessage?.base64 ||
               messageData?.data?.videoMessage?.base64 ||
               messageData?.data?.audioMessage?.base64 ||
               messageData?.data?.documentMessage?.base64 ||
+              messageData?.data?.stickerMessage?.base64 ||
               // Alguns formatos usam `media` em vez de `base64`
               imageMsg?.media ||
               videoMsg?.media ||
               audioMsg?.media ||
-              documentMsg?.media;
+              documentMsg?.media ||
+              stickerMsg?.media;
 
             // mimeType: tenta pegar do objeto específico, senão fallback genérico
             let mimeType =
@@ -2389,9 +2619,10 @@ const handleWebhookEvolution = async (req, res) => {
               videoMsg?.mimetype ||
               audioMsg?.mimetype ||
               documentMsg?.mimetype ||
+              stickerMsg?.mimetype ||
               messageObj?.mimetype ||
               messageData?.mimetype ||
-              (imageMsg ? 'image/jpeg' : videoMsg ? 'video/mp4' : audioMsg ? 'audio/ogg; codecs=opus' : 'application/octet-stream');
+              (imageMsg ? 'image/jpeg' : stickerMsg ? 'image/webp' : videoMsg ? 'video/mp4' : audioMsg ? 'audio/ogg; codecs=opus' : 'application/octet-stream');
 
             let dataUrl = null;
             if (isDataUrl(base64Candidate)) {
@@ -2432,8 +2663,64 @@ const handleWebhookEvolution = async (req, res) => {
               } catch (dbError) {
                 console.error(`[WEBHOOK] Erro ao salvar base64 no banco para ${messageId}:`, dbError);
               }
+
+              // Se for sticker (ou webp), salva na biblioteca de stickers com dedupe por SHA256
+              const isStickerMime = String(mimeType || '').toLowerCase().includes('image/webp');
+              if (stickerMsg || isStickerMime) {
+                try {
+                  const base64Only = String(dataUrl).includes('base64,') ? String(dataUrl).split('base64,')[1] : String(dataUrl);
+                  const sha256 = crypto.createHash('sha256').update(base64Only).digest('hex');
+
+                  // Para salvar, precisamos associar a um user_id (admin) — regra atual: usar o primeiro ADMIN encontrado.
+                  const adminRes = await pool.query(`SELECT id FROM users WHERE role = 'ADMIN' ORDER BY id ASC LIMIT 1`);
+                  const adminId = adminRes.rows?.[0]?.id;
+                  if (adminId) {
+                    await pool.query(
+                      `INSERT INTO stickers (user_id, sha256, mime_type, data_url, media_url, first_message_id, first_remote_jid)
+                       VALUES ($1, $2, $3, $4, NULL, $5, $6)
+                       ON CONFLICT (user_id, sha256)
+                       DO UPDATE SET updated_at = CURRENT_TIMESTAMP`,
+                      [adminId, sha256, mimeType || 'image/webp', dataUrl, messageId, remoteJid]
+                    );
+                    console.log(`[WEBHOOK] ✅ Sticker salvo na biblioteca (dedupe sha256): ${sha256.slice(0, 10)}...`);
+                  }
+                } catch (stErr) {
+                  console.error('[WEBHOOK] Erro ao salvar sticker na biblioteca:', stErr);
+                }
+              }
             } else {
-              console.log(`[WEBHOOK] ⚠️ Mensagem de mídia sem base64 - messageId: ${messageId}, imageMsg: ${imageMsg ? 'existe' : 'não'}, videoMsg: ${videoMsg ? 'existe' : 'não'}, audioMsg: ${audioMsg ? 'existe' : 'não'}, documentMsg: ${documentMsg ? 'existe' : 'não'}`);
+              console.log(`[WEBHOOK] ⚠️ Mensagem de mídia sem base64 - messageId: ${messageId}, imageMsg: ${imageMsg ? 'existe' : 'não'}, stickerMsg: ${stickerMsg ? 'existe' : 'não'}, videoMsg: ${videoMsg ? 'existe' : 'não'}, audioMsg: ${audioMsg ? 'existe' : 'não'}, documentMsg: ${documentMsg ? 'existe' : 'não'}`);
+
+              // Se for sticker mas sem base64, tenta salvar usando URL/directPath (dedupe por hash da URL)
+              if (stickerMsg) {
+                try {
+                  const mediaUrl =
+                    stickerMsg?.url ||
+                    stickerMsg?.mediaUrl ||
+                    stickerMsg?.directPath ||
+                    messageObj?.url ||
+                    messageData?.url ||
+                    null;
+
+                  if (mediaUrl && typeof mediaUrl === 'string' && mediaUrl.trim()) {
+                    const sha256 = crypto.createHash('sha256').update(mediaUrl.trim()).digest('hex');
+                    const adminRes = await pool.query(`SELECT id FROM users WHERE role = 'ADMIN' ORDER BY id ASC LIMIT 1`);
+                    const adminId = adminRes.rows?.[0]?.id;
+                    if (adminId) {
+                      await pool.query(
+                        `INSERT INTO stickers (user_id, sha256, mime_type, data_url, media_url, first_message_id, first_remote_jid)
+                         VALUES ($1, $2, $3, NULL, $4, $5, $6)
+                         ON CONFLICT (user_id, sha256)
+                         DO UPDATE SET updated_at = CURRENT_TIMESTAMP`,
+                        [adminId, sha256, mimeType || 'image/webp', mediaUrl.trim(), messageId, remoteJid]
+                      );
+                      console.log(`[WEBHOOK] ✅ Sticker salvo na biblioteca (dedupe URL): ${sha256.slice(0, 10)}...`);
+                    }
+                  }
+                } catch (stErr) {
+                  console.error('[WEBHOOK] Erro ao salvar sticker (sem base64) na biblioteca:', stErr);
+                }
+              }
             }
           }
         } catch (msgError) {

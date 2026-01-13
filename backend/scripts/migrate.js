@@ -2,6 +2,7 @@ import pg from 'pg';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import crypto from 'crypto';
 
 const { Client } = pg;
 dotenv.config();
@@ -173,6 +174,46 @@ async function migrate() {
       )
     `);
 
+    // Criar tabela de tags (por usuário/admin)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tags (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        color VARCHAR(100) NOT NULL DEFAULT 'bg-blue-100 text-blue-700',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, name)
+      )
+    `);
+
+    // Criar tabela de stickers (biblioteca global por usuário/admin)
+    // - sha256: permite deduplicar quando temos base64/dataUrl
+    // - data_url: conteúdo embutido (data:mime;base64,...), ideal para exibir no frontend sem depender de URLs externas
+    // - media_url: fallback quando não há base64 disponível
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS stickers (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        sha256 VARCHAR(64),
+        mime_type VARCHAR(100) NOT NULL DEFAULT 'image/webp',
+        data_url TEXT,
+        media_url TEXT,
+        first_message_id VARCHAR(255),
+        first_remote_jid VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, sha256)
+      )
+    `);
+
+    // Índice auxiliar quando sha256 estiver NULL (não garante unicidade, mas melhora listagem)
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_tags_user_id ON tags(user_id);
+      CREATE INDEX IF NOT EXISTS idx_stickers_user_id ON stickers(user_id);
+      CREATE INDEX IF NOT EXISTS idx_stickers_created_at ON stickers(created_at);
+    `);
+
     // Criar índices para melhor performance
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_departments_user_id ON departments(user_id);
@@ -184,7 +225,7 @@ async function migrate() {
       CREATE INDEX IF NOT EXISTS idx_workflows_user_id ON workflows(user_id);
     `);
 
-    // Criar usuário admin padrão se não existir
+    // Criar usuário admin padrão se não existir (seed inicial do primeiro acesso)
     const bcrypt = await import('bcryptjs');
     const adminUsername = 'admin@piekas.com';
     const adminExists = await client.query('SELECT id FROM users WHERE username = $1', [adminUsername]);
@@ -206,6 +247,70 @@ async function migrate() {
       );
       console.log(`✅ Senha e role do usuário admin atualizados (username: ${adminUsername}, password: 123, role: ADMIN)`);
     }
+
+    // Busca ID do admin para seeds dependentes
+    const adminRow = await client.query('SELECT id FROM users WHERE username = $1', [adminUsername]);
+    const adminId = adminRow.rows?.[0]?.id;
+    if (!adminId) {
+      throw new Error('Falha ao obter ID do admin após criação/atualização');
+    }
+
+    // Seed: departamentos padrão (se ainda não existirem para o admin)
+    const deptCount = await client.query('SELECT COUNT(*)::int AS count FROM departments WHERE user_id = $1', [adminId]);
+    if ((deptCount.rows?.[0]?.count ?? 0) === 0) {
+      await client.query(
+        `INSERT INTO departments (user_id, name, description, color)
+         VALUES
+          ($1, 'Comercial', 'Vendas e novos negócios', 'bg-blue-500'),
+          ($1, 'Suporte Técnico', 'Resolução de problemas', 'bg-orange-500'),
+          ($1, 'Financeiro', 'Cobranças e faturamento', 'bg-green-600')
+         ON CONFLICT (user_id, name) DO NOTHING`,
+        [adminId]
+      );
+      console.log('✅ Departamentos padrão criados para o admin');
+    }
+
+    // Seed: tags padrão (se ainda não existirem para o admin)
+    const tagCount = await client.query('SELECT COUNT(*)::int AS count FROM tags WHERE user_id = $1', [adminId]);
+    if ((tagCount.rows?.[0]?.count ?? 0) === 0) {
+      await client.query(
+        `INSERT INTO tags (user_id, name, color)
+         VALUES
+          ($1, 'VIP', 'bg-purple-100 text-purple-700'),
+          ($1, 'Novo Lead', 'bg-blue-100 text-blue-700'),
+          ($1, 'Recorrente', 'bg-green-100 text-green-700'),
+          ($1, 'Inadimplente', 'bg-red-100 text-red-700'),
+          ($1, 'Aguardando', 'bg-orange-100 text-orange-700')
+         ON CONFLICT (user_id, name) DO NOTHING`,
+        [adminId]
+      );
+      console.log('✅ Tags padrão criadas para o admin');
+    }
+
+    // Seed: chatbotConfig padrão (global via user_data: user_id NULL)
+    // Mantemos em user_data para compatibilidade com o padrão já usado em configs globais.
+    const defaultChatbotConfig = {
+      isEnabled: false,
+      awayMessage: "Olá! No momento estamos fechados. Nosso horário de atendimento é de Segunda a Sexta das 09:00 às 18:00.",
+      greetingMessage: "Olá! Bem-vindo ao nosso atendimento.",
+      businessHours: [
+        { dayOfWeek: 0, isOpen: false, openTime: '09:00', closeTime: '18:00' },
+        { dayOfWeek: 1, isOpen: true, openTime: '09:00', closeTime: '18:00' },
+        { dayOfWeek: 2, isOpen: true, openTime: '09:00', closeTime: '18:00' },
+        { dayOfWeek: 3, isOpen: true, openTime: '09:00', closeTime: '18:00' },
+        { dayOfWeek: 4, isOpen: true, openTime: '09:00', closeTime: '18:00' },
+        { dayOfWeek: 5, isOpen: true, openTime: '09:00', closeTime: '18:00' },
+        { dayOfWeek: 6, isOpen: false, openTime: '09:00', closeTime: '12:00' }
+      ]
+    };
+
+    await client.query(
+      `INSERT INTO user_data (user_id, data_type, data_key, data_value)
+       VALUES (NULL, 'config', 'chatbotConfig', $1)
+       ON CONFLICT (COALESCE(user_id, 0), data_type, data_key)
+       DO NOTHING`,
+      [JSON.stringify(defaultChatbotConfig)]
+    );
 
     console.log('✅ Migração concluída com sucesso!');
   } catch (error) {

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Chat, Department, ViewState, ApiConfig, User, UserRole, QuickReply, Workflow, Contact, ChatbotConfig, MessageStatus, Message } from './types';
-import { INITIAL_CHATS, INITIAL_DEPARTMENTS, INITIAL_USERS, INITIAL_QUICK_REPLIES, INITIAL_WORKFLOWS, MOCK_GOOGLE_CONTACTS, INITIAL_CHATBOT_CONFIG } from './constants';
+import { Chat, Department, ViewState, ApiConfig, User, UserRole, QuickReply, Workflow, Contact, ChatbotConfig, MessageStatus, Message, Tag as TagType, Sticker as StickerType } from './types';
 import Login from './components/Login';
 import BackendConnectionError from './components/BackendConnectionError';
 import ChatInterface from './components/ChatInterface';
@@ -14,7 +13,9 @@ import ReportsDashboard from './components/ReportsDashboard';
 import Contacts from './components/Contacts';
 import ChatbotSettings from './components/ChatbotSettings';
 import Holidays from './components/Holidays';
-import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot, ChevronLeft, ChevronRight, Calendar, Flag } from 'lucide-react';
+import TagsSettings from './components/TagsSettings';
+import StickersSettings from './components/StickersSettings';
+import { MessageSquare, Settings as SettingsIcon, Smartphone, Users, LayoutDashboard, LogOut, ShieldCheck, Menu, X, Zap, BarChart, ListChecks, Info, AlertTriangle, CheckCircle, Contact as ContactIcon, Bot, ChevronLeft, ChevronRight, Calendar, Flag, Tag as TagIcon, Image as ImageIcon } from 'lucide-react';
 import { fetchChats, fetchChatMessages, normalizeJid, mapApiMessageToInternal, findActiveInstance, sendDepartmentSelectionMessage, sendDepartmentSelectionConfirmationMessage, processDepartmentSelection } from './services/whatsappService';
 import { processChatbotMessages } from './services/chatbotService'; 
 import { storageService } from './services/storageService';
@@ -23,6 +24,21 @@ import { SecurityService } from './services/securityService';
 import { logger, setDebugLoggingEnabled } from './services/logger';
 import { io, Socket } from 'socket.io-client';
 import { getNationalHolidays, getUpcomingHolidays, Holiday, BRAZILIAN_STATES } from './services/holidaysService';
+
+const DEFAULT_CHATBOT_CONFIG: ChatbotConfig = {
+  isEnabled: false,
+  awayMessage: "Olá! No momento estamos fechados. Nosso horário de atendimento é de Segunda a Sexta das 09:00 às 18:00.",
+  greetingMessage: "Olá! Bem-vindo ao nosso atendimento.",
+  businessHours: [
+    { dayOfWeek: 0, isOpen: false, openTime: '09:00', closeTime: '18:00' }, // Dom
+    { dayOfWeek: 1, isOpen: true, openTime: '09:00', closeTime: '18:00' },  // Seg
+    { dayOfWeek: 2, isOpen: true, openTime: '09:00', closeTime: '18:00' },
+    { dayOfWeek: 3, isOpen: true, openTime: '09:00', closeTime: '18:00' },
+    { dayOfWeek: 4, isOpen: true, openTime: '09:00', closeTime: '18:00' },
+    { dayOfWeek: 5, isOpen: true, openTime: '09:00', closeTime: '18:00' },
+    { dayOfWeek: 6, isOpen: false, openTime: '09:00', closeTime: '12:00' }, // Sab
+  ]
+};
 
 // Função utilitária para normalizar conteúdo de mensagens do agente (remove cabeçalho)
 // CRÍTICO: O frontend renderiza o nome do agente separadamente, então o conteúdo NUNCA deve ter o cabeçalho
@@ -205,7 +221,7 @@ const loadQuickRepliesFromStorage = (): QuickReply[] => {
   } catch (e) {
     console.error('[App] Erro ao carregar respostas rápidas do localStorage:', e);
   }
-  return INITIAL_QUICK_REPLIES;
+  return [];
 };
 
 const loadWorkflowsFromStorage = (): Workflow[] => {
@@ -217,7 +233,7 @@ const loadWorkflowsFromStorage = (): Workflow[] => {
   } catch (e) {
     console.error('[App] Erro ao carregar workflows do localStorage:', e);
   }
-  return INITIAL_WORKFLOWS;
+  return [];
 };
 
 const loadChatbotConfigFromStorage = (): ChatbotConfig => {
@@ -229,13 +245,13 @@ const loadChatbotConfigFromStorage = (): ChatbotConfig => {
   } catch (e) {
     console.error('[App] Erro ao carregar configuração do chatbot do localStorage:', e);
   }
-  return INITIAL_CHATBOT_CONFIG;
+  return DEFAULT_CHATBOT_CONFIG;
 };
 
 const loadViewStateFromStorage = (): ViewState => {
   try {
     const saved = SecurityService.getItemWithFallback('zentria_currentView', 'zapflow_currentView');
-    if (saved && ['dashboard', 'chats', 'contacts', 'settings', 'connection', 'departments', 'users', 'quickMessages', 'workflows', 'reports', 'chatbot', 'holidays'].includes(saved)) {
+    if (saved && ['dashboard', 'chat', 'chats', 'contacts', 'settings', 'connection', 'connections', 'departments', 'users', 'quickMessages', 'workflows', 'reports', 'chatbot', 'holidays', 'tags', 'stickers'].includes(saved)) {
       return saved as ViewState;
     }
   } catch (e) {
@@ -313,7 +329,7 @@ const App: React.FC = () => {
     } catch (e) {
       console.error('[App] Erro ao carregar chats do localStorage:', e);
     }
-    return INITIAL_CHATS;
+    return [];
   };
 
   // Carrega usuários do localStorage se existir, senão usa INITIAL_USERS
@@ -327,7 +343,7 @@ const App: React.FC = () => {
     } catch (e) {
       console.error('[App] Erro ao carregar usuários do localStorage:', e);
     }
-    return INITIAL_USERS;
+    return [];
   };
 
   // Carrega contatos do localStorage se existir, senão usa array vazio
@@ -355,7 +371,9 @@ const App: React.FC = () => {
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [chatbotConfig, setChatbotConfig] = useState<ChatbotConfig>(INITIAL_CHATBOT_CONFIG);
+  const [chatbotConfig, setChatbotConfig] = useState<ChatbotConfig>(DEFAULT_CHATBOT_CONFIG);
+  const [tags, setTags] = useState<TagType[]>([]);
+  const [stickers, setStickers] = useState<StickerType[]>([]);
   const [apiConfig, setApiConfig] = useState<ApiConfig>(loadConfig()); // Config precisa ser carregado imediatamente
   const [forceSelectChatId, setForceSelectChatId] = useState<string | null>(null);
 
@@ -486,13 +504,13 @@ const App: React.FC = () => {
         if (quickRepliesData && quickRepliesData.length > 0) {
           setQuickReplies(quickRepliesData);
         } else {
-          setQuickReplies(INITIAL_QUICK_REPLIES);
+          setQuickReplies([]);
         }
 
         if (workflowsData && workflowsData.length > 0) {
           setWorkflows(workflowsData);
         } else {
-          setWorkflows(INITIAL_WORKFLOWS);
+          setWorkflows([]);
         }
 
         if (chatbotConfigData) {
@@ -502,7 +520,7 @@ const App: React.FC = () => {
         if (usersData && usersData.length > 0) {
           setUsers(usersData);
         } else {
-          setUsers(INITIAL_USERS);
+          setUsers([]);
         }
 
         if (contactsData && contactsData.length > 0) {
@@ -521,16 +539,16 @@ const App: React.FC = () => {
           }));
           setChats(chatsWithDates);
         } else {
-          setChats(INITIAL_CHATS);
+          setChats([]);
         }
       } catch (error) {
         console.error('[App] Erro ao carregar dados iniciais:', error);
         // Em caso de erro, usa valores padrão
         setDepartments([]);
-        setQuickReplies(INITIAL_QUICK_REPLIES);
-        setWorkflows(INITIAL_WORKFLOWS);
-        setUsers(INITIAL_USERS);
-        setChats(INITIAL_CHATS);
+        setQuickReplies([]);
+        setWorkflows([]);
+        setUsers([]);
+        setChats([]);
       }
     };
 
@@ -652,23 +670,27 @@ const App: React.FC = () => {
           departmentsData, 
           quickRepliesData, 
           workflowsData, 
-          chatbotConfigData, 
+          chatbotConfigResp,
           viewStateData, 
           sidebarStateData,
           usersData,
           contactsData,
-          chatsData
+          chatsData,
+          tagsResp,
+          stickersResp
         ] = await Promise.all([
           loadConfigFromBackend(), // Usa endpoint específico /api/config
           storageService.load<Department[]>('departments'),
           storageService.load<QuickReply[]>('quickReplies'),
           storageService.load<Workflow[]>('workflows'),
-          storageService.load<ChatbotConfig>('chatbotConfig'),
+          apiService.loadChatbotConfig(),
           storageService.load<ViewState>('viewState'),
           storageService.load<boolean>('sidebarState'),
           storageService.load<User[]>('users'),
           storageService.load<Contact[]>('contacts'),
           storageService.load<Chat[]>('chats'),
+          apiService.getTags(),
+          apiService.getStickers(500),
         ]);
 
         // Atualiza configuração - sempre atualiza mesmo que venha com valores vazios
@@ -717,8 +739,19 @@ const App: React.FC = () => {
         if (workflowsData && workflowsData.length > 0) {
           setWorkflows(workflowsData);
         }
-        if (chatbotConfigData) {
-          setChatbotConfig(chatbotConfigData);
+        if (chatbotConfigResp && (chatbotConfigResp as any).success) {
+          const cfg = (chatbotConfigResp as any).data;
+          if (cfg && typeof cfg === 'object') {
+            setChatbotConfig(cfg as ChatbotConfig);
+          }
+        }
+
+        if (tagsResp && (tagsResp as any).success && Array.isArray((tagsResp as any).data)) {
+          setTags((tagsResp as any).data as TagType[]);
+        }
+
+        if (stickersResp && (stickersResp as any).success && Array.isArray((stickersResp as any).data)) {
+          setStickers((stickersResp as any).data as StickerType[]);
         }
         if (viewStateData) {
           setCurrentView(viewStateData);
@@ -1175,8 +1208,8 @@ const App: React.FC = () => {
                                         
                                         if (chatHasDepartment) {
                                             // Se já tem departamento, pode enviar mensagem de saudação se configurado
-                                            const chatbotConfig = await storageService.load<ChatbotConfig>('chatbotConfig');
-                                            if (chatbotConfig && chatbotConfig.isEnabled && chatbotConfig.greetingMessage) {
+                                            const chatbotCfg = chatbotConfig;
+                                            if (chatbotCfg && chatbotCfg.isEnabled && chatbotCfg.greetingMessage) {
                                                 // Verifica se já foi enviada (para evitar reenvio)
                                                 const hasGreeting = realChat.messages.some((msg: Message) =>
                                                     msg.sender === 'system' && msg.content?.includes('greeting_sent')
@@ -1184,7 +1217,7 @@ const App: React.FC = () => {
                                                 
                                                 if (!hasGreeting) {
                                                     const { sendGreetingMessage } = await import('./services/chatbotService');
-                                                    const success = await sendGreetingMessage(apiConfig, chatbotConfig, {
+                                                    const success = await sendGreetingMessage(apiConfig, chatbotCfg, {
                                                         ...realChat,
                                                         status: 'pending'
                                                     });
@@ -4169,7 +4202,7 @@ const App: React.FC = () => {
   const getDepartmentsForSelection = async (): Promise<Department[]> => {
     // Em demo, mantém comportamento antigo
     if (apiConfig.isDemo) {
-      return (Array.isArray(departments) && departments.length > 0) ? departments : INITIAL_DEPARTMENTS;
+      return (Array.isArray(departments) && departments.length > 0) ? departments : [];
     }
 
     const now = Date.now();
@@ -5457,7 +5490,7 @@ const App: React.FC = () => {
                 newContacts = importedContacts;
             } else {
                 if (apiConfig.isDemo) {
-                   newContacts = MOCK_GOOGLE_CONTACTS.map(c => ({...c, lastSync: new Date()}));
+                   newContacts = [];
                 }
             }
             
@@ -5535,7 +5568,17 @@ const App: React.FC = () => {
     });
   };
 
-  const handleUpdateChatbotConfig = (cfg: ChatbotConfig) => setChatbotConfig(cfg);
+  const handleUpdateChatbotConfig = async (cfg: ChatbotConfig) => {
+    setChatbotConfig(cfg);
+    try {
+      const res = await apiService.saveChatbotConfig(cfg);
+      if (!res.success) {
+        console.warn('[App] ⚠️ Falha ao salvar chatbotConfig no banco:', res.error);
+      }
+    } catch (e: any) {
+      console.warn('[App] ⚠️ Erro ao salvar chatbotConfig no banco:', e?.message || e);
+    }
+  };
 
   const filteredChats = useMemo(() => {
     if (!currentUser) return [];
@@ -5803,10 +5846,12 @@ const App: React.FC = () => {
           </div>
         );
       case 'chat':
-        return <div className="h-full md:p-4"><ChatInterface chats={filteredChats} departments={departments} currentUser={currentUser} onUpdateChat={handleUpdateChat} onAddContact={handleAddContact} apiConfig={apiConfig} quickReplies={quickReplies} workflows={workflows} contacts={contacts} forceSelectChatId={forceSelectChatId} isViewActive={currentView === 'chat'} /></div>;
+        return <div className="h-full md:p-4"><ChatInterface chats={filteredChats} departments={departments} currentUser={currentUser} onUpdateChat={handleUpdateChat} onAddContact={handleAddContact} apiConfig={apiConfig} quickReplies={quickReplies} workflows={workflows} contacts={contacts} tags={tags} stickers={stickers} forceSelectChatId={forceSelectChatId} isViewActive={currentView === 'chat'} /></div>;
       case 'reports': return <ReportsDashboard chats={chats} departments={departments} />;
       case 'contacts': return <Contacts contacts={contacts} onSyncGoogle={handleSyncGoogleContacts} onImportCSV={handleImportCSVContacts} onAddContact={handleAddContact} onStartChat={handleStartChatFromContact} clientId={apiConfig.googleClientId} />;
       case 'chatbot': return <ChatbotSettings config={chatbotConfig} onSave={handleUpdateChatbotConfig} />;
+      case 'tags': return <TagsSettings tags={tags} currentUser={currentUser} onChanged={setTags} />;
+      case 'stickers': return <StickersSettings stickers={stickers} currentUser={currentUser} onChanged={setStickers} />;
       case 'holidays': return <Holidays />;
       case 'connections': return <Connection config={apiConfig} onNavigateToSettings={() => setCurrentView('settings')} onUpdateConfig={handleSaveConfig} />;
       case 'departments': return <DepartmentSettings departments={departments} onAdd={handleAddDepartment} onUpdate={handleUpdateDepartment} onDelete={handleDeleteDepartment} />;
@@ -5883,6 +5928,8 @@ const App: React.FC = () => {
                 <div className={`pt-4 pb-2 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider ${isSidebarCollapsed ? 'text-center' : ''}`}>{isSidebarCollapsed ? 'Admin' : 'Administração'}</div>
                 <SidebarItem view="reports" icon={BarChart} label="Relatórios" />
                 <SidebarItem view="chatbot" icon={Bot} label="Chatbot & Horários" />
+                <SidebarItem view="tags" icon={TagIcon} label="Tags" />
+                <SidebarItem view="stickers" icon={ImageIcon} label="Stickers" />
                 <SidebarItem view="workflows" icon={ListChecks} label="Fluxos (SOP)" />
                 <SidebarItem view="departments" icon={Users} label="Departamentos" />
                 <SidebarItem view="users" icon={ShieldCheck} label="Usuários" />
