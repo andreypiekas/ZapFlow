@@ -4365,6 +4365,13 @@ const App: React.FC = () => {
     const awaiting = !!(chat as any).awaitingRating;
     const withinEndedAtWindow = isRatingWindowOpen(chat);
     const hasPrompt = hasRecentRatingPrompt((chat as any).messages);
+    const status: any = (chat as any).status;
+
+    // IMPORTANTE: após F5, pode acontecer de `awaitingRating`/prompt não estarem presentes ainda,
+    // mas o chat está `closed` e `endedAt` está dentro da janela. Nessa situação, "1" a "5"
+    // deve ser tratado como avaliação para NÃO reabrir e NÃO enviar seleção de setor.
+    if (withinEndedAtWindow && status === 'closed') return true;
+
     return (awaiting && withinEndedAtWindow) || hasPrompt;
   };
 

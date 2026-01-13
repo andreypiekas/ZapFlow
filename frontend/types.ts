@@ -136,6 +136,7 @@ export interface Chat {
   clientCode?: string;
   tags?: string[]; // Array of Tag IDs or Names
   departmentId: string | null;
+  closedDepartmentId?: string | null; // Departamento do atendimento no momento do fechamento (para relatórios)
   unreadCount: number;
   lastMessage: string;
   lastMessageTime: Date;

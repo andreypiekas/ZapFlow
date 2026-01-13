@@ -514,3 +514,16 @@ Manter os arquivos de instucao e manuais, documentos
 
 **Critério de aceite:**
 - Abrir **Relatórios** após fechar chats e registrar avaliações → métricas (finalizados/CSAT/últimas avaliações) aparecem e persistem após F5.
+
+---
+
+### 28. Pós-finalização: nota 1–5 não pode disparar seleção de setor após F5 + manter departamento no relatório
+**Status:** ✅ Concluído  
+**Prioridade:** Alta  
+**Resumo:**
+- Dentro da janela pós-finalização (15 min), respostas **“1” a “5”** são tratadas como **avaliação** mesmo após F5 (quando `awaitingRating`/prompt ainda não carregaram), evitando reabrir chat e evitando enviar seleção de departamento.
+- Backend passa a salvar `closedDepartmentId` no fechamento antes de limpar `departmentId`, para que Relatórios mantenha a atribuição correta por departamento.
+
+**Critério de aceite:**
+- Finalizar chat → cliente responde “5” → dar F5 → **não** envia seleção de setor automaticamente; rating permanece.
+- Relatórios: atendimentos fechados continuam contabilizados no departamento correto (não migram para “Sem Setor”).

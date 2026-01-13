@@ -2300,7 +2300,9 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
       contactName,
       contactAvatar,
       awaitingDepartmentSelection,
-      departmentSelectionSent
+      departmentSelectionSent,
+      awaitingRating,
+      rating
     } = req.body;
 
     // Decodifica o chatId (pode vir URL encoded)
@@ -2377,6 +2379,12 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
     if (assignedTo !== undefined) {
       chatData.assignedTo = assignedTo;
     }
+
+    // Para relatórios: capturar o departamento do atendimento ANTES de limpar no fechamento.
+    // Preferência: usa departmentId do request quando for um valor real (não null), senão usa o do chat existente.
+    const resolvedDepartmentIdForClose =
+      (departmentId !== undefined && departmentId !== null) ? departmentId : (chatData.departmentId ?? null);
+
     if (departmentId !== undefined) {
       chatData.departmentId = departmentId;
     }
@@ -2392,8 +2400,25 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
     if (departmentSelectionSent !== undefined) {
       chatData.departmentSelectionSent = departmentSelectionSent;
     }
+    if (awaitingRating !== undefined) {
+      chatData.awaitingRating = awaitingRating;
+    }
+    if (rating !== undefined) {
+      chatData.rating = rating;
+    }
     if (status === 'closed') {
       chatData.endedAt = new Date().toISOString();
+
+      // Salva o departamento de fechamento para relatórios (mesmo que departmentId seja limpo)
+      if (resolvedDepartmentIdForClose) {
+        chatData.closedDepartmentId = resolvedDepartmentIdForClose;
+      }
+
+      // Ao fechar, abre janela de avaliação (se ainda não houver rating salvo)
+      if (chatData.rating === undefined || chatData.rating === null) {
+        chatData.awaitingRating = true;
+      }
+
       // Ao finalizar atendimento, limpa o departamento para evitar auto-roteamento no próximo contato
       chatData.departmentId = null;
       chatData.assignedTo = undefined;
@@ -2401,6 +2426,9 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
       chatData.departmentSelectionSent = false;
     } else if (status === 'open' && chatData.endedAt) {
       chatData.endedAt = undefined;
+      chatData.awaitingRating = false;
+      chatData.rating = undefined;
+      chatData.closedDepartmentId = undefined;
     }
 
     // Garante que decodedChatId não é null/undefined

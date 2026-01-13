@@ -9,6 +9,15 @@ interface ReportsDashboardProps {
 }
 
 const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments }) => {
+
+  // Para relatórios: quando um atendimento é finalizado, `departmentId` pode ser limpo (fluxo normal).
+  // Nesse caso, usamos `closedDepartmentId` (capturado no fechamento) para manter a atribuição correta.
+  const getReportDepartmentId = (chat: Chat): string | null => {
+    const anyChat: any = chat as any;
+    return (chat.status === 'closed')
+      ? (anyChat.closedDepartmentId ?? chat.departmentId ?? null)
+      : (chat.departmentId ?? null);
+  };
   
   // Métricas Principais
   const totalChats = chats.length;
@@ -32,11 +41,11 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
 
   // Agrupamentos
   const chatsByDepartment = departments.map(dept => {
-    const count = chats.filter(c => c.departmentId === dept.id).length;
-    const closed = chats.filter(c => c.departmentId === dept.id && c.status === 'closed').length;
+    const count = chats.filter(c => getReportDepartmentId(c) === dept.id).length;
+    const closed = chats.filter(c => getReportDepartmentId(c) === dept.id && c.status === 'closed').length;
     const rated = chats.filter(c => {
       const rating = c.rating;
-      return c.departmentId === dept.id && rating !== undefined && rating !== null && typeof rating === 'number' && rating >= 1 && rating <= 5;
+      return getReportDepartmentId(c) === dept.id && rating !== undefined && rating !== null && typeof rating === 'number' && rating >= 1 && rating <= 5;
     });
     const deptAvgRating = rated.length > 0
       ? (rated.reduce((acc, curr) => acc + (curr.rating || 0), 0) / rated.length).toFixed(1)
@@ -44,7 +53,7 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
     return { name: dept.name, color: dept.color, count, closed, rated: rated.length, avgRating: deptAvgRating };
   });
 
-  const generalChats = chats.filter(c => !c.departmentId).length;
+  const generalChats = chats.filter(c => !getReportDepartmentId(c)).length;
   
   // Distribuição de avaliações (1-5 estrelas)
   const ratingDistribution = [1, 2, 3, 4, 5].map(rating => ({
