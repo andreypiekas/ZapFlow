@@ -2195,6 +2195,32 @@ const App: React.FC = () => {
                               lastMergedMsg.timestamp.getTime() > lastExistingMsg.timestamp.getTime()));
                         
                         // Verifica se há contato salvo para atualizar o nome
+                        // Também melhora o nome usando o "pushName/subject" do WhatsApp (via Evolution)
+                        // quando o contato não está salvo (ex.: contactName numérico).
+                        const isGroupChat = String(existingChat.id || realChat.id).includes('@g.us');
+                        const whatsappNameCandidate = (realChat as any)?.contactName ? String((realChat as any).contactName).trim() : '';
+
+                        const isPlaceholderName = (name: string | undefined | null): boolean => {
+                          const n = String(name || '').trim();
+                          if (!n) return true;
+                          if (/^\d+$/.test(n)) return true;
+                          // placeholders comuns
+                          if (n === (existingChat.contactNumber || '').trim()) return true;
+                          if ((existingChat.contactNumber && n === String(existingChat.contactNumber).replace(/\D/g, ''))) return true;
+                          if (isGroupChat && (n.toLowerCase().startsWith('grupo ') || n.toLowerCase().startsWith('group '))) return true;
+                          return false;
+                        };
+
+                        const isGoodWhatsAppName = (name: string): boolean => {
+                          const n = String(name || '').trim();
+                          if (!n) return false;
+                          if (/^\d+$/.test(n)) return false;
+                          // evita "nome" igual ao próprio id/número
+                          if (n === String(existingChat.contactNumber || '').trim()) return false;
+                          if (n === String(existingChat.id || '').trim()) return false;
+                          return true;
+                        };
+
                         let finalContactName = existingChat.contactName;
                         if (contacts.length > 0) {
                           const chatPhone = normalizePhoneForMatch(useRealContactNumber ? realChat.contactNumber : existingChat.contactNumber);
@@ -2218,6 +2244,11 @@ const App: React.FC = () => {
                               finalContactName = contactMatch.name.trim();
                             }
                           }
+                        }
+
+                        // Se não tem contato salvo (ou o nome ainda é placeholder), tenta usar o nome do WhatsApp (pushName/subject).
+                        if (isPlaceholderName(finalContactName) && isGoodWhatsAppName(whatsappNameCandidate)) {
+                          finalContactName = whatsappNameCandidate;
                         }
                         
                         let finalContactAvatar = existingChat.contactAvatar || realChat.contactAvatar;
