@@ -31,7 +31,120 @@ export const normalizeJid = (jid: string | null | undefined): string => {
 const unsupportedEvolutionEndpointsByBaseUrl = {
     fetchMessages: new Set<string>(),
     includeMessagesInFindChats: new Set<string>(),
-    fetchAllMessages: new Set<string>()
+    fetchAllMessages: new Set<string>(),
+    fetchGroups: new Set<string>()
+};
+
+// Cache simples de nomes de grupos (remoteJid -> subject/name) por baseUrl+instance.
+// TTL curto para evitar spam de requests em polling.
+const groupSubjectsCacheByKey = new Map<string, { fetchedAt: number; map: Map<string, string> }>();
+const GROUPS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
+
+const isPlaceholderGroupName = (name: string | undefined | null): boolean => {
+    const n = String(name || '').trim();
+    if (!n) return true;
+    if (/^\d+$/.test(n)) return true;
+    return n.toLowerCase().startsWith('grupo ') || n.toLowerCase().startsWith('group ');
+};
+
+// Best-effort: tenta obter lista de grupos (subject) pela Evolution API.
+// Como a API pode variar por versão/deploy, testamos múltiplos endpoints e formatos.
+const fetchGroupSubjectsMap = async (config: ApiConfig, instanceName: string): Promise<Map<string, string>> => {
+    const baseUrlKey = getEvolutionBaseUrlKey(config);
+    const cacheKey = `${baseUrlKey}::${instanceName}`;
+    const now = Date.now();
+    const cached = groupSubjectsCacheByKey.get(cacheKey);
+    if (cached && (now - cached.fetchedAt) < GROUPS_CACHE_TTL_MS) {
+        return cached.map;
+    }
+
+    if (unsupportedEvolutionEndpointsByBaseUrl.fetchGroups.has(baseUrlKey)) {
+        return new Map<string, string>();
+    }
+
+    const candidates: Array<{ method: 'GET' | 'POST'; url: string; body?: any }> = [
+        // Endpoints mais comuns (variam por imagem/versão)
+        { method: 'GET', url: `${config.baseUrl}/group/findGroups/${instanceName}` },
+        { method: 'POST', url: `${config.baseUrl}/group/findGroups/${instanceName}`, body: {} },
+        { method: 'GET', url: `${config.baseUrl}/group/fetchAllGroups/${instanceName}` },
+        { method: 'GET', url: `${config.baseUrl}/group/list/${instanceName}` },
+        { method: 'GET', url: `${config.baseUrl}/group/groups/${instanceName}` }
+    ];
+
+    const normalizeJidKey = (jid: any): string => {
+        const raw = typeof jid === 'string' ? jid : (jid?.remoteJid || jid?.jid || jid?.id);
+        const n = normalizeJid(String(raw || ''));
+        return n;
+    };
+
+    const pickTitle = (g: any): string => {
+        const title =
+            g?.subject ||
+            g?.name ||
+            g?.groupSubject ||
+            g?.groupName ||
+            g?.title ||
+            g?.topic ||
+            '';
+        return String(title || '').trim();
+    };
+
+    const extractGroups = (data: any): any[] => {
+        if (!data) return [];
+        if (Array.isArray(data)) return data;
+        const candidates = [
+            data?.groups,
+            data?.data,
+            data?.response,
+            data?.response?.groups,
+            data?.response?.data,
+            data?.result,
+            data?.result?.groups
+        ];
+        for (const c of candidates) {
+            if (Array.isArray(c)) return c;
+        }
+        // Às vezes vem como objeto map; tenta values
+        if (data && typeof data === 'object') {
+            const values = Object.values(data);
+            if (values.length && values.every(v => v && typeof v === 'object')) return values as any[];
+        }
+        return [];
+    };
+
+    for (const c of candidates) {
+        try {
+            const res = await fetch(c.url, {
+                method: c.method,
+                headers: { ...createAuthHeaders(config), ...(c.method === 'POST' ? { 'Content-Type': 'application/json' } : {}) },
+                body: c.method === 'POST' ? JSON.stringify(c.body ?? {}) : undefined
+            });
+
+            if (res.status === 404) continue;
+            if (!res.ok) continue;
+
+            const raw = await res.json().catch(() => null);
+            const groups = extractGroups(raw);
+
+            const map = new Map<string, string>();
+            for (const g of groups) {
+                const jid = normalizeJidKey(g?.remoteJid || g?.jid || g?.id || g?.groupJid);
+                if (!jid || !jid.includes('@g.us')) continue;
+                const title = pickTitle(g);
+                if (!title) continue;
+                map.set(jid, title);
+            }
+
+            groupSubjectsCacheByKey.set(cacheKey, { fetchedAt: now, map });
+            return map;
+        } catch {
+            // ignore and try next
+        }
+    }
+
+    // Se nenhum endpoint funcionou, marca como não suportado para evitar spam.
+    unsupportedEvolutionEndpointsByBaseUrl.fetchGroups.add(baseUrlKey);
+    return new Map<string, string>();
 };
 
 const getEvolutionBaseUrlKey = (config: ApiConfig): string => {
@@ -1780,7 +1893,15 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
         //     }
         // });
 
-        // 4. Mapeia para o formato interno do Frontend
+        // 4. Best-effort: tenta resolver subject/nome real de grupos (quando disponível na Evolution)
+        const hasAnyGroup = chatsArray.some((c: any) => {
+            const id = String(c?.id || '');
+            const rj = String(c?.raw?.remoteJid || '');
+            return id.includes('@g.us') || rj.includes('@g.us');
+        });
+        const groupSubjectsMap = hasAnyGroup ? await fetchGroupSubjectsMap(config, instanceName) : new Map<string, string>();
+
+        // 5. Mapeia para o formato interno do Frontend
         const mappedChats = chatsArray.map((item: any) => {
             // Logs removidos para produção - muito verbosos
             // console.log(`[MapChat] Processando chat: ID=${item.id}, Messages=${item.messages?.length || 0}`);
@@ -2013,12 +2134,16 @@ export const fetchChats = async (config: ApiConfig): Promise<Chat[]> => {
             // - Para grupos, `pushName` costuma ser o nome do participante/remetente e NÃO o nome do grupo.
             //   Então priorizamos `raw.name/subject` para manter o nome real do grupo.
             // - Para contatos, `pushName` é útil quando o contato não está salvo.
-            const groupTitle =
+            const groupJidKey = isGroup ? normalizeJid(item.raw?.remoteJid || item.id) : '';
+            const subjectFromGroupsApi = isGroup ? (groupSubjectsMap.get(groupJidKey) || '') : '';
+            const rawGroupTitle =
               item.raw?.name ||
               item.raw?.subject ||
               item.raw?.groupSubject ||
               item.raw?.groupName ||
               '';
+            // Se o raw não trouxe o nome do grupo (ou trouxe placeholder), tenta o endpoint de grupos
+            const groupTitle = (!isPlaceholderGroupName(rawGroupTitle) ? rawGroupTitle : (subjectFromGroupsApi || rawGroupTitle));
             const name = isGroup
               ? (groupTitle || item.id.split('@')[0])
               : (item.raw.pushName || item.raw.name || (validNumber || item.id.split('@')[0]));
