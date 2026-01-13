@@ -502,3 +502,15 @@ Manter os arquivos de instucao e manuais, documentos
 
 **Critério de aceite:**
 - Em ambiente sem proxy `/message/*`, o console não fica repetindo 404 para cada chat.
+
+---
+
+### 27. Relatórios: carregar chats do banco corretamente (persistência por chatId)
+**Status:** ✅ Concluído  
+**Prioridade:** Alta  
+**Resumo:**
+- `chats` deixou de ser salvo em `chats/default` e passou a ser persistido **por chat** (`data_key = chatId`).
+- Ajuste: no login, o frontend carrega chats via `getAllData('chats')` e monta o array, garantindo que **Relatórios** tenha acesso a `status/endedAt/rating` e histórico completo.
+
+**Critério de aceite:**
+- Abrir **Relatórios** após fechar chats e registrar avaliações → métricas (finalizados/CSAT/últimas avaliações) aparecem e persistem após F5.

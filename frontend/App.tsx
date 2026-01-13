@@ -680,7 +680,7 @@ const App: React.FC = () => {
           sidebarStateData,
           usersData,
           contactsData,
-          chatsData,
+          chatsMap,
           tagsResp,
           stickersResp
         ] = await Promise.all([
@@ -693,7 +693,8 @@ const App: React.FC = () => {
           storageService.load<boolean>('sidebarState'),
           storageService.load<User[]>('users'),
           storageService.load<Contact[]>('contacts'),
-          storageService.load<Chat[]>('chats'),
+          // Chats são persistidos por chatId (data_key = chatId). Portanto, carregar como mapa completo.
+          storageService.getAllData<Chat>('chats'),
           apiService.getTags(),
           apiService.getStickers(500),
         ]);
@@ -771,6 +772,7 @@ const App: React.FC = () => {
         if (contactsData && contactsData.length > 0) {
           setContacts(contactsData);
         }
+        const chatsData = chatsMap ? Object.values(chatsMap) : [];
         if (chatsData && chatsData.length > 0) {
           // Converte timestamps de string para Date
           const chatsWithDates = chatsData.map((chat: Chat) => ({
