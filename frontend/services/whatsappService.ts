@@ -54,6 +54,18 @@ const formatPhoneForApi = (phone: string): string => {
     return clean;
 };
 
+// Normaliza o destino para envio na Evolution API.
+// - Para grupos: mantém o JID completo "...@g.us"
+// - Para contatos: garante número (com DDI quando necessário)
+const normalizeRecipientForEvolution = (raw: string): string => {
+    const value = String(raw || '').trim();
+    if (!value) return '';
+    if (value.includes('@g.us')) return value; // group JID
+    // Se vier como JID de contato (@s.whatsapp.net / @lid), remove domínio e formata
+    const base = value.includes('@') ? value.split('@')[0] : value;
+    return formatPhoneForApi(base);
+};
+
 // Função para limpar número de contato e garantir formato internacional
 // WhatsApp precisa do número com código do país para reconhecer o contato
 const cleanContactPhone = (phone: string): string => {
@@ -502,19 +514,19 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
   const active = await findActiveInstance(config);
   const target = active?.instanceName || config.instanceName;
   
-  // Formata o número (Adiciona 55 se faltar e tiver 10/11 dígitos)
-  const cleanPhone = formatPhoneForApi(phone);
+  // Normaliza destino (grupo: JID @g.us, contato: número)
+  const recipient = normalizeRecipientForEvolution(phone);
 
   try {
     // Valida que o texto não está vazio
     if (!text || text.trim().length === 0) {
-      console.error(`[sendRealMessage] Erro: texto vazio para ${cleanPhone}`);
+      console.error(`[sendRealMessage] Erro: texto vazio para ${recipient}`);
       return false;
     }
 
     // Payload simplificado para máxima compatibilidade com v2.x
     const payload: any = {
-        number: cleanPhone,
+        number: recipient,
         text: text.trim(),
         delay: 1200,
         linkPreview: false
@@ -528,7 +540,7 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
             // A Evolution API espera o objeto completo com key e message
             payload.quoted = {
                 key: {
-                    remoteJid: replyToRawMessage.key.remoteJid || cleanPhone + '@s.whatsapp.net',
+                    remoteJid: replyToRawMessage.key.remoteJid || (recipient.includes('@g.us') ? recipient : (recipient + '@s.whatsapp.net')),
                     fromMe: replyToRawMessage.key.fromMe !== undefined ? replyToRawMessage.key.fromMe : false,
                     id: replyToRawMessage.key.id || replyToMessageId,
                     participant: replyToRawMessage.key.participant || undefined
@@ -560,15 +572,15 @@ export const sendRealMessage = async (config: ApiConfig, phone: string, text: st
     
     if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[sendRealMessage] Falha API: ${response.status} para ${cleanPhone}`, errorText);
+        console.error(`[sendRealMessage] Falha API: ${response.status} para ${recipient}`, errorText);
         
         // Tenta parsear o erro para verificar se é "exists: false"
         try {
             const errorJson = JSON.parse(errorText);
             if (errorJson.response?.message?.[0]?.exists === false) {
-                console.error(`[sendRealMessage] Número não existe no WhatsApp: ${cleanPhone}`);
+                console.error(`[sendRealMessage] Número não existe no WhatsApp: ${recipient}`);
                 // Lança um erro específico para que o componente possa mostrar uma mensagem adequada
-                throw new Error(`O número ${cleanPhone} não existe no WhatsApp ou não está registrado.`);
+                throw new Error(`O número ${recipient} não existe no WhatsApp ou não está registrado.`);
             }
         } catch (parseError) {
             // Se não conseguir parsear, continua com o tratamento normal
@@ -693,16 +705,16 @@ export const sendRealMessageWithId = async (
 
   const active = await findActiveInstance(config);
   const target = active?.instanceName || config.instanceName;
-  const cleanPhone = formatPhoneForApi(phone);
+  const recipient = normalizeRecipientForEvolution(phone);
 
   try {
     if (!text || text.trim().length === 0) {
-      console.error(`[sendRealMessageWithId] Erro: texto vazio para ${cleanPhone}`);
+      console.error(`[sendRealMessageWithId] Erro: texto vazio para ${recipient}`);
       return { success: false, error: 'Texto vazio' };
     }
 
     const payload: any = {
-      number: cleanPhone,
+      number: recipient,
       text: text.trim(),
       delay: 1200,
       linkPreview: false
@@ -713,7 +725,7 @@ export const sendRealMessageWithId = async (
       if (replyToRawMessage && replyToRawMessage.key) {
         payload.quoted = {
           key: {
-            remoteJid: replyToRawMessage.key.remoteJid || cleanPhone + '@s.whatsapp.net',
+            remoteJid: replyToRawMessage.key.remoteJid || (recipient.includes('@g.us') ? recipient : (recipient + '@s.whatsapp.net')),
             fromMe: replyToRawMessage.key.fromMe !== undefined ? replyToRawMessage.key.fromMe : false,
             id: replyToRawMessage.key.id || replyToMessageId,
             participant: replyToRawMessage.key.participant || undefined
@@ -742,13 +754,13 @@ export const sendRealMessageWithId = async (
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[sendRealMessageWithId] Falha API: ${response.status} para ${cleanPhone}`, errorText);
+      console.error(`[sendRealMessageWithId] Falha API: ${response.status} para ${recipient}`, errorText);
 
       let errorMessage: string | undefined;
       try {
         const errorJson = JSON.parse(errorText);
         if (errorJson.response?.message?.[0]?.exists === false) {
-          errorMessage = `O número ${cleanPhone} não existe no WhatsApp ou não está registrado.`;
+          errorMessage = `O número ${recipient} não existe no WhatsApp ou não está registrado.`;
         }
       } catch {
         // ignore parse errors
@@ -818,8 +830,8 @@ export const sendRealMediaMessageWithId = async (
   const active = await findActiveInstance(config);
   const target = active?.instanceName || config.instanceName;
 
-  // Formata o número
-  const cleanPhone = formatPhoneForApi(phone);
+  // Normaliza destino (grupo: JID @g.us, contato: número)
+  const recipient = normalizeRecipientForEvolution(phone);
 
   const base64 = await blobToBase64(mediaBlob);
 
@@ -828,7 +840,7 @@ export const sendRealMediaMessageWithId = async (
 
   // Evolution API v2.3.4 e v2.3.6 esperam mediatype no nível raiz, não dentro de mediaMessage
   const body: any = {
-    number: cleanPhone,
+    number: recipient,
     delay: 1200,
     mediatype: mediaType, // Propriedade no nível raiz (requerido pela API)
     media: base64,
@@ -895,7 +907,7 @@ export const sendRealContact = async (
   const target = active?.instanceName || config.instanceName;
   
   // Formata o número de destino (adiciona 55 se necessário)
-  const cleanPhone = formatPhoneForApi(phone);
+  const cleanPhone = normalizeRecipientForEvolution(phone);
   
   // Limpa o número do contato SEM adicionar código do país
   // Preserva o formato exato fornecido pelo usuário

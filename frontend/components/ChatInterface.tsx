@@ -80,6 +80,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
   
   // Helper function para extrair número válido do chat
   const getValidPhoneNumber = (chat: Chat): string => {
+    // Grupos usam JID (@g.us). Não é número de telefone e deve ser enviado como JID.
+    if (chat?.id && chat.id.includes('@g.us')) {
+        return chat.id;
+    }
+
     console.log(`[NumberDebug] Iniciando busca para chat ID: ${chat.id}, contactNumber: ${chat.contactNumber}, mensagens: ${chat.messages.length}`);
     
     // PRIMEIRO: Tenta extrair do ID do chat se for um JID válido (número completo)
@@ -1529,8 +1534,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
     console.log("[NumberDebug] Número final para envio:", targetNumber);
 
     // Valida se tem número válido antes de enviar (>=10 dígitos, formatPhoneForApi adiciona DDI se necessário)
+    const isGroupTarget = selectedChat.id.includes('@g.us') || targetNumber.includes('@g.us');
     const targetDigits = targetNumber.replace(/\D/g, '').length;
-    if (!targetNumber || targetDigits < 10) {
+    if (!targetNumber || (!isGroupTarget && targetDigits < 10)) {
         alert('Erro: Não foi possível encontrar um número de telefone válido para este contato. Aguarde a sincronização ou verifique as configurações.');
         setIsSending(false);
         return;
@@ -1661,8 +1667,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       const targetNumber = getValidPhoneNumber(selectedChat);
       
       // Valida se tem número válido antes de enviar (>=10 dígitos, formatPhoneForApi adiciona DDI se necessário)
+      const isGroupTarget = selectedChat.id.includes('@g.us') || targetNumber.includes('@g.us');
       const targetDigits = targetNumber.replace(/\D/g, '').length;
-      if (!targetNumber || targetDigits < 10) {
+      if (!targetNumber || (!isGroupTarget && targetDigits < 10)) {
           alert('Erro: Não foi possível encontrar um número de telefone válido para este contato. Aguarde a sincronização ou verifique as configurações.');
           setIsSending(false);
           return;
