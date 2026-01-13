@@ -880,19 +880,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
         // Chats atribuídos ao usuário atual ou com departamento atribuído
         const isAssigned = chat.assignedTo === currentUser.id || (chat.departmentId !== null && chat.departmentId !== undefined);
 
-        // Aba "Grupos": mostra somente grupos (separado do fluxo normal)
+        // Aba "Finalizados": mostra todos os chats fechados (inclui grupos)
+        if (activeTab === 'closed') {
+            return isClosed;
+        }
+
+        // Aba "Grupos": mostra somente grupos ABERTOS/PENDENTES (grupos fechados vão para "Finalizados")
         if (activeTab === 'groups') {
-            return isGroupChat;
+            return isGroupChat && !isClosed;
         }
 
         // Nas demais abas, grupos não aparecem
         if (isGroupChat) {
             return false;
-        }
-
-        // Aba "Finalizados": apenas chats com status 'closed' (não-grupos)
-        if (activeTab === 'closed') {
-            return isClosed;
         }
 
         // Chats fechados NÃO devem aparecer em outras abas

@@ -247,7 +247,7 @@
   - Configura Nginx com `80 → 443` e proxy:
     - `/` → frontend (`:5173`)
     - `/api/` → backend (`:3001`)
-    - `/instance/`, `/message/`, `/chat/`, `/socket.io/` → Evolution (`:8080`) com upgrade (WSS)
+    - `/instance/`, `/message/`, `/chat/`, `/group/`, `/socket.io/` → Evolution (`:8080`) com upgrade (WSS)
 - Helper (Windows): `install/https_autoconfig.ps1` (importa o cert no store confiável do Windows).
 - Docs: `docs/HTTPS_POR_IP_AUTOCONFIG.md` (inclui passos Windows/Android e troubleshooting).
 - Docker: `docker-compose.yml` aceita override de URL pública via `EVOLUTION_SERVER_URL`.
@@ -259,6 +259,7 @@
 **Observações (validação em ambiente):**
 - Se aparecer **Mixed Content** no browser, normalmente é porque o Nginx **não está proxyando** a Evolution (HTTP) via HTTPS nas rotas `/message/`, `/chat/`, `/instance/`, `/group/` e `/socket.io/`.
 - Se aparecer **404** em `POST /message/fetchMessages/<instance>` no host HTTPS, significa que o proxy dessas rotas **não está aplicado**. O frontend já tem mitigação para **não spammar** o console após detectar 404, mas o ideal é ajustar o proxy.
+- Para zerar Mixed Content de mídia, a Evolution deve anunciar URLs HTTPS: usar `EVOLUTION_SERVER_URL=https://<IP>` (o `install/https_autoconfig.sh` já grava isso automaticamente no `.env` da raiz do projeto).
 
 ---
 
@@ -477,6 +478,7 @@ Manter os arquivos de instucao e manuais, documentos
 **Commits:** `265ac14`, `7c51e80`, `02fac1f`, `e9b6f1d`, `8eee773`, `55b2ee8`, `9f9e682`, `f72f63f`, `687f7e9`, `2c2ff21`  
 **Resumo:**
 - UI: nova aba **Grupos** e grupos isolados do fluxo “A Fazer/Aguardando/Finalizados”.
+- Regra: **grupos fechados (status `closed`) aparecem em “Finalizados”** (não ficam na aba “Grupos”).
 - Webhook: `chats.update` cria stub no banco para grupos aparecerem mesmo sem mensagens.
 - Mensagens automáticas (**seleção de departamento/chatbot**) bloqueadas para `@g.us` em todos os pontos críticos.
 - Envio para grupos: suporta destino `@g.us` (JID), sem validação numérica.
