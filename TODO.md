@@ -523,7 +523,24 @@ Manter os arquivos de instucao e manuais, documentos
 **Resumo:**
 - Dentro da janela pós-finalização (15 min), respostas **“1” a “5”** são tratadas como **avaliação** mesmo após F5 (quando `awaitingRating`/prompt ainda não carregaram), evitando reabrir chat e evitando enviar seleção de departamento.
 - Backend passa a salvar `closedDepartmentId` no fechamento antes de limpar `departmentId`, para que Relatórios mantenha a atribuição correta por departamento.
+- Frontend preserva `closedDepartmentId` ao finalizar o chat (antes de limpar `departmentId`), evitando perda do “último setor” quando o chat é salvo por inteiro.
+- Fallback: ao salvar chat completo, o app tenta preencher `closedDepartmentId` a partir do `departmentId` anterior caso venha ausente (robustez).
 
 **Critério de aceite:**
 - Finalizar chat → cliente responde “5” → dar F5 → **não** envia seleção de setor automaticamente; rating permanece.
 - Relatórios: atendimentos fechados continuam contabilizados no departamento correto (não migram para “Sem Setor”).
+
+---
+
+### 29. Relatórios: métricas reais (CSAT/TMA/1ª resposta) + robustez de dados
+**Status:** ✅ Concluído  
+**Prioridade:** Alta  
+**Resumo:**
+- CSAT: cálculo usa rating numérico (aceita `number` e faz coercion defensivo se vier como string).
+- TMA: calculado como `endedAt - primeira mensagem do usuário` (fallback para 1ª não-system).
+- Tempo de resposta: calculado como `1ª msg do agente - 1ª msg do usuário`.
+- Export CSV usa o departamento correto do relatório (considera `closedDepartmentId` quando o chat está `closed`).
+
+**Critério de aceite:**
+- “Últimas Avaliações” aparece quando existem chats com nota 1–5.
+- TMA e Tempo de Resposta deixam de ser valores fixos e passam a refletir os chats do banco.

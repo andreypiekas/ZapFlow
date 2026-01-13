@@ -2383,7 +2383,9 @@ app.put('/api/chats/:chatId', authenticateToken, dataLimiter, async (req, res) =
     // Para relatórios: capturar o departamento do atendimento ANTES de limpar no fechamento.
     // Preferência: usa departmentId do request quando for um valor real (não null), senão usa o do chat existente.
     const resolvedDepartmentIdForClose =
-      (departmentId !== undefined && departmentId !== null) ? departmentId : (chatData.departmentId ?? null);
+      (departmentId !== undefined && departmentId !== null)
+        ? departmentId
+        : (chatData.closedDepartmentId ?? chatData.departmentId ?? null);
 
     if (departmentId !== undefined) {
       chatData.departmentId = departmentId;

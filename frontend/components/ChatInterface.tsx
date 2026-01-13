@@ -1825,11 +1825,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ chats, departments, curre
       ? 'Atendimento finalizado. Enviamos uma pesquisa de satisfação para o cliente.' 
       : 'Atendimento finalizado pelo agente.';
 
+    // Preserva o departamento do atendimento para relatórios (mesmo que departmentId seja limpo ao fechar).
+    const closedDepartmentId = selectedChat.departmentId;
+
     const updatedChat: Chat = {
       ...selectedChat,
       status: 'closed',
       // Limpa departamento ao finalizar para evitar auto-roteamento no próximo atendimento
       departmentId: null,
+      closedDepartmentId: closedDepartmentId ?? undefined,
       awaitingDepartmentSelection: false,
       departmentSelectionSent: false,
       endedAt: new Date(),

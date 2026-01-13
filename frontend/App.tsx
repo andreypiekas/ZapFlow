@@ -4648,10 +4648,19 @@ const App: React.FC = () => {
               msgCount: updatedChat.messages.length
             });
             
+            // Preserva o "último departamento" para relatórios quando o chat é finalizado e departmentId é limpo.
+            const oldChatDepartmentId = (oldChat as any)?.departmentId ?? null;
+            const updatedClosedDept = (updatedChat as any)?.closedDepartmentId ?? null;
+            const shouldBackfillClosedDept =
+              updatedChat.status === 'closed' &&
+              !updatedClosedDept &&
+              oldChatDepartmentId;
+
             // CRÍTICO: Normaliza mensagens do agente ANTES de salvar no banco
             // Garante que mensagens do agente NUNCA tenham cabeçalho no banco
             const normalizedChat = {
               ...updatedChat,
+              ...(shouldBackfillClosedDept ? { closedDepartmentId: oldChatDepartmentId } : {}),
               messages: updatedChat.messages.map(msg => ({
                 ...msg,
                 // Canonicaliza o ID quando temos whatsappMessageId, evitando duplicação (DB vs Socket/REST).

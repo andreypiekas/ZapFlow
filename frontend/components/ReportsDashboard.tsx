@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Chat, Department } from '../types';
-import { BarChart, Clock, ThumbsUp, MessageSquare, CheckCircle, TrendingUp, Users, Download } from 'lucide-react';
+import { BarChart, Clock, ThumbsUp, MessageSquare, CheckCircle, Users, Download } from 'lucide-react';
 
 interface ReportsDashboardProps {
   chats: Chat[];
@@ -18,6 +18,63 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
       ? (anyChat.closedDepartmentId ?? chat.departmentId ?? null)
       : (chat.departmentId ?? null);
   };
+
+  const toMs = (value: any): number => {
+    if (!value) return 0;
+    const ms = value instanceof Date ? value.getTime() : new Date(value).getTime();
+    return Number.isFinite(ms) ? ms : 0;
+  };
+
+  const formatDuration = (ms: number): string => {
+    if (!Number.isFinite(ms) || ms <= 0) return 'N/A';
+    const totalSeconds = Math.round(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
+  };
+
+  const getNumericRating = (chat: Chat): number | null => {
+    const raw: any = (chat as any).rating;
+    const n = typeof raw === 'number' ? raw : Number.parseInt(String(raw || ''), 10);
+    if (!Number.isFinite(n) || n < 1 || n > 5) return null;
+    return n;
+  };
+
+  const getChatStartMs = (chat: Chat): number => {
+    const msgs: any[] = Array.isArray((chat as any).messages) ? (chat as any).messages : [];
+    const userTimes = msgs
+      .filter(m => m && m.sender === 'user')
+      .map(m => toMs(m.timestamp))
+      .filter(ms => ms > 0);
+    if (userTimes.length > 0) return Math.min(...userTimes);
+
+    const nonSystemTimes = msgs
+      .filter(m => m && m.sender !== 'system')
+      .map(m => toMs(m.timestamp))
+      .filter(ms => ms > 0);
+    if (nonSystemTimes.length > 0) return Math.min(...nonSystemTimes);
+
+    return toMs((chat as any).lastMessageTime);
+  };
+
+  const getFirstResponseMs = (chat: Chat): number => {
+    const msgs: any[] = Array.isArray((chat as any).messages) ? (chat as any).messages : [];
+    const firstUserMs = getChatStartMs(chat);
+    if (!firstUserMs) return 0;
+
+    const agentTimes = msgs
+      .filter(m => m && m.sender === 'agent')
+      .map(m => toMs(m.timestamp))
+      .filter(ms => ms > firstUserMs);
+
+    if (agentTimes.length === 0) return 0;
+    const firstAgentMs = Math.min(...agentTimes);
+    const diff = firstAgentMs - firstUserMs;
+    return diff > 0 ? diff : 0;
+  };
   
   // Métricas Principais
   const totalChats = chats.length;
@@ -25,30 +82,49 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
   const closedChats = chats.filter(c => c.status === 'closed').length;
   
   // Filtra avaliações válidas (rating deve ser um número entre 1 e 5)
-  const ratedChats = chats.filter(c => {
-    const rating = c.rating;
-    return rating !== undefined && rating !== null && typeof rating === 'number' && rating >= 1 && rating <= 5;
-  });
+  const ratedChats = chats
+    .map(c => ({ chat: c, rating: getNumericRating(c) }))
+    .filter(x => x.rating != null)
+    .map(x => ({ ...x.chat, rating: x.rating as number }));
   
   const averageRating = ratedChats.length > 0 
     ? (ratedChats.reduce((acc, curr) => acc + (curr.rating || 0), 0) / ratedChats.length).toFixed(1)
     : 'N/A';
 
-  // Simulação de Tempo Médio de Atendimento (SLA)
-  // Em produção, isso seria calculado (EndedAt - StartedAt)
-  const averageHandleTime = "12m 30s"; 
-  const averageResponseTime = "45s";
+  // Tempo Médio de Atendimento (TMA): endedAt - 1ª mensagem do usuário (ou 1ª não-system)
+  const handleTimesMs = chats
+    .filter(c => c.status === 'closed')
+    .map(c => {
+      const endMs = toMs((c as any).endedAt) || toMs((c as any).lastMessageTime);
+      const startMs = getChatStartMs(c);
+      const diff = endMs && startMs ? (endMs - startMs) : 0;
+      return diff > 0 ? diff : 0;
+    })
+    .filter(ms => ms > 0);
+
+  const averageHandleTime = handleTimesMs.length > 0
+    ? formatDuration(handleTimesMs.reduce((a, b) => a + b, 0) / handleTimesMs.length)
+    : 'N/A';
+
+  // Tempo de Primeira Resposta: 1ª msg do agente - 1ª msg do usuário
+  const responseTimesMs = chats
+    .map(c => getFirstResponseMs(c))
+    .filter(ms => ms > 0);
+
+  const averageResponseTime = responseTimesMs.length > 0
+    ? formatDuration(responseTimesMs.reduce((a, b) => a + b, 0) / responseTimesMs.length)
+    : 'N/A';
 
   // Agrupamentos
   const chatsByDepartment = departments.map(dept => {
     const count = chats.filter(c => getReportDepartmentId(c) === dept.id).length;
     const closed = chats.filter(c => getReportDepartmentId(c) === dept.id && c.status === 'closed').length;
     const rated = chats.filter(c => {
-      const rating = c.rating;
-      return getReportDepartmentId(c) === dept.id && rating !== undefined && rating !== null && typeof rating === 'number' && rating >= 1 && rating <= 5;
+      const rating = getNumericRating(c);
+      return getReportDepartmentId(c) === dept.id && rating !== null;
     });
     const deptAvgRating = rated.length > 0
-      ? (rated.reduce((acc, curr) => acc + (curr.rating || 0), 0) / rated.length).toFixed(1)
+      ? (rated.reduce((acc, curr) => acc + (getNumericRating(curr) || 0), 0) / rated.length).toFixed(1)
       : 'N/A';
     return { name: dept.name, color: dept.color, count, closed, rated: rated.length, avgRating: deptAvgRating };
   });
@@ -67,7 +143,8 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
     
     // Linhas de dados
     const rows = chats.map(chat => {
-      const deptName = departments.find(d => d.id === chat.departmentId)?.name || 'Sem Departamento';
+      const deptId = getReportDepartmentId(chat);
+      const deptName = departments.find(d => d.id === deptId)?.name || 'Sem Departamento';
       const lastMsg = chat.lastMessageTime ? new Date(chat.lastMessageTime).toLocaleString() : '';
       const endedAt = chat.endedAt ? new Date(chat.endedAt).toLocaleString() : '';
       const clientCode = chat.clientCode || '';
@@ -167,9 +244,7 @@ const ReportsDashboard: React.FC<ReportsDashboardProps> = ({ chats, departments 
               <Clock size={20} strokeWidth={2} />
             </div>
           </div>
-          <p className="text-xs text-[#00E0D1] flex items-center gap-1">
-             <TrendingUp size={12} strokeWidth={2} /> -12% vs mês anterior
-          </p>
+          <p className="text-xs text-slate-400">Baseado em {handleTimesMs.length} atendimentos fechados</p>
         </div>
 
         <div className="bg-[#16191F] p-6 rounded-xl shadow-lg neon-border hover-glow transition-all hover:border-[#00E0D1]/50 group">
